@@ -61,8 +61,10 @@
     "export:android": "expo export --platform android --output-dir dist/android",
     "export:ios": "expo export --platform ios --output-dir dist/ios",
     "prebuild": "expo prebuild",
-    "eas:preview": "npx eas-cli@22.6.0 build --platform all --profile preview",
-    "eas:production": "npx eas-cli@22.6.0 build --platform all --profile production --auto-submit"
+    "native:android": "npx expo prebuild --platform android --no-install && npm run native:android:build",
+    "native:android:build": "cd android && ./gradlew assembleDebug --no-daemon",
+    "native:ios": "npx expo prebuild --platform ios --no-install && npm run native:ios:build",
+    "native:ios:build": "pod install --project-directory=ios && xcodebuild -workspace ios/Cohub.xcworkspace -scheme Cohub -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build"
   },
   "private": true,
   "overrides": {

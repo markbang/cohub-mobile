@@ -18,15 +18,6 @@ if (expectedTag && expectedTag !== `v${version}`) {
   failures.push(`Tag mismatch: expected v${version}, received ${expectedTag}`);
 }
 
-if (process.argv.includes("--require-eas")) {
-  const projectId = process.env.EXPO_PROJECT_ID?.trim();
-  const owner = process.env.EXPO_OWNER?.trim();
-  const token = process.env.EXPO_TOKEN?.trim();
-  if (!projectId) failures.push("EXPO_PROJECT_ID is required for an EAS release");
-  if (!owner) failures.push("EXPO_OWNER is required for an EAS release");
-  if (!token) failures.push("EXPO_TOKEN is required for an EAS release");
-}
-
 if (failures.length > 0) {
   console.error("Release validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
