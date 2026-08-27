@@ -1,11 +1,16 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 function buildNumberFor(version: string) {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
-  if (!match) throw new Error(`Invalid app version: ${version}`);
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version.trim());
+  if (!match) {
+    throw new Error(`Native builds require a stable X.Y.Z version, received: ${version}`);
+  }
   const major = Number(match[1]);
   const minor = Number(match[2]);
   const patch = Number(match[3]);
+  if (major > 2_099 || minor >= 1_000 || patch >= 1_000) {
+    throw new Error(`Version components cannot be encoded into a native build number: ${version}`);
+  }
   const buildNumber = major * 1_000_000 + minor * 1_000 + patch;
   if (!Number.isSafeInteger(buildNumber) || buildNumber <= 0) {
     throw new Error(`App version cannot produce a valid native build number: ${version}`);

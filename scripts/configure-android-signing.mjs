@@ -26,14 +26,16 @@ if (!source.includes(marker)) {
   source = source.replace(signingConfigs, `${signingConfigs}${signingBlock}`);
 }
 
+const configuredReleaseTarget = "            signingConfig signingConfigs.release\n            def enableShrinkResources";
+if (source.includes(configuredReleaseTarget)) {
+  console.log(`Native Android release signing is already configured in ${gradlePath}.`);
+  process.exit(0);
+}
 const debugReleaseTarget = "            signingConfig signingConfigs.debug\n            def enableShrinkResources";
 const matchCount = source.split(debugReleaseTarget).length - 1;
 if (matchCount !== 1) {
   throw new Error(`Expected one generated release signing target in ${gradlePath}, found ${matchCount}`);
 }
-source = source.replace(
-  debugReleaseTarget,
-  "            signingConfig signingConfigs.release\n            def enableShrinkResources",
-);
+source = source.replace(debugReleaseTarget, configuredReleaseTarget);
 await writeFile(gradlePath, source);
 console.log(`Configured native Android release signing in ${gradlePath}.`);

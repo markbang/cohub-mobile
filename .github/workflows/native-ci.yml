@@ -37,7 +37,7 @@ jobs:
         run: npm ci
 
       - name: Generate Android project
-        run: npx expo prebuild --platform android --no-install
+        run: npm run native:android:prepare
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -47,8 +47,7 @@ jobs:
           cache: gradle
 
       - name: Compile debug APK
-        working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: npm run native:android:build
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v7
@@ -61,7 +60,7 @@ jobs:
   ios:
     name: iOS simulator build
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -75,26 +74,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate iOS project
-        run: npx expo prebuild --platform ios --no-install
-
-      - name: Install CocoaPods
-        run: pod install --project-directory=ios
+      - name: Generate iOS project and install pods
+        run: npm run native:ios:prepare
 
       - name: Compile simulator app
-        run: |
-          xcodebuild \
-            -workspace ios/Cohub.xcworkspace \
-            -scheme Cohub \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -derivedDataPath build/ios \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-          mkdir -p build/artifacts
-          ditto -c -k --sequesterRsrc --keepParent \
-            build/ios/Build/Products/Debug-iphonesimulator/Cohub.app \
-            build/artifacts/Cohub-ios-simulator.zip
+        run: npm run native:ios:build
 
       - name: Upload simulator app
         uses: actions/upload-artifact@v7
