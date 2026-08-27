@@ -102,6 +102,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       target_ref: ${{ steps.target.outputs.ref }}
+      target_sha: ${{ steps.target.outputs.sha }}
     steps:
       - name: Checkout trusted main
         uses: actions/checkout@v7
@@ -131,7 +132,8 @@ jobs:
               exit 1
             fi
             echo "ref=refs/tags/$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-            echo "Using protected main-history tag $RELEASE_TAG."
+            echo "sha=$tag_sha" >> "$GITHUB_OUTPUT"
+            echo "Using protected main-history tag $RELEASE_TAG at $tag_sha."
           else
             target_ref="${INPUT_REF:-${GITHUB_REF}}"
             test -n "$target_ref" || { echo "A preview ref could not be resolved"; exit 1; }
@@ -149,7 +151,7 @@ jobs:
       - name: Checkout validated ref
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.metadata.outputs.target_ref }}
+          ref: ${{ needs.metadata.outputs.target_sha || needs.metadata.outputs.target_ref }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -172,6 +174,10 @@ jobs:
 
       - name: Generate Android project
         run: npm run native:android:prepare
+
+      - name: Resolve Android identifier
+        id: identifiers
+        run: node scripts/print-native-identifiers.mjs
 
       - name: Set up Java
         uses: actions/setup-java@v6
@@ -232,7 +238,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: io.github.markbang.cohubmobile
+          packageName: ${{ steps.identifiers.outputs.android_package }}
           releaseFiles: android/app/build/outputs/bundle/release/app-release.aab
           tracks: ${{ inputs.android_track }}
           releaseName: ${{ inputs.release_tag || github.ref_name }}
@@ -248,7 +254,7 @@ jobs:
       - name: Checkout validated ref
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.metadata.outputs.target_ref }}
+          ref: ${{ needs.metadata.outputs.target_sha || needs.metadata.outputs.target_ref }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -271,6 +277,10 @@ jobs:
 
       - name: Generate iOS project and install pods
         run: npm run native:ios:prepare
+
+      - name: Resolve iOS identifier
+        id: identifiers
+        run: node scripts/print-native-identifiers.mjs
 
       - name: Build preview simulator app
         if: inputs.profile == 'preview'
@@ -311,7 +321,7 @@ jobs:
         id: profiles
         uses: apple-actions/download-provisioning-profiles@v6
         with:
-          bundle-id: io.github.markbang.cohubmobile
+          bundle-id: ${{ steps.identifiers.outputs.ios_bundle_id }}
           profile-type: IOS_APP_STORE
           issuer-id: ${{ vars.APPSTORE_ISSUER_ID }}
           api-key-id: ${{ vars.APPSTORE_API_KEY_ID }}

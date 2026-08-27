@@ -5,6 +5,24 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+export async function getNativeIdentifiers(root = process.cwd()) {
+  const { stdout } = await execFileAsync(
+    "npx",
+    ["expo", "config", "--type", "public", "--json"],
+    { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+  );
+  const config = JSON.parse(stdout);
+  const iosBundleId = config.ios?.bundleIdentifier;
+  const androidPackage = config.android?.package;
+  if (typeof iosBundleId !== "string" || !iosBundleId.trim()) {
+    throw new Error("Expo config does not define ios.bundleIdentifier");
+  }
+  if (typeof androidPackage !== "string" || !androidPackage.trim()) {
+    throw new Error("Expo config does not define android.package");
+  }
+  return { iosBundleId, androidPackage };
+}
+
 export async function run(command, args, options = {}) {
   const { cwd = process.cwd(), env = process.env } = options;
   await new Promise((resolvePromise, reject) => {

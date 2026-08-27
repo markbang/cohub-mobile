@@ -1,6 +1,6 @@
 import { copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ensureDirectory, findBuiltIpa, findIosScheme, findIosWorkspace, run } from "./native-project.mjs";
+import { ensureDirectory, findBuiltIpa, findIosScheme, findIosWorkspace, getNativeIdentifiers, run } from "./native-project.mjs";
 
 const required = ["IOS_TEAM_ID", "IOS_PROFILE_NAME"];
 const missing = required.filter((name) => !process.env[name]?.trim());
@@ -11,6 +11,7 @@ if (missing.length > 0) {
 const root = process.cwd();
 const workspace = await findIosWorkspace(root);
 const scheme = await findIosScheme(workspace);
+const { iosBundleId } = await getNativeIdentifiers(root);
 const buildDir = join(root, "build");
 await ensureDirectory(buildDir);
 await run("xcodebuild", [
@@ -22,6 +23,7 @@ await run("xcodebuild", [
   "CODE_SIGN_STYLE=Manual",
   `DEVELOPMENT_TEAM=${process.env.IOS_TEAM_ID}`,
   `PROVISIONING_PROFILE_SPECIFIER=${process.env.IOS_PROFILE_NAME}`,
+  "CODE_SIGN_IDENTITY=Apple Distribution",
   "archive",
 ]);
 
@@ -35,7 +37,7 @@ const exportOptions = `<?xml version="1.0" encoding="UTF-8"?>
 <key>stripSwiftSymbols</key><true/>
 <key>teamID</key><string>${xml(process.env.IOS_TEAM_ID)}</string>
 <key>provisioningProfiles</key><dict>
-<key>io.github.markbang.cohubmobile</key><string>${xml(process.env.IOS_PROFILE_NAME)}</string>
+<key>${xml(iosBundleId)}</key><string>${xml(process.env.IOS_PROFILE_NAME)}</string>
 </dict>
 </dict></plist>
 `;
