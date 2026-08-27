@@ -1,6 +1,6 @@
 import { readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -8,11 +8,22 @@ const execFileAsync = promisify(execFile);
 export async function run(command, args, options = {}) {
   const { cwd = process.cwd(), env = process.env } = options;
   await new Promise((resolvePromise, reject) => {
-    const child = execFile(command, args, { cwd, env, stdio: "inherit" }, (error) => {
-      if (error) reject(error);
-      else resolvePromise();
+    const child = spawn(command, args, { cwd, env, stdio: "inherit" });
+    let settled = false;
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
     });
-    child.on("error", reject);
+    child.once("exit", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      if (code === 0) {
+        resolvePromise();
+        return;
+      }
+      reject(new Error(`${command} exited with ${signal ? `signal ${signal}` : `code ${code ?? "unknown"}`}`));
+    });
   });
 }
 
