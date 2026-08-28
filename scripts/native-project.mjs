@@ -40,34 +40,48 @@ export async function configureAndroidAbiSplits(root = process.cwd(), architectu
   const gradlePath = join(root, "android", "app", "build.gradle");
   const source = await readFile(gradlePath, "utf8");
   const marker = "// COHUB_ABI_SPLITS";
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
   const includes = requestedArchitectures.map((architecture) => `"${architecture}"`).join(", ");
-  const splitsBlock = `    splits {
-        abi {
-            ${marker}
-            enable true
-            reset()
-            include ${includes}
-            universalApk false
-        }
-    }
-`;
-  const existingBlock = /    splits \{\n        abi \{\n            \/\/ COHUB_ABI_SPLITS\n            enable true\n            reset\(\)\n            include [^\n]+\n            universalApk false\n        \}\n    \}\n/;
+
   if (source.includes(marker)) {
-    if (!existingBlock.test(source)) {
-      throw new Error(`Could not parse the Android ABI split block in ${gradlePath}`);
+    const markerIndex = source.indexOf(marker);
+    const afterMarker = source.slice(markerIndex);
+    const includePattern = /^([ \t]*)include[ \t]+[^\r\n]*$/m;
+    const includeMatch = includePattern.exec(afterMarker);
+    if (!includeMatch) {
+      throw new Error(`Could not find the Android ABI include line in ${gradlePath}`);
     }
-    const updatedSource = source.replace(existingBlock, splitsBlock);
+    const updatedAfterMarker = afterMarker.replace(
+      includePattern,
+      `${includeMatch[1]}include ${includes}`,
+    );
+    const updatedSource = source.slice(0, markerIndex) + updatedAfterMarker;
     if (updatedSource !== source) await writeFile(gradlePath, updatedSource);
     console.log(`Configured Android ABI splits (${normalizedArchitectures}) in ${gradlePath}.`);
     return normalizedArchitectures;
   }
 
-  const buildTypes = "    buildTypes {\n";
-  const matchCount = source.split(buildTypes).length - 1;
-  if (matchCount !== 1) {
-    throw new Error(`Expected one Android buildTypes block in ${gradlePath}, found ${matchCount}`);
+  const buildTypesMatches = [...source.matchAll(/^([ \t]*)buildTypes[ \t]*\{\r?\n/gm)];
+  if (buildTypesMatches.length !== 1) {
+    throw new Error(`Expected one Android buildTypes block in ${gradlePath}, found ${buildTypesMatches.length}`);
   }
-  await writeFile(gradlePath, source.replace(buildTypes, `${splitsBlock}${buildTypes}`));
+  const baseIndent = buildTypesMatches[0][1];
+  const childIndent = `${baseIndent}    `;
+  const splitsBlock = [
+    `${baseIndent}splits {`,
+    `${childIndent}abi {`,
+    `${childIndent}    ${marker}`,
+    `${childIndent}    enable true`,
+    `${childIndent}    reset()`,
+    `${childIndent}    include ${includes}`,
+    `${childIndent}    universalApk false`,
+    `${childIndent}}`,
+    `${baseIndent}}`,
+    "",
+  ].join(newline);
+  const insertionIndex = buildTypesMatches[0].index;
+  const updatedSource = source.slice(0, insertionIndex) + splitsBlock + source.slice(insertionIndex);
+  await writeFile(gradlePath, updatedSource);
   console.log(`Configured Android ABI splits (${normalizedArchitectures}) in ${gradlePath}.`);
   return normalizedArchitectures;
 }

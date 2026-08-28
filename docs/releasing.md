@@ -38,7 +38,7 @@ cohub-vX.Y.Z-android-x86_64.apk
 
 Each APK contains only its own native libraries, so each download is much smaller than one universal APK. This is direct APK distribution, not a Google Play upload. The automatic path does not build iOS and does not use any store credentials.
 
-For the existing `v1.1.0` release, run `Native Release` manually with `platform=android`, `profile=preview`, `submit=false` if you want ABI-specific APKs before the next version release.
+For the existing `v1.1.0` release, run `Native Release` manually with `ref=v1.1.0`, `platform=android`, `profile=preview`, `submit=false` if you want ABI-specific APKs before the next version release.
 
 ### Android / Google Play later
 
