@@ -32,33 +32,32 @@ jobs:
           manifest-file: .release-please-manifest.json
 
   mobile-release:
-    name: Build Android APK
+    name: Build Android distribution APKs
     needs: release
     if: needs.release.outputs.release_created == 'true' && vars.NATIVE_AUTO_RELEASE_ENABLED == 'true'
     uses: ./.github/workflows/native-release.yml
     with:
-      ref: ${{ needs.release.outputs.tag_name }}
       platform: android
-      profile: preview
+      profile: distribution
       submit: false
       release_tag: ${{ needs.release.outputs.tag_name }}
     secrets: inherit
 
   publish-android:
-    name: Publish standalone Android APKs to GitHub Release
+    name: Publish formal Android APKs to GitHub Release
     needs: [release, mobile-release]
     if: needs.release.outputs.release_created == 'true' && vars.NATIVE_AUTO_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download standalone Android APKs
+      - name: Download formal Android APKs
         uses: actions/download-artifact@v8
         with:
-          name: cohub-android-preview-${{ github.run_id }}
+          name: cohub-android-distribution-${{ github.run_id }}
           path: build/release
 
-      - name: Upload standalone APKs to GitHub Release
+      - name: Upload formal APKs to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
@@ -90,5 +89,5 @@ jobs:
     steps:
       - name: Explain release gate
         run: |
-          echo "::notice::GitHub Release created without an Android APK."
-          echo "Set the NATIVE_AUTO_RELEASE_ENABLED repository variable to true to build and attach an Android APK."
+          echo "::notice::GitHub Release created without Android distribution APKs."
+          echo "Set NATIVE_AUTO_RELEASE_ENABLED=true and configure Android release keystore secrets to build and attach formal APKs."
