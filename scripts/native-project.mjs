@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -21,6 +21,55 @@ export async function getNativeIdentifiers(root = process.cwd()) {
     throw new Error("Expo config does not define android.package");
   }
   return { iosBundleId, androidPackage };
+}
+
+export async function configureAndroidAbiSplits(root = process.cwd(), architectures) {
+  const supportedArchitectures = new Set(["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]);
+  const requestedArchitectures = typeof architectures === "string"
+    ? architectures.split(",").map((architecture) => architecture.trim())
+    : [];
+  if (
+    requestedArchitectures.length === 0 ||
+    requestedArchitectures.some((architecture) => !supportedArchitectures.has(architecture)) ||
+    new Set(requestedArchitectures).size !== requestedArchitectures.length
+  ) {
+    throw new Error(`Invalid Android ABI list: ${architectures ?? "<empty>"}`);
+  }
+
+  const normalizedArchitectures = requestedArchitectures.join(",");
+  const gradlePath = join(root, "android", "app", "build.gradle");
+  const source = await readFile(gradlePath, "utf8");
+  const marker = "// COHUB_ABI_SPLITS";
+  const includes = requestedArchitectures.map((architecture) => `"${architecture}"`).join(", ");
+  const splitsBlock = `    splits {
+        abi {
+            ${marker}
+            enable true
+            reset()
+            include ${includes}
+            universalApk false
+        }
+    }
+`;
+  const existingBlock = /    splits \{\n        abi \{\n            \/\/ COHUB_ABI_SPLITS\n            enable true\n            reset\(\)\n            include [^\n]+\n            universalApk false\n        \}\n    \}\n/;
+  if (source.includes(marker)) {
+    if (!existingBlock.test(source)) {
+      throw new Error(`Could not parse the Android ABI split block in ${gradlePath}`);
+    }
+    const updatedSource = source.replace(existingBlock, splitsBlock);
+    if (updatedSource !== source) await writeFile(gradlePath, updatedSource);
+    console.log(`Configured Android ABI splits (${normalizedArchitectures}) in ${gradlePath}.`);
+    return normalizedArchitectures;
+  }
+
+  const buildTypes = "    buildTypes {\n";
+  const matchCount = source.split(buildTypes).length - 1;
+  if (matchCount !== 1) {
+    throw new Error(`Expected one Android buildTypes block in ${gradlePath}, found ${matchCount}`);
+  }
+  await writeFile(gradlePath, source.replace(buildTypes, `${splitsBlock}${buildTypes}`));
+  console.log(`Configured Android ABI splits (${normalizedArchitectures}) in ${gradlePath}.`);
+  return normalizedArchitectures;
 }
 
 export async function run(command, args, options = {}) {
