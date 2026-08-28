@@ -7,7 +7,7 @@ The repository does not require Expo Application Services (EAS) for builds.
 1. `CI` validates every PR and push to `main`, then exports Web, Android, and iOS JavaScript bundles.
 2. `Native CI` compiles an Android debug APK on a GitHub Linux runner and an iOS simulator app on a GitHub macOS runner.
 3. `Release Please` maintains a version/changelog PR from Conventional Commits.
-4. Merging the Release Please PR creates `vX.Y.Z` and a GitHub Release. When the repository variable `NATIVE_AUTO_RELEASE_ENABLED` is `true`, the release also builds an Android debug APK and attaches it to that GitHub Release. iOS and store submissions are not part of this automatic path.
+4. Merging the Release Please PR creates `vX.Y.Z` and a GitHub Release. When the repository variable `NATIVE_AUTO_RELEASE_ENABLED` is `true`, the release also builds Android release APKs and attaches them to that GitHub Release. iOS and store submissions are not part of this automatic path.
 
 Expo is used as the open-source React Native toolchain and for native modules. `expo prebuild` generates standard Gradle and Xcode projects inside CI. No Expo subscription or EAS project is required.
 
@@ -89,7 +89,7 @@ GitHub-hosted macOS runner usage may be subject to your GitHub plan's Actions qu
 
 Open Actions -> `Native Release` -> Run workflow. Choose:
 
-- `preview` for an Android debug APK and an iOS simulator ZIP
+- `preview` for standalone Android release APKs and an iOS simulator ZIP
 - `production` for signed store artifacts
 - one platform or `all`
 - `submit=true` only when a production artifact should be sent to a store; the automatic Release Please path always uses `submit=false`
