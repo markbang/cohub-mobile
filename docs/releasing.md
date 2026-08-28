@@ -97,7 +97,7 @@ The iOS command requires macOS and Xcode. The Android command requires the Andro
 
 ## Recovery
 
-If the automatic unsigned Android APK build fails, no signing or store credential is involved. Inspect the build error and rerun `Native Release` manually with the existing tag, `platform=android`, `profile=preview`, and `submit=false`. Keeping `NATIVE_AUTO_RELEASE_ENABLED=true` lets the next Release Please release rebuild and attach its APK automatically.
+If the automatic unsigned Android APK build fails, no signing or store credential is involved. Inspect the build error and rerun `Native Release` manually with `ref` set to the existing `vX.Y.Z` tag, `platform=android`, `profile=preview`, and `submit=false`. The manual rerun only produces a downloadable Actions artifact and does not attach it to the GitHub Release; keeping `NATIVE_AUTO_RELEASE_ENABLED=true` lets the next Release Please release rebuild and attach its APK automatically.
 
 For a Google Play failure, configure the Android signing and Play service-account secrets first, then rerun `Native Release` with:
 
