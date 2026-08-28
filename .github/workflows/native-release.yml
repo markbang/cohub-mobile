@@ -50,7 +50,7 @@ on:
         description: Platform to build
         required: true
         type: choice
-        options: [android, ios, all]
+        options: [android, all]
         default: android
       profile:
         description: Native build profile
@@ -339,7 +339,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: cohub-ios-${{ inputs.profile }}-${{ github.run_id }}
-          path: ${{ inputs.profile == 'production' && 'build/export/Cohub.ipa' || 'build/artifacts/Cohub-ios-simulator.zip' }}
+          path: build/export/Cohub.ipa
           if-no-files-found: error
           retention-days: 30
 

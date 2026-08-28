@@ -15,7 +15,7 @@ Expo is used as the open-source React Native toolchain and for native modules. `
 
 ### Android formal distribution
 
-The current direct-download release path does not need a Google Play service account, but it does need one stable Android release keystore. The same keystore must be used for every future version so Android can install updates over the previous version. The current `v1.1.0` APKs were signed with the old debug key and are not upgrade-compatible with the future formal-distribution key; uninstall `v1.1.0` before installing the first formally signed build.
+The current direct-download release path does not need a Google Play service account, but it does need one stable Android release keystore for formal APK signing. The same keystore must be used for every future version so Android can install updates over the previous version. The current `v1.1.0` APKs were signed with the old debug key and are not upgrade-compatible with the future formal-distribution key; uninstall `v1.1.0` before installing the first formally signed build.
 
 Generate the keystore locally and keep a protected backup of both the file and its passwords:
 
@@ -32,13 +32,15 @@ keytool -genkeypair -v \
 Add the keystore and its metadata as GitHub Actions secrets:
 
 ```bash
-base64 < cohub-release.keystore | tr -d '\\n' | gh secret set ANDROID_KEYSTORE_BASE64 --repo markbang/cohub-mobile
+base64 < cohub-release.keystore | tr -d '\n' | gh secret set ANDROID_KEYSTORE_BASE64 --repo markbang/cohub-mobile
 gh secret set ANDROID_KEYSTORE_PASSWORD --repo markbang/cohub-mobile
 gh secret set ANDROID_KEY_ALIAS --repo markbang/cohub-mobile --body cohub-release
 gh secret set ANDROID_KEY_PASSWORD --repo markbang/cohub-mobile
 ```
 
 The two password commands read their values interactively. Do not commit `cohub-release.keystore` or put it in the repository. Losing this keystore means future APKs cannot update an installed version.
+
+If `NATIVE_AUTO_RELEASE_ENABLED=true` before all four Android signing secrets exist, the release gate logs a notice and skips the APK build; it does not fail the GitHub Release. Add all four secrets before expecting APKs.
 
 After the secrets are configured, enable automatic formal APK builds:
 

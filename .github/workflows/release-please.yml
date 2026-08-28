@@ -31,10 +31,42 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+  native-release-gate:
+    name: Check Android distribution signing
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      enabled: ${{ steps.gate.outputs.enabled }}
+    steps:
+      - name: Evaluate automatic Android distribution gate
+        id: gate
+        env:
+          AUTO_RELEASE: ${{ vars.NATIVE_AUTO_RELEASE_ENABLED }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ "$AUTO_RELEASE" != "true" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Automatic Android distribution is disabled."
+          elif [[ -z "$KEYSTORE_BASE64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Automatic Android distribution is enabled but signing secrets are incomplete; skipping the APK build."
+            echo "Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD to enable it."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Android distribution signing inputs are configured."
+          fi
+
   mobile-release:
     name: Build Android distribution APKs
-    needs: release
-    if: needs.release.outputs.release_created == 'true' && vars.NATIVE_AUTO_RELEASE_ENABLED == 'true'
+    needs: [release, native-release-gate]
+    if: needs.release.outputs.release_created == 'true' && needs.native-release-gate.outputs.enabled == 'true'
     uses: ./.github/workflows/native-release.yml
     with:
       platform: android
@@ -45,8 +77,8 @@ jobs:
 
   publish-android:
     name: Publish formal Android APKs to GitHub Release
-    needs: [release, mobile-release]
-    if: needs.release.outputs.release_created == 'true' && vars.NATIVE_AUTO_RELEASE_ENABLED == 'true'
+    needs: [release, native-release-gate, mobile-release]
+    if: needs.release.outputs.release_created == 'true' && needs.native-release-gate.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -80,9 +112,9 @@ jobs:
           done
 
   native-release-not-configured:
-    name: Native release is disabled
-    needs: release
-    if: needs.release.outputs.release_created == 'true' && vars.NATIVE_AUTO_RELEASE_ENABLED != 'true'
+    name: Native release is not configured
+    needs: [release, native-release-gate]
+    if: needs.release.outputs.release_created == 'true' && needs.native-release-gate.outputs.enabled != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -90,4 +122,4 @@ jobs:
       - name: Explain release gate
         run: |
           echo "::notice::GitHub Release created without Android distribution APKs."
-          echo "Set NATIVE_AUTO_RELEASE_ENABLED=true and configure Android release keystore secrets to build and attach formal APKs."
+          echo "Set NATIVE_AUTO_RELEASE_ENABLED=true and configure all four Android release keystore secrets to build and attach formal APKs."
