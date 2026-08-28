@@ -84,7 +84,7 @@ Open Actions -> `Native Release` -> Run workflow. Choose:
 - `production` for signed store artifacts
 - one platform or `all`
 - `submit=true` only when a production artifact should be sent to a store; the automatic Release Please path always uses `submit=false`
-- `internal` or `production` for the Google Play track (the automatic Release Please path uses `internal` until the first Play Console release is promoted)
+- `internal` or `production` for the Google Play track when manually submitting a `profile=production` Android build
 
 Equivalent local preview commands:
 
@@ -97,12 +97,14 @@ The iOS command requires macOS and Xcode. The Android command requires the Andro
 
 ## Recovery
 
-If a native build fails after a GitHub Release exists, fix the relevant build/signing or store credential, set `NATIVE_AUTO_RELEASE_ENABLED=true` if using automatic Android APK builds, and rerun `Native Release` with:
+If the automatic unsigned Android APK build fails, no signing or store credential is involved. Inspect the build error and rerun `Native Release` manually with the existing tag, `platform=android`, `profile=preview`, and `submit=false`. Keeping `NATIVE_AUTO_RELEASE_ENABLED=true` lets the next Release Please release rebuild and attach its APK automatically.
+
+For a Google Play failure, configure the Android signing and Play service-account secrets first, then rerun `Native Release` with:
 
 - ref: the existing `vX.Y.Z` tag
 - profile: `production`
-- platform: the failed platform or `all`
-- submit: enabled when the store upload should be retried
+- platform: `android`
+- submit: `true` when the store upload should be retried
 - release tag: the same `vX.Y.Z`
 
 Do not create a second tag for the same source version.
