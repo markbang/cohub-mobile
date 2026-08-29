@@ -26,6 +26,16 @@ const logtoConfig = {
   resources: [config.apiResource],
 };
 
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 10_000) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs / 1000} seconds`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 export default function RootLayout() {
   // Logto's native storage adapter is intentionally not constructed during
   // Expo web static rendering. Native builds take the authenticated path.
@@ -42,22 +52,35 @@ function NativeRoot() {
   const theme = useAppTheme();
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [userUuid, setUserUuid] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<{ authenticated: boolean; uuid: string | null }>(() => ({ authenticated: isAuthenticated, uuid: null }));
 
   useEffect(() => {
-    if (!isAuthenticated) return;
     let active = true;
-    void client.getIdTokenClaims().then((claims) => {
-      if (active) setUserUuid(typeof claims.sub === "string" ? claims.sub : null);
+    if (!isAuthenticated) {
+      void Promise.resolve().then(() => {
+        if (active) setIdentity({ authenticated: false, uuid: null });
+      });
+      return () => { active = false; };
+    }
+    void withTimeout(client.getAccessTokenClaims(config.apiResource), "Reading account identity").then((claims) => {
+      const userUuid = typeof claims.talesofai_uuid === "string" && claims.talesofai_uuid.trim()
+        ? claims.talesofai_uuid.trim()
+        : null;
+      if (!userUuid) throw new Error("Your account identity is missing. Please sign in again.");
+      if (active) setIdentity({ authenticated: true, uuid: userUuid });
     }).catch((error) => {
-      if (active) setAuthError(error instanceof Error ? error.message : "Unable to read your account");
+      if (active) {
+        setAuthError(error instanceof Error ? error.message : "Unable to read your account");
+        setIdentity({ authenticated: true, uuid: null });
+      }
     });
     return () => { active = false; };
   }, [client, isAuthenticated]);
 
-  const getAccessToken = useCallback(async () => {
+  const getAccessToken = useCallback(async (options?: { forceRefresh?: boolean }) => {
     try {
-      return await client.getAccessToken(config.apiResource);
+      if (options?.forceRefresh) await client.clearAccessToken();
+      return await withTimeout(client.getAccessToken(config.apiResource), "Loading sign-in token").catch(() => null);
     } catch {
       return null;
     }
@@ -80,8 +103,9 @@ function NativeRoot() {
   }, [isInitialized]);
 
   if (!isInitialized) return <LoadingScreen />;
-  if (!isAuthenticated || !userUuid) return <AuthScreen onSignIn={handleSignIn} loading={authLoading} error={authError} />;
-  return <AppProvider userUuid={userUuid} getAccessToken={getAccessToken}><Navigation theme={theme} /></AppProvider>;
+  if (!isAuthenticated || (authError && !identity.uuid)) return <AuthScreen onSignIn={handleSignIn} loading={authLoading} error={authError} />;
+  if (identity.authenticated !== isAuthenticated || !identity.uuid) return <LoadingScreen />;
+  return <AppProvider userUuid={identity.uuid} getAccessToken={getAccessToken}><Navigation theme={theme} /></AppProvider>;
 }
 
 function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {

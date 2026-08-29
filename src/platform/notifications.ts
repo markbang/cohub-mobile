@@ -29,11 +29,16 @@ export async function registerForPushNotifications(): Promise<PushRegistration |
   }
   if (status !== "granted") return null;
 
-  const token = await Notifications.getDevicePushTokenAsync();
-  return {
-    token: token.data,
-    platform: Platform.OS === "ios" ? "ios" : "android",
-  };
+  try {
+    const token = await Notifications.getDevicePushTokenAsync();
+    return {
+      token: token.data,
+      platform: Platform.OS === "ios" ? "ios" : "android",
+    };
+  } catch {
+    // Android needs a Firebase config file for native device-token registration.
+    return null;
+  }
 }
 
 export async function getInitialNotificationUrl() {
