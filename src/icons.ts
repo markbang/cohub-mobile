@@ -23,7 +23,6 @@ import FolderOpen from "lucide-react-native/icons/folder-open";
 import Images from "lucide-react-native/icons/images";
 import Info from "lucide-react-native/icons/info";
 import Layers2 from "lucide-react-native/icons/layers-2";
-import MessageCircle from "lucide-react-native/icons/message-circle";
 import MessagesSquare from "lucide-react-native/icons/messages-square";
 import Mic from "lucide-react-native/icons/mic";
 import Paperclip from "lucide-react-native/icons/paperclip";
@@ -66,7 +65,6 @@ export const icons = {
   images: Images,
   info: Info,
   layers: Layers2,
-  "message-circle": MessageCircle,
   messages: MessagesSquare,
   mic: Mic,
   more: Ellipsis,
