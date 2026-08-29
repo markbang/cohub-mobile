@@ -11,6 +11,7 @@ export default function ProfileScreen() {
   const theme = useAppTheme();
   const { getClaims, signOut } = useProfileSession();
   const { state, connectionState, clearCache, installationId, refreshHome } = useApp();
+  const dataError = state.error ?? state.spacesError ?? state.sessionsError;
   const [profile, setProfile] = useState<{ name: string; email: string | null; avatar: string | null }>({ name: "Cohub user", email: null, avatar: null });
   const [notificationState, setNotificationState] = useState<"unknown" | "enabled" | "unavailable">("unknown");
   const [signingOut, setSigningOut] = useState(false);
@@ -41,7 +42,7 @@ export default function ProfileScreen() {
   return <Screen scroll>
     <TopBar title="Profile" subtitle="Account and device" left={<BrandMark size={38} />} right={<IconButton name="settings-outline" label="Settings" size={40} onPress={() => Alert.alert("Settings", "More account settings will be available here.")} />} />
     <View style={{ alignItems: "center", paddingTop: 22, paddingBottom: 18 }}><Avatar name={profile.name} uri={profile.avatar} size={76} online={connectionState === "open"} /><Text style={[typography.title, { color: theme.colors.text, marginTop: 12 }]}>{profile.name}</Text>{profile.email ? <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>{profile.email}</Text> : null}</View>
-    {state.error ? <DataError message={state.error} onRetry={() => void refreshHome()} /> : <SyncStatus timestamp={state.lastSyncedAt} />}
+    {dataError ? <DataError message={dataError} onRetry={() => void refreshHome()} /> : <SyncStatus timestamp={state.lastSyncedAt} />}
     <SectionHeader title="Device" />
     <View style={{ marginHorizontal: 16, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 14, backgroundColor: theme.colors.surface, overflow: "hidden" }}>
       <SettingRow icon="wifi-outline" title="Connection" detail={connectionState === "open" ? "Connected to Cohub" : connectionState} trailing={<StatusPill label={connectionState === "open" ? "Online" : "Offline"} tone={connectionState === "open" ? "success" : "neutral"} />} />

@@ -53,6 +53,7 @@ function NativeRoot() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [identity, setIdentity] = useState<{ authenticated: boolean; uuid: string | null }>(() => ({ authenticated: isAuthenticated, uuid: null }));
+  const [identityAttempt, setIdentityAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -67,7 +68,10 @@ function NativeRoot() {
         ? claims.talesofai_uuid.trim()
         : null;
       if (!userUuid) throw new Error("Your account identity is missing. Please sign in again.");
-      if (active) setIdentity({ authenticated: true, uuid: userUuid });
+      if (active) {
+        setAuthError(null);
+        setIdentity({ authenticated: true, uuid: userUuid });
+      }
     }).catch((error) => {
       if (active) {
         setAuthError(error instanceof Error ? error.message : "Unable to read your account");
@@ -75,7 +79,7 @@ function NativeRoot() {
       }
     });
     return () => { active = false; };
-  }, [client, isAuthenticated]);
+  }, [client, identityAttempt, isAuthenticated]);
 
   const getAccessToken = useCallback(async (options?: { forceRefresh?: boolean }) => {
     try {
@@ -86,7 +90,16 @@ function NativeRoot() {
     }
   }, [client]);
 
+  const retryIdentity = useCallback(() => {
+    setAuthError(null);
+    setIdentityAttempt((attempt) => attempt + 1);
+  }, []);
+
   const handleSignIn = useCallback(async () => {
+    if (isAuthenticated) {
+      retryIdentity();
+      return;
+    }
     setAuthLoading(true);
     setAuthError(null);
     try {
@@ -96,7 +109,7 @@ function NativeRoot() {
     } finally {
       setAuthLoading(false);
     }
-  }, [signIn]);
+  }, [isAuthenticated, retryIdentity, signIn]);
 
   useEffect(() => {
     if (isInitialized) void SplashScreen.hideAsync();

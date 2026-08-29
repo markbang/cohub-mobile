@@ -10,7 +10,7 @@ export default function ActivityScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const { state, activityItems, connectionState, refreshHome } = useApp();
-  const dataError = state.error ?? state.activityError;
+  const dataError = state.error ?? state.sessionsError ?? state.activityError;
   const [filter, setFilter] = useState<"all" | "running" | "attention">("all");
   const items = useMemo(() => filter === "all" ? activityItems : activityItems.filter((item) => item.status === filter), [activityItems, filter]);
   return <Screen scroll refreshing={state.refreshing} onRefresh={() => void refreshHome()}>
@@ -29,7 +29,7 @@ export default function ActivityScreen() {
       <ActivityFilter label="Needs you" selected={filter === "attention"} onPress={() => setFilter("attention")} />
     </View>
     <View style={{ marginTop: 10 }}>
-      {state.error ? <EmptyState icon="cloud-offline-outline" title="Activity is unavailable" description="Retry above after checking your connection and sign-in session." /> : state.booting ? <LoadingRows count={4} /> : items.length > 0 ? items.map((item) => <Pressable key={item.id} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.sessionId } })} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
+      {dataError && items.length === 0 ? <EmptyState icon="cloud-offline-outline" title="Activity is unavailable" description="Retry above after checking your connection and sign-in session." /> : state.booting ? <LoadingRows count={4} /> : items.length > 0 ? items.map((item) => <Pressable key={item.id} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.sessionId } })} style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
         <View style={[{ width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center" }, { backgroundColor: item.status === "running" ? theme.colors.warningSoft : item.status === "attention" ? theme.colors.dangerSoft : theme.colors.successSoft }]}><AppIcon name={item.status === "running" ? "sync-outline" : item.status === "attention" ? "alert-outline" : "checkmark-outline"} size={17} color={item.status === "running" ? theme.colors.warning : item.status === "attention" ? theme.colors.danger : theme.colors.success} /></View>
         <View style={{ flex: 1, minWidth: 0 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}><Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, flex: 1 }]}>{item.title}</Text><Text style={[typography.micro, { color: theme.colors.textFaint }]}>{formatRelativeTime(item.updatedAt)}</Text></View><Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{item.spaceName} · {item.preview}</Text></View>
         <StatusPill label={item.status === "running" ? "Running" : item.status === "attention" ? "Needs you" : "Done"} tone={getStatusTone(item.status)} />

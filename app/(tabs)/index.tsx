@@ -14,8 +14,14 @@ export default function ChatsScreen() {
   const { state, connectionState, refreshHome } = useApp();
   const dataError = state.error ?? state.sessionsError;
   const searchRef = useRef<TextInput>(null);
+  const listRef = useRef<FlatList>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+
+  const focusSearch = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
 
   const sessions = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -33,11 +39,12 @@ export default function ChatsScreen() {
         title="Chats"
         subtitle={dataError ? "Chats unavailable" : state.sessions.length > 0 ? `${state.sessions.length} recent threads` : "Your work inbox"}
         left={<BrandMark size={38} />}
-        right={<><IconButton name="search-outline" label="Focus search" size={40} onPress={() => searchRef.current?.focus()} /><IconButton name="create-outline" label="New Chat" size={40} tone="accent" onPress={() => router.push("/new-chat")} /></>}
+        right={<><IconButton name="search-outline" label="Focus search" size={40} onPress={focusSearch} /><IconButton name="create-outline" label="New Chat" size={40} tone="accent" onPress={() => router.push("/new-chat")} /></>}
       />
       <ConnectionBanner state={connectionState} />
       {dataError ? <DataError message={dataError} onRetry={() => void refreshHome()} /> : <SyncStatus timestamp={state.lastSyncedAt} />}
       <FlatList
+        ref={listRef}
         data={sessions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <SessionRow session={item} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.id } })} />}

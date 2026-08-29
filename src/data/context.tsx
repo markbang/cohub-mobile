@@ -314,6 +314,10 @@ export function AppProvider({
   const stateRef = useRef(state);
   const subscriptions = useRef(new Map<string, () => void>());
   const openTokens = useRef(new Map<string, number>());
+  const installationIdRef = useRef<string | null>(null);
+  const installationRequestRef = useRef<Promise<string> | null>(null);
+  const clientRef = useRef<CohubClient | null>(null);
+  const homeRefreshGenerationRef = useRef(0);
   const userKey = userUuid;
 
   useEffect(() => {
@@ -324,23 +328,27 @@ export function AppProvider({
     setState((current) => reducer(current, action));
   }, []);
 
+  const ensureInstallation = useCallback(async () => {
+    const existing = installationIdRef.current;
+    if (existing) return existing;
+    const pending = installationRequestRef.current;
+    if (pending) return pending;
+
+    const request = getInstallationId().then((id) => {
+      installationIdRef.current = id;
+      setInstallationId(id);
+      return id;
+    });
+    installationRequestRef.current = request;
+    void request.finally(() => {
+      if (installationRequestRef.current === request) installationRequestRef.current = null;
+    }).catch(() => undefined);
+    return request;
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    void getInstallationId()
-      .then((id) => {
-        if (active) setInstallationId(id);
-      })
-      .catch((error) => {
-        if (!active) return;
-        dispatch({
-          type: "home-error",
-          message: errorMessage(error, "Device storage unavailable"),
-        });
-      });
-    return () => {
-      active = false;
-    };
-  }, [dispatch]);
+    installationIdRef.current = installationId;
+  }, [installationId]);
 
   const client = useMemo(
     () =>
@@ -350,22 +358,32 @@ export function AppProvider({
     [getAccessToken, installationId, offline],
   );
 
+  useEffect(() => {
+    clientRef.current = client;
+  }, [client]);
+
   const refreshHome = useCallback(async () => {
-    if (!client) return;
+    if (offline) return;
+    const generation = homeRefreshGenerationRef.current + 1;
+    homeRefreshGenerationRef.current = generation;
     dispatch({ type: "home-start" });
     try {
+      const resolvedInstallationId = await ensureInstallation();
+      const activeClient = clientRef.current ?? createMobileClient(getAccessToken, resolvedInstallationId);
+      clientRef.current = activeClient;
       const token = await withAccessTokenTimeout(getAccessToken());
       if (!token) throw new Error("Your sign-in session is unavailable. Please sign in again.");
       const [spacesResult, sessionsResult] = await Promise.all([
-        withTimeout(client.spaces.list(), "Loading Spaces").then(
+        withTimeout(activeClient.spaces.list(), "Loading Spaces").then(
           (spaces) => ({ status: "fulfilled" as const, value: spaces }),
           (reason: unknown) => ({ status: "rejected" as const, reason }),
         ),
-        withTimeout(client.user.listSessions({ limit: 60 }), "Loading Chats").then(
+        withTimeout(activeClient.user.listSessions({ limit: 60 }), "Loading Chats").then(
           (sessions) => ({ status: "fulfilled" as const, value: sessions }),
           (reason: unknown) => ({ status: "rejected" as const, reason }),
         ),
       ]);
+      if (generation !== homeRefreshGenerationRef.current) return;
       const errors = [spacesResult, sessionsResult].flatMap((result) => result.status === "rejected" ? [result.reason] : []);
       if (errors.length === 2) {
         throw new Error(errors.map((error) => errorMessage(error, "Request failed")).join("\n"));
@@ -385,16 +403,22 @@ export function AppProvider({
           console.warn("[mobile-cache] failed to save home", error);
         });
       }
-      void withTimeout(client.user.getActivity({ days: 7 }), "Loading activity")
-        .then((activity) => dispatch({ type: "usage", usage: activity.summary }))
-        .catch((error) => dispatch({ type: "usage-error", message: errorMessage(error, "Activity could not be refreshed") }));
+      void withTimeout(activeClient.user.getActivity({ days: 7 }), "Loading activity")
+        .then((activity) => {
+          if (generation === homeRefreshGenerationRef.current) dispatch({ type: "usage", usage: activity.summary });
+        })
+        .catch((error) => {
+          if (generation === homeRefreshGenerationRef.current) dispatch({ type: "usage-error", message: errorMessage(error, "Activity could not be refreshed") });
+        });
     } catch (error) {
-      dispatch({ type: "home-error", message: errorMessage(error, "Unable to load Cohub") });
+      if (generation === homeRefreshGenerationRef.current) {
+        dispatch({ type: "home-error", message: errorMessage(error, "Unable to load Cohub") });
+      }
     }
-  }, [client, dispatch, getAccessToken, userKey]);
+  }, [dispatch, ensureInstallation, getAccessToken, offline, userKey]);
 
   useEffect(() => {
-    if (!client) return;
+    if (offline) return;
     let active = true;
     const activeSubscriptions = subscriptions.current;
     void (async () => {
@@ -424,7 +448,7 @@ export function AppProvider({
       for (const stop of activeSubscriptions.values()) stop();
       activeSubscriptions.clear();
     };
-  }, [client, dispatch, refreshHome, userKey]);
+  }, [dispatch, offline, refreshHome, userKey]);
 
   useEffect(() => {
     if (!client) return;
