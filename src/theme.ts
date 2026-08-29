@@ -7,6 +7,7 @@ export type AppTheme = {
     surface: string;
     surfaceRaised: string;
     surfacePressed: string;
+    pressOverlay: string;
     border: string;
     borderStrong: string;
     text: string;
@@ -51,6 +52,7 @@ const darkTheme: AppTheme = {
     surface: "#171a1f",
     surfaceRaised: "#22262e",
     surfacePressed: "#2b3039",
+    pressOverlay: "rgba(255, 255, 255, 0.12)",
     border: "#2d333c",
     borderStrong: "#424a56",
     text: "#f7f8fa",
@@ -83,6 +85,7 @@ const lightTheme: AppTheme = {
     surface: "#ffffff",
     surfaceRaised: "#f0f1ef",
     surfacePressed: "#e6e8e5",
+    pressOverlay: "rgba(29, 32, 36, 0.10)",
     border: "#e1e3df",
     borderStrong: "#c9cdc8",
     text: "#1d2024",
