@@ -110,7 +110,7 @@ export function SectionHeader({ title, action, onAction }: { title: string; acti
   return (
     <View style={styles.sectionHeader}>
       <Text style={[typography.caption, { color: theme.colors.textMuted, textTransform: "uppercase", letterSpacing: 0.8 }]}>{title}</Text>
-      {action ? onAction ? <Pressable onPress={onAction} hitSlop={8}><Text style={[typography.caption, { color: theme.colors.accent }]}>{action}</Text></Pressable> : <Text style={[typography.caption, { color: theme.colors.accent }]}>{action}</Text> : null}
+      {action && onAction ? <Pressable onPress={onAction} hitSlop={8}><Text style={[typography.caption, { color: theme.colors.accent }]}>{action}</Text></Pressable> : null}
     </View>
   );
 }

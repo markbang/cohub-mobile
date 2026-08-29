@@ -22,7 +22,7 @@ export default function ActivityScreen() {
       <Metric label="Successful" value={state.activityLoading ? "…" : formatNumber(state.usage?.successCount)} icon="checkmark-circle-outline" tone="success" />
       <Metric label="Tokens" value={state.activityLoading ? "…" : formatNumber(state.usage?.totalTokens)} icon="layers-outline" tone="info" />
     </View>
-    <SectionHeader title="Recent work" action={items.length > 0 ? `${items.length} items` : undefined} />
+    <SectionHeader title="Recent work" action={items.length > 0 ? `${items.length} items` : undefined} onAction={() => setFilter("all")} />
     <View style={{ paddingHorizontal: 16, flexDirection: "row", gap: 8 }}>
       <ActivityFilter label="All" selected={filter === "all"} onPress={() => setFilter("all")} />
       <ActivityFilter label="Running" selected={filter === "running"} onPress={() => setFilter("running")} />

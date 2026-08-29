@@ -48,7 +48,7 @@ function WebPreviewRoot() {
 }
 
 function NativeRoot() {
-  const { client, isInitialized, isAuthenticated, signIn } = useLogto();
+  const { client, isInitialized, isAuthenticated, signIn, signOut } = useLogto();
   const theme = useAppTheme();
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -90,26 +90,19 @@ function NativeRoot() {
     }
   }, [client]);
 
-  const retryIdentity = useCallback(() => {
-    setAuthError(null);
-    setIdentityAttempt((attempt) => attempt + 1);
-  }, []);
-
   const handleSignIn = useCallback(async () => {
-    if (isAuthenticated) {
-      retryIdentity();
-      return;
-    }
     setAuthLoading(true);
     setAuthError(null);
     try {
+      if (isAuthenticated) await signOut();
       await signIn(config.redirectUri);
+      setIdentityAttempt((attempt) => attempt + 1);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Sign in was not completed");
     } finally {
       setAuthLoading(false);
     }
-  }, [isAuthenticated, retryIdentity, signIn]);
+  }, [isAuthenticated, signIn, signOut]);
 
   useEffect(() => {
     if (isInitialized) void SplashScreen.hideAsync();
