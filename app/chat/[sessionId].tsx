@@ -139,18 +139,18 @@ function ChatContent({ sessionId }: { sessionId: string }) {
   };
 
   if (view.loading && !session && view.messages.length === 0) {
-    return <Screen><TopBar title="Chat" left={<IconButton name="arrow-back" label="Back" size={40} onPress={() => router.back()} />} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>Opening Chat…</Text></View></Screen>;
+    return <Screen><TopBar title="Chat" left={<IconButton name="arrow-left" label="Back" size={40} onPress={() => router.back()} />} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>Opening Chat…</Text></View></Screen>;
   }
 
   return <Screen keyboard>
     <TopBar
       title={session ? displaySessionTitle(session) : "Chat"}
       subtitle={spaceName}
-      left={<IconButton name="arrow-back" label="Back" size={40} onPress={() => router.back()} />}
-      right={<><IconButton name="folder-open-outline" label="Open Files" size={38} onPress={() => view.space ? router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: view.space.id } }) : undefined} disabled={!view.space} /><IconButton name="ellipsis-horizontal" label="More actions" size={38} onPress={openRename} /></>}
+      left={<IconButton name="arrow-left" label="Back" size={40} onPress={() => router.back()} />}
+      right={<><IconButton name="folder-open" label="Open Files" size={38} onPress={() => view.space ? router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: view.space.id } }) : undefined} disabled={!view.space} /><IconButton name="more" label="More actions" size={38} onPress={openRename} /></>}
     />
     <ConnectionBanner state={connectionState} />
-    {view.error ? <Pressable onPress={() => void refreshSession(sessionId)} style={{ marginHorizontal: 16, marginTop: 12, padding: 11, borderRadius: 12, backgroundColor: theme.colors.dangerSoft, flexDirection: "row", alignItems: "center", gap: 8 }}><AppIcon name="alert-circle-outline" size={16} color={theme.colors.danger} /><Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{view.error}</Text><Text style={[typography.caption, { color: theme.colors.danger }]}>Retry</Text></Pressable> : null}
+    {view.error ? <Pressable onPress={() => void refreshSession(sessionId)} android_ripple={{ color: theme.colors.dangerSoft }} style={({ pressed }) => ({ marginHorizontal: 16, marginTop: 12, padding: 11, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.dangerSoft, flexDirection: "row", alignItems: "center", gap: 8 })}><AppIcon name="alert" size={16} color={theme.colors.danger} /><Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{view.error}</Text><Text style={[typography.caption, { color: theme.colors.danger }]}>Retry</Text></Pressable> : null}
     <FlatList
       ref={listRef}
       data={messages}
@@ -166,7 +166,7 @@ function ChatContent({ sessionId }: { sessionId: string }) {
       }}
       onRefresh={() => void refreshSession(sessionId)}
       refreshing={view.refreshing}
-      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }}><View style={{ width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSoft }}><AppIcon name="sparkles-outline" size={23} color={theme.colors.accent} /></View><Text style={[typography.heading, { color: theme.colors.text, marginTop: 14 }]}>A fresh Space for thinking</Text><Text style={[typography.body, { color: theme.colors.textMuted, textAlign: "center", marginTop: 6, maxWidth: 290 }]}>Send a prompt to start working with the Agent.</Text></View>}
+      ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 28 }}><View style={{ width: 52, height: 52, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSoft }}><AppIcon name="sparkles" size={23} color={theme.colors.accent} /></View><Text style={[typography.heading, { color: theme.colors.text, marginTop: 14 }]}>A fresh Space for thinking</Text><Text style={[typography.body, { color: theme.colors.textMuted, textAlign: "center", marginTop: 6, maxWidth: 290 }]}>Send a prompt to start working with the Agent.</Text></View>}
       ListFooterComponent={view.stream ? <StreamCard content={view.stream.contentBlocks} status={view.stream.status} /> : null}
     />
     {attachments.length > 0 ? <View style={{ paddingHorizontal: 12, paddingTop: 4, gap: 7, backgroundColor: theme.colors.background }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</View> : null}
@@ -178,9 +178,9 @@ function ChatContent({ sessionId }: { sessionId: string }) {
         <Pressable style={{ padding: 16, paddingBottom: 28, borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: theme.colors.surface }} onPress={(event) => event.stopPropagation()}>
           <View style={{ width: 34, height: 4, borderRadius: 2, alignSelf: "center", backgroundColor: theme.colors.borderStrong, marginBottom: 18 }} />
           <Text style={[typography.heading, { color: theme.colors.text, marginBottom: 10 }]}>Add to Chat</Text>
-          <SheetAction icon="images-outline" title="Photo library" detail="Choose one or more images" onPress={() => void pickPhotos()} />
-          <SheetAction icon="camera-outline" title="Take a photo" detail="Use the device camera" onPress={() => void takePhoto()} />
-          <SheetAction icon="document-attach-outline" title="Choose a file" detail="Attach a document or archive" onPress={() => void pickAttachments()} />
+          <SheetAction icon="images" title="Photo library" detail="Choose one or more images" onPress={() => void pickPhotos()} />
+          <SheetAction icon="camera" title="Take a photo" detail="Use the device camera" onPress={() => void takePhoto()} />
+          <SheetAction icon="paperclip" title="Choose a file" detail="Attach a document or archive" onPress={() => void pickAttachments()} />
           <Pressable onPress={() => setAttachmentMenuOpen(false)} style={{ minHeight: 46, alignItems: "center", justifyContent: "center", marginTop: 5 }}><Text style={[typography.bodyMedium, { color: theme.colors.textMuted }]}>Cancel</Text></Pressable>
         </Pressable>
       </Pressable>
@@ -200,11 +200,11 @@ function ChatContent({ sessionId }: { sessionId: string }) {
 
 function SheetAction({ icon, title, detail, onPress }: { icon: React.ComponentProps<typeof AppIcon>["name"]; title: string; detail: string; onPress: () => void }) {
   const theme = useAppTheme();
-  return <Pressable onPress={onPress} style={({ pressed }) => ({ minHeight: 58, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 8, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}><View style={{ width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSoft }}><AppIcon name={icon} size={18} color={theme.colors.accent} /></View><View style={{ flex: 1 }}><Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text><Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text></View><AppIcon name="chevron-forward" size={17} color={theme.colors.textFaint} /></Pressable>;
+  return <Pressable onPress={onPress} android_ripple={{ color: theme.colors.surfacePressed }} style={({ pressed }) => ({ minHeight: 58, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 8, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}><View style={{ width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.accentSoft }}><AppIcon name={icon} size={18} color={theme.colors.accent} /></View><View style={{ flex: 1 }}><Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text><Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text></View><AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} /></Pressable>;
 }
 
 function MissingChat() {
   const router = useRouter();
   const theme = useAppTheme();
-  return <Screen><TopBar title="Chat" left={<IconButton name="arrow-back" label="Back" size={40} onPress={() => router.back()} />} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>This Chat could not be found.</Text></View></Screen>;
+  return <Screen><TopBar title="Chat" left={<IconButton name="arrow-left" label="Back" size={40} onPress={() => router.back()} />} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>This Chat could not be found.</Text></View></Screen>;
 }
