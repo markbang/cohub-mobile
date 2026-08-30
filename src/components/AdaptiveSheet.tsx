@@ -22,6 +22,8 @@ const COMPACT_BREAKPOINT = 720;
 const OPEN_DURATION_MS = 220;
 const CLOSE_DURATION_MS = 170;
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
+const WEB_DRAG_STYLE: (ViewStyle & { touchAction: "none" }) | undefined =
+  Platform.OS === "web" ? { touchAction: "none" } : undefined;
 
 type AdaptiveSheetProps = {
   visible: boolean;
@@ -192,8 +194,12 @@ export function AdaptiveSheet({
             ]}
           >
             {compact ? (
-              <View testID={testID ? `${testID}-drag-handle` : undefined} style={styles.dragArea} {...panResponder.panHandlers}>
-                <View style={[styles.dragHandle, { backgroundColor: theme.colors.borderStrong }]} />
+              <View
+                testID={dismissible && testID ? `${testID}-drag-handle` : undefined}
+                style={[styles.dragArea, WEB_DRAG_STYLE]}
+                {...(dismissible ? panResponder.panHandlers : {})}
+              >
+                {dismissible ? <View style={[styles.dragHandle, { backgroundColor: theme.colors.borderStrong }]} /> : null}
               </View>
             ) : null}
             <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
