@@ -77,6 +77,18 @@ export default function FilesScreen() {
     [router, spaceId],
   );
 
+  const dismissPath = useCallback(
+    (path: string) => {
+      if (!spaceId) return;
+      const normalizedPath = normalizeSpacePath(path);
+      router.dismissTo({
+        pathname: "/space/[spaceId]/files",
+        params: normalizedPath ? { spaceId, path: normalizedPath } : { spaceId },
+      });
+    },
+    [router, spaceId],
+  );
+
   const openEntry = useCallback(
     (entry: SpaceFsEntry) => {
       if (entry.type === "dir") {
@@ -93,8 +105,8 @@ export default function FilesScreen() {
   );
 
   const goToParent = useCallback(() => {
-    router.back();
-  }, [router]);
+    dismissPath(parentSpacePath(currentPath));
+  }, [currentPath, dismissPath]);
 
   const title = currentPath ? spacePathName(currentPath) : "Files";
   const subtitle = space
@@ -151,7 +163,7 @@ export default function FilesScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Back to Files"
-                  onPress={() => router.back()}
+                  onPress={() => dismissPath("")}
                   style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginTop: 14 })}
                 >
                   <Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>Back to Files</Text>

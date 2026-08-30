@@ -41,11 +41,16 @@ function findInlineEmphasis(value: string, startAt: number): InlineEmphasis | nu
     const closingMarker = marker.repeat(markerLength);
     let closing = value.indexOf(closingMarker, contentStart);
     while (closing >= 0) {
+      if (value[closing - 1] === "\\") {
+        closing = value.indexOf(closingMarker, closing + markerLength);
+        continue;
+      }
       const content = value.slice(contentStart, closing);
       const lastContentCharacter = content[content.length - 1];
       const closingAfter = value[closing + markerLength];
       const validEnd = Boolean(content) && !/\s/.test(lastContentCharacter ?? "") &&
-        !(marker === "_" && (closingAfter === "_" || isWordCharacter(closingAfter)));
+        !(marker === "_" && (closingAfter === "_" || isWordCharacter(closingAfter))) &&
+        !(marker === "*" && !isBold && (value[closing - 1] === "*" || closingAfter === "*"));
       if (validEnd) {
         return { start: index, end: closing + markerLength, content, kind: isBold ? "bold" : "italic" };
       }

@@ -195,7 +195,7 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
       await stream.start();
       streamStartedRef.current = true;
       streamOwnerRef.current = operation;
-      if (!isCurrent()) {
+      if (!isCurrent() || streamStopRequestedRef.current) {
         stopOwnedStream(operation);
         return;
       }
