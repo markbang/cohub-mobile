@@ -342,7 +342,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     userSelect: "none",
-    touchAction: "none",
   },
   dragHandle: {
     width: 34,
