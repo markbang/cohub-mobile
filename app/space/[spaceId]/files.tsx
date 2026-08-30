@@ -55,8 +55,12 @@ export default function FilesScreen() {
   }, [client, currentPath, spaceId]);
 
   useEffect(() => {
-    void Promise.resolve().then(loadEntries);
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) void loadEntries();
+    });
     return () => {
+      active = false;
       requestIdRef.current += 1;
     };
   }, [loadEntries, refreshToken]);
@@ -66,18 +70,6 @@ export default function FilesScreen() {
       if (!spaceId) return;
       const normalizedPath = normalizeSpacePath(path);
       router.push({
-        pathname: "/space/[spaceId]/files",
-        params: normalizedPath ? { spaceId, path: normalizedPath } : { spaceId },
-      });
-    },
-    [router, spaceId],
-  );
-
-  const replacePath = useCallback(
-    (path: string) => {
-      if (!spaceId) return;
-      const normalizedPath = normalizeSpacePath(path);
-      router.replace({
         pathname: "/space/[spaceId]/files",
         params: normalizedPath ? { spaceId, path: normalizedPath } : { spaceId },
       });
@@ -101,8 +93,8 @@ export default function FilesScreen() {
   );
 
   const goToParent = useCallback(() => {
-    replacePath(parentSpacePath(currentPath));
-  }, [currentPath, replacePath]);
+    router.back();
+  }, [router]);
 
   const title = currentPath ? spacePathName(currentPath) : "Files";
   const subtitle = space
@@ -159,7 +151,7 @@ export default function FilesScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Back to Files"
-                  onPress={() => replacePath("")}
+                  onPress={() => router.back()}
                   style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginTop: 14 })}
                 >
                   <Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>Back to Files</Text>

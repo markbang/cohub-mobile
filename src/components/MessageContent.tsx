@@ -14,12 +14,67 @@ function TextBlock({ value, muted = false }: { value: string; muted?: boolean })
   })}</View>;
 }
 
+type InlineEmphasis = {
+  start: number;
+  end: number;
+  content: string;
+  kind: "bold" | "italic";
+};
+
+function isWordCharacter(value: string | undefined) {
+  return value !== undefined && /[A-Za-z0-9]/.test(value);
+}
+
+function findInlineEmphasis(value: string, startAt: number): InlineEmphasis | null {
+  for (let index = startAt; index < value.length; index += 1) {
+    const marker = value[index];
+    if (marker !== "*" && marker !== "_") continue;
+    if (value[index - 1] === "\\") continue;
+
+    const isBold = marker === "*" && value[index + 1] === "*";
+    const markerLength = isBold ? 2 : 1;
+    if (marker === "*" && !isBold && (value[index - 1] === "*" || value[index + 1] === "*")) continue;
+    if (marker === "_" && (value[index - 1] === "_" || value[index + 1] === "_" || isWordCharacter(value[index - 1]))) continue;
+
+    const contentStart = index + markerLength;
+    if (!value[contentStart] || /\s/.test(value[contentStart])) continue;
+    const closingMarker = marker.repeat(markerLength);
+    let closing = value.indexOf(closingMarker, contentStart);
+    while (closing >= 0) {
+      const content = value.slice(contentStart, closing);
+      const lastContentCharacter = content[content.length - 1];
+      const closingAfter = value[closing + markerLength];
+      const validEnd = Boolean(content) && !/\s/.test(lastContentCharacter ?? "") &&
+        !(marker === "_" && (closingAfter === "_" || isWordCharacter(closingAfter)));
+      if (validEnd) {
+        return { start: index, end: closing + markerLength, content, kind: isBold ? "bold" : "italic" };
+      }
+      closing = value.indexOf(closingMarker, closing + markerLength);
+    }
+  }
+  return null;
+}
+
 function renderInlineMarkdown(value: string): ReactNode {
-  const parts = value.split(/(\*\*[^*]+\*\*|__[^_]+__)/g);
-  return parts.map((part, index) => {
-    const isBold = (part.startsWith("**") && part.endsWith("**")) || (part.startsWith("__") && part.endsWith("__"));
-    return isBold ? <Text key={`${index}-${part}`} style={{ fontWeight: "700" }}>{part.slice(2, -2)}</Text> : part;
-  });
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  let nodeIndex = 0;
+  while (cursor < value.length) {
+    const emphasis = findInlineEmphasis(value, cursor);
+    if (!emphasis) {
+      nodes.push(value.slice(cursor));
+      break;
+    }
+    if (emphasis.start > cursor) nodes.push(value.slice(cursor, emphasis.start));
+    nodes.push(
+      <Text key={`${nodeIndex}-${emphasis.start}`} style={emphasis.kind === "bold" ? { fontWeight: "700" } : { fontStyle: "italic" }}>
+        {emphasis.content}
+      </Text>,
+    );
+    nodeIndex += 1;
+    cursor = emphasis.end;
+  }
+  return nodes;
 }
 
 function Block({ block }: { block: ContentBlock }) {

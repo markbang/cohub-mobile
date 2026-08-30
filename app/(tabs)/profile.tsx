@@ -120,7 +120,11 @@ export default function ProfileScreen() {
     setSigningOut(true);
     setSheetError(null);
     try {
-      await clearCache();
+      try {
+        await clearCache();
+      } catch {
+        setSheetError("Local cache could not be cleared. Signing out anyway.");
+      }
       await signOut();
       setSheet(null);
     } catch (error) {
@@ -246,6 +250,7 @@ export default function ProfileScreen() {
           icon="database"
           title="Local data"
           detail={`${state.spaces.length} Spaces and ${state.sessions.length} Chats cached`}
+          disabled={notificationLoading}
           onPress={() => openSheet("clear-cache")}
         />
         <Text style={[typography.micro, { color: theme.colors.textFaint, marginTop: 12, marginLeft: 8 }]}>Cohub Mobile · {version}</Text>
@@ -254,6 +259,7 @@ export default function ProfileScreen() {
           title="Sign out"
           detail="Clear local work and end this session"
           tone="danger"
+          disabled={notificationLoading}
           onPress={() => openSheet("sign-out")}
         />
         {sheetError ? <SheetError message={sheetError} /> : null}

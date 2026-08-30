@@ -71,9 +71,9 @@ export function hasRenderableContent(content: ContentBlock[] | null | undefined)
     if (block.type === "text") return typeof block.text === "string" && block.text.trim().length > 0;
     if (block.type === "thinking") return typeof block.thinking === "string" && block.thinking.trim().length > 0;
     if (block.type === "image") return block.source?.type === "url" && Boolean(block.source.url);
-    if (block.type === "tool_use") return typeof block.name === "string" && block.name.trim().length > 0;
+    if (block.type === "tool_use") return true;
     if (block.type === "tool_result") return true;
-    return true;
+    return false;
   });
 }
 

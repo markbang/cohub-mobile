@@ -164,7 +164,7 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   const theme = useAppTheme();
   const color = tone === "danger" ? theme.colors.danger : theme.colors.accent;
   const pressedColor = tone === "danger" ? theme.colors.danger : theme.colors.accentPressed;
-  const foreground = tone === "danger" ? "#ffffff" : theme.colors.accentText;
+  const foreground = tone === "danger" ? theme.colors.dangerText : theme.colors.accentText;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled || loading} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => [styles.primaryButton, { backgroundColor: pressed ? pressedColor : color, opacity: disabled || loading ? 0.55 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }, style]}>
       {loading ? <ActivityIndicator color={foreground} size="small" /> : icon ? <AppIcon name={icon} size={17} color={foreground} /> : null}

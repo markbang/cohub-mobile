@@ -1,5 +1,5 @@
 import { fromUint8Array } from "js-base64";
-import { useAudioStream, requestRecordingPermissionsAsync } from "expo-audio";
+import { requestRecordingPermissionsAsync, useAudioStream } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import { config } from "@/src/config";
@@ -36,7 +36,10 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
   const waitingRef = useRef<((message: VoiceMessage) => void) | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamStopRequestedRef = useRef(false);
+  const streamStartedRef = useRef(false);
+  const streamOwnerRef = useRef<number | null>(null);
   const operationRef = useRef(0);
+  const startInFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const [isStarting, setIsStarting] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -69,24 +72,44 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
     if (socket && socket.readyState !== WebSocket.CLOSED) socket.close(1000, "voice stopped");
   }, []);
 
+  const stopOwnedStream = useCallback(
+    (owner: number) => {
+      if (!streamStartedRef.current || streamOwnerRef.current !== owner) return;
+      streamStartedRef.current = false;
+      streamOwnerRef.current = null;
+      streamStopRequestedRef.current = true;
+      try {
+        stream.stop();
+      } catch (caught) {
+        if (mountedRef.current) setError(voiceErrorMessage(caught, "Voice input stopped unexpectedly. Try again."));
+      }
+    },
+    [stream],
+  );
+
   const stopStream = useCallback(() => {
     if (streamStopRequestedRef.current) return;
     streamStopRequestedRef.current = true;
-    try {
-      stream.stop();
-    } catch (caught) {
-      if (mountedRef.current) setError(voiceErrorMessage(caught, "Voice input stopped unexpectedly. Try again."));
-    }
-  }, [stream]);
+    const owner = streamOwnerRef.current;
+    if (owner !== null) stopOwnedStream(owner);
+  }, [stopOwnedStream]);
 
   const start = useCallback(async () => {
-    if (Platform.OS === "web" || isStarting || isRecording) return;
+    if (Platform.OS === "web" || startInFlightRef.current || isStarting || isRecording) return;
+    if (streamStartedRef.current) return;
+
     const operation = operationRef.current + 1;
     operationRef.current = operation;
+    startInFlightRef.current = true;
+    // A prior stop may still have a delayed server close callback. Clear both
+    // the timer and socket before assigning this operation's connection.
+    closeSocket();
     streamStopRequestedRef.current = false;
+    streamOwnerRef.current = null;
     const isCurrent = () => mountedRef.current && operationRef.current === operation;
     setError(null);
     setIsStarting(true);
+
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) throw new Error("Microphone permission is required for voice input");
@@ -117,7 +140,6 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
           if (isCurrent()) {
             stopStream();
             setIsRecording(false);
-            setIsStarting(false);
           }
         };
       });
@@ -128,6 +150,7 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
         socket.onclose = () => reject(new Error("Voice connection closed"));
       });
       if (!isCurrent()) return;
+
       socket.onmessage = (event) => {
         if (!isCurrent() || socketRef.current !== socket) return;
         let message: VoiceMessage;
@@ -160,6 +183,7 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
           closeSocket();
         }
       };
+
       const authReady = waitFor("system.auth.ok");
       socket.send(JSON.stringify({ type: "auth", payload: { token } }));
       await authReady;
@@ -169,21 +193,27 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
       await asrReady;
       if (!isCurrent()) return;
       await stream.start();
+      streamStartedRef.current = true;
+      streamOwnerRef.current = operation;
       if (!isCurrent()) {
-        stopStream();
+        stopOwnedStream(operation);
         return;
       }
       setIsRecording(true);
     } catch (caught) {
-      if (!isCurrent()) return;
-      stopStream();
+      if (!isCurrent()) {
+        stopOwnedStream(operation);
+        return;
+      }
+      stopOwnedStream(operation);
       closeSocket();
       setError(voiceErrorMessage(caught));
       setIsRecording(false);
     } finally {
-      if (isCurrent()) setIsStarting(false);
+      startInFlightRef.current = false;
+      if (mountedRef.current) setIsStarting(false);
     }
-  }, [closeSocket, getAccessToken, isRecording, isStarting, stopStream, stream]);
+  }, [closeSocket, getAccessToken, isRecording, isStarting, stopOwnedStream, stopStream, stream]);
 
   const stop = useCallback(() => {
     operationRef.current += 1;
@@ -198,18 +228,20 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
     if (mountedRef.current) {
       setPartial("");
       setIsRecording(false);
-      setIsStarting(false);
+      if (!startInFlightRef.current) setIsStarting(false);
     }
   }, [closeSocket, stopStream]);
 
   useEffect(() => {
     mountedRef.current = true;
-    streamStopRequestedRef.current = false;
     return () => {
       mountedRef.current = false;
       operationRef.current += 1;
       streamStopRequestedRef.current = true;
+      streamOwnerRef.current = null;
       closeSocket();
+      // useAudioStream's shared-object lifecycle releases the native stream on
+      // unmount. Calling stream.stop() here would race that release and throw.
     };
   }, [closeSocket, stream]);
 

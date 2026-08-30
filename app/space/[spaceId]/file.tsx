@@ -58,8 +58,12 @@ export default function FileScreen() {
   }, [client, path, spaceId]);
 
   useEffect(() => {
-    void Promise.resolve().then(loadFile);
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) void loadFile();
+    });
     return () => {
+      active = false;
       requestIdRef.current += 1;
     };
   }, [loadFile, retryToken]);
