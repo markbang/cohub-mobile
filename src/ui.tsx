@@ -107,6 +107,20 @@ export function TopBar({ title, subtitle, left, right }: { title: string; subtit
   );
 }
 
+export function DetailTopBar({ title, subtitle, onBack, backLabel = "Back", actions }: { title: string; subtitle?: string; onBack: () => void; backLabel?: string; actions?: ReactNode }) {
+  const theme = useAppTheme();
+  return (
+    <View style={[styles.detailTopBar, { borderBottomColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+      <IconButton name="arrow-left" label={backLabel} size={40} onPress={onBack} />
+      <View style={styles.detailTopBarTitle}>
+        <Text accessibilityRole="header" numberOfLines={1} style={[typography.heading, { color: theme.colors.text }]}>{title}</Text>
+        {subtitle ? <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 1 }]}>{subtitle}</Text> : null}
+      </View>
+      {actions ? <View style={styles.detailTopBarActions}>{actions}</View> : null}
+    </View>
+  );
+}
+
 export function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   const theme = useAppTheme();
   return (
@@ -243,6 +257,9 @@ const styles = StyleSheet.create({
   topBarLeft: { width: 44, alignItems: "flex-start", justifyContent: "center" },
   topBarTitle: { flex: 1, minWidth: 0, paddingVertical: 2 },
   topBarRight: { width: 96, alignItems: "flex-end", justifyContent: "center", flexDirection: "row", gap: 2 },
+  detailTopBar: { minHeight: 60, paddingHorizontal: 8, paddingVertical: 5, flexDirection: "row", alignItems: "center", gap: 4, borderBottomWidth: StyleSheet.hairlineWidth },
+  detailTopBarTitle: { flex: 1, minWidth: 0, paddingHorizontal: 2 },
+  detailTopBarActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 0 },
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingTop: 22, paddingBottom: 10 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, minHeight: 260 },
   emptyIcon: { width: 56, height: 56, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },

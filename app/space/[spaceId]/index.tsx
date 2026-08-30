@@ -1,11 +1,12 @@
 import type { AppRecord, CheckpointRecord, TaskRunRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionRow } from "@/src/components/SessionRow";
 import { useApp } from "@/src/data/context";
 import { useAppTheme, typography } from "@/src/theme";
-import { AppIcon, Avatar, IconButton, PrimaryButton, Screen, SectionHeader, StatusPill, TopBar } from "@/src/ui";
+import { AppIcon, Avatar, DetailTopBar, IconButton, PrimaryButton, Screen, SectionHeader, StatusPill } from "@/src/ui";
 import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 
 type Params = { spaceId?: string | string[] };
@@ -23,6 +24,7 @@ export default function SpaceScreen() {
   const params = useLocalSearchParams<Params>();
   const spaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { state, client, refreshHome } = useApp();
   const [resources, setResources] = useState<Resources>(emptyResources);
   const [loadingResources, setLoadingResources] = useState(false);
@@ -56,18 +58,23 @@ export default function SpaceScreen() {
   }, [client, spaceId]);
 
   if (!space) {
-    return <Screen><TopBar title="Space" left={<IconButton name="arrow-left" label="Back" size={40} onPress={() => router.back()} />} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>Space unavailable.</Text></View></Screen>;
+    return <Screen><DetailTopBar title="Space" onBack={() => router.back()} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>Space unavailable.</Text></View></Screen>;
   }
 
   const name = displaySpaceName(space);
   const activeTasks = resources.tasks.filter((task) => task.status === "pending" || task.status === "running").length;
-  return <Screen scroll refreshing={state.refreshing} onRefresh={() => void refreshHome()}>
-    <TopBar
+  return <Screen>
+    <DetailTopBar
       title={name}
       subtitle="Space"
-      left={<IconButton name="arrow-left" label="Back" size={40} onPress={() => router.back()} />}
-      right={<IconButton name="more" label="Space actions" size={40} onPress={() => Alert.alert(name, space.description || "A Cohub Space")} />}
+      onBack={() => router.back()}
+      actions={<IconButton name="more" label="Space actions" size={40} onPress={() => Alert.alert(name, space.description || "A Cohub Space")} />}
     />
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+      refreshControl={<RefreshControl refreshing={state.refreshing} onRefresh={() => void refreshHome()} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}
+    >
     <View style={{ alignItems: "center", paddingHorizontal: 20, paddingTop: 25, paddingBottom: 22 }}>
       <Avatar name={name} uri={space.publicProfile?.avatarUrl} size={70} online={space.status === "running"} />
       <Text style={[typography.title, { color: theme.colors.text, marginTop: 12 }]}>{name}</Text>
@@ -94,6 +101,7 @@ export default function SpaceScreen() {
 
     <SectionHeader title="Task Runs" />
     <View style={{ paddingBottom: 24 }}>{resources.tasks.length > 0 ? resources.tasks.map((task) => <ResourceRow key={task.id} icon={task.status === "running" ? "sync" : task.status === "failed" ? "alert" : "check-circle"} title={task.taskType.replaceAll("_", " ")} subtitle={task.errorMessage || `${formatRelativeTime(task.updatedAt)} · attempt ${task.attemptCount}`} trailing={<StatusPill label={task.status} tone={task.status === "failed" ? "danger" : task.status === "running" || task.status === "pending" ? "warning" : "success"} />} onPress={task.sessionId ? () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: task.sessionId! } }) : undefined} />) : <ResourceEmpty text={loadingResources ? "Loading task runs…" : "No recent task runs."} />}</View>
+    </ScrollView>
   </Screen>;
 }
 
