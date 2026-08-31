@@ -86,17 +86,18 @@ export async function configureAndroidAbiSplits(root = process.cwd(), architectu
   return normalizedArchitectures;
 }
 
-const ANDROID_GRADLE_MEMORY_LINE =
-  "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m";
-
 export async function configureAndroidGradleMemory(root = process.cwd()) {
   const gradlePath = join(root, "android", "gradle.properties");
+  const memoryArgsPath = join(root, "scripts", "android-gradle-jvmargs.txt");
+  const memoryArgs = (await readFile(memoryArgsPath, "utf8")).trim();
+  if (!memoryArgs) throw new Error(`Android Gradle JVM args are empty in ${memoryArgsPath}`);
+  const memoryLine = `org.gradle.jvmargs=${memoryArgs}`;
   const source = await readFile(gradlePath, "utf8");
   const propertyPattern = /^org\.gradle\.jvmargs=.*$/m;
-  if (!propertyPattern.test(source)) {
-    throw new Error(`Could not find org.gradle.jvmargs in ${gradlePath}`);
-  }
-  const updatedSource = source.replace(propertyPattern, ANDROID_GRADLE_MEMORY_LINE);
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const updatedSource = propertyPattern.test(source)
+    ? source.replace(propertyPattern, memoryLine)
+    : `${source.replace(/[\r\n]+$/, "")}${newline}${memoryLine}${newline}`;
   if (updatedSource !== source) await writeFile(gradlePath, updatedSource);
   console.log(`Configured Android Gradle heap in ${gradlePath}.`);
 }
