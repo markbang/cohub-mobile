@@ -4,7 +4,7 @@ const startupModules = [
   "src/platform/NavigationBridge.tsx",
   "src/platform/notifications.ts",
 ];
-const staticImportPattern = /(?:^|\n)\s*import\s+(?!type\b)(?:(?:(?!;)[\s\S])*?\s+from\s+)?["']expo-notifications["'];/;
+const staticImportPattern = /(?:^|\n)\s*import\s+(?!\s*type\b)(?:(?:(?!;)[\s\S])*?\s+from\s+)?["']expo-notifications["'];/;
 const failures = [];
 
 for (const path of startupModules) {
