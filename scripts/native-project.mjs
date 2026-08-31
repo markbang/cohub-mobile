@@ -86,8 +86,24 @@ export async function configureAndroidAbiSplits(root = process.cwd(), architectu
   return normalizedArchitectures;
 }
 
+const ANDROID_GRADLE_MEMORY_LINE =
+  "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m";
+
+export async function configureAndroidGradleMemory(root = process.cwd()) {
+  const gradlePath = join(root, "android", "gradle.properties");
+  const source = await readFile(gradlePath, "utf8");
+  const propertyPattern = /^org\.gradle\.jvmargs=.*$/m;
+  if (!propertyPattern.test(source)) {
+    throw new Error(`Could not find org.gradle.jvmargs in ${gradlePath}`);
+  }
+  const updatedSource = source.replace(propertyPattern, ANDROID_GRADLE_MEMORY_LINE);
+  if (updatedSource !== source) await writeFile(gradlePath, updatedSource);
+  console.log(`Configured Android Gradle heap in ${gradlePath}.`);
+}
+
 export async function buildAndroid(root = process.cwd(), { architectures, variant, minify = false }) {
   const normalizedArchitectures = await configureAndroidAbiSplits(root, architectures);
+  if (variant === "release") await configureAndroidGradleMemory(root);
   const task = variant === "release" ? "assembleRelease" : "assembleDebug";
   const args = [`-PreactNativeArchitectures=${normalizedArchitectures}`];
   if (minify) args.push("-Pandroid.enableMinifyInReleaseBuilds=true");
