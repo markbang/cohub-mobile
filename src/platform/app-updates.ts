@@ -5,7 +5,9 @@ import * as Device from "expo-device";
 import { config } from "@/src/config";
 
 const CACHE_KEY = "cohub:mobile-update-check:v1";
+const SNOOZE_KEY = "cohub:mobile-update-snooze:v1";
 const CHECK_TTL_MS = 6 * 60 * 60 * 1000;
+const SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 export type AppRelease = {
@@ -18,6 +20,11 @@ export type AppRelease = {
 type CachedCheck = {
   checkedAt: number;
   release: AppRelease;
+};
+
+type SnoozeRecord = {
+  version: string;
+  until: number;
 };
 
 let cachedCheck: CachedCheck | null = null;
@@ -164,7 +171,11 @@ export async function checkForAppUpdate(options: { force?: boolean } = {}) {
   const currentVersion = getInstalledAppVersion();
   if (!options.force) {
     await loadPersistedCache();
-    if (cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_TTL_MS) {
+    if (
+      cachedCheck &&
+      cachedCheck.checkedAt <= Date.now() &&
+      Date.now() - cachedCheck.checkedAt < CHECK_TTL_MS
+    ) {
       return isNewerAppVersion(currentVersion, cachedCheck.release.version)
         ? cachedCheck.release
         : null;
@@ -182,4 +193,34 @@ export async function checkForAppUpdate(options: { force?: boolean } = {}) {
       request = null;
     });
   return request;
+}
+
+function parseSnooze(value: string | null): SnoozeRecord | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!isRecord(parsed) || typeof parsed.version !== "string" || typeof parsed.until !== "number") return null;
+    return parseVersion(parsed.version) && Number.isFinite(parsed.until)
+      ? { version: parsed.version, until: parsed.until }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function isUpdateSnoozed(version: string) {
+  const record = parseSnooze(await AsyncStorage.getItem(SNOOZE_KEY));
+  if (!record || record.version !== version) return false;
+  if (record.until <= Date.now()) {
+    await AsyncStorage.removeItem(SNOOZE_KEY).catch(() => undefined);
+    return false;
+  }
+  return true;
+}
+
+export async function snoozeAppUpdate(version: string) {
+  await AsyncStorage.setItem(SNOOZE_KEY, JSON.stringify({
+    version,
+    until: Date.now() + SNOOZE_DURATION_MS,
+  } satisfies SnoozeRecord));
 }

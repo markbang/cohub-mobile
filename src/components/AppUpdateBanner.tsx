@@ -7,6 +7,8 @@ import { AppIcon, PrimaryButton } from "@/src/ui";
 import {
   checkForAppUpdate,
   getInstalledAppVersion,
+  isUpdateSnoozed,
+  snoozeAppUpdate,
   type AppRelease,
 } from "@/src/platform/app-updates";
 
@@ -24,14 +26,17 @@ export function AppUpdateBanner() {
     const check = async () => {
       try {
         const latest = await checkForAppUpdate();
+        const snoozed = latest ? await isUpdateSnoozed(latest.version) : false;
         if (!active) return;
+        setSnoozedVersion(snoozed && latest ? latest.version : null);
         setRelease((current) => {
-          if (!latest) return null;
-          return current?.version === latest.version && current.url === latest.url
+          if (!latest || snoozed) return null;
+          return current?.version === latest.version &&
+            current.url === latest.url &&
+            current.downloadUrl === latest.downloadUrl
             ? current
             : latest;
         });
-        if (latest) setSnoozedVersion(null);
       } catch {
         // An update check is optional and must not affect app startup.
       }
@@ -50,7 +55,9 @@ export function AppUpdateBanner() {
   if (Platform.OS !== "android" || !release || release.version === snoozedVersion) return null;
 
   const close = () => {
+    void snoozeAppUpdate(release.version).catch(() => undefined);
     setSnoozedVersion(release.version);
+    setRelease(null);
     setDetailsOpen(false);
   };
 
