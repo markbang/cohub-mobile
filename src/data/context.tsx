@@ -189,6 +189,15 @@ function updateView(state: AppState, sessionId: string, update: Partial<SessionV
   };
 }
 
+function preferNewerSession(current: SessionRecord | null | undefined, incoming: SessionRecord) {
+  if (!current) return incoming;
+  const currentTime = Date.parse(current.updatedAt);
+  const incomingTime = Date.parse(incoming.updatedAt);
+  return Number.isFinite(currentTime) && Number.isFinite(incomingTime) && currentTime > incomingTime
+    ? current
+    : incoming;
+}
+
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "hydrate":
@@ -234,13 +243,17 @@ function reducer(state: AppState, action: Action): AppState {
       });
     case "session-cache":
       return updateView(state, action.sessionId, { messages: action.messages, loading: false });
-    case "session-success":
+    case "session-success": {
+      const session = preferNewerSession(
+        state.sessionViews[action.sessionId]?.session,
+        action.session,
+      );
       return updateView(
         {
           ...state,
           sessions: state.sessions.map((item) =>
-            item.id === action.session.id
-              ? { ...item, ...action.session, space: item.space ?? { id: action.space.id, name: displaySpaceName(action.space), slug: action.space.slug, publicProfile: action.space.publicProfile ?? null } }
+            item.id === session.id
+              ? { ...item, ...session, space: item.space ?? { id: action.space.id, name: displaySpaceName(action.space), slug: action.space.slug, publicProfile: action.space.publicProfile ?? null } }
               : item,
           ),
         },
@@ -250,10 +263,11 @@ function reducer(state: AppState, action: Action): AppState {
           refreshing: false,
           error: null,
           space: action.space,
-          session: action.session,
+          session,
           messages: action.messages,
         },
       );
+    }
     case "session-error":
       return updateView(state, action.sessionId, { loading: false, refreshing: false, error: action.message });
     case "session-refresh-start":

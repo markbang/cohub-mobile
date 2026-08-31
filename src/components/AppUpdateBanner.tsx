@@ -6,9 +6,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import { AppIcon, PrimaryButton } from "@/src/ui";
 import {
   checkForAppUpdate,
-  dismissAppUpdate,
   getInstalledAppVersion,
-  isUpdateDismissed,
   type AppRelease,
 } from "@/src/platform/app-updates";
 
@@ -16,23 +14,26 @@ export function AppUpdateBanner() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const [release, setRelease] = useState<AppRelease | null>(null);
+  const [snoozedVersion, setSnoozedVersion] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
     let active = true;
 
     const check = async () => {
-      setChecking(true);
       try {
         const latest = await checkForAppUpdate();
-        if (!active || !latest || await isUpdateDismissed(latest.version)) return;
-        setRelease(latest);
+        if (!active) return;
+        setRelease((current) => {
+          if (!latest) return null;
+          return current?.version === latest.version && current.url === latest.url
+            ? current
+            : latest;
+        });
+        if (latest) setSnoozedVersion(null);
       } catch {
         // An update check is optional and must not affect app startup.
-      } finally {
-        if (active) setChecking(false);
       }
     };
 
@@ -46,11 +47,10 @@ export function AppUpdateBanner() {
     };
   }, []);
 
-  if (Platform.OS !== "android" || checking || !release) return null;
+  if (Platform.OS !== "android" || !release || release.version === snoozedVersion) return null;
 
   const close = () => {
-    void dismissAppUpdate(release.version).catch(() => undefined);
-    setRelease(null);
+    setSnoozedVersion(release.version);
     setDetailsOpen(false);
   };
 

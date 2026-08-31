@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionRow } from "@/src/components/SessionRow";
+import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useAppTheme, typography } from "@/src/theme";
 import { AppIcon, IconButton, PrimaryButton } from "@/src/ui";
 import { normalizeSpacePath, parentSpacePath, spacePathName } from "@/src/utils";
@@ -232,6 +233,8 @@ export function SpacePanels({
           </Animated.View>
           <Animated.View
             {...panelResponder.panHandlers}
+            accessibilityViewIsModal
+            role="dialog"
             style={[
               styles.panel,
               {
@@ -412,27 +415,12 @@ function FilesPanel({
           data={entries}
           keyExtractor={(item) => item.path}
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24, flexGrow: entries.length === 0 ? 1 : undefined }}
-          renderItem={({ item }) => <PanelFileRow entry={item} onPress={() => openEntry(item)} />}
+          renderItem={({ item }) => <SpaceFileRow entry={item} compact onPress={() => openEntry(item)} />}
           ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name="folder-open" size={26} color={theme.colors.textMuted} /><Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 10 }]}>{path ? "This folder is empty." : "This workspace is empty."}</Text></View>}
         />
       )}
     </View>
   );
-}
-
-function PanelFileRow({ entry, onPress }: { entry: SpaceFsEntry; onPress: () => void }) {
-  const theme = useAppTheme();
-  const directory = entry.type === "dir";
-  const symlink = entry.type === "symlink";
-  const icon = directory ? "folder" : symlink ? "external-link" : "file-text";
-  const detail = directory ? "Folder" : symlink ? "Symbolic link" : `${entry.mimeType || "File"} · ${formatBytes(entry.size)}`;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${directory ? "Open folder" : "Open file"} ${entry.name}`} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => ({ minHeight: 60, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent", borderBottomWidth: 1, borderBottomColor: theme.colors.border })}><View style={{ width: 33, height: 33, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: directory ? theme.colors.accentSoft : theme.colors.surface }}><AppIcon name={icon} size={17} color={directory ? theme.colors.accent : theme.colors.textMuted} /></View><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{entry.name}</Text><Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text></View><AppIcon name="chevron-right" size={15} color={theme.colors.textFaint} /></Pressable>;
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const styles = {

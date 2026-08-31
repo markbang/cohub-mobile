@@ -4,7 +4,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { config } from "@/src/config";
 
-const DISMISSED_PREFIX = "cohub:mobile-update-dismissed:v1";
+const CACHE_KEY = "cohub:mobile-update-check:v1";
 const CHECK_TTL_MS = 6 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -17,10 +17,11 @@ export type AppRelease = {
 
 type CachedCheck = {
   checkedAt: number;
-  release: AppRelease | null;
+  release: AppRelease;
 };
 
 let cachedCheck: CachedCheck | null = null;
+let persistedCacheRead: Promise<void> | null = null;
 let request: Promise<AppRelease | null> | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -100,6 +101,48 @@ function releaseFromPayload(payload: unknown): AppRelease | null {
   };
 }
 
+function parseCachedCheck(value: unknown): CachedCheck | null {
+  if (!isRecord(value) || typeof value.checkedAt !== "number" || !Number.isFinite(value.checkedAt) || !isRecord(value.release)) return null;
+  const rawRelease = value.release;
+  const version = typeof rawRelease.version === "string" ? rawRelease.version.trim() : "";
+  const url = typeof rawRelease.url === "string" ? rawRelease.url.trim() : "";
+  const notes = rawRelease.notes == null ? null : typeof rawRelease.notes === "string" ? rawRelease.notes : null;
+  const downloadUrl = rawRelease.downloadUrl == null ? null : typeof rawRelease.downloadUrl === "string" ? rawRelease.downloadUrl.trim() || null : null;
+  if (!version || !parseVersion(version) || !isAllowedReleaseUrl(url)) return null;
+  if (downloadUrl && !isAllowedReleaseUrl(downloadUrl)) return null;
+  return { checkedAt: value.checkedAt, release: { version, url, notes, downloadUrl } };
+}
+
+async function loadPersistedCache() {
+  if (cachedCheck) return;
+  if (persistedCacheRead) {
+    await persistedCacheRead;
+    return;
+  }
+
+  const read = AsyncStorage.getItem(CACHE_KEY)
+    .then((raw) => {
+      if (!raw || cachedCheck) return;
+      try {
+        const parsed = parseCachedCheck(JSON.parse(raw));
+        if (parsed) cachedCheck = parsed;
+      } catch {
+        // Ignore malformed local cache and use the network result.
+      }
+    })
+    .catch(() => undefined);
+  persistedCacheRead = read;
+  try {
+    await read;
+  } finally {
+    if (persistedCacheRead === read) persistedCacheRead = null;
+  }
+}
+
+function persistCheck(value: CachedCheck) {
+  void AsyncStorage.setItem(CACHE_KEY, JSON.stringify(value)).catch(() => undefined);
+}
+
 async function requestLatestRelease() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -119,33 +162,24 @@ async function requestLatestRelease() {
 
 export async function checkForAppUpdate(options: { force?: boolean } = {}) {
   const currentVersion = getInstalledAppVersion();
-  if (!options.force && cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_TTL_MS) {
-    return cachedCheck.release && isNewerAppVersion(currentVersion, cachedCheck.release.version)
-      ? cachedCheck.release
-      : null;
+  if (!options.force) {
+    await loadPersistedCache();
+    if (cachedCheck && Date.now() - cachedCheck.checkedAt < CHECK_TTL_MS) {
+      return isNewerAppVersion(currentVersion, cachedCheck.release.version)
+        ? cachedCheck.release
+        : null;
+    }
   }
   if (request && !options.force) return request;
 
   request = requestLatestRelease()
     .then((latest) => {
-      const release = isNewerAppVersion(currentVersion, latest.version) ? latest : null;
       cachedCheck = { checkedAt: Date.now(), release: latest };
-      return release;
+      persistCheck(cachedCheck);
+      return isNewerAppVersion(currentVersion, latest.version) ? latest : null;
     })
     .finally(() => {
       request = null;
     });
   return request;
-}
-
-function dismissedKey(version: string) {
-  return `${DISMISSED_PREFIX}:${version}`;
-}
-
-export async function isUpdateDismissed(version: string) {
-  return (await AsyncStorage.getItem(dismissedKey(version))) === "true";
-}
-
-export async function dismissAppUpdate(version: string) {
-  await AsyncStorage.setItem(dismissedKey(version), "true");
 }
