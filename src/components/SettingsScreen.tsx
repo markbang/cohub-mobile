@@ -110,7 +110,17 @@ export function SettingsScreen({
 		if (signingOut) return;
 		setSigningOut(true);
 		try {
-			await clearCache();
+			try {
+				await clearCache();
+			} catch (error) {
+				setNotice({
+					title: "Local cache cleanup incomplete",
+					message:
+						error instanceof Error
+							? `${error.message} Sign out will continue.`
+							: "Local cache could not be cleared. Sign out will continue.",
+				});
+			}
 			await signOut();
 			setSignOutOpen(false);
 		} catch (error) {
@@ -384,6 +394,7 @@ function SettingsRow({
 	trailing,
 	onPress,
 	danger = false,
+	disabled = false,
 }: {
 	icon: React.ComponentProps<typeof AppIcon>["name"];
 	title: string;
@@ -391,6 +402,7 @@ function SettingsRow({
 	trailing?: ReactNode;
 	onPress?: () => void;
 	danger?: boolean;
+	disabled?: boolean;
 }) {
 	const theme = useAppTheme();
 	const content = (
@@ -452,10 +464,12 @@ function SettingsRow({
 		<Pressable
 			accessibilityRole="button"
 			accessibilityLabel={title}
+			disabled={disabled}
 			onPress={onPress}
 			android_ripple={{ color: theme.colors.pressOverlay }}
 			style={({ pressed }) => ({
 				backgroundColor: pressed ? theme.colors.surfacePressed : "transparent",
+				opacity: disabled ? 0.55 : 1,
 			})}
 		>
 			{content}
@@ -1518,6 +1532,7 @@ function BillingSection({
 	const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [pendingProductKey, setPendingProductKey] = useState<string | null>(null);
 	const load = useCallback(async () => {
 		if (!client) {
 			setLoading(false);
@@ -1547,7 +1562,8 @@ function BillingSection({
 	const openProduct = async (
 		product: BillingCatalog["plans"][number] | BillingCatalog["addons"][number],
 	) => {
-		if (!client) return;
+		if (!client || pendingProductKey) return;
+		setPendingProductKey(product.key);
 		try {
 			const result =
 				product.kind === "plan"
@@ -1570,6 +1586,8 @@ function BillingSection({
 				message:
 					caught instanceof Error ? caught.message : "Unable to open checkout.",
 			});
+		} finally {
+			setPendingProductKey(null);
 		}
 	};
 	return (
@@ -1615,6 +1633,7 @@ function BillingSection({
 								icon="zap"
 								title={plan.name}
 								detail={plan.description || "Cohub plan"}
+								disabled={pendingProductKey !== null}
 								onPress={() => void openProduct(plan)}
 								trailing={
 									<Text
@@ -1649,6 +1668,7 @@ function BillingSection({
 										icon="zap"
 										title={addon.name}
 										detail={addon.description || "Additional Cohub credits"}
+										disabled={pendingProductKey !== null}
 										onPress={() => void openProduct(addon)}
 										trailing={
 											<Text

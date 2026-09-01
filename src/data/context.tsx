@@ -124,6 +124,7 @@ const emptyView = (): SessionView => ({
   session: null,
   messages: [],
   turns: [],
+  historyLoaded: false,
   turnIndex: [],
   turnIndexLoading: false,
   hasMoreOlder: false,
@@ -178,6 +179,7 @@ type Action =
   | { type: "session-page-start"; sessionId: string; direction: "older" | "newer" }
   | { type: "session-page-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMore: boolean; direction: "older" | "newer" }
   | { type: "session-page-error"; sessionId: string; message: string }
+  | { type: "session-page-end"; sessionId: string; direction: "older" | "newer" }
   | { type: "session-window-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMoreOlder: boolean; hasMoreNewer: boolean; oldestCursor?: number | null; newestCursor?: number | null }
   | { type: "turn-index-start"; sessionId: string }
   | { type: "turn-index"; sessionId: string; turnIndex: SessionTurnIndexItem[] }
@@ -248,12 +250,8 @@ function reducer(state: AppState, action: Action): AppState {
     case "home-start":
       return { ...state, refreshing: true, error: null, spacesError: null, sessionsError: null, activityLoading: true, activityError: null };
     case "home-success": {
-      const incomingSessions = new Map(action.sessions.map((session) => [session.id, session]));
-      const existingIds = new Set(state.sessions.map((session) => session.id));
-      const mergedSessions = [
-        ...state.sessions.map((session) => mergeSessionItem(session, incomingSessions.get(session.id) ?? session)),
-        ...action.sessions.filter((session) => !existingIds.has(session.id)),
-      ];
+      const existingSessions = new Map(state.sessions.map((session) => [session.id, session]));
+      const refreshedSessions = action.sessions.map((session) => mergeSessionItem(existingSessions.get(session.id), session));
       return {
         ...state,
         booting: false,
@@ -263,7 +261,7 @@ function reducer(state: AppState, action: Action): AppState {
         sessionsError: action.sessionsError ?? null,
         lastSyncedAt: new Date().toISOString(),
         spaces: sortByRecent(action.spaces),
-        sessions: sortByRecent(mergedSessions),
+        sessions: sortByRecent(refreshedSessions),
         sessionsHasMore: action.sessionsHasMore ?? false,
         sessionsCursor: action.sessionsCursor ?? null,
         sessionsLoadingMore: false,
@@ -296,6 +294,8 @@ function reducer(state: AppState, action: Action): AppState {
     case "session-start":
       return updateView(state, action.sessionId, {
         loading: true,
+        loadingOlder: false,
+        loadingNewer: false,
         error: null,
         space: action.space ?? state.sessionViews[action.sessionId]?.space ?? null,
         session: action.session ?? state.sessionViews[action.sessionId]?.session ?? null,
@@ -330,6 +330,7 @@ function reducer(state: AppState, action: Action): AppState {
           session,
           messages: action.messages,
           turns: action.turns,
+          historyLoaded: true,
           hasMoreOlder: action.hasMoreOlder,
           hasMoreNewer: action.hasMoreNewer ?? false,
           loadingOlder: false,
@@ -352,7 +353,7 @@ function reducer(state: AppState, action: Action): AppState {
         refreshing: false,
         ...(session ? { session } : {}),
         ...(action.messages ? { messages: action.messages } : {}),
-        ...(action.turns ? { turns: action.turns } : {}),
+        ...(action.turns ? { turns: action.turns, historyLoaded: true } : {}),
         ...(action.hasMoreOlder !== undefined ? { hasMoreOlder: action.hasMoreOlder } : {}),
         ...(action.hasMoreNewer !== undefined ? { hasMoreNewer: action.hasMoreNewer } : {}),
         ...(action.oldestCursor !== undefined ? { oldestCursor: action.oldestCursor } : {}),
@@ -370,6 +371,7 @@ function reducer(state: AppState, action: Action): AppState {
         error: null,
         ...(session ? { session } : {}),
         turns,
+        historyLoaded: true,
         messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
         hasMoreOlder: action.direction === "older" ? action.hasMore : current.hasMoreOlder,
         hasMoreNewer: action.direction === "newer" ? action.hasMore : current.hasMoreNewer,
@@ -381,6 +383,8 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case "session-page-error":
       return updateView(state, action.sessionId, { loadingOlder: false, loadingNewer: false, error: action.message });
+    case "session-page-end":
+      return updateView(state, action.sessionId, action.direction === "older" ? { loadingOlder: false } : { loadingNewer: false });
     case "session-window-success": {
       const current = state.sessionViews[action.sessionId] ?? emptyView();
       const turns = mergeTurns(current.turns, action.turns);
@@ -389,6 +393,7 @@ function reducer(state: AppState, action: Action): AppState {
         error: null,
         ...(session ? { session } : {}),
         turns,
+        historyLoaded: true,
         messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
         hasMoreOlder: action.hasMoreOlder,
         hasMoreNewer: action.hasMoreNewer,
@@ -812,7 +817,7 @@ export function AppProvider({
       try {
         let cursor: number | undefined;
         const collected: SessionTurnIndexItem[] = [];
-        for (let page = 0; page < 20; page += 1) {
+        for (;;) {
           const response = await activeClient.space(spaceId).session(sessionId).turns.index({ cursor, limit: 500 });
           collected.push(...response.turns);
           if (!response.hasMore || response.nextCursor == null) break;
@@ -845,14 +850,22 @@ export function AppProvider({
       const activeClient = clientRef.current;
       if (!activeClient || !spaceId || !view || !view.hasMoreOlder || view.loadingOlder) return;
       const openToken = openTokens.current.get(sessionId);
+      const isCurrentRequest = () => openToken === undefined || openTokens.current.get(sessionId) === openToken;
       dispatch({ type: "session-page-start", sessionId, direction: "older" });
       try {
         const response = await activeClient.space(spaceId).session(sessionId).turns.listPaginated({ ...(view.oldestCursor != null ? { cursor: view.oldestCursor } : {}), direction: "older", limit: 30 });
-        if (openToken !== undefined && openTokens.current.get(sessionId) !== openToken) return;
+        if (!isCurrentRequest()) {
+          dispatch({ type: "session-page-end", sessionId, direction: "older" });
+          return;
+        }
         dispatch({ type: "session-page-success", sessionId, session: response.session, turns: response.turns, hasMore: response.hasMore, direction: "older" });
         const merged = mergeTurns(stateRef.current.sessionViews[sessionId]?.turns ?? [], response.turns);
         if (Platform.OS !== "web") void saveMessages(userKey, sessionId, messagesFromTurns(merged)).catch(() => undefined);
       } catch (error) {
+        if (!isCurrentRequest()) {
+          dispatch({ type: "session-page-end", sessionId, direction: "older" });
+          return;
+        }
         dispatch({ type: "session-page-error", sessionId, message: errorMessage(error, "Unable to load earlier turns") });
       }
     })();
@@ -874,14 +887,22 @@ export function AppProvider({
       const activeClient = clientRef.current;
       if (!activeClient || !spaceId || !view || !view.hasMoreNewer || view.loadingNewer) return;
       const openToken = openTokens.current.get(sessionId);
+      const isCurrentRequest = () => openToken === undefined || openTokens.current.get(sessionId) === openToken;
       dispatch({ type: "session-page-start", sessionId, direction: "newer" });
       try {
         const response = await activeClient.space(spaceId).session(sessionId).turns.listPaginated({ ...(view.newestCursor != null ? { cursor: view.newestCursor } : {}), direction: "newer", limit: 100 });
-        if (openToken !== undefined && openTokens.current.get(sessionId) !== openToken) return;
+        if (!isCurrentRequest()) {
+          dispatch({ type: "session-page-end", sessionId, direction: "newer" });
+          return;
+        }
         dispatch({ type: "session-page-success", sessionId, session: response.session, turns: response.turns, hasMore: response.hasMore, direction: "newer" });
         const merged = mergeTurns(stateRef.current.sessionViews[sessionId]?.turns ?? [], response.turns);
         if (Platform.OS !== "web") void saveMessages(userKey, sessionId, messagesFromTurns(merged)).catch(() => undefined);
       } catch (error) {
+        if (!isCurrentRequest()) {
+          dispatch({ type: "session-page-end", sessionId, direction: "newer" });
+          return;
+        }
         dispatch({ type: "session-page-error", sessionId, message: errorMessage(error, "Unable to load newer turns") });
       }
     })();
@@ -1037,6 +1058,7 @@ export function AppProvider({
   const closeSession = useCallback((sessionId: string) => {
     subscriptions.current.get(sessionId)?.();
     subscriptions.current.delete(sessionId);
+    openTokens.current.set(sessionId, (openTokens.current.get(sessionId) ?? 0) + 1);
   }, []);
 
   const abortSession = useCallback(

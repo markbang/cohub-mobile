@@ -15,9 +15,6 @@ type SpacePanelsProps = {
   spaceId: string;
   spaceName: string;
   sessions: UserSessionListItem[];
-  sessionsHasMore?: boolean;
-  sessionsLoadingMore?: boolean;
-  onLoadMoreSessions?: () => void;
   client: CohubClient | null;
   activePanel: SpacePanel | null;
   onActivePanelChange: (panel: SpacePanel | null) => void;
@@ -47,7 +44,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function SpacePanels({ spaceId, spaceName, sessions, sessionsHasMore = false, sessionsLoadingMore = false, onLoadMoreSessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children }: SpacePanelsProps) {
+export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children }: SpacePanelsProps) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -201,7 +198,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, sessionsHasMore = fa
       <View style={styles.modalRoot}>
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}><Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.fill} onPress={closeDrawer} /></Animated.View>
         <Animated.View {...panelResponder.panHandlers} accessibilityViewIsModal role="dialog" style={[styles.panel, { width: panelWidth, height: Math.max(0, height), paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: theme.colors.background, borderColor: theme.colors.border, ...panelPosition, transform: [{ translateX }] }]}>
-          {visibleSide === "chat" ? <ChatPanel spaceName={spaceName} sessions={sessions} sessionsHasMore={sessionsHasMore} sessionsLoadingMore={sessionsLoadingMore} onLoadMoreSessions={onLoadMoreSessions} onClose={closeDrawer} onNewChat={() => { closeDrawer(); onNewChat(); }} onOpenSession={(sessionId) => { closeDrawer(); onOpenSession(sessionId); }} /> : <FilesPanel spaceId={spaceId} spaceName={spaceName} client={client} onClose={closeDrawer} onOpenFile={(path) => { closeDrawer(); onOpenFile(path); }} onOpenFilesPage={() => { closeDrawer(); onOpenFilesPage(); }} />}
+          {visibleSide === "chat" ? <ChatPanel spaceName={spaceName} sessions={sessions} onClose={closeDrawer} onNewChat={() => { closeDrawer(); onNewChat(); }} onOpenSession={(sessionId) => { closeDrawer(); onOpenSession(sessionId); }} /> : <FilesPanel spaceId={spaceId} spaceName={spaceName} client={client} onClose={closeDrawer} onOpenFile={(path) => { closeDrawer(); onOpenFile(path); }} onOpenFilesPage={() => { closeDrawer(); onOpenFilesPage(); }} />}
         </Animated.View>
       </View>
     </Modal>
@@ -222,7 +219,7 @@ function PanelHeader({ title, subtitle, onClose, action }: { title: string; subt
   );
 }
 
-function ChatPanel({ spaceName, sessions, sessionsHasMore, sessionsLoadingMore, onLoadMoreSessions, onClose, onNewChat, onOpenSession }: { spaceName: string; sessions: UserSessionListItem[]; sessionsHasMore: boolean; sessionsLoadingMore: boolean; onLoadMoreSessions?: () => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string) => void }) {
+function ChatPanel({ spaceName, sessions, onClose, onNewChat, onOpenSession }: { spaceName: string; sessions: UserSessionListItem[]; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string) => void }) {
   const theme = useAppTheme();
   const [query, setQuery] = useState("");
   const displaySessions = sessions.map((session) => session.space ? session : {
@@ -242,10 +239,8 @@ function ChatPanel({ spaceName, sessions, sessionsHasMore, sessionsLoadingMore, 
         data={filteredSessions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <SessionRow session={item} onPress={() => onOpenSession(item.id)} />}
-        onEndReached={() => { if (sessionsHasMore) onLoadMoreSessions?.(); }}
-        onEndReachedThreshold={0.7}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: filteredSessions.length === 0 ? 1 : undefined }}
-        ListFooterComponent={sessionsHasMore ? <Pressable accessibilityRole="button" accessibilityLabel="Load more Chats" disabled={sessionsLoadingMore} onPress={() => onLoadMoreSessions?.()} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => ({ minHeight: 40, marginHorizontal: 14, marginTop: 8, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{sessionsLoadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={[typography.caption, { color: theme.colors.accent }]}>Load more Chats</Text>}</Pressable> : null}
         ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name={query ? "search" : "messages"} size={26} color={theme.colors.textMuted} /><Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 10, textAlign: "center" }]}>{query ? "No matching Chats" : "No Chats in this Space yet."}</Text></View>}
       />
     </View>

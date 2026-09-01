@@ -85,13 +85,14 @@ export function getDefaultThinkingLevel(
 	entry: ModelCatalogEntry,
 ): ModelThinkingLevel {
 	const configured = entry.model?.defaultThinkingLevel;
-	if (
+	const fallback =
 		typeof configured === "string" &&
 		THINKING_LEVELS.includes(configured as ModelThinkingLevel)
-	) {
-		return configured as ModelThinkingLevel;
-	}
-	return entry.model?.reasoning === true ? "high" : "off";
+			? (configured as ModelThinkingLevel)
+			: entry.model?.reasoning === true
+				? "high"
+				: "off";
+	return clampThinkingLevel(entry, fallback);
 }
 
 export function clampThinkingLevel(

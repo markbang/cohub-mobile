@@ -52,7 +52,7 @@ export default function ChatsScreen() {
         keyboardShouldPersistTaps="handled"
         refreshing={state.refreshing}
         onRefresh={() => void refreshHome()}
-        onEndReached={() => { if (!query && filter === "all") void loadMoreSessions(); }}
+        onEndReached={() => { if (!query.trim() && filter === "all") void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         contentContainerStyle={{ paddingBottom: 30, flexGrow: sessions.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View style={{ paddingHorizontal: 16, paddingTop: 12 }}>

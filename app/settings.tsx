@@ -23,5 +23,5 @@ export default function SettingsRoute() {
 		raw && sections.has(raw)
 			? (raw as Parameters<typeof SettingsScreen>[0]["initialSection"])
 			: undefined;
-	return <SettingsScreen initialSection={section} />;
+	return <SettingsScreen key={section ?? "profile"} initialSection={section} />;
 }

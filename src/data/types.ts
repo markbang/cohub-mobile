@@ -51,6 +51,8 @@ export type SessionView = {
   messages: MessageRecord[];
   /** Authoritative turn history loaded from the paginated session API. */
   turns: SessionTurnRecord[];
+  /** True after the first authoritative turn response has arrived. */
+  historyLoaded: boolean;
   turnIndex: SessionTurnIndexItem[];
   turnIndexLoading: boolean;
   hasMoreOlder: boolean;

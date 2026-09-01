@@ -136,7 +136,7 @@ function loadThemePreference() {
   if (themePreferenceLoad) return themePreferenceLoad;
   themePreferenceLoad = AsyncStorage.getItem(THEME_PREFERENCE_KEY)
     .then((value) => {
-      if (isThemePreference(value)) themePreference = value;
+      if (!themePreferenceLoaded && isThemePreference(value)) themePreference = value;
       themePreferenceLoaded = true;
       notifyThemePreferenceListeners();
     })

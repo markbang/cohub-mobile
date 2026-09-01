@@ -138,7 +138,12 @@ export async function registerForPushNotifications(options: PushRegistrationOpti
   }
   if (!token) return unavailable("native-token-unavailable", "The operating system returned an empty push token.");
 
-  const accessToken = await options.getAccessToken();
+  let accessToken: string | null;
+  try {
+    accessToken = await options.getAccessToken();
+  } catch {
+    return unavailable("missing-auth", "Your Cohub sign-in token is unavailable. Sign in again and retry.");
+  }
   if (!accessToken) return unavailable("missing-auth", "Your Cohub sign-in token is unavailable. Sign in again and retry.");
 
   try {

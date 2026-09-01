@@ -38,7 +38,7 @@ export default function ChatScreen() {
 function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessionId: string; initialTurnSequence: number | null; initialTurnId: string | null }) {
   const router = useRouter();
   const theme = useAppTheme();
-  const { state, client, connectionState, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadMoreSessions, renameSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useApp();
+  const { state, client, connectionState, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, renameSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useApp();
   const view = useSession(sessionId);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
@@ -116,6 +116,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
     });
     if (index < 0) { pendingScrollSequence.current = sequence; return; }
     pendingScrollSequence.current = null;
+    initialScrollDone.current = true;
     listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.08 });
     setCurrentTurnSequence(sequence);
   }, [messages]);
@@ -141,7 +142,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
 
   useEffect(() => {
     const targetKey = initialTurnId ? `id:${initialTurnId}` : initialTurnSequence !== null ? `sequence:${initialTurnSequence}` : null;
-    if (!targetKey || !client || !spaceId || handledDeepLinkTarget.current === targetKey) return;
+    if (!targetKey || !client || !spaceId || !view.historyLoaded || handledDeepLinkTarget.current === targetKey) return;
     handledDeepLinkTarget.current = targetKey;
     const target = initialTurnId ? { turnId: initialTurnId } : initialTurnSequence;
     if (target === null) return;
@@ -154,7 +155,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
         setNotice({ title: "Turn unavailable", message: error instanceof Error ? error.message : "Unable to open the requested part of the Chat." });
       }
     })();
-  }, [client, initialTurnId, initialTurnSequence, jumpToTurn, scrollToTurn, sessionId, spaceId]);
+  }, [client, initialTurnId, initialTurnSequence, jumpToTurn, scrollToTurn, sessionId, spaceId, view.historyLoaded]);
 
   useEffect(() => {
     if (turnNavigatorOpen) void loadTurnIndex(sessionId, { force: true }).catch(() => undefined);
@@ -215,7 +216,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
 
   if (view.loading && !session && view.messages.length === 0 && view.turns.length === 0) return <Screen><DetailTopBar title="Chat" onBack={() => router.back()} /><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Text style={[typography.body, { color: theme.colors.textMuted }]}>Opening Chat…</Text></View></Screen>;
   return <Screen keyboard>
-    <SpacePanels key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} sessions={spaceSessions} sessionsHasMore={state.sessionsHasMore} sessionsLoadingMore={state.sessionsLoadingMore} onLoadMoreSessions={() => void loadMoreSessions()} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId } })} onNewChat={() => spaceId ? router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }) : undefined} onOpenFile={(path) => spaceId ? router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }) : undefined} onOpenFilesPage={() => spaceId ? router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }) : undefined}>
+    <SpacePanels key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId } })} onNewChat={() => spaceId ? router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }) : undefined} onOpenFile={(path) => spaceId ? router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }) : undefined} onOpenFilesPage={() => spaceId ? router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }) : undefined}>
       <View style={{ flex: 1 }}>
         <DetailTopBar title={session ? displaySessionTitle(session) : "Chat"} subtitle={spaceName} onBack={() => router.back()} actions={<><IconButton name="list-tree" label="Open conversation turns" size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} /><IconButton name="messages" label="Open Chats" size={38} onPress={() => setActivePanel("chat")} disabled={!spaceId} /><IconButton name="folder-open" label="Open Files" size={38} onPress={() => setActivePanel("files")} disabled={!spaceId} /><IconButton name="more" label="More actions" size={38} onPress={openRename} /></>} />
         <ConnectionBanner state={connectionState} />
@@ -243,7 +244,7 @@ function TurnMarker({ sequence, status }: { sequence: number; status?: string })
 function DraftChatContent({ spaceId }: { spaceId: string }) {
   const router = useRouter();
   const theme = useAppTheme();
-  const { state, client, connectionState, sendNewMessage, loadMoreSessions, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useApp();
+  const { state, client, connectionState, sendNewMessage, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useApp();
   const space = state.spaces.find((item) => item.id === spaceId) ?? null;
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
@@ -274,7 +275,7 @@ function DraftChatContent({ spaceId }: { spaceId: string }) {
   const modelTriggerLabel = selectedModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(selectedModel.thinkingLevel)}` : modelLabel;
   const selectedStatus = selectedModel ? modelAvailabilityLevel(modelStatus?.models[selectedModel.id]) : "unknown";
   return <Screen keyboard>
-    <SpacePanels key={space.id} spaceId={space.id} spaceName={spaceName} sessions={spaceSessions} sessionsHasMore={state.sessionsHasMore} sessionsLoadingMore={state.sessionsLoadingMore} onLoadMoreSessions={() => void loadMoreSessions()} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
+    <SpacePanels key={space.id} spaceId={space.id} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
       <View style={{ flex: 1 }}>
         <DetailTopBar title={spaceName} subtitle="Start a conversation" onBack={() => router.back()} actions={<><IconButton name="messages" label="Open Chats" size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label="Open Files" size={38} onPress={() => setActivePanel("files")} /></>} />
         <ConnectionBanner state={connectionState} />
