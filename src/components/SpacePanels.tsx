@@ -229,6 +229,26 @@ function mergePanelSessions(current: UserSessionListItem[], incoming: UserSessio
   return sortByRecent([...byId.values()]);
 }
 
+function isOlderSession(left: UserSessionListItem, right: UserSessionListItem) {
+  const leftTime = left.lastMessageAt ? Date.parse(left.lastMessageAt) : null;
+  const rightTime = right.lastMessageAt ? Date.parse(right.lastMessageAt) : null;
+  if (leftTime === null && rightTime !== null) return true;
+  if (leftTime !== null && rightTime === null) return false;
+  if (leftTime !== null && rightTime !== null && leftTime !== rightTime) return leftTime < rightTime;
+  return left.id < right.id;
+}
+
+function cursorAfterOldestSession(sessions: UserSessionListItem[]) {
+  const oldest = sessions.reduce<UserSessionListItem | null>((current, session) => {
+    if (!current || isOlderSession(session, current)) return session;
+    return current;
+  }, null);
+  if (!oldest) return null;
+  const date = oldest.lastMessageAt ? new Date(oldest.lastMessageAt) : null;
+  if (date && !Number.isFinite(date.getTime())) return null;
+  return `${date ? date.toISOString() : "null"}|${oldest.id}`;
+}
+
 function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; sessions: UserSessionListItem[]; client: CohubClient | null; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string) => void }) {
   const theme = useAppTheme();
   const [query, setQuery] = useState("");
@@ -238,7 +258,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
   const [scopeInitialized, setScopeInitialized] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const displaySessions = useMemo(() => mergePanelSessions(sessions, extraSessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
+  const displaySessions = useMemo(() => mergePanelSessions(extraSessions, sessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
   const needle = query.trim().toLowerCase();
   const filteredSessions = displaySessions.filter((session) => !needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value?.toLowerCase().includes(needle)));
   const loadMore = async () => {
@@ -246,7 +266,8 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
     setLoadingMore(true);
     setLoadMoreError(null);
     try {
-      const response = await client.space(spaceId).sessions.list({ limit: 60, ...(scopeCursor ? { cursor: scopeCursor } : {}) });
+      const cursor = scopeCursor ?? cursorAfterOldestSession(sessions);
+      const response = await client.space(spaceId).sessions.list({ limit: 60, ...(cursor ? { cursor } : {}) });
       setExtraSessions((current) => mergePanelSessions(current, response.sessions, spaceId, spaceName));
       setScopeCursor(response.pageInfo?.nextCursor ?? null);
       setScopeHasMore(Boolean(response.pageInfo?.hasMore));
