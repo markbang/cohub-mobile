@@ -141,7 +141,8 @@ export async function registerForPushNotifications(options: PushRegistrationOpti
   let accessToken: string | null;
   try {
     accessToken = await options.getAccessToken();
-  } catch {
+  } catch (error) {
+    console.warn("[mobile-notifications] access token unavailable", error);
     return unavailable("missing-auth", "Your Cohub sign-in token is unavailable. Sign in again and retry.");
   }
   if (!accessToken) return unavailable("missing-auth", "Your Cohub sign-in token is unavailable. Sign in again and retry.");

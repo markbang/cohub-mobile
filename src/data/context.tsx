@@ -294,6 +294,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "session-start":
       return updateView(state, action.sessionId, {
         loading: true,
+        historyLoaded: false,
         loadingOlder: false,
         loadingNewer: false,
         error: null,
