@@ -27,7 +27,7 @@ export default function SpaceScreen() {
   const spaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { state, client, refreshHome, loadMoreSessions } = useApp();
+  const { state, client, refreshHome } = useApp();
   const [resources, setResources] = useState<Resources>(emptyResources);
   const [loadingResources, setLoadingResources] = useState(false);
   const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
@@ -73,9 +73,6 @@ export default function SpaceScreen() {
       spaceId={space.id}
       spaceName={name}
       sessions={sessions}
-      sessionsHasMore={state.sessionsHasMore}
-      sessionsLoadingMore={state.sessionsLoadingMore}
-      onLoadMoreSessions={() => void loadMoreSessions()}
       client={client}
       activePanel={activePanel}
       onActivePanelChange={setActivePanel}

@@ -7,7 +7,7 @@ import { SessionRow } from "@/src/components/SessionRow";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useAppTheme, typography } from "@/src/theme";
 import { AppIcon, IconButton, PrimaryButton, SearchField } from "@/src/ui";
-import { normalizeSpacePath, parentSpacePath, spacePathName } from "@/src/utils";
+import { normalizeSpacePath, parentSpacePath, sortByRecent, spacePathName } from "@/src/utils";
 
 export type SpacePanel = "chat" | "files";
 
@@ -15,9 +15,6 @@ type SpacePanelsProps = {
   spaceId: string;
   spaceName: string;
   sessions: UserSessionListItem[];
-  sessionsHasMore?: boolean;
-  sessionsLoadingMore?: boolean;
-  onLoadMoreSessions?: () => void;
   client: CohubClient | null;
   activePanel: SpacePanel | null;
   onActivePanelChange: (panel: SpacePanel | null) => void;
@@ -47,7 +44,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-export function SpacePanels({ spaceId, spaceName, sessions, sessionsHasMore = false, sessionsLoadingMore = false, onLoadMoreSessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children }: SpacePanelsProps) {
+export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children }: SpacePanelsProps) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -201,7 +198,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, sessionsHasMore = fa
       <View style={styles.modalRoot}>
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}><Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.fill} onPress={closeDrawer} /></Animated.View>
         <Animated.View {...panelResponder.panHandlers} accessibilityViewIsModal role="dialog" style={[styles.panel, { width: panelWidth, height: Math.max(0, height), paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: theme.colors.background, borderColor: theme.colors.border, ...panelPosition, transform: [{ translateX }] }]}>
-          {visibleSide === "chat" ? <ChatPanel spaceName={spaceName} sessions={sessions} sessionsHasMore={sessionsHasMore} sessionsLoadingMore={sessionsLoadingMore} onLoadMoreSessions={onLoadMoreSessions} onClose={closeDrawer} onNewChat={() => { closeDrawer(); onNewChat(); }} onOpenSession={(sessionId) => { closeDrawer(); onOpenSession(sessionId); }} /> : <FilesPanel spaceId={spaceId} spaceName={spaceName} client={client} onClose={closeDrawer} onOpenFile={(path) => { closeDrawer(); onOpenFile(path); }} onOpenFilesPage={() => { closeDrawer(); onOpenFilesPage(); }} />}
+          {visibleSide === "chat" ? <ChatPanel spaceId={spaceId} spaceName={spaceName} sessions={sessions} client={client} onClose={closeDrawer} onNewChat={() => { closeDrawer(); onNewChat(); }} onOpenSession={(sessionId) => { closeDrawer(); onOpenSession(sessionId); }} /> : <FilesPanel spaceId={spaceId} spaceName={spaceName} client={client} onClose={closeDrawer} onOpenFile={(path) => { closeDrawer(); onOpenFile(path); }} onOpenFilesPage={() => { closeDrawer(); onOpenFilesPage(); }} />}
         </Animated.View>
       </View>
     </Modal>
@@ -222,15 +219,45 @@ function PanelHeader({ title, subtitle, onClose, action }: { title: string; subt
   );
 }
 
-function ChatPanel({ spaceName, sessions, sessionsHasMore, sessionsLoadingMore, onLoadMoreSessions, onClose, onNewChat, onOpenSession }: { spaceName: string; sessions: UserSessionListItem[]; sessionsHasMore: boolean; sessionsLoadingMore: boolean; onLoadMoreSessions?: () => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string) => void }) {
+function mergePanelSessions(current: UserSessionListItem[], incoming: UserSessionListItem[], spaceId: string, spaceName: string) {
+  const knownSpace = current.find((session) => session.space)?.space ?? { id: spaceId, name: spaceName, slug: null, publicProfile: null };
+  const byId = new Map(current.map((session) => [session.id, session]));
+  for (const session of incoming) {
+    const previous = byId.get(session.id);
+    byId.set(session.id, { ...previous, ...session, space: session.space ?? previous?.space ?? knownSpace });
+  }
+  return sortByRecent([...byId.values()]);
+}
+
+function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; sessions: UserSessionListItem[]; client: CohubClient | null; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string) => void }) {
   const theme = useAppTheme();
   const [query, setQuery] = useState("");
-  const displaySessions = sessions.map((session) => session.space ? session : {
-    ...session,
-    space: { id: session.spaceId, name: spaceName, slug: null, publicProfile: null },
-  });
+  const [extraSessions, setExtraSessions] = useState<UserSessionListItem[]>([]);
+  const [scopeCursor, setScopeCursor] = useState<string | null>(null);
+  const [scopeHasMore, setScopeHasMore] = useState(false);
+  const [scopeInitialized, setScopeInitialized] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const displaySessions = useMemo(() => mergePanelSessions(sessions, extraSessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
   const needle = query.trim().toLowerCase();
   const filteredSessions = displaySessions.filter((session) => !needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value?.toLowerCase().includes(needle)));
+  const loadMore = async () => {
+    if (!client || loadingMore || (scopeInitialized && !scopeHasMore)) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const response = await client.space(spaceId).sessions.list({ limit: 60, ...(scopeCursor ? { cursor: scopeCursor } : {}) });
+      setExtraSessions((current) => mergePanelSessions(current, response.sessions, spaceId, spaceName));
+      setScopeCursor(response.pageInfo?.nextCursor ?? null);
+      setScopeHasMore(Boolean(response.pageInfo?.hasMore));
+      setScopeInitialized(true);
+    } catch (error) {
+      setLoadMoreError(error instanceof Error ? error.message : "Unable to load more Chats");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+  const showLoadMore = Boolean(client && (!scopeInitialized || scopeHasMore));
   return (
     <View style={styles.panelContent}>
       <PanelHeader title="Chats" subtitle={spaceName} onClose={onClose} />
@@ -244,7 +271,7 @@ function ChatPanel({ spaceName, sessions, sessionsHasMore, sessionsLoadingMore, 
         renderItem={({ item }) => <SessionRow session={item} onPress={() => onOpenSession(item.id)} />}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: filteredSessions.length === 0 ? 1 : undefined }}
-        ListFooterComponent={sessionsHasMore && onLoadMoreSessions ? <Pressable accessibilityRole="button" accessibilityLabel="Load more Chats" disabled={sessionsLoadingMore} onPress={onLoadMoreSessions} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => ({ minHeight: 40, marginHorizontal: 14, marginTop: 8, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{sessionsLoadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={[typography.caption, { color: theme.colors.accent }]}>Load more Chats</Text>}</Pressable> : null}
+        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable style={[typography.micro, { color: theme.colors.danger, marginHorizontal: 14, marginTop: 8 }]}>{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? "Retry loading Chats" : "Load more Chats"} disabled={loadingMore} onPress={() => void loadMore()} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => ({ minHeight: 40, marginHorizontal: 14, marginTop: 8, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={[typography.caption, { color: theme.colors.accent }]}>{loadMoreError ? "Retry loading Chats" : "Load more Chats"}</Text>}</Pressable></View> : null}
         ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name={query ? "search" : "messages"} size={26} color={theme.colors.textMuted} /><Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 10, textAlign: "center" }]}>{query ? "No matching Chats" : "No Chats in this Space yet."}</Text></View>}
       />
     </View>
