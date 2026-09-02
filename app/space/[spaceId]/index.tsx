@@ -36,7 +36,8 @@ export default function SpaceScreen() {
   const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
   const spaceRefreshAtRef = useRef<{ spaceId: string; at: number } | null>(null);
-  const spaceRefreshInFlightRef = useRef<string | null>(null);
+  const spaceRefreshInFlightRef = useRef<{ spaceId: string; token: number } | null>(null);
+  const spaceRefreshTokenRef = useRef(0);
   const cachedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
   const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
   const sessions = useMemo(
@@ -46,10 +47,12 @@ export default function SpaceScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!client || !spaceId) return undefined;
-    if (spaceRefreshInFlightRef.current === spaceId) return undefined;
+    if (spaceRefreshInFlightRef.current?.spaceId === spaceId) return undefined;
     const lastRefresh = spaceRefreshAtRef.current;
     if (cachedSpace && lastRefresh?.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS) return undefined;
-    spaceRefreshInFlightRef.current = spaceId;
+    const requestToken = spaceRefreshTokenRef.current + 1;
+    spaceRefreshTokenRef.current = requestToken;
+    spaceRefreshInFlightRef.current = { spaceId, token: requestToken };
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setSpaceLoading(true);
@@ -61,10 +64,13 @@ export default function SpaceScreen() {
         upsertSpace(next);
       }
     }).catch(() => undefined).finally(() => {
-      if (spaceRefreshInFlightRef.current === spaceId) spaceRefreshInFlightRef.current = null;
+      if (spaceRefreshInFlightRef.current?.token === requestToken) spaceRefreshInFlightRef.current = null;
       if (active) setSpaceLoading(false);
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      if (spaceRefreshInFlightRef.current?.token === requestToken) spaceRefreshInFlightRef.current = null;
+    };
   }, [cachedSpace, client, spaceId, upsertSpace]));
 
   useEffect(() => {
