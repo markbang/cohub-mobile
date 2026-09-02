@@ -41,13 +41,13 @@ export default function ChatsScreen() {
       const matchesFilter = filter === "all" || (filter === "running" ? isRunningStatus(session.status) : isNeedsAttentionStatus(session.status));
       if (!matchesFilter) return false;
       if (!needle) return true;
-      return [session.title, session.latestMessageText, session.space?.name].some((value) => value?.toLowerCase().includes(needle));
+      return [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false);
     });
   }, [filter, state.sessions, trimmedQuery]);
   const localSpaces = useMemo(() => {
     if (filter !== "all" || !trimmedQuery) return [];
     const needle = trimmedQuery.toLowerCase();
-    return state.spaces.filter((space) => [space.name, space.title, space.description].some((value) => value?.toLowerCase().includes(needle)));
+    return state.spaces.filter((space) => [space.name, space.title, space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   }, [filter, state.spaces, trimmedQuery]);
   const listItems = useMemo<ChatListItem[]>(() => {
     if (!trimmedQuery || filter !== "all") return localSessions.map((session) => ({ kind: "local-session", session }));

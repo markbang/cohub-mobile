@@ -379,7 +379,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
   const displaySessions = useMemo(() => mergePanelSessions(extraSessions, sessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
   const trimmedQuery = normalizeSearchQuery(query);
   const needle = trimmedQuery.toLowerCase();
-  const filteredSessions = displaySessions.filter((session) => !needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value?.toLowerCase().includes(needle)));
+  const filteredSessions = displaySessions.filter((session) => !needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   const listItems = useMemo<ChatPanelItem[]>(() => {
     if (!trimmedQuery) return filteredSessions.map((session) => ({ kind: "local", session }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;

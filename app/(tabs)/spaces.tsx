@@ -30,7 +30,7 @@ export default function SpacesScreen() {
   const trimmedQuery = normalizeSearchQuery(query);
   const spaces = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
-    return state.spaces.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value?.toLowerCase().includes(needle)));
+    return state.spaces.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   }, [state.spaces, trimmedQuery]);
   const listItems = useMemo<SpaceListItem[]>(() => {
     if (!trimmedQuery) return spaces.map((space) => ({ kind: "local", space }));

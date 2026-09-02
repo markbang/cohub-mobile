@@ -1,6 +1,6 @@
 import type { AppRecord, CheckpointRecord, SpaceRecord, TaskRunRecord } from "@neta-art/cohub";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { AdaptiveSheet, SheetAction } from "@/src/components/AdaptiveSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -41,8 +41,8 @@ export default function SpaceScreen() {
     [spaceId, state.sessions],
   );
 
-  useEffect(() => {
-    if (!client || !spaceId || cachedSpace) return;
+  useFocusEffect(useCallback(() => {
+    if (!client || !spaceId) return undefined;
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setSpaceLoading(true);
@@ -56,7 +56,7 @@ export default function SpaceScreen() {
       if (active) setSpaceLoading(false);
     });
     return () => { active = false; };
-  }, [cachedSpace, client, spaceId, upsertSpace]);
+  }, [client, spaceId, upsertSpace]));
 
   useEffect(() => {
     if (!client || !spaceId) return;

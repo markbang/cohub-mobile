@@ -381,7 +381,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceToBottom = Math.max(0, contentSize.height - layoutMeasurement.height - contentOffset.y);
     setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null }));
-  }, [setFollowingTail]);
+    requestFollowTail();
+  }, [requestFollowTail, setFollowingTail]);
 
   const handleMomentumScrollBegin = useCallback(() => {
     if (userDraggingRef.current) momentumScrollingRef.current = true;
@@ -394,7 +395,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceToBottom = Math.max(0, contentSize.height - layoutMeasurement.height - contentOffset.y);
     setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()) }));
-  }, [setFollowingTail, targetIsLatestMessage]);
+    requestFollowTail();
+  }, [requestFollowTail, setFollowingTail, targetIsLatestMessage]);
 
   const submit = async () => {
     if ((!input.trim() && attachments.length === 0) || view.sending) return;
