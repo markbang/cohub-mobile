@@ -36,6 +36,7 @@ export default function SpaceScreen() {
   const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
   const spaceRefreshAtRef = useRef<{ spaceId: string; at: number } | null>(null);
+  const spaceRefreshInFlightRef = useRef<string | null>(null);
   const cachedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
   const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
   const sessions = useMemo(
@@ -45,19 +46,22 @@ export default function SpaceScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!client || !spaceId) return undefined;
+    if (spaceRefreshInFlightRef.current === spaceId) return undefined;
     const lastRefresh = spaceRefreshAtRef.current;
     if (cachedSpace && lastRefresh?.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS) return undefined;
-    spaceRefreshAtRef.current = { spaceId, at: Date.now() };
+    spaceRefreshInFlightRef.current = spaceId;
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setSpaceLoading(true);
     });
     void client.spaces.get(spaceId).then((next) => {
       if (active) {
+        spaceRefreshAtRef.current = { spaceId, at: Date.now() };
         setLoadedSpace(next);
         upsertSpace(next);
       }
     }).catch(() => undefined).finally(() => {
+      if (spaceRefreshInFlightRef.current === spaceId) spaceRefreshInFlightRef.current = null;
       if (active) setSpaceLoading(false);
     });
     return () => { active = false; };
