@@ -1,6 +1,6 @@
 import type { AppRecord, CheckpointRecord, SpaceRecord, TaskRunRecord } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { AdaptiveSheet, SheetAction } from "@/src/components/AdaptiveSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +20,7 @@ type Resources = {
 };
 
 const emptyResources: Resources = { checkpoints: [], apps: [], tasks: [] };
+const SPACE_REFRESH_INTERVAL_MS = 60_000;
 
 export default function SpaceScreen() {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function SpaceScreen() {
   const [loadingResources, setLoadingResources] = useState(false);
   const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
+  const spaceRefreshAtRef = useRef<{ spaceId: string; at: number } | null>(null);
   const cachedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
   const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
   const sessions = useMemo(
@@ -43,6 +45,9 @@ export default function SpaceScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!client || !spaceId) return undefined;
+    const lastRefresh = spaceRefreshAtRef.current;
+    if (cachedSpace && lastRefresh?.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS) return undefined;
+    spaceRefreshAtRef.current = { spaceId, at: Date.now() };
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setSpaceLoading(true);
@@ -56,7 +61,7 @@ export default function SpaceScreen() {
       if (active) setSpaceLoading(false);
     });
     return () => { active = false; };
-  }, [client, spaceId, upsertSpace]));
+  }, [cachedSpace, client, spaceId, upsertSpace]));
 
   useEffect(() => {
     if (!client || !spaceId) return;
