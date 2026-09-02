@@ -90,12 +90,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
     }
   }, []);
   const requestFollowTail = useCallback((animated = false) => {
-    if (!followingTailRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null || followTailFrameRef.current !== null) return;
+    if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null || followTailFrameRef.current !== null) return;
     followTailFrameRef.current = requestAnimationFrame(() => {
       followTailFrameRef.current = null;
-      if (!followingTailRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
-      userDraggingRef.current = false;
-      momentumScrollingRef.current = false;
+      if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
       listRef.current?.scrollToEnd({ animated });
     });
   }, []);
@@ -366,6 +364,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId }: { sessio
   const handleScrollBeginDrag = useCallback(() => {
     userDraggingRef.current = true;
     momentumScrollingRef.current = false;
+    if (followTailFrameRef.current !== null) {
+      cancelAnimationFrame(followTailFrameRef.current);
+      followTailFrameRef.current = null;
+    }
     cancelTurnScroll();
   }, [cancelTurnScroll]);
 

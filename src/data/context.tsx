@@ -556,6 +556,7 @@ export type AppContextValue = {
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
   createSpace: (name: string, description?: string) => Promise<SpaceRecord>;
+  upsertSpace: (space: SpaceRecord) => void;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   clearCache: () => Promise<void>;
   activityItems: ActivityItem[];
@@ -1293,6 +1294,17 @@ export function AppProvider({
     [client, dispatch, userKey],
   );
 
+  const upsertSpace = useCallback((space: SpaceRecord) => {
+    dispatch({ type: "space-upsert", space });
+    if (Platform.OS !== "web") {
+      const home = stateRef.current;
+      void saveHome(userKey, {
+        spaces: [space, ...home.spaces.filter((item) => item.id !== space.id)],
+        sessions: home.sessions,
+      }).catch(() => undefined);
+    }
+  }, [dispatch, userKey]);
+
   const renameSession = useCallback(
     async (sessionId: string, title: string) => {
       if (!client) throw new Error("Cohub is still connecting");
@@ -1367,6 +1379,7 @@ export function AppProvider({
       loadModels,
       loadModelStatus,
       createSpace,
+      upsertSpace,
       renameSession,
       clearCache,
       activityItems,
@@ -1401,6 +1414,7 @@ export function AppProvider({
       sendMessage,
       sendNewMessage,
       state,
+      upsertSpace,
     ],
   );
 

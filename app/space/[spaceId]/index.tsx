@@ -27,7 +27,7 @@ export default function SpaceScreen() {
   const spaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { state, client, refreshHome } = useApp();
+  const { state, client, refreshHome, upsertSpace } = useApp();
   const [loadedSpace, setLoadedSpace] = useState<SpaceRecord | null>(null);
   const [spaceLoading, setSpaceLoading] = useState(false);
   const [resources, setResources] = useState<Resources>(emptyResources);
@@ -48,12 +48,15 @@ export default function SpaceScreen() {
       if (active) setSpaceLoading(true);
     });
     void client.spaces.get(spaceId).then((next) => {
-      if (active) setLoadedSpace(next);
+      if (active) {
+        setLoadedSpace(next);
+        upsertSpace(next);
+      }
     }).catch(() => undefined).finally(() => {
       if (active) setSpaceLoading(false);
     });
     return () => { active = false; };
-  }, [cachedSpace, client, spaceId]);
+  }, [cachedSpace, client, spaceId, upsertSpace]);
 
   useEffect(() => {
     if (!client || !spaceId) return;

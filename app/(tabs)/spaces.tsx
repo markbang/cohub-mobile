@@ -4,7 +4,7 @@ import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "r
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SpaceRow } from "@/src/components/SpaceRow";
-import { useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
+import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useApp } from "@/src/data/context";
 import { useAppTheme, typography } from "@/src/theme";
 import { BrandMark, DataError, EmptyState, IconButton, LoadingRows, PrimaryButton, SearchField, SyncStatus, TopBar, Screen } from "@/src/ui";
@@ -27,7 +27,7 @@ export default function SpacesScreen() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const remoteSearch = useRemoteSearch(client, query, { types: SPACE_SEARCH_TYPES });
-  const trimmedQuery = query.trim();
+  const trimmedQuery = normalizeSearchQuery(query);
   const spaces = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
     return state.spaces.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value?.toLowerCase().includes(needle)));
@@ -35,14 +35,13 @@ export default function SpacesScreen() {
   const listItems = useMemo<SpaceListItem[]>(() => {
     if (!trimmedQuery) return spaces.map((space) => ({ kind: "local", space }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
-    const remoteReady = remoteQueryMatches && !remoteSearch.loading && !remoteSearch.error && !remoteSearch.degraded;
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
     const remoteIds = new Set(remoteSpaces.map((hit) => hit.spaceId));
     return [
       ...remoteSpaces.map((hit) => ({ kind: "remote" as const, hit })),
-      ...(remoteReady ? [] : spaces.filter((space) => !remoteIds.has(space.id)).map((space) => ({ kind: "local" as const, space }))),
+      ...spaces.filter((space) => !remoteIds.has(space.id)).map((space) => ({ kind: "local" as const, space })),
     ];
-  }, [remoteSearch.degraded, remoteSearch.error, remoteSearch.loading, remoteSearch.query, remoteSearch.spaces, spaces, trimmedQuery]);
+  }, [remoteSearch.query, remoteSearch.spaces, spaces, trimmedQuery]);
 
   const closeCreate = () => {
     if (!creating) setCreateOpen(false);

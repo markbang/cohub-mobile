@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { messageIndexForTurn } from "../src/data/session-history.ts";
-import { mapRemoteSearchResults } from "../src/data/session-search.ts";
+import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
+
+assert.equal(normalizeSearchQuery("  server   result  "), "server result");
 
 const searchResult = (overrides = {}) => ({
   type: "turn",

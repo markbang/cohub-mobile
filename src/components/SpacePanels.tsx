@@ -9,7 +9,7 @@ import { SessionSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useAppTheme, typography } from "@/src/theme";
-import { useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
+import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { AppIcon, IconButton, PrimaryButton, SearchField } from "@/src/ui";
 import { normalizeSpacePath, parentSpacePath, sortByRecent, spacePathName } from "@/src/utils";
 
@@ -377,20 +377,19 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const remoteSearch = useRemoteSearch(client, query, { enabled: Boolean(spaceId), spaceId, types: ["session", "turn"] });
   const displaySessions = useMemo(() => mergePanelSessions(extraSessions, sessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
-  const trimmedQuery = query.trim();
+  const trimmedQuery = normalizeSearchQuery(query);
   const needle = trimmedQuery.toLowerCase();
   const filteredSessions = displaySessions.filter((session) => !needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value?.toLowerCase().includes(needle)));
   const listItems = useMemo<ChatPanelItem[]>(() => {
     if (!trimmedQuery) return filteredSessions.map((session) => ({ kind: "local", session }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
-    const remoteReady = remoteQueryMatches && !remoteSearch.loading && !remoteSearch.error && !remoteSearch.degraded;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
     const remoteIds = new Set(remoteSessions.map((hit) => hit.sessionId));
     return [
       ...remoteSessions.map((hit) => ({ kind: "remote" as const, hit })),
-      ...(remoteReady ? [] : filteredSessions.filter((session) => !remoteIds.has(session.id)).map((session) => ({ kind: "local" as const, session }))),
+      ...filteredSessions.filter((session) => !remoteIds.has(session.id)).map((session) => ({ kind: "local" as const, session })),
     ];
-  }, [filteredSessions, remoteSearch.degraded, remoteSearch.error, remoteSearch.loading, remoteSearch.query, remoteSearch.sessions, trimmedQuery]);
+  }, [filteredSessions, remoteSearch.query, remoteSearch.sessions, trimmedQuery]);
   const loadMore = async () => {
     if (!client || loadingMore || (scopeInitialized && !scopeHasMore)) return;
     setLoadingMore(true);

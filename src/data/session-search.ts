@@ -56,6 +56,10 @@ const EMPTY_STATE: RemoteSearchState = {
   degraded: false,
 };
 
+export function normalizeSearchQuery(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function text(value: string | null | undefined) {
   const normalized = value?.replace(/\s+/g, " ").trim();
   return normalized || null;
@@ -160,7 +164,7 @@ export function useRemoteSearch(
   const limit = options.limit ?? 50;
   const spaceId = options.spaceId ?? null;
   const typesKey = (options.types ?? DEFAULT_SEARCH_TYPES).join(",");
-  const normalizedQuery = query.replace(/\s+/g, " ").trim();
+  const normalizedQuery = normalizeSearchQuery(query);
   const [state, setState] = useState<RemoteSearchState>(EMPTY_STATE);
   const requestIdRef = useRef(0);
   const [retryToken, setRetryToken] = useState(0);

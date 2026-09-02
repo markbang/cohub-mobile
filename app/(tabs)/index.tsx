@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
-import { useRemoteSearch, type RemoteSessionSearchHit, type RemoteSpaceSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
+import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type RemoteSpaceSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { useApp } from "@/src/data/context";
 import { useAppTheme, typography } from "@/src/theme";
 import { BrandMark, ConnectionBanner, DataError, EmptyState, IconButton, LoadingRows, Screen, SearchField, SyncStatus, TopBar } from "@/src/ui";
@@ -28,7 +28,7 @@ export default function ChatsScreen() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const remoteSearch = useRemoteSearch(client, query, { enabled: filter === "all", types: CHAT_SEARCH_TYPES });
-  const trimmedQuery = query.trim();
+  const trimmedQuery = normalizeSearchQuery(query);
 
   const focusSearch = () => {
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -52,18 +52,17 @@ export default function ChatsScreen() {
   const listItems = useMemo<ChatListItem[]>(() => {
     if (!trimmedQuery || filter !== "all") return localSessions.map((session) => ({ kind: "local-session", session }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
-    const remoteReady = remoteQueryMatches && !remoteSearch.loading && !remoteSearch.error && !remoteSearch.degraded;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
     const remoteSessionIds = new Set(remoteSessions.map((hit) => hit.sessionId));
     const remoteSpaceIds = new Set(remoteSpaces.map((hit) => hit.spaceId));
     return [
       ...remoteSessions.map((hit) => ({ kind: "remote-session" as const, hit })),
-      ...(remoteReady ? [] : localSessions.filter((session) => !remoteSessionIds.has(session.id)).map((session) => ({ kind: "local-session" as const, session }))),
+      ...localSessions.filter((session) => !remoteSessionIds.has(session.id)).map((session) => ({ kind: "local-session" as const, session })),
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
-      ...(remoteReady ? [] : localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space }))),
+      ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [filter, localSessions, localSpaces, remoteSearch.degraded, remoteSearch.error, remoteSearch.loading, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, trimmedQuery]);
+  }, [filter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, trimmedQuery]);
 
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
     router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
