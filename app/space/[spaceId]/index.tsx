@@ -39,6 +39,10 @@ export default function SpaceScreen() {
   const spaceRefreshInFlightRef = useRef<{ spaceId: string; token: number } | null>(null);
   const spaceRefreshTokenRef = useRef(0);
   const cachedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
+  const cachedSpaceRef = useRef<SpaceRecord | null>(cachedSpace);
+  useEffect(() => {
+    cachedSpaceRef.current = cachedSpace;
+  }, [cachedSpace]);
   const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
   const sessions = useMemo(
     () => state.sessions.filter((session) => session.spaceId === spaceId),
@@ -49,7 +53,7 @@ export default function SpaceScreen() {
     if (!client || !spaceId) return undefined;
     if (spaceRefreshInFlightRef.current?.spaceId === spaceId) return undefined;
     const lastRefresh = spaceRefreshAtRef.current;
-    if (cachedSpace && lastRefresh?.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS) return undefined;
+    if (cachedSpaceRef.current && lastRefresh?.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS) return undefined;
     const requestToken = spaceRefreshTokenRef.current + 1;
     spaceRefreshTokenRef.current = requestToken;
     spaceRefreshInFlightRef.current = { spaceId, token: requestToken };
@@ -71,7 +75,7 @@ export default function SpaceScreen() {
       active = false;
       if (spaceRefreshInFlightRef.current?.token === requestToken) spaceRefreshInFlightRef.current = null;
     };
-  }, [cachedSpace, client, spaceId, upsertSpace]));
+  }, [client, spaceId, upsertSpace]));
 
   useEffect(() => {
     if (!client || !spaceId) return;
