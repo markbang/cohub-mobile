@@ -45,7 +45,10 @@ function parseVersion(value: string) {
 function isAllowedReleaseUrl(value: string) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && (url.hostname === "github.com" || url.hostname === "www.github.com");
+    const path = url.pathname.replace(/\/+$/, "");
+    return url.protocol === "https:" &&
+      (url.hostname === "github.com" || url.hostname === "www.github.com") &&
+      (path === "/markbang/cohub-mobile/releases" || path.startsWith("/markbang/cohub-mobile/releases/"));
   } catch {
     return false;
   }
@@ -69,6 +72,7 @@ export function getInstalledAppVersion() {
 }
 
 function resolveDownloadUrl(payload: Record<string, unknown>) {
+  if (Platform.OS !== "android") return null;
   const architectures = (Device.supportedCpuArchitectures ?? []).map((value) => value.toLowerCase());
   const abi = architectures.some((value) => value.includes("arm64") || value.includes("aarch64"))
     ? "arm64-v8a"
@@ -112,7 +116,9 @@ function parseCachedCheck(value: unknown): CachedCheck | null {
   const version = typeof rawRelease.version === "string" ? rawRelease.version.trim() : "";
   const url = typeof rawRelease.url === "string" ? rawRelease.url.trim() : "";
   const notes = rawRelease.notes == null ? null : typeof rawRelease.notes === "string" ? rawRelease.notes : null;
-  const downloadUrl = rawRelease.downloadUrl == null ? null : typeof rawRelease.downloadUrl === "string" ? rawRelease.downloadUrl.trim() || null : null;
+  const downloadUrl = Platform.OS === "android" && rawRelease.downloadUrl != null
+    ? typeof rawRelease.downloadUrl === "string" ? rawRelease.downloadUrl.trim() || null : null
+    : null;
   if (!version || !parseVersion(version) || !isAllowedReleaseUrl(url)) return null;
   if (downloadUrl && !isAllowedReleaseUrl(downloadUrl)) return null;
   return { checkedAt: value.checkedAt, release: { version, url, notes, downloadUrl } };
@@ -181,16 +187,17 @@ export async function checkForAppUpdate(options: { force?: boolean } = {}) {
   }
   if (request && !options.force) return request;
 
-  request = requestLatestRelease()
+  const nextRequest = requestLatestRelease()
     .then((latest) => {
       cachedCheck = { checkedAt: Date.now(), release: latest };
       persistCheck(cachedCheck);
       return isNewerAppVersion(currentVersion, latest.version) ? latest : null;
     })
     .finally(() => {
-      request = null;
+      if (request === nextRequest) request = null;
     });
-  return request;
+  request = nextRequest;
+  return nextRequest;
 }
 
 function parseSnooze(value: string | null): SnoozeRecord | null {

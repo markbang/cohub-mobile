@@ -1,12 +1,17 @@
 import { Tabs } from "expo-router";
-import type { ColorValue } from "react-native";
+import { useEffect, useState } from "react";
+import { Animated, Platform, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppIcon, type IconName } from "@/src/ui";
 import { useAppTheme } from "@/src/theme";
 
+const TAB_BAR_EXTRA_BOTTOM_SPACE = 10;
+const TAB_BAR_CONTENT_HEIGHT = 64;
+
 export default function TabLayout() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
+  const bottomSpace = Math.max(insets.bottom, 0) + TAB_BAR_EXTRA_BOTTOM_SPACE;
   return (
     <Tabs
       screenOptions={{
@@ -16,12 +21,18 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          height: 58 + insets.bottom,
-          paddingTop: 7,
-          paddingBottom: Math.max(insets.bottom, 6),
+          height: TAB_BAR_CONTENT_HEIGHT + bottomSpace,
+          paddingTop: 6,
+          paddingBottom: bottomSpace,
+          paddingHorizontal: 4,
+          shadowColor: theme.colors.shadow,
+          shadowOffset: { width: 0, height: -3 },
+          shadowOpacity: 0.12,
+          shadowRadius: 8,
+          elevation: 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginBottom: 1 },
-        tabBarItemStyle: { minHeight: 50 },
+        tabBarItemStyle: { minHeight: 52, marginHorizontal: 3, marginVertical: 3, borderRadius: 18 },
         tabBarHideOnKeyboard: true,
       }}
     >
@@ -34,5 +45,38 @@ export default function TabLayout() {
 }
 
 function TabIcon({ name, color, size, focused }: { name: IconName; color: ColorValue; size: number; focused: boolean }) {
-  return <AppIcon name={name} color={color} size={Math.min(size, 24)} strokeWidth={focused ? 2.3 : 1.8} />;
+  const [scale] = useState(() => new Animated.Value(focused ? 1 : 0.92));
+  const [translateY] = useState(() => new Animated.Value(focused ? -1 : 1));
+  const [opacity] = useState(() => new Animated.Value(focused ? 1 : 0.78));
+
+  useEffect(() => {
+    const driver = Platform.OS !== "web";
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: focused ? 1 : 0.92,
+        damping: 13,
+        stiffness: 220,
+        mass: 0.7,
+        useNativeDriver: driver,
+      }),
+      Animated.spring(translateY, {
+        toValue: focused ? -1 : 1,
+        damping: 14,
+        stiffness: 220,
+        mass: 0.7,
+        useNativeDriver: driver,
+      }),
+      Animated.timing(opacity, {
+        toValue: focused ? 1 : 0.78,
+        duration: 180,
+        useNativeDriver: driver,
+      }),
+    ]).start();
+  }, [focused, opacity, scale, translateY]);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ scale }, { translateY }] }}>
+      <AppIcon name={name} color={color} size={Math.min(size, 24)} strokeWidth={focused ? 2.3 : 1.8} />
+    </Animated.View>
+  );
 }

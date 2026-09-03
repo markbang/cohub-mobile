@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppState as NativeAppState, Linking, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, AppState as NativeAppState, Linking, Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { useAppTheme, typography } from "@/src/theme";
@@ -132,6 +132,89 @@ export function AppUpdateBanner() {
   );
 }
 
+export function AppUpdateRow() {
+  const theme = useAppTheme();
+  const [checking, setChecking] = useState(false);
+  const [release, setRelease] = useState<AppRelease | null>(null);
+  const [status, setStatus] = useState<"idle" | "current" | "error">("idle");
+
+  if (Platform.OS === "web") return null;
+
+  const check = async () => {
+    if (checking) return;
+    setChecking(true);
+    setRelease(null);
+    setStatus("idle");
+    try {
+      const latest = await checkForAppUpdate({ force: true });
+      setRelease(latest);
+      setStatus(latest ? "idle" : "current");
+    } catch {
+      setStatus("error");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const openRelease = async () => {
+    if (!release) return;
+    const url = release.downloadUrl ?? release.url;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      if (url !== release.url) {
+        try {
+          await Linking.openURL(release.url);
+          return;
+        } catch {
+          // Keep the retry state visible when neither URL can be opened.
+        }
+      }
+      setStatus("error");
+    }
+  };
+
+  const title = release ? `Cohub ${release.version} is ready` : "Check for updates";
+  const detail = checking
+    ? "Checking GitHub…"
+    : status === "current"
+      ? `You are up to date · ${getInstalledAppVersion()}`
+      : status === "error"
+        ? "GitHub could not be reached. Tap to retry."
+        : release?.downloadUrl
+          ? "A signed APK is available for this device"
+          : "Check the latest Cohub release on GitHub";
+
+  return <Pressable
+    testID="app-update-row"
+    accessibilityRole="button"
+    accessibilityLabel={release ? `Download Cohub ${release.version}` : "Check for app updates"}
+    accessibilityState={{ busy: checking }}
+    disabled={checking}
+    onPress={() => void (release ? openRelease() : check())}
+    android_ripple={{ color: theme.colors.pressOverlay }}
+    style={({ pressed }) => ({
+      minHeight: 66,
+      paddingHorizontal: 13,
+      paddingVertical: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 11,
+      backgroundColor: pressed ? theme.colors.surfacePressed : "transparent",
+      opacity: checking ? 0.65 : 1,
+    })}
+  >
+    <View style={[styles.updateRowIcon, { backgroundColor: release ? theme.colors.accentSoft : theme.colors.surfaceRaised }]}>
+      {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={17} color={theme.colors.accent} />}
+    </View>
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text>
+      <Text numberOfLines={2} style={[typography.caption, { color: release ? theme.colors.accent : theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
+    </View>
+    {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={17} color={theme.colors.textFaint} /> : null}
+  </Pressable>;
+}
+
 const styles = {
   bannerLayer: {
     position: "absolute" as const,
@@ -165,6 +248,13 @@ const styles = {
   bannerText: {
     flex: 1,
     minWidth: 0,
+  },
+  updateRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
   },
   footer: {
     flexDirection: "row" as const,

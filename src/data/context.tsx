@@ -32,6 +32,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns } from "@/src/data/session-history";
+import { getResourcePinState, isResourcePinned, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
 import {
   displaySessionTitle,
@@ -556,6 +557,8 @@ export type AppContextValue = {
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
   createSpace: (name: string, description?: string) => Promise<SpaceRecord>;
+  refreshSpacePin: (spaceId: string) => Promise<boolean>;
+  toggleSpacePin: (spaceId: string) => Promise<boolean>;
   upsertSpace: (space: SpaceRecord) => void;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   clearCache: () => Promise<void>;
@@ -599,6 +602,7 @@ export function AppProvider({
   const paginationRequestsRef = useRef(new Map<string, Promise<void>>());
   const optimisticMessageSequenceRef = useRef(new Map<string, number>());
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
+  const spacePinMutationVersionsRef = useRef(new Map<string, number>());
   const userKey = userUuid;
 
   useEffect(() => {
@@ -1294,6 +1298,80 @@ export function AppProvider({
     [client, dispatch, userKey],
   );
 
+  const refreshSpacePin = useCallback(async (spaceId: string) => {
+    if (!client) throw new Error("Cohub is still connecting");
+    const requestVersion = spacePinMutationVersionsRef.current.get(spaceId) ?? 0;
+    const pinned = await getResourcePinState(client, "space", spaceId, { force: true });
+    if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== requestVersion) {
+      return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
+    }
+    const current = stateRef.current.spaces.find((space) => space.id === spaceId);
+    if (current) {
+      const next = { ...current, isPinned: pinned };
+      dispatch({ type: "space-upsert", space: next });
+      if (Platform.OS !== "web") {
+        const home = stateRef.current;
+        void saveHome(userKey, {
+          spaces: [next, ...home.spaces.filter((space) => space.id !== spaceId)],
+          sessions: home.sessions,
+        }).catch(() => undefined);
+      }
+    }
+    return pinned;
+  }, [client, dispatch, userKey]);
+
+  const toggleSpacePin = useCallback(async (spaceId: string) => {
+    if (!client) throw new Error("Cohub is still connecting");
+    const current = stateRef.current.spaces.find((space) => space.id === spaceId) ?? null;
+    const wasPinned = current?.isPinned ?? await getResourcePinState(client, "space", spaceId, { force: true });
+    spacePinMutationVersionsRef.current.set(spaceId, (spacePinMutationVersionsRef.current.get(spaceId) ?? 0) + 1);
+    if (current) dispatch({ type: "space-upsert", space: { ...current, isPinned: !wasPinned } });
+    try {
+      const pinned = await toggleResourcePin(client, "space", spaceId, wasPinned);
+      const latest = stateRef.current.spaces.find((space) => space.id === spaceId) ?? current;
+      if (latest) {
+        const next = { ...latest, isPinned: pinned };
+        dispatch({ type: "space-upsert", space: next });
+        if (Platform.OS !== "web") {
+          const home = stateRef.current;
+          void saveHome(userKey, {
+            spaces: [next, ...home.spaces.filter((space) => space.id !== spaceId)],
+            sessions: home.sessions,
+          }).catch(() => undefined);
+        }
+      }
+      return pinned;
+    } catch (error) {
+      if (current) dispatch({ type: "space-upsert", space: current });
+      throw error;
+    }
+  }, [client, dispatch, userKey]);
+
+  useEffect(() => {
+    if (!client) return;
+    return client.onUserEvent((event) => {
+      if (event.type !== "label.assignments.updated") return;
+      const payload = event.payload as {
+        resourceType?: unknown;
+        resourceRef?: unknown;
+        assignments?: unknown;
+      };
+      if (payload.resourceType !== "space" || typeof payload.resourceRef !== "string" || !Array.isArray(payload.assignments)) return;
+      const current = stateRef.current.spaces.find((space) => space.id === payload.resourceRef);
+      if (!current) return;
+      const pinned = isResourcePinned(payload.assignments as { labelSystemKey?: string | null }[]);
+      const next = { ...current, isPinned: pinned };
+      dispatch({ type: "space-upsert", space: next });
+      if (Platform.OS !== "web") {
+        const home = stateRef.current;
+        void saveHome(userKey, {
+          spaces: [next, ...home.spaces.filter((space) => space.id !== next.id)],
+          sessions: home.sessions,
+        }).catch(() => undefined);
+      }
+    });
+  }, [client, dispatch, userKey]);
+
   const upsertSpace = useCallback((space: SpaceRecord) => {
     dispatch({ type: "space-upsert", space });
     if (Platform.OS !== "web") {
@@ -1328,6 +1406,7 @@ export function AppProvider({
     setModelStatusError(null);
     modelStatusLoadedAtRef.current = 0;
     paginationRequestsRef.current.clear();
+    spacePinMutationVersionsRef.current.clear();
     setState({ ...initialState, booting: false, refreshing: false });
   }, [userKey]);
 
@@ -1379,6 +1458,8 @@ export function AppProvider({
       loadModels,
       loadModelStatus,
       createSpace,
+      refreshSpacePin,
+      toggleSpacePin,
       upsertSpace,
       renameSession,
       clearCache,
@@ -1393,6 +1474,8 @@ export function AppProvider({
       connectionState,
       createSpace,
       getAccessToken,
+      refreshSpacePin,
+      toggleSpacePin,
       installationId,
       jumpToTurn,
       loadModelStatus,

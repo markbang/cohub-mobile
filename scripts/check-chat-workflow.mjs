@@ -1,10 +1,41 @@
 import assert from "node:assert/strict";
 import { getComposerActionState } from "../src/data/composer-state.ts";
+import { filterSpaces } from "../src/data/space-filters.ts";
+import { panelForOpeningDelta, shouldClosePanel, shouldOpenPanel } from "../src/data/space-panel-gesture.ts";
+import { getResourcePinState, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
 import { nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { messageIndexForTurn } from "../src/data/session-history.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
 
 assert.equal(normalizeSearchQuery("  server   result  "), "server result");
+assert.equal(isResourcePinned([{ labelSystemKey: "user:pinned" }]), true);
+assert.equal(isResourcePinned([{ labelSystemKey: "other" }]), false);
+assert.deepEqual(filterSpaces([{ id: "a", isPinned: true }, { id: "b", isPinned: false }, { id: "c", isPinned: true }], "pinned").map((space) => space.id), ["a", "c"]);
+assert.equal(panelForOpeningDelta(30), "chat");
+assert.equal(panelForOpeningDelta(-30), "files");
+assert.equal(panelForOpeningDelta(0), null);
+assert.equal(shouldOpenPanel(100, 360, 0), true);
+assert.equal(shouldOpenPanel(10, 360, 0.5), false);
+assert.equal(shouldOpenPanel(10, 360, 0.6), true);
+assert.equal(shouldClosePanel(180, 360, 0), true);
+
+let fakePinned = false;
+const pinCalls = [];
+const fakeClient = {
+  user: {
+    labels: {
+      getResourceLabels: async () => ({ assignments: fakePinned ? [{ labelSystemKey: "user:pinned" }] : [] }),
+      patchResourceLabels: async (_resourceType, _resourceRef, input) => {
+        pinCalls.push(input);
+        fakePinned = Boolean(input.addLabelRefs);
+        return { assignments: fakePinned ? [{ labelSystemKey: "user:pinned" }] : [] };
+      },
+    },
+  },
+};
+assert.equal(await getResourcePinState(fakeClient, "session", "session-1", { force: true }), false);
+assert.equal(await toggleResourcePin(fakeClient, "session", "session-1", false), true);
+assert.deepEqual(pinCalls, [{ addLabelRefs: ["Pinned"] }]);
 
 const searchResult = (overrides = {}) => ({
   type: "turn",
