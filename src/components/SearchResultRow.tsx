@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native";
-import { Avatar, AppIcon, IconButton } from "@/src/ui";
+import { PinnedRow } from "@/src/components/PinnedRow";
+import { Avatar, AppIcon } from "@/src/ui";
 import type { RemoteSessionSearchHit, RemoteSpaceSearchHit, SessionNavigationTarget } from "@/src/data/session-search";
 import { useAppTheme, typography } from "@/src/theme";
 import { formatRelativeTime, shortPreview } from "@/src/utils";
@@ -33,12 +34,18 @@ export function SessionSearchRow({ hit, onPress, pinned = false, pinning = false
   if (!onTogglePin) {
     return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${hit.title}`} onPress={() => onPress(target)} android_ripple={{ color: theme.colors.pressOverlay }} style={rowStyle}>{content}</Pressable>;
   }
-  return <View style={{ flexDirection: "row", alignItems: "stretch", borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${hit.title}`} onPress={() => onPress(target)} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => [rowStyle({ pressed }), { flex: 1, borderBottomWidth: 0, paddingRight: 4 }]}>{content}</Pressable>
-    <View style={{ justifyContent: "center", paddingRight: 8 }}>
-      <IconButton name={pinned ? "pin-off" : "pin"} label={pinned ? "Unpin Chat" : "Pin Chat"} size={36} tone={pinned ? "accent" : "default"} disabled={pinning} onPress={() => onTogglePin()} />
-    </View>
-  </View>;
+  return <PinnedRow
+    openLabel={`Open ${hit.title}`}
+    pinLabel="Pin Chat"
+    unpinLabel="Unpin Chat"
+    pinned={pinned}
+    pinning={pinning}
+    onPress={() => onPress(target)}
+    onTogglePin={() => onTogglePin()}
+    rowStyle={rowStyle}
+  >
+    {content}
+  </PinnedRow>;
 }
 
 export function SpaceSearchRow({ hit, onPress }: { hit: RemoteSpaceSearchHit; onPress: () => void }) {

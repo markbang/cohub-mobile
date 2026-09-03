@@ -49,7 +49,7 @@ function IconFrame({ size, children }: { size: number; children: ReactNode }) {
 
 function SvgLayer({ size, children, style }: { size: number; children: ReactNode; style: object }) {
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { pointerEvents: "none" }, style]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         {children}
       </Svg>

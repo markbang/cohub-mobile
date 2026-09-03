@@ -1,6 +1,7 @@
 import type { SpaceRecord } from "@neta-art/cohub";
 import { Pressable, Text, View } from "react-native";
-import { Avatar, AppIcon, IconButton, StatusPill } from "@/src/ui";
+import { PinnedRow } from "@/src/components/PinnedRow";
+import { Avatar, AppIcon, StatusPill } from "@/src/ui";
 import { useAppTheme, typography } from "@/src/theme";
 import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 
@@ -28,8 +29,16 @@ export function SpaceRow({ space, chatCount, onPress, pinning = false, onToggleP
   </>;
   const rowStyle = ({ pressed }: { pressed: boolean }) => ({ flexDirection: "row" as const, alignItems: "center" as const, gap: 13, minHeight: 84, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" });
   if (!onTogglePin) return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${name}`} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={rowStyle}>{content}</Pressable>;
-  return <View style={{ flexDirection: "row", alignItems: "stretch", borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${name}`} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => [rowStyle({ pressed }), { flex: 1, borderBottomWidth: 0, paddingRight: 4 }]}>{content}</Pressable>
-    <View style={{ justifyContent: "center", paddingRight: 8 }}><IconButton name={pinned ? "pin-off" : "pin"} label={pinned ? "Unpin Space" : "Pin Space"} size={36} tone={pinned ? "accent" : "default"} disabled={pinning} onPress={() => onTogglePin()} /></View>
-  </View>;
+  return <PinnedRow
+    openLabel={`Open ${name}`}
+    pinLabel="Pin Space"
+    unpinLabel="Unpin Space"
+    pinned={pinned}
+    pinning={pinning}
+    onPress={onPress}
+    onTogglePin={() => onTogglePin()}
+    rowStyle={rowStyle}
+  >
+    {content}
+  </PinnedRow>;
 }

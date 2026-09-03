@@ -11,6 +11,10 @@ assert.equal(normalizeSearchQuery("  server   result  "), "server result");
 assert.equal(isResourcePinned([{ labelSystemKey: "user:pinned" }]), true);
 assert.equal(isResourcePinned([{ labelSystemKey: "other" }]), false);
 assert.deepEqual(filterSpaces([{ id: "a", isPinned: true }, { id: "b", isPinned: false }, { id: "c", isPinned: true }], "pinned").map((space) => space.id), ["a", "c"]);
+assert.deepEqual(filterSpaces([
+  { id: "old", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "new", updatedAt: "2026-09-01T00:00:00.000Z" },
+], "recent").map((space) => space.id), ["new", "old"]);
 assert.equal(panelForOpeningDelta(30), "chat");
 assert.equal(panelForOpeningDelta(-30), "files");
 assert.equal(panelForOpeningDelta(0), null);
@@ -36,6 +40,29 @@ const fakeClient = {
 assert.equal(await getResourcePinState(fakeClient, "session", "session-1", { force: true }), false);
 assert.equal(await toggleResourcePin(fakeClient, "session", "session-1", false), true);
 assert.deepEqual(pinCalls, [{ addLabelRefs: ["Pinned"] }]);
+
+let resolveRaceRead;
+let racePinned = false;
+const raceRead = new Promise((resolve) => {
+  resolveRaceRead = resolve;
+});
+const raceClient = {
+  user: {
+    labels: {
+      getResourceLabels: async () => raceRead,
+      patchResourceLabels: async (_resourceType, _resourceRef, input) => {
+        racePinned = Boolean(input.addLabelRefs);
+        return { assignments: racePinned ? [{ labelSystemKey: "user:pinned" }] : [] };
+      },
+    },
+  },
+};
+const staleRead = getResourcePinState(raceClient, "session", "race-1", { force: true });
+const raceMutation = toggleResourcePin(raceClient, "session", "race-1", false);
+resolveRaceRead({ assignments: [] });
+assert.equal(await staleRead, false);
+assert.equal(await raceMutation, true);
+assert.equal(await getResourcePinState(raceClient, "session", "race-1"), true);
 
 const searchResult = (overrides = {}) => ({
   type: "turn",

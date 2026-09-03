@@ -1,6 +1,7 @@
 import type { UserSessionListItem } from "@neta-art/cohub";
 import { Pressable, Text, View } from "react-native";
-import { Avatar, AppIcon, IconButton, StatusPill } from "@/src/ui";
+import { PinnedRow } from "@/src/components/PinnedRow";
+import { Avatar, AppIcon, StatusPill } from "@/src/ui";
 import { useAppTheme, typography } from "@/src/theme";
 import { displaySessionTitle, formatRelativeTime, isNeedsAttentionStatus, isRunningStatus, shortPreview } from "@/src/utils";
 
@@ -35,10 +36,16 @@ export function SessionRow({ session, onPress, pinned = false, pinning = false, 
   if (!onTogglePin) {
     return <Pressable accessibilityRole="button" accessibilityLabel={`Open ${displaySessionTitle(session)}`} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={rowStyle}>{rowContent}</Pressable>;
   }
-  return <View style={{ flexDirection: "row", alignItems: "stretch", borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${displaySessionTitle(session)}`} onPress={onPress} android_ripple={{ color: theme.colors.pressOverlay }} style={({ pressed }) => [rowStyle({ pressed }), { flex: 1, borderBottomWidth: 0, paddingRight: 4 }]}>{rowContent}</Pressable>
-    <View style={{ justifyContent: "center", paddingRight: 8 }}>
-      <IconButton name={pinned ? "pin-off" : "pin"} label={pinned ? "Unpin Chat" : "Pin Chat"} size={36} tone={pinned ? "accent" : "default"} disabled={pinning} onPress={() => onTogglePin()} />
-    </View>
-  </View>;
+  return <PinnedRow
+    openLabel={`Open ${displaySessionTitle(session)}`}
+    pinLabel="Pin Chat"
+    unpinLabel="Unpin Chat"
+    pinned={pinned}
+    pinning={pinning}
+    onPress={onPress}
+    onTogglePin={() => onTogglePin()}
+    rowStyle={rowStyle}
+  >
+    {rowContent}
+  </PinnedRow>;
 }

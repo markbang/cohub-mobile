@@ -113,7 +113,7 @@ function AboutRow({ icon, title, detail, onPress }: { icon: IconName; title: str
   );
   return onPress ? (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole="link"
       accessibilityLabel={title}
       onPress={onPress}
       android_ripple={{ color: theme.colors.pressOverlay }}

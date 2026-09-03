@@ -32,7 +32,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns } from "@/src/data/session-history";
-import { getResourcePinState, isResourcePinned, toggleResourcePin } from "@/src/data/resource-pins";
+import { getResourcePinState, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
 import {
   displaySessionTitle,
@@ -268,6 +268,12 @@ function mergeSessionItem(current: UserSessionListItem | undefined, incoming: Us
     : { ...current, ...incoming, space: incoming.space ?? current.space };
 }
 
+function preserveSpacePin(current: SpaceRecord | undefined, incoming: SpaceRecord) {
+  return incoming.isPinned === undefined && current?.isPinned !== undefined
+    ? { ...incoming, isPinned: current.isPinned }
+    : incoming;
+}
+
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "hydrate":
@@ -280,6 +286,8 @@ function reducer(state: AppState, action: Action): AppState {
     case "home-start":
       return { ...state, refreshing: true, error: null, spacesError: null, sessionsError: null, activityLoading: true, activityError: null };
     case "home-success": {
+      const existingSpaces = new Map(state.spaces.map((space) => [space.id, space]));
+      const refreshedSpaces = action.spaces.map((space) => preserveSpacePin(existingSpaces.get(space.id), space));
       const existingSessions = new Map(state.sessions.map((session) => [session.id, session]));
       const refreshedSessions = action.sessions.map((session) => mergeSessionItem(existingSessions.get(session.id), session));
       return {
@@ -290,7 +298,7 @@ function reducer(state: AppState, action: Action): AppState {
         spacesError: action.spacesError ?? null,
         sessionsError: action.sessionsError ?? null,
         lastSyncedAt: new Date().toISOString(),
-        spaces: sortByRecent(action.spaces),
+        spaces: sortByRecent(refreshedSpaces),
         sessions: sortByRecent(refreshedSessions),
         sessionsHasMore: action.sessionsHasMore ?? false,
         sessionsCursor: action.sessionsCursor ?? null,
@@ -729,13 +737,40 @@ export function AppProvider({
       if (errors.length === 2) {
         throw new Error(errors.map((error) => errorMessage(error, "Request failed")).join("\n"));
       }
-      const spaces = spacesResult.status === "fulfilled" ? spacesResult.value ?? [] : stateRef.current.spaces;
-      const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value.sessions ?? [] : stateRef.current.sessions;
-      const sessionsHasMore = sessionsResult.status === "fulfilled" ? Boolean(sessionsResult.value.pageInfo?.hasMore) : stateRef.current.sessionsHasMore;
-      const sessionsCursor = sessionsResult.status === "fulfilled" ? (sessionsResult.value.pageInfo?.nextCursor ?? null) : stateRef.current.sessionsCursor;
+      const existingSpaces = new Map(stateRef.current.spaces.map((space) => [space.id, space]));
+      const remoteSpaces = spacesResult.status === "fulfilled" ? spacesResult.value ?? [] : null;
+      let spaces = remoteSpaces
+        ? remoteSpaces.map((space) => preserveSpacePin(existingSpaces.get(space.id), space))
+        : stateRef.current.spaces;
       const spacesError = spacesResult.status === "rejected"
         ? `Spaces could not be refreshed: ${errorMessage(spacesResult.reason, "Request failed")}`
         : undefined;
+      const pinRequestVersions = new Map(spaces.map((space) => [space.id, spacePinMutationVersionsRef.current.get(space.id) ?? 0]));
+      const spacesMissingPinState = remoteSpaces?.filter((space) => space.isPinned === undefined).map((space) => space.id) ?? [];
+      let pinStates: Record<string, boolean> = {};
+      if (spacesMissingPinState.length > 0) {
+        try {
+          pinStates = await withTimeout(
+            loadResourcePinStates(activeClient, "space", spacesMissingPinState, { force: true }),
+            "Loading Space pins",
+          );
+        } catch (error) {
+          console.warn("[mobile-pins] failed to refresh Space pins", error);
+        }
+      }
+      if (generation !== homeRefreshGenerationRef.current) return;
+      spaces = spaces.map((space) => {
+        const mutationVersion = spacePinMutationVersionsRef.current.get(space.id) ?? 0;
+        if (mutationVersion !== pinRequestVersions.get(space.id)) {
+          const current = stateRef.current.spaces.find((item) => item.id === space.id);
+          return current?.isPinned === undefined ? space : { ...space, isPinned: current.isPinned };
+        }
+        const pinned = pinStates[space.id];
+        return pinned === undefined ? space : { ...space, isPinned: pinned };
+      });
+      const sessions = sessionsResult.status === "fulfilled" ? sessionsResult.value.sessions ?? [] : stateRef.current.sessions;
+      const sessionsHasMore = sessionsResult.status === "fulfilled" ? Boolean(sessionsResult.value.pageInfo?.hasMore) : stateRef.current.sessionsHasMore;
+      const sessionsCursor = sessionsResult.status === "fulfilled" ? (sessionsResult.value.pageInfo?.nextCursor ?? null) : stateRef.current.sessionsCursor;
       const sessionsError = sessionsResult.status === "rejected"
         ? `Chats could not be refreshed: ${errorMessage(sessionsResult.reason, "Request failed")}`
         : undefined;
@@ -1324,10 +1359,14 @@ export function AppProvider({
     if (!client) throw new Error("Cohub is still connecting");
     const current = stateRef.current.spaces.find((space) => space.id === spaceId) ?? null;
     const wasPinned = current?.isPinned ?? await getResourcePinState(client, "space", spaceId, { force: true });
-    spacePinMutationVersionsRef.current.set(spaceId, (spacePinMutationVersionsRef.current.get(spaceId) ?? 0) + 1);
+    const mutationVersion = (spacePinMutationVersionsRef.current.get(spaceId) ?? 0) + 1;
+    spacePinMutationVersionsRef.current.set(spaceId, mutationVersion);
     if (current) dispatch({ type: "space-upsert", space: { ...current, isPinned: !wasPinned } });
     try {
       const pinned = await toggleResourcePin(client, "space", spaceId, wasPinned);
+      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
+        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
+      }
       const latest = stateRef.current.spaces.find((space) => space.id === spaceId) ?? current;
       if (latest) {
         const next = { ...latest, isPinned: pinned };
@@ -1342,6 +1381,9 @@ export function AppProvider({
       }
       return pinned;
     } catch (error) {
+      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
+        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? !wasPinned;
+      }
       if (current) dispatch({ type: "space-upsert", space: current });
       throw error;
     }

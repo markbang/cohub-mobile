@@ -15,6 +15,7 @@ type PinCacheEntry = {
 type ClientPinCache = {
   entries: Map<string, PinCacheEntry>;
   pending: Map<string, Promise<boolean>>;
+  mutationVersions: Map<string, number>;
 };
 
 const caches = new WeakMap<CohubClient, ClientPinCache>();
@@ -22,7 +23,11 @@ const caches = new WeakMap<CohubClient, ClientPinCache>();
 function getCache(client: CohubClient) {
   const existing = caches.get(client);
   if (existing) return existing;
-  const created: ClientPinCache = { entries: new Map(), pending: new Map() };
+  const created: ClientPinCache = {
+    entries: new Map(),
+    pending: new Map(),
+    mutationVersions: new Map(),
+  };
   caches.set(client, created);
   return created;
 }
@@ -69,12 +74,15 @@ export async function getResourcePinState(
   }
   const pending = cache.pending.get(key);
   if (pending) return pending;
+  const requestVersion = cache.mutationVersions.get(key) ?? 0;
 
   const request = client.user.labels
     .getResourceLabels(resourceType, resourceRef)
     .then((result) => {
       const pinned = isResourcePinned(result.assignments);
-      cachePinState(client, resourceType, resourceRef, pinned);
+      if ((cache.mutationVersions.get(key) ?? 0) === requestVersion) {
+        cachePinState(client, resourceType, resourceRef, pinned);
+      }
       return pinned;
     })
     .finally(() => {
@@ -112,14 +120,29 @@ export async function toggleResourcePin(
   currentPinned?: boolean,
 ) {
   const wasPinned = currentPinned ?? await getResourcePinState(client, resourceType, resourceRef);
-  const result = await client.user.labels.patchResourceLabels(
-    resourceType,
-    resourceRef,
-    wasPinned
-      ? { removeLabelRefs: [PINNED_LABEL_REF] }
-      : { addLabelRefs: [PINNED_LABEL_REF] },
-  );
-  const nextPinned = isResourcePinned(result.assignments);
-  cachePinState(client, resourceType, resourceRef, nextPinned);
-  return nextPinned;
+  const key = resourceKey(resourceType, resourceRef);
+  const cache = getCache(client);
+  const mutationVersion = (cache.mutationVersions.get(key) ?? 0) + 1;
+  cache.mutationVersions.set(key, mutationVersion);
+  cache.pending.delete(key);
+  cachePinState(client, resourceType, resourceRef, !wasPinned);
+  try {
+    const result = await client.user.labels.patchResourceLabels(
+      resourceType,
+      resourceRef,
+      wasPinned
+        ? { removeLabelRefs: [PINNED_LABEL_REF] }
+        : { addLabelRefs: [PINNED_LABEL_REF] },
+    );
+    const nextPinned = isResourcePinned(result.assignments);
+    if ((cache.mutationVersions.get(key) ?? 0) === mutationVersion) {
+      cachePinState(client, resourceType, resourceRef, nextPinned);
+    }
+    return nextPinned;
+  } catch (error) {
+    if ((cache.mutationVersions.get(key) ?? 0) === mutationVersion) {
+      cachePinState(client, resourceType, resourceRef, wasPinned);
+    }
+    throw error;
+  }
 }

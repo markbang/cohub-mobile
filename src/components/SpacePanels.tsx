@@ -4,7 +4,7 @@
 import type { CohubClient, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, Animated, BackHandler, FlatList, Modal, PanResponder, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, FlatList, Modal, PanResponder, Platform, Pressable, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, { cancelAnimation, Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -38,8 +38,12 @@ const PANEL_WIDTH_RATIO = 0.86;
 const MAX_PANEL_WIDTH = 360;
 const ANIMATION_DURATION_MS = 220;
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
-const WEB_GESTURE_STYLE = Platform.OS === "web"
-  ? ({ touchAction: "pan-y" } as const)
+// These CSS properties are supported by React Native Web but are not in the shared RN ViewStyle type.
+const WEB_GESTURE_STYLE: ViewStyle | undefined = Platform.OS === "web"
+  ? ({ touchAction: "pan-y" } as unknown as ViewStyle)
+  : undefined;
+const WEB_NO_SELECT_STYLE: ViewStyle | undefined = Platform.OS === "web"
+  ? ({ userSelect: "none" } as unknown as ViewStyle)
   : undefined;
 
 type GestureController = {
@@ -480,7 +484,7 @@ function WebSpacePanels({ spaceId, spaceName, sessions, client, activePanel, onA
   const backdropOpacity = progress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.52] });
   const panelPosition = { left: visibleSide === "chat" ? 0 : undefined, right: visibleSide === "files" ? 0 : undefined };
 
-  return <View collapsable={false} style={[{ flex: 1 }, WEB_GESTURE_STYLE, gestureActive ? { userSelect: "none" as const } : null]} {...screenResponder.panHandlers}>
+  return <View collapsable={false} style={[{ flex: 1 }, WEB_GESTURE_STYLE, gestureActive ? WEB_NO_SELECT_STYLE : null]} {...screenResponder.panHandlers}>
     {children}
     {!drawerMounted && gestureSide ? <View pointerEvents="none" accessibilityElementsHidden style={[styles.gesturePreviewRoot, { top: -insets.top, bottom: -insets.bottom }]}>
       <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]} />
@@ -494,7 +498,7 @@ function WebSpacePanels({ spaceId, spaceName, sessions, client, activePanel, onA
     <Modal visible={drawerMounted} transparent animationType="none" statusBarTranslucent navigationBarTranslucent hardwareAccelerated onRequestClose={closeDrawer}>
       <View style={styles.modalRoot}>
         <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}><Pressable accessibilityRole="button" accessibilityLabel="Close panel" style={styles.fill} onPress={closeDrawer} /></Animated.View>
-        <Animated.View collapsable={false} testID={visibleSide ? `space-panel-${visibleSide}` : undefined} {...panelResponder.panHandlers} accessibilityViewIsModal role="dialog" style={[styles.panel, WEB_GESTURE_STYLE, gestureActive ? { userSelect: "none" as const } : null, { width: panelWidth, height: Math.max(0, height), paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: theme.colors.background, borderColor: theme.colors.border, ...panelPosition, transform: [{ translateX }] }]}>
+        <Animated.View collapsable={false} testID={visibleSide ? `space-panel-${visibleSide}` : undefined} {...panelResponder.panHandlers} accessibilityViewIsModal role="dialog" style={[styles.panel, WEB_GESTURE_STYLE, gestureActive ? WEB_NO_SELECT_STYLE : null, { width: panelWidth, height: Math.max(0, height), paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: theme.colors.background, borderColor: theme.colors.border, ...panelPosition, transform: [{ translateX }] }]}>
             {visibleSide === "chat" ? <ChatPanel spaceId={spaceId} spaceName={spaceName} sessions={sessions} client={client} onClose={closeDrawer} onNewChat={() => { closeDrawer(); onNewChat(); }} onOpenSession={(sessionId, target) => { closeDrawer(); onOpenSession(sessionId, target); }} /> : <FilesPanel spaceId={spaceId} spaceName={spaceName} client={client} onClose={closeDrawer} onOpenFile={(path) => { closeDrawer(); onOpenFile(path); }} onOpenFilesPage={() => { closeDrawer(); onOpenFilesPage(); }} />}
         </Animated.View>
       </View>
@@ -575,7 +579,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
   const pinningIdsRef = useRef(new Set<string>());
   const pinMutationVersionsRef = useRef(new Map<string, number>());
   const [pinningIds, setPinningIds] = useState<Set<string>>(new Set());
-  const remoteSearch = useRemoteSearch(client, query, { enabled: Boolean(spaceId) && pinFilter === "all", spaceId, types: ["session", "turn"] });
+  const remoteSearch = useRemoteSearch(client, query, { enabled: Boolean(spaceId), spaceId, types: ["session", "turn"] });
   const displaySessions = useMemo(() => mergePanelSessions(extraSessions, sessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
   const remoteQueryMatches = remoteSearch.query === normalizeSearchQuery(query);
   const pinCandidateIds = useMemo(() => [...new Set([
@@ -638,20 +642,23 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onClose, onNewChat, o
   const togglePin = useCallback(async (sessionId: string) => {
     if (!client || pinningIdsRef.current.has(sessionId)) return;
     pinningIdsRef.current.add(sessionId);
-    pinMutationVersionsRef.current.set(sessionId, (pinMutationVersionsRef.current.get(sessionId) ?? 0) + 1);
+    const mutationVersion = (pinMutationVersionsRef.current.get(sessionId) ?? 0) + 1;
+    pinMutationVersionsRef.current.set(sessionId, mutationVersion);
     setPinningIds((current) => new Set([...current, sessionId]));
     setPinError(null);
     let previous = pinStatesRef.current[sessionId];
     try {
       if (previous === undefined) {
         previous = await getResourcePinState(client, "session", sessionId, { force: true });
+        if ((pinMutationVersionsRef.current.get(sessionId) ?? 0) !== mutationVersion) return;
         updatePinStates({ [sessionId]: previous });
       }
       const optimistic = !previous;
       updatePinStates({ [sessionId]: optimistic });
       const resolved = await toggleResourcePin(client, "session", sessionId, previous);
-      updatePinStates({ [sessionId]: resolved });
+      if ((pinMutationVersionsRef.current.get(sessionId) ?? 0) === mutationVersion) updatePinStates({ [sessionId]: resolved });
     } catch (error) {
+      if ((pinMutationVersionsRef.current.get(sessionId) ?? 0) !== mutationVersion) return;
       if (previous !== undefined) updatePinStates({ [sessionId]: previous });
       setPinError(error instanceof Error ? error.message : "Unable to update Chat pin");
     } finally {
