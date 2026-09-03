@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Platform, useColorScheme } from "react-native";
+import { useColorScheme } from "react-native";
 import { useEffect, useState } from "react";
 
 export type AppTheme = {
@@ -242,7 +242,6 @@ export function useAppTheme(): AppTheme {
   const colorScheme = useColorScheme();
   const preference = useThemePreference();
   const pureBlack = usePureBlackPreference();
-  if (Platform.OS === "web") return lightTheme;
   const mode = preference === "system"
     ? colorScheme === "light" ? "light" : "dark"
     : preference;

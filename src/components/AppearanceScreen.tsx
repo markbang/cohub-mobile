@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Platform, Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   setPureBlackPreference,
@@ -126,7 +126,7 @@ export function AppearanceContent() {
       <View style={[styles.currentPalette, { marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.accent }} />
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{preferenceLabel(preference)} · {appliedModeLabel(preference, theme.mode, pureBlack)}</Text>
+          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{preferenceLabel(preference)} · {appliedModeLabel(theme.mode, pureBlack)}</Text>
         </View>
         <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 5 }]}>Applied to navigation, Chat, Files, and settings.</Text>
       </View>
@@ -138,9 +138,9 @@ function preferenceLabel(preference: ThemePreference) {
   return THEME_OPTIONS.find((option) => option.value === preference)?.label ?? "System";
 }
 
-function appliedModeLabel(preference: ThemePreference, mode: AppTheme["mode"], pureBlack: boolean) {
+function appliedModeLabel(mode: AppTheme["mode"], pureBlack: boolean) {
   if (mode === "dark") return pureBlack ? "Pure black" : "Dark";
-  return Platform.OS === "web" && preference !== "light" ? "Light preview" : "Light";
+  return "Light";
 }
 
 function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: { label: string; mode: "light" | "dark"; pureBlack: boolean; selected: boolean; width: number; onPress: () => void }) {
