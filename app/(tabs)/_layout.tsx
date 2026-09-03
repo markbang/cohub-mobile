@@ -1,8 +1,6 @@
 import { Tabs } from "expo-router";
-import { useEffect, useState } from "react";
-import { Animated, Platform, type ColorValue } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppIcon, type IconName } from "@/src/ui";
+import { AnimatedTabIcon } from "@/src/components/AnimatedTabIcon";
 import { useAppTheme } from "@/src/theme";
 
 const TAB_BAR_EXTRA_BOTTOM_SPACE = 10;
@@ -36,47 +34,10 @@ export default function TabLayout() {
         tabBarHideOnKeyboard: true,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Chats", tabBarIcon: (props) => <TabIcon name="messages" {...props} /> }} />
-      <Tabs.Screen name="spaces" options={{ title: "Spaces", tabBarIcon: (props) => <TabIcon name="layers" {...props} /> }} />
-      <Tabs.Screen name="activity" options={{ title: "Activity", tabBarIcon: (props) => <TabIcon name="activity" {...props} /> }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: (props) => <TabIcon name="user" {...props} /> }} />
+      <Tabs.Screen name="index" options={{ title: "Chats", tabBarIcon: (props) => <AnimatedTabIcon name="messages" route="/" {...props} /> }} />
+      <Tabs.Screen name="spaces" options={{ title: "Spaces", tabBarIcon: (props) => <AnimatedTabIcon name="layers" route="/spaces" {...props} /> }} />
+      <Tabs.Screen name="activity" options={{ title: "Activity", tabBarIcon: (props) => <AnimatedTabIcon name="activity" route="/activity" {...props} /> }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: (props) => <AnimatedTabIcon name="user" route="/profile" {...props} /> }} />
     </Tabs>
-  );
-}
-
-function TabIcon({ name, color, size, focused }: { name: IconName; color: ColorValue; size: number; focused: boolean }) {
-  const [scale] = useState(() => new Animated.Value(focused ? 1 : 0.92));
-  const [translateY] = useState(() => new Animated.Value(focused ? -1 : 1));
-  const [opacity] = useState(() => new Animated.Value(focused ? 1 : 0.78));
-
-  useEffect(() => {
-    const driver = Platform.OS !== "web";
-    Animated.parallel([
-      Animated.spring(scale, {
-        toValue: focused ? 1 : 0.92,
-        damping: 13,
-        stiffness: 220,
-        mass: 0.7,
-        useNativeDriver: driver,
-      }),
-      Animated.spring(translateY, {
-        toValue: focused ? -1 : 1,
-        damping: 14,
-        stiffness: 220,
-        mass: 0.7,
-        useNativeDriver: driver,
-      }),
-      Animated.timing(opacity, {
-        toValue: focused ? 1 : 0.78,
-        duration: 180,
-        useNativeDriver: driver,
-      }),
-    ]).start();
-  }, [focused, opacity, scale, translateY]);
-
-  return (
-    <Animated.View style={{ opacity, transform: [{ scale }, { translateY }] }}>
-      <AppIcon name={name} color={color} size={Math.min(size, 24)} strokeWidth={focused ? 2.3 : 1.8} />
-    </Animated.View>
   );
 }
