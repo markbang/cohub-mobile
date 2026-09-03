@@ -32,7 +32,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns } from "@/src/data/session-history";
-import { getResourcePinState, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
+import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
 import {
   displaySessionTitle,
@@ -611,6 +611,7 @@ export function AppProvider({
   const optimisticMessageSequenceRef = useRef(new Map<string, number>());
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
   const spacePinMutationVersionsRef = useRef(new Map<string, number>());
+  const spacePinPendingMutationsRef = useRef(new Map<string, number>());
   const userKey = userUuid;
 
   useEffect(() => {
@@ -755,13 +756,14 @@ export function AppProvider({
             "Loading Space pins",
           );
         } catch (error) {
+          invalidateResourcePinReads(activeClient, "space", spacesMissingPinState);
           console.warn("[mobile-pins] failed to refresh Space pins", error);
         }
       }
       if (generation !== homeRefreshGenerationRef.current) return;
       spaces = spaces.map((space) => {
         const mutationVersion = spacePinMutationVersionsRef.current.get(space.id) ?? 0;
-        if (mutationVersion !== pinRequestVersions.get(space.id)) {
+        if (spacePinPendingMutationsRef.current.has(space.id) || mutationVersion !== pinRequestVersions.get(space.id)) {
           const current = stateRef.current.spaces.find((item) => item.id === space.id);
           return current?.isPinned === undefined ? space : { ...space, isPinned: current.isPinned };
         }
@@ -1335,8 +1337,13 @@ export function AppProvider({
 
   const refreshSpacePin = useCallback(async (spaceId: string) => {
     if (!client) throw new Error("Cohub is still connecting");
+    const currentBeforeRequest = stateRef.current.spaces.find((space) => space.id === spaceId);
+    if (spacePinPendingMutationsRef.current.has(spaceId)) return currentBeforeRequest?.isPinned ?? false;
     const requestVersion = spacePinMutationVersionsRef.current.get(spaceId) ?? 0;
     const pinned = await getResourcePinState(client, "space", spaceId, { force: true });
+    if (spacePinPendingMutationsRef.current.has(spaceId)) {
+      return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
+    }
     if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== requestVersion) {
       return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
     }
@@ -1357,12 +1364,18 @@ export function AppProvider({
 
   const toggleSpacePin = useCallback(async (spaceId: string) => {
     if (!client) throw new Error("Cohub is still connecting");
-    const current = stateRef.current.spaces.find((space) => space.id === spaceId) ?? null;
-    const wasPinned = current?.isPinned ?? await getResourcePinState(client, "space", spaceId, { force: true });
     const mutationVersion = (spacePinMutationVersionsRef.current.get(spaceId) ?? 0) + 1;
     spacePinMutationVersionsRef.current.set(spaceId, mutationVersion);
-    if (current) dispatch({ type: "space-upsert", space: { ...current, isPinned: !wasPinned } });
+    spacePinPendingMutationsRef.current.set(spaceId, mutationVersion);
+    let current: SpaceRecord | null = null;
+    let wasPinned = false;
     try {
+      current = stateRef.current.spaces.find((space) => space.id === spaceId) ?? null;
+      wasPinned = current?.isPinned ?? await getResourcePinState(client, "space", spaceId, { force: true });
+      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
+        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? wasPinned;
+      }
+      if (current) dispatch({ type: "space-upsert", space: { ...current, isPinned: !wasPinned } });
       const pinned = await toggleResourcePin(client, "space", spaceId, wasPinned);
       if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
         return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
@@ -1386,6 +1399,10 @@ export function AppProvider({
       }
       if (current) dispatch({ type: "space-upsert", space: current });
       throw error;
+    } finally {
+      if (spacePinPendingMutationsRef.current.get(spaceId) === mutationVersion) {
+        spacePinPendingMutationsRef.current.delete(spaceId);
+      }
     }
   }, [client, dispatch, userKey]);
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { filterSpaces } from "../src/data/space-filters.ts";
 import { panelForOpeningDelta, shouldClosePanel, shouldOpenPanel } from "../src/data/space-panel-gesture.ts";
-import { getResourcePinState, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
+import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
 import { nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { messageIndexForTurn } from "../src/data/session-history.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
@@ -63,6 +63,54 @@ resolveRaceRead({ assignments: [] });
 assert.equal(await staleRead, false);
 assert.equal(await raceMutation, true);
 assert.equal(await getResourcePinState(raceClient, "session", "race-1"), true);
+
+let patchStarted = false;
+let resolveFirstPatch;
+const mutationClient = {
+  user: {
+    labels: {
+      getResourceLabels: async () => ({ assignments: [] }),
+      patchResourceLabels: async (_resourceType, _resourceRef, input) => {
+        patchStarted = true;
+        await new Promise((resolve) => { resolveFirstPatch = resolve; });
+        return { assignments: input.addLabelRefs ? [{ labelSystemKey: "user:pinned" }] : [] };
+      },
+    },
+  },
+};
+const mutation = toggleResourcePin(mutationClient, "session", "mutation-1", false);
+while (!patchStarted) await new Promise((resolve) => setTimeout(resolve, 0));
+let readDuringMutationResolved = false;
+const readDuringMutation = getResourcePinState(mutationClient, "session", "mutation-1", { force: true }).then((value) => {
+  readDuringMutationResolved = true;
+  return value;
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(readDuringMutationResolved, false);
+resolveFirstPatch(true);
+assert.equal(await mutation, true);
+assert.equal(await readDuringMutation, true);
+
+let invalidationReadCount = 0;
+let resolveHangingRead;
+const invalidationClient = {
+  user: {
+    labels: {
+      getResourceLabels: async () => {
+        invalidationReadCount += 1;
+        if (invalidationReadCount === 1) return new Promise((resolve) => { resolveHangingRead = resolve; });
+        return { assignments: [] };
+      },
+    },
+  },
+};
+const hangingRead = getResourcePinState(invalidationClient, "session", "retry-1", { force: true });
+await new Promise((resolve) => setTimeout(resolve, 0));
+invalidateResourcePinReads(invalidationClient, "session", ["retry-1"]);
+assert.equal(await getResourcePinState(invalidationClient, "session", "retry-1", { force: true }), false);
+resolveHangingRead({ assignments: [{ labelSystemKey: "user:pinned" }] });
+assert.equal(await hangingRead, true);
+assert.equal(invalidationReadCount, 2);
 
 const searchResult = (overrides = {}) => ({
   type: "turn",
