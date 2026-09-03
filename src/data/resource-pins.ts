@@ -105,6 +105,7 @@ export function invalidateResourcePinReads(
   for (const resourceRef of new Set(resourceRefs.filter(Boolean))) {
     const key = resourceKey(resourceType, resourceRef);
     cache.pending.delete(key);
+    cache.entries.delete(key);
     if (!cache.mutations.has(key)) {
       cache.mutationVersions.set(key, (cache.mutationVersions.get(key) ?? 0) + 1);
     }

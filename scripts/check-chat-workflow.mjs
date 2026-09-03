@@ -98,19 +98,21 @@ const invalidationClient = {
     labels: {
       getResourceLabels: async () => {
         invalidationReadCount += 1;
-        if (invalidationReadCount === 1) return new Promise((resolve) => { resolveHangingRead = resolve; });
+        if (invalidationReadCount === 1) return { assignments: [{ labelSystemKey: "user:pinned" }] };
+        if (invalidationReadCount === 2) return new Promise((resolve) => { resolveHangingRead = resolve; });
         return { assignments: [] };
       },
     },
   },
 };
+assert.equal(await getResourcePinState(invalidationClient, "session", "retry-1"), true);
 const hangingRead = getResourcePinState(invalidationClient, "session", "retry-1", { force: true });
 await new Promise((resolve) => setTimeout(resolve, 0));
 invalidateResourcePinReads(invalidationClient, "session", ["retry-1"]);
-assert.equal(await getResourcePinState(invalidationClient, "session", "retry-1", { force: true }), false);
+assert.equal(await getResourcePinState(invalidationClient, "session", "retry-1"), false);
 resolveHangingRead({ assignments: [{ labelSystemKey: "user:pinned" }] });
 assert.equal(await hangingRead, true);
-assert.equal(invalidationReadCount, 2);
+assert.equal(invalidationReadCount, 3);
 
 const searchResult = (overrides = {}) => ({
   type: "turn",

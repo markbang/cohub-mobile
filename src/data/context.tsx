@@ -612,6 +612,7 @@ export function AppProvider({
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
   const spacePinMutationVersionsRef = useRef(new Map<string, number>());
   const spacePinPendingMutationsRef = useRef(new Map<string, number>());
+  const spacePinMutationSequenceRef = useRef(0);
   const userKey = userUuid;
 
   useEffect(() => {
@@ -1364,7 +1365,7 @@ export function AppProvider({
 
   const toggleSpacePin = useCallback(async (spaceId: string) => {
     if (!client) throw new Error("Cohub is still connecting");
-    const mutationVersion = (spacePinMutationVersionsRef.current.get(spaceId) ?? 0) + 1;
+    const mutationVersion = ++spacePinMutationSequenceRef.current;
     spacePinMutationVersionsRef.current.set(spaceId, mutationVersion);
     spacePinPendingMutationsRef.current.set(spaceId, mutationVersion);
     let current: SpaceRecord | null = null;
@@ -1466,6 +1467,7 @@ export function AppProvider({
     modelStatusLoadedAtRef.current = 0;
     paginationRequestsRef.current.clear();
     spacePinMutationVersionsRef.current.clear();
+    spacePinPendingMutationsRef.current.clear();
     setState({ ...initialState, booting: false, refreshing: false });
   }, [userKey]);
 
