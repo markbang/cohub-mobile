@@ -52,7 +52,7 @@ on:
         description: Platform to build
         required: true
         type: choice
-        options: [android, all]
+        options: [android, ios, all]
         default: android
       profile:
         description: Native build profile

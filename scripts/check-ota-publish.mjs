@@ -51,6 +51,7 @@ const nativeCi = parse(".github/workflows/native-ci.yml");
 assert.equal(Object.hasOwn(nativeCi.on, "push"), false);
 
 const nativeRelease = parse(".github/workflows/native-release.yml");
+assert.ok(nativeRelease.on.workflow_dispatch.inputs.platform.options.includes("ios"), "Native Release must allow iOS-only TestFlight builds");
 assert.match(JSON.stringify(nativeRelease.jobs.android.steps), /native-fingerprint/);
 assert.match(nativeRelease.jobs.android.steps.find((step) => step.uses === "actions/upload-artifact@v7").with.path, /native-fingerprint/);
 
