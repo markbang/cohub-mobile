@@ -1,4 +1,5 @@
 import { useFocusEffect, useIsFocused, useRouter, useScrollToTop } from "expo-router";
+import { openNativeActivity } from "@/src/platform/native-activity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { AccountAvatar } from "@/src/components/AccountAvatar";
@@ -91,7 +92,7 @@ export default function ChatsScreen() {
   const refresh = () => { setCutoff(sessionFilterCutoff(filterPreference.minutes, Date.now())); void loadSessionFilterMinutes().then(() => refreshHome()).catch(() => undefined); };
 
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
-    router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
+    if (!openNativeActivity(`chat/${sessionId}`, { turn: target?.turn, turnId: target?.turnId })) router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
   };
 
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
@@ -118,8 +119,8 @@ export default function ChatsScreen() {
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} onPress={() => openSearchSession(item.session.id)} />;
-          if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
-          return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
+          if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => openNativeActivity(`space/${item.hit.spaceId}`) || router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
+          return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => openNativeActivity(`space/${item.space.id}`) || router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
         refreshing={state.refreshing}
