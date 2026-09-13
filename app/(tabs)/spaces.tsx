@@ -1,5 +1,4 @@
 import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
-import { openNativeActivity } from "@/src/platform/native-activity";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, Text, TextInput, View, type ViewToken } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -106,7 +105,7 @@ export default function SpacesScreen() {
       setCreateOpen(false);
       setName("");
       setDescription("");
-      if (!openNativeActivity(`space/${space.id}`)) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
+      router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : t("spaces.create.error"));
     } finally {
@@ -133,7 +132,7 @@ export default function SpacesScreen() {
       ref={listRef}
       data={listItems}
       keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
-      renderItem={({ item }) => item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => openNativeActivity(`space/${item.hit.spaceId}`) || router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => openNativeActivity(`space/${item.space.id}`) || router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
+      renderItem={({ item }) => item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
       refreshing={state.refreshing || (filter === "recent" && spaceList.loading)}
       onRefresh={() => void Promise.all([refreshHome(), spaceList.refresh()])}
       viewabilityConfig={viewabilityConfig}
