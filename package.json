@@ -37,7 +37,7 @@
     "expo-updates": "~57.0.22",
     "expo-web-browser": "~57.0.3",
     "js-base64": "^3.9.3",
-    "lucide-react-native": "^1.40.0",
+    "lucide-react-native": "^1.45.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-enriched-markdown": "^1.0.2",
