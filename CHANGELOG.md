@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.13](https://github.com/markbang/cohub-mobile/compare/v2.2.12...v2.2.13) (2026-09-15)
+
+
+### Features
+
+* **android:** add version-level APK release notes ([c4a4320](https://github.com/markbang/cohub-mobile/commit/c4a43207156acebdf52ffc0eebe949a85e37bbde))
+* **chat:** animate attachments and queued followups ([5b6ac2e](https://github.com/markbang/cohub-mobile/commit/5b6ac2ead0ed74b130fceaac445a637fc24f74ba))
+
 ## [2.2.12](https://github.com/markbang/cohub-mobile/compare/v2.2.11...v2.2.12) (2026-09-15)
 
 
