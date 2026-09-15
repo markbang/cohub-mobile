@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.12](https://github.com/markbang/cohub-mobile/compare/v2.2.11...v2.2.12) (2026-09-15)
+
+
+### Fixes
+
+* **chat:** let overflowing code blocks keep their horizontal drag ([f9212b0](https://github.com/markbang/cohub-mobile/commit/f9212b01e7315d2e95972a0e3aba8946cf863395))
+* **chat:** restore code-block swipes and retarget OTA ([#81](https://github.com/markbang/cohub-mobile/issues/81)) ([b7e0d14](https://github.com/markbang/cohub-mobile/commit/b7e0d143e9e568d46baa9066e27752a76c0d0663))
+
+
+### Documentation
+
+* **ota:** point the production manifest at mobile.talesofai.com ([82ac8e1](https://github.com/markbang/cohub-mobile/commit/82ac8e1262f43f22fbc347e6f5046c47066d9892))
+
 ## [2.2.11](https://github.com/markbang/cohub-mobile/compare/v2.2.10...v2.2.11) (2026-09-15)
 
 
