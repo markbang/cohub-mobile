@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.2.15](https://github.com/markbang/cohub-mobile/compare/v2.2.14...v2.2.15) (2026-09-19)
+
+
+### Features
+
+* add space/app editing, activity heatmap, and settings enhancements ([8123a18](https://github.com/markbang/cohub-mobile/commit/8123a18fcb6c98567bcecee9150917d2db88499b))
+* **android:** use app-scoped Yaota APK catalogs ([16229eb](https://github.com/markbang/cohub-mobile/commit/16229eb9e30606da99a3618aedc0713d4f6bd730))
+* **chat:** persist drafts and keep new chats in place ([a0d213e](https://github.com/markbang/cohub-mobile/commit/a0d213eb183cf7259512617eca997abb4801ced1))
+
+
+### Fixes
+
+* add mod installation and improve task navigation ([9497d29](https://github.com/markbang/cohub-mobile/commit/9497d292eaf0b1fdc2f3afdee45f60b9e9e58dc2))
+* **android:** scope Yaota APK checks to Cohub app ([0ec9018](https://github.com/markbang/cohub-mobile/commit/0ec90187f88deb3204f79afdc005ed146cb249e2))
+* **android:** use standalone Yaota APK catalog endpoint ([1fa9744](https://github.com/markbang/cohub-mobile/commit/1fa97444c55444e9519fe0178a04258439313b0d))
+* change activity heatmap to GitHub-style daily view ([51236e4](https://github.com/markbang/cohub-mobile/commit/51236e405edce87f24aca257443bfd8301ff0b51))
+* **ios:** assign beta groups through the documented group-side endpoint ([adae084](https://github.com/markbang/cohub-mobile/commit/adae0840f87601aa078aef7a79e70752437f3aad))
+* **ios:** assign the beta group without the forbidden read-back ([6d73a1f](https://github.com/markbang/cohub-mobile/commit/6d73a1fea7ae813080faf1dc39715ac498c91bd8))
+* **ios:** backdate the App Store Connect token iat by 60s ([84a3c05](https://github.com/markbang/cohub-mobile/commit/84a3c05ceb6f58dea983a2dbf9d8b6d96a0fccbf))
+* **ios:** drop the page limit the builds lookup rejects ([c0dc3c3](https://github.com/markbang/cohub-mobile/commit/c0dc3c304d4fe4e3644808bee906f36c912b1376))
+* **ios:** drop the remaining page limits ASC rejects ([1e002b9](https://github.com/markbang/cohub-mobile/commit/1e002b9ca25646594c9b1374a06ee4d6dc71ac25))
+* **ios:** sign the App Store Connect token exactly like apple-actions ([6d55a16](https://github.com/markbang/cohub-mobile/commit/6d55a1651d6b4fe5035512ab884f8a7f99ec212c))
+* **space:** repair mod installation and activity display ([242645f](https://github.com/markbang/cohub-mobile/commit/242645f432fa13715256197c6a2f8bccf2ed11ba))
+* suppress session status errors during background app resume ([c4c949f](https://github.com/markbang/cohub-mobile/commit/c4c949f31061e39cdfc9ddc7c755e812c94a85d5))
+* update workflow tests and add safe activity API checks ([dcd1b75](https://github.com/markbang/cohub-mobile/commit/dcd1b7537a480b5e8ee67f6a9773f0ddec198e64))
+
+
+### Performance
+
+* optimize task detail and activity heatmap performance ([88fcd81](https://github.com/markbang/cohub-mobile/commit/88fcd81ecb683548e2a44ebb67898109039c725b))
+
+
+### CI
+
+* **ios:** add a distribute-only rerun for the external TestFlight group ([2605233](https://github.com/markbang/cohub-mobile/commit/2605233d1dbb3356e6b869926ecc6ca01b7341c0))
+* **ios:** diagnose the App Store Connect token rejection ([21a1754](https://github.com/markbang/cohub-mobile/commit/21a1754b1f5992b70e93a6ae3674e76aae4d1fe2))
+* **ios:** pass the App Store secrets under the names the beta script reads ([beb01d7](https://github.com/markbang/cohub-mobile/commit/beb01d76edc005c159a824ebd33d4f1c2419a8dc))
+* **ios:** run the distribute-only rerun against main's script ([31cfbca](https://github.com/markbang/cohub-mobile/commit/31cfbcac4bd58bf2c5a46163a874f83f4f604a9e))
+
 ## [2.2.14](https://github.com/markbang/cohub-mobile/compare/v2.2.13...v2.2.14) (2026-09-18)
 
 
