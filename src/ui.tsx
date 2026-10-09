@@ -16,6 +16,7 @@ import {
   View,
   type ColorValue,
   type GestureResponderEvent,
+  type KeyboardEvent,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
@@ -25,6 +26,7 @@ import { icons, type IconName } from "@/src/icons";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import type { ActivityItem, ConnectionState } from "@/src/data/types";
@@ -108,7 +110,8 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
   ) : (
     <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentStyle]}>{children}</View>
   );
-  const wrapped = keyboard ? <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.background }} behavior={Platform.OS === "ios" ? "padding" : "height"}>{body}</KeyboardAvoidingView> : body;
+  const keyboardStyle = { flex: 1, backgroundColor: theme.colors.background };
+  const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView style={keyboardStyle}>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView style={keyboardStyle} behavior="height">{body}</KeyboardAvoidingView>;
   return <View style={{ flex: 1, paddingTop: edgeToEdge ? 0 : insets.top, backgroundColor: theme.colors.background }}>{wrapped}</View>;
 }
 
@@ -228,7 +231,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const insets = useSafeAreaInsets();
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const [focused, setFocused] = useState(false);
-  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => { const frame = Keyboard.metrics(); return frame && isUsableKeyboardFrame(frame) ? frame.screenY : null; });
   const [expanded, setExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   // User edits always round-trip through onChangeText; voice finals update `value`
@@ -243,7 +246,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const show = Keyboard.addListener(showEvent, (event) => setKeyboardTop(event.endCoordinates.screenY));
+    // The iOS resume frame would size the composer against a zero-height window.
+    const show = Keyboard.addListener(showEvent, (event) => { if (isUsableKeyboardFrame(event.endCoordinates)) setKeyboardTop(event.endCoordinates.screenY); });
     const hide = Keyboard.addListener(hideEvent, () => setKeyboardTop(null));
     return () => { show.remove(); hide.remove(); };
   }, []);
@@ -379,6 +383,46 @@ export function getStatusTone(status: ActivityItem["status"]): "success" | "warn
 
 export function useBackButton() {
   return useRouter();
+}
+
+/**
+ * iOS padding-mode replacement for KeyboardAvoidingView. RN's version applies the resume
+ * keyboard frame (zero origin) as an overlap of the whole screen, which collapses the content
+ * to nothing until the keyboard is dismissed. Unusable frames are ignored here, and
+ * `keyboardDidShow` re-applies the frame once the scene is active and RN can convert it.
+ * Like RN's view, it listens to show/hide only: split and floating keyboards report a frame
+ * change before their hide.
+ */
+function IOSKeyboardPaddingView({ style, children }: { style: ViewStyle; children: ReactNode }) {
+  const { height: windowHeight } = useWindowDimensions();
+  const [bottom, setBottom] = useState(0);
+  const bottomRef = useRef(0);
+
+  useEffect(() => {
+    const apply = (name: string, event: KeyboardEvent) => {
+      const frame = event.endCoordinates;
+      if (!isUsableKeyboardFrame(frame)) {
+        recordDebugEvent("keyboard.frame_ignored", { event: name, screenY: frame.screenY, height: frame.height, windowHeight });
+        return;
+      }
+      const next = keyboardOverlap(frame, windowHeight);
+      if (next === bottomRef.current) return;
+      bottomRef.current = next;
+      Keyboard.scheduleLayoutAnimation(event);
+      setBottom(next);
+    };
+    const willShow = Keyboard.addListener("keyboardWillShow", (event) => apply("keyboardWillShow", event));
+    const didShow = Keyboard.addListener("keyboardDidShow", (event) => apply("keyboardDidShow", event));
+    const willHide = Keyboard.addListener("keyboardWillHide", (event) => {
+      if (bottomRef.current === 0) return;
+      bottomRef.current = 0;
+      Keyboard.scheduleLayoutAnimation(event);
+      setBottom(0);
+    });
+    return () => { willShow.remove(); didShow.remove(); willHide.remove(); };
+  }, [windowHeight]);
+
+  return <View style={[style, { paddingBottom: bottom }]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
