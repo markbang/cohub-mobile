@@ -1,9 +1,23 @@
-import type { PaletteOverviewResponse, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
+import type { CohubClient, PaletteOverviewResponse, SpaceListOptions, SpaceListPage, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 
 export type SpaceFilter = "recent" | "all" | "pinned";
 export type SpaceListSpace = Pick<SpaceRecord, "id" | "name" | "description" | "isPinned"> & Partial<Pick<SpaceRecord, "title" | "status" | "publicProfile" | "lastActivityAt" | "updatedAt" | "createdAt">>;
 export type SpaceVisit = { spaceId: string; timestamp: number };
 export const SPACE_VISIT_MAX_AGE_MS = 90 * 86_400_000;
+
+const SPACE_LIST_PAGE_LIMIT = 100;
+
+/** Pages through every non-archived Space the viewer is a member of; `spaces.list()` returns one page since SDK 9. */
+export async function listAllSpaces(client: CohubClient, options: Pick<SpaceListOptions, "filter" | "name"> = {}): Promise<SpaceRecord[]> {
+  const spaces: SpaceRecord[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: SpaceListPage = await client.spaces.list({ filter: options.filter ?? "all", name: options.name, limit: SPACE_LIST_PAGE_LIMIT, cursor });
+    spaces.push(...page.items);
+    cursor = page.pageInfo.hasMore ? page.pageInfo.nextCursor : null;
+  } while (cursor);
+  return spaces;
+}
 
 export function recentSpaceVisits(visits: readonly SpaceVisit[], now: number): SpaceVisit[] {
   const byId = new Map<string, SpaceVisit>();

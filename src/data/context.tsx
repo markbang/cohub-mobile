@@ -20,6 +20,7 @@ import { createMobileClient } from "@/src/data/client";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
 import { useSpaceListData } from "@/src/data/use-space-list";
+import { listAllSpaces } from "@/src/data/space-list";
 import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-scheduler";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions } from "@/src/data/running-sessions";
@@ -1042,7 +1043,7 @@ export function AppProvider({
       const token = await withAccessTokenTimeout(getAccessToken());
       if (!token) throw new Error(translate("data.signInUnavailable"));
       const [spacesResult, sessionsResult] = await Promise.all([
-        withTimeout(activeClient.spaces.list(), "Loading Spaces").then(
+        withTimeout(listAllSpaces(activeClient), "Loading Spaces").then(
           (spaces) => ({ status: "fulfilled" as const, value: spaces }),
           (reason: unknown) => ({ status: "rejected" as const, reason }),
         ),
@@ -1338,7 +1339,7 @@ export function AppProvider({
       run: async () => {
         const generation = homeRefreshGenerationRef.current;
         try {
-          const spaces = await withTimeout(client.spaces.list(), "Loading Spaces");
+          const spaces = await withTimeout(listAllSpaces(client), "Loading Spaces");
           if (generation !== homeRefreshGenerationRef.current) return;
           dispatch({ type: "spaces-sync", spaces });
         } catch (error) {

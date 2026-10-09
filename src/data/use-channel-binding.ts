@@ -1,6 +1,7 @@
 import type { Channel, CohubClient, SpaceRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/src/i18n";
+import { listAllSpaces } from "./space-list";
 
 export function useChannelBinding(client: CohubClient | null, channel: Channel, onChanged: () => void) {
   const { t } = useTranslation();
@@ -15,7 +16,7 @@ export function useChannelBinding(client: CohubClient | null, channel: Channel, 
     setLoading(true);
     setError(null);
     try {
-      const next = await client.spaces.list();
+      const next = await listAllSpaces(client);
       if (current === generation.current) setSpaces(next);
     } catch (caught) {
       if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.channels.bindingError"));

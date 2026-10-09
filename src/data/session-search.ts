@@ -17,7 +17,6 @@ export type RemoteSessionSearchHit = {
   turnId: string | null;
   updatedAt: string | null;
   score: number;
-  turnScore: number | null;
 };
 
 export type RemoteSpaceSearchHit = {
@@ -45,7 +44,7 @@ type RemoteSearchOptions = {
   types?: readonly GlobalSearchType[];
 };
 
-const DEFAULT_SEARCH_TYPES: readonly GlobalSearchType[] = ["session", "turn"];
+const DEFAULT_SEARCH_TYPES: readonly GlobalSearchType[] = ["chat"];
 const SEARCH_DEBOUNCE_MS = 180;
 const EMPTY_STATE: RemoteSearchState = {
   query: "",
@@ -75,11 +74,6 @@ function latestTimestamp(current: string | null, incoming: string | null) {
   return incomingTime > currentTime ? incoming : current;
 }
 
-function sessionIdForResult(item: GlobalSearchResult) {
-  if (item.sessionId) return item.sessionId;
-  return item.type === "session" ? item.id : null;
-}
-
 export function mapRemoteSearchResults(items: GlobalSearchResult[]) {
   const sessions = new Map<string, RemoteSessionSearchHit>();
   const spaces = new Map<string, RemoteSpaceSearchHit>();
@@ -105,43 +99,23 @@ export function mapRemoteSearchResults(items: GlobalSearchResult[]) {
       });
       continue;
     }
+    if (item.type !== "chat") continue;
 
-    const sessionId = sessionIdForResult(item);
-    if (!sessionId) continue;
-    const itemTitle = text(item.sessionTitle) ?? (item.type === "session" ? text(item.title) : null);
-    const itemPreview = text(item.excerpt) ?? (item.type === "turn" ? text(item.title) : null);
+    // A chat result is one session; `hit` is its best-matching user message, if any.
+    const sessionId = item.sessionId ?? item.id;
     const current = sessions.get(sessionId);
-    if (!current) {
-      sessions.set(sessionId, {
-        sessionId,
-        spaceId: item.spaceId,
-        title: itemTitle ?? "Untitled Chat",
-        preview: itemPreview,
-        spaceName: text(item.spaceName),
-        spaceAvatarUrl: item.spaceProfile?.avatarUrl ?? null,
-        turnSequence: item.type === "turn" ? item.sequence : null,
-        turnId: item.type === "turn" ? item.turnId : null,
-        updatedAt: item.updatedAt,
-        score: item.score,
-        turnScore: item.type === "turn" ? item.score : null,
-      });
-      continue;
-    }
-
-    const replaceTurn = item.type === "turn" && (
-      current.turnSequence === null || current.turnScore === null || item.score > current.turnScore
-    );
+    if (current && current.score >= item.score) continue;
     sessions.set(sessionId, {
-      ...current,
-      title: itemTitle ?? current.title,
-      preview: replaceTurn ? itemPreview : current.preview,
-      spaceName: text(item.spaceName) ?? current.spaceName,
-      spaceAvatarUrl: item.spaceProfile?.avatarUrl ?? current.spaceAvatarUrl,
-      turnSequence: replaceTurn ? item.sequence : current.turnSequence,
-      turnId: replaceTurn ? item.turnId : current.turnId,
-      updatedAt: latestTimestamp(current.updatedAt, item.updatedAt),
-      score: Math.max(current.score, item.score),
-      turnScore: replaceTurn ? item.score : current.turnScore,
+      sessionId,
+      spaceId: item.spaceId,
+      title: text(item.title) ?? "Untitled Chat",
+      preview: text(item.hit?.excerpt) ?? text(item.excerpt),
+      spaceName: text(item.spaceName),
+      spaceAvatarUrl: item.spaceProfile?.avatarUrl ?? null,
+      turnSequence: item.hit?.sequence ?? null,
+      turnId: item.hit?.turnId ?? null,
+      updatedAt: item.updatedAt,
+      score: item.score,
     });
   }
 
@@ -152,7 +126,7 @@ export function mapRemoteSearchResults(items: GlobalSearchResult[]) {
 }
 
 function isGlobalSearchType(value: string): value is GlobalSearchType {
-  return value === "turn" || value === "session" || value === "space" || value === "label";
+  return value === "chat" || value === "space" || value === "label";
 }
 
 export function useRemoteSearch(

@@ -23,7 +23,7 @@ import { sessionSourceFilterKeys } from "../src/data/session-source.ts";
 import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
-import { selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
+import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
 import { reconcileSessionHead } from "../src/data/session-list-sync.ts";
@@ -580,7 +580,7 @@ for (const [tab, component, expectedRequests] of [
     useSessionSourcePreference: () => ({ filter: "all", loaded: true, error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
     useToast: () => () => {},
     sessionFilterCutoff, normalizeSearchQuery, selectSpaceList: () => [], personalSpaceActivity: () => new Map(), emptyRunningSessions, runningSessionCandidates, sessionListStatus,
-    CHAT_SEARCH_TYPES: ["session", "turn", "space"], SPACE_SEARCH_TYPES: ["space"],
+    CHAT_SEARCH_TYPES: ["chat", "space"], SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
@@ -2901,16 +2901,15 @@ assert.equal(await hangingRead, true);
 assert.equal(invalidationReadCount, 3);
 
 const searchResult = (overrides = {}) => ({
-  type: "turn",
-  id: "turn-1",
+  type: "chat",
+  id: "session-1",
   spaceId: "space-1",
   sessionId: "session-1",
-  turnId: "turn-1",
-  sequence: 7,
-  title: "Matched prompt",
+  title: "A remote Chat",
   excerpt: "A server-side match",
+  hit: { turnId: "turn-1", sequence: 7, excerpt: "Matched prompt", highlights: [] },
+  matchCount: 2,
   spaceName: "Research",
-  sessionTitle: "A remote Chat",
   spaceProfile: null,
   matchedField: "userText",
   href: "/spaces/space-1/sessions/session-1?turn=7",
@@ -3145,14 +3144,32 @@ assert.equal(latestUnreadAssistantIndex(messages, 6), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 7), -1);
 assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta: null }], null), -1);
 
-const mapped = mapRemoteSearchResults([
-  searchResult({ type: "session", id: "session-1", turnId: null, sequence: null, score: 0.99, title: "Remote Chat" }),
-  searchResult({ type: "turn", score: 0.4, sequence: 7, turnId: "turn-7" }),
+const spaceListCalls = [];
+const pagedSpaces = await listAllSpaces({ spaces: { list: async (options) => {
+  spaceListCalls.push(options);
+  return options.cursor
+    ? { items: [{ id: "space-2" }], pageInfo: { nextCursor: "ignored", hasMore: false } }
+    : { items: [{ id: "space-1" }], pageInfo: { nextCursor: "page-2", hasMore: true } };
+} } });
+assert.deepEqual(pagedSpaces.map((space) => space.id), ["space-1", "space-2"]);
+assert.deepEqual(spaceListCalls.map(({ filter, cursor, limit }) => ({ filter, cursor, limit })), [
+  { filter: "all", cursor: null, limit: 100 },
+  { filter: "all", cursor: "page-2", limit: 100 },
 ]);
-assert.equal(mapped.sessions.length, 1);
+
+const mapped = mapRemoteSearchResults([
+  searchResult({ score: 0.99, title: "Remote Chat", hit: { turnId: "turn-7", sequence: 7, excerpt: "Matched prompt", highlights: [] } }),
+  searchResult({ id: "session-2", sessionId: "session-2", title: "Title only", excerpt: null, hit: null, score: 0.3 }),
+  searchResult({ type: "label", id: "label-1", sessionId: null, score: 0.9 }),
+]);
+assert.equal(mapped.sessions.length, 2);
 assert.equal(mapped.sessions[0]?.sessionId, "session-1");
+assert.equal(mapped.sessions[0]?.title, "Remote Chat");
+assert.equal(mapped.sessions[0]?.preview, "Matched prompt");
 assert.equal(mapped.sessions[0]?.turnSequence, 7);
 assert.equal(mapped.sessions[0]?.turnId, "turn-7");
+assert.equal(mapped.sessions[1]?.preview, null);
+assert.equal(mapped.sessions[1]?.turnSequence, null);
 
 assert.equal(toolCallPreview("skill_view", { skill: "github-pr-workflow" }), "github-pr-workflow");
 assert.equal(toolCallPreview("terminal", { command: "git status --short --branch && git rebase" }), "git status --short --branch && git rebase");

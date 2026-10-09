@@ -31,7 +31,7 @@ type ChatListItem =
   | { kind: "remote-session"; hit: RemoteSessionSearchHit }
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit };
-const CHAT_SEARCH_TYPES = ["session", "turn", "space"] as const;
+const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 
 export default function ChatsScreen() {
   const router = useRouter();

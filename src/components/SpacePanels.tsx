@@ -470,7 +470,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   const labelMembersGeneration = useRef(0);
   const selectedLabelRef = listFilter.kind === "label" ? listFilter.ref : null;
   const [labelSheetSession, setLabelSheetSession] = useState<UserSessionListItem | null>(null);
-  const remoteSearch = useRemoteSearch(client, query, { enabled: Boolean(spaceId), spaceId, types: ["session", "turn"] });
+  const remoteSearch = useRemoteSearch(client, query, { enabled: Boolean(spaceId), spaceId, types: ["chat"] });
   const displaySessions = useMemo(() => mergePanelSessions(extraSessions, sessions, spaceId, spaceName), [extraSessions, sessions, spaceId, spaceName]);
   const remoteQueryMatches = remoteSearch.query === normalizeSearchQuery(query);
 

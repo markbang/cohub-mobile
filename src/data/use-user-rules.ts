@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
+import { listAllSpaces } from "@/src/data/space-list";
 
 export function useUserRules() {
   const { client, userUuid, createSpace } = useApp();
@@ -19,7 +20,7 @@ export function useUserRules() {
     setLoading(true);
     setError(null);
     try {
-      const [rules, spaces] = await Promise.all([client.user.getRules(), client.spaces.list()]);
+      const [rules, spaces] = await Promise.all([client.user.getRules(), listAllSpaces(client, { filter: "mine", name: "config" })]);
       if (current !== generation.current) return;
       setData(rules);
       setConfigSpace(spaces.find((space) => space.name === "config" && space.userUuid === userUuid) ?? null);
