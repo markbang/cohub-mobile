@@ -46,7 +46,7 @@ jobs:
         run: npm run check
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/check-audit.mjs
 
   # Runs alongside Quality: the export does not read lint/typecheck results, and
   # serializing the two added ~70s to every pull request and main push.
