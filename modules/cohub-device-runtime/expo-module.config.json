@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["io.github.markbang.cohubmobile.deviceruntime.DeviceRuntimeModule"]
+  }
+}

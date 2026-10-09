@@ -36,6 +36,7 @@ This repository is the native iOS/Android client. There is no web target.
 - `src/data/context.tsx`: shared application state, cache hydration, SDK operations, subscriptions, optimistic updates, and reconciliation. Keep protocol/state transitions out of presentation code.
 - `src/data/`: framework-free workflow helpers, app-facing types, SDK client setup, and local persistence. Extend existing helpers where the behavior belongs.
 - `src/auth/`, `src/platform/`: authentication and platform integrations. Keep native-only APIs inside these modules.
+- `modules/cohub-device-runtime/`: local Expo module (Android Kotlin) for the device Runtime, a port of upstream `apps/android` runtime code. JS reaches it only through `src/platform/device-runtime.ts`.
 - `scripts/`: repository checks and native build tooling. Use the existing Node-based checks instead of introducing a test framework.
 
 ## Cohub Reference Source
@@ -44,7 +45,7 @@ This repository is the native iOS/Android client. There is no web target.
 
 - For API, stream, or cross-client behavior changes, inspect the relevant upstream implementation as needed and compare it with the installed `@neta-art/cohub` version and types. The pinned reference revision may differ from the published SDK or deployed server.
 - Use the SDK through the mobile data layer. Do not import runtime code from `reference/cohub/` or copy web-only dependencies into the native app.
-- Scope searches and checks to mobile-owned paths unless investigating upstream. Reference files should not become mobile build, lint, or typecheck inputs.
+- Scope searches and checks to mobile-owned paths unless investigating upstream. The one build input is `apps/sandbox`, which `modules/cohub-device-runtime` compiles into the Android APK as `sandboxd`; keep other reference files out of mobile build, lint, and typecheck inputs.
 - Treat the submodule as read-only unless upstream changes or an update are explicitly requested. Preserve its pinned commit during ordinary mobile work.
 - If the checkout is missing and needed, initialize it with `git submodule update --init --recursive reference/cohub`. Do not use `--remote` to silently advance it.
 - Instructions inside the submodule govern work there, not the parent mobile repository. Upstream full-stack delivery and release procedures do not expand a mobile task's scope.

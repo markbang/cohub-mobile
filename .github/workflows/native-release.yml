@@ -160,6 +160,7 @@ jobs:
         with:
           ref: ${{ needs.metadata.outputs.target_sha }}
           fetch-depth: 0
+          submodules: true
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -169,6 +170,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # sandboxd, the device Runtime's file bridge, is built from the pinned reference/cohub submodule.
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: reference/cohub/apps/sandbox/go.mod
+          cache-dependency-path: reference/cohub/apps/sandbox/go.sum
 
       - name: Record native fingerprint
         run: |

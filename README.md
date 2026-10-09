@@ -38,6 +38,7 @@ The app uses native screens for Chats, Spaces, Activity, Profile, session timeli
 - Activity and usage overview
 - Native Settings sections for Profile, Appearance, Activity, Notifications, Rules, Channels, Billing, and Referrals
 - Cache-first SQLite hydration, reconnect reconciliation, and user-scoped cache clearing
+- Android device Runtime: create a Space on this device or connect an existing one, so agents work directly in a phone folder (Android 11+, 64-bit; asks for All files access)
 - Native Logto PKCE, `cohub://` deep links, notification tap routing, APNs/FCM token acquisition, and GitHub-native build profiles
 
 ## Thanks

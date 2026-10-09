@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
 import { latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
@@ -13,6 +14,7 @@ import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
+import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
@@ -23,6 +25,7 @@ import { sessionSourceFilterKeys } from "../src/data/session-source.ts";
 import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
+import { accessTokenExpiresAt, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
@@ -444,6 +447,7 @@ const formScope = {
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", ActivityIndicator: "ActivityIndicator",
     SPEC_OPTIONS: ["standard", "boost", "ultra"], SLEEP_OPTIONS: ["never", "0.5h", "2h"],
     specNeedsRestart: () => false, sleepFromConfig: () => "2h",
+    deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
   });
   const render = () => { cursor = 0; return chromeNodes(renderSettings()); };
   const add = render().find((node) => node.props?.label === "space.settings.addMod" || String(node.props?.onPress).includes("Alert.prompt"));
@@ -579,6 +583,9 @@ for (const [tab, component, expectedRequests] of [
     useSessionFilterPreference: () => ({ loaded: true, minutes: 30 }), loadSessionFilterMinutes: async () => 30,
     useSessionSourcePreference: () => ({ filter: "all", loaded: true, error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
     useToast: () => () => {},
+    useDeviceRuntimeInstances: () => null, deviceRuntimeSupported: false, startDeviceRuntime: async () => null,
+    useDeviceFolderBrowser: () => ({ listing: null, loading: false, failure: null, load: async () => {} }), DeviceFolderBrowser: "DeviceFolderBrowser",
+    isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey,
     sessionFilterCutoff, normalizeSearchQuery, selectSpaceList: () => [], personalSpaceActivity: () => new Map(), emptyRunningSessions, runningSessionCandidates, sessionListStatus,
     CHAT_SEARCH_TYPES: ["chat", "space"], SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
@@ -1250,13 +1257,14 @@ for (const isPinned of [false, true]) {
   }
 }
 
-for (const [path, labels] of [
-  ["../app/(tabs)/index.tsx", ["All", "Running", "Completed"]],
-  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"]],
+// Spaces also uses the capsule for the create sheet's Cloud / This device choice.
+for (const [path, labels, chips] of [
+  ["../app/(tabs)/index.tsx", ["All", "Running", "Completed"], 3],
+  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 5],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/, "both tabs must use the same filter component");
-  assert.equal((source.match(/<FilterChip\s/g) ?? []).length, 3, "all three filters must use the shared capsule");
+  assert.equal((source.match(/<FilterChip\s/g) ?? []).length, chips, "all filters must use the shared capsule");
   const theme = loadChromeComponent("../src/theme.ts", "darkTheme", {});
   const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", { ...chromeScope, useAppTheme: () => theme });
   for (const label of labels) {
@@ -2989,6 +2997,12 @@ assert.equal(COMPOSER_CHROME_HEIGHT, 132);
 assert.equal(collapsedComposerHeight(34), 166);
 assert.equal(collapsedComposerHeight(0), 132);
 assert.equal(collapsedComposerHeight(-1), 132);
+assert.equal(keyboardOverlap({ screenY: 620, height: 336 }, 956), 336, "a docked keyboard covers its own height");
+assert.equal(keyboardOverlap({ screenY: 0, height: 0 }, 956), 0, "the iOS resume frame must not cover the whole screen");
+assert.equal(keyboardOverlap({ screenY: 0, height: 956 }, 956), 0, "a zero-origin frame is never a docked keyboard");
+assert.equal(isUsableKeyboardFrame({ screenY: 0, height: 336 }), false);
+assert.equal(isUsableKeyboardFrame(undefined), false);
+assert.equal(keyboardOverlap({ screenY: 900, height: 336 }, 956), 56, "overlap stops at the window edge");
 const composerMenuInput = { anchor: { x: 12, y: 680, width: 366, height: 114 }, windowWidth: 390, windowHeight: 844, topInset: 47, bottomInset: 34, keyboardTop: null, preferredWidth: 360 };
 assert.deepEqual(getComposerMenuLayout(composerMenuInput), { left: 12, bottom: 172, width: 360, maxHeight: 480 });
 assert.equal(getComposerMenuLayout({ ...composerMenuInput, preferredWidth: 240 }).width, 240, "attachments use a compact menu");
@@ -3143,6 +3157,25 @@ assert.equal(latestUnreadAssistantIndex(messages, null), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 6), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 7), -1);
 assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta: null }], null), -1);
+
+// Device Runtime: relays live at the gateway root, and tokens carry their expiry to native.
+assert.equal(runtimeGatewayOrigin("wss://gateway.cohub.live/ws"), "wss://gateway.cohub.live");
+assert.equal(runtimeGatewayOrigin("wss://gateway-dev.cohub.live/ws/"), "wss://gateway-dev.cohub.live");
+for (const invalid of ["ws://gateway.cohub.live/ws", "wss://gateway.cohub.live", "wss://gateway.cohub.live/realtime"]) assert.throws(() => runtimeGatewayOrigin(invalid), /wss:\/\/<host>\/ws/);
+const jwt = (payload) => `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
+assert.equal(accessTokenExpiresAt(jwt({ exp: 1_800_000_000 })), 1_800_000_000_000);
+assert.equal(accessTokenExpiresAt(jwt({ sub: "user" })), null);
+assert.equal(accessTokenExpiresAt("opaque-token"), null);
+assert.equal(isDeviceRuntimeRunning({ state: "connecting" }), true);
+assert.equal(isDeviceRuntimeRunning({ state: "error" }), false);
+assert.equal(isDeviceRuntimeRunning(null), false);
+assert.equal(deviceFolderName({ label: "Internal storage/Documents/Notes" }), "Notes");
+assert.equal(deviceFolderName({ label: "Internal storage" }), "Internal storage");
+assert.equal(deviceRuntimeStateKey(null), "deviceRuntime.notConnected");
+assert.equal(deviceRuntimeStateKey({ state: "error", error: "conflict" }), "deviceRuntime.error.conflict");
+assert.equal(deviceRuntimeStateKey({ state: "error", error: null }), "deviceRuntime.error.failed");
+assert.equal(deviceRuntimeRefusalKey("declined"), "deviceRuntime.accessRequired");
+assert.equal(deviceRuntimeRefusalKey("space_in_use"), "deviceRuntime.spaceInUse");
 
 const spaceListCalls = [];
 const pagedSpaces = await listAllSpaces({ spaces: { list: async (options) => {

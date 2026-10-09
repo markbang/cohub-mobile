@@ -4,9 +4,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
+import { deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
+import { deviceRuntimeSupported, startDeviceRuntime, stopDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
@@ -270,6 +273,8 @@ export default function SpaceSettingsScreen() {
           ))}
         </View>
 
+        {deviceRuntimeSupported && spaceId ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
+
         <View>
           <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.sandbox")}</Text>
           <ResourceStatus state={resources.config} onRetry={() => void loadResource("config")} />
@@ -466,6 +471,66 @@ function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnviro
           <AppIcon name={visible ? "eye-off" : "eye"} size={17} color={theme.colors.textMuted} />
         </Pressable>
       </View>
+    </View>
+  );
+}
+
+function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const instance = useDeviceRuntimeInstances()?.find((item) => item.spaceId === spaceId) ?? null;
+  const running = isDeviceRuntimeRunning(instance);
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  const update = async (action: () => Promise<DeviceRuntimeRefusal | "declined" | null> | void) => {
+    if (busy) return;
+    setBusy(true);
+    setHint(null);
+    try {
+      const refusal = await action();
+      if (refusal) setHint(t(deviceRuntimeRefusalKey(refusal)));
+    } catch {
+      setHint(t("deviceRuntime.error.failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View>
+      <Text style={[typography.heading, { color: theme.colors.text }]}>{t("deviceRuntime.thisDevice")}</Text>
+      <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>{t("deviceRuntime.hint")}</Text>
+      <View style={[styles.portRow, { backgroundColor: theme.colors.surfaceRaised }]}>
+        <AppIcon name="smartphone" size={18} color={instance?.state === "ready" ? theme.colors.success : theme.colors.textMuted} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[typography.bodyMedium, { color: instance?.state === "error" ? theme.colors.danger : theme.colors.text }]}>{t(deviceRuntimeStateKey(instance))}</Text>
+          {instance ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{instance.label}</Text> : null}
+        </View>
+        {busy || instance?.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+      </View>
+      {hint ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: 8 }]}>{hint}</Text> : null}
+      <View style={styles.inviteRow}>
+        {running ? (
+          <ActionButton label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(spaceId))} />
+        ) : instance ? (
+          <>
+            <ActionButton label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void update(() => startDeviceRuntime(spaceId, instance.root))} />
+            <ActionButton label={t("deviceRuntime.changeFolder")} icon="folder" disabled={busy} onPress={() => setPicking(true)} />
+          </>
+        ) : (
+          <ActionButton label={t("deviceRuntime.chooseFolder")} icon="folder" disabled={busy} onPress={() => setPicking(true)} />
+        )}
+      </View>
+      <DeviceFolderPickerSheet
+        visible={picking}
+        onClose={() => setPicking(false)}
+        onSelect={(folder) => {
+          setPicking(false);
+          void update(() => startDeviceRuntime(spaceId, folder.path));
+        }}
+      />
     </View>
   );
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cohub_runtime_channel">Local Runtime</string>
+    <string name="cohub_runtime_title">Cohub is connected to this device</string>
+    <plurals name="cohub_runtime_ready">
+        <item quantity="one">Agents can work in %d folder.</item>
+        <item quantity="other">Agents can work in %d folders.</item>
+    </plurals>
+    <string name="cohub_runtime_connecting">Connecting…</string>
+    <string name="cohub_runtime_disconnect">Disconnect all</string>
+</resources>

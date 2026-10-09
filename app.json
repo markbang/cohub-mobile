@@ -75,6 +75,7 @@
           "iCloudContainerEnvironment": "Production"
         }
       ],
+      "./modules/cohub-device-runtime/app.plugin.js",
       [
         "expo-splash-screen",
         {

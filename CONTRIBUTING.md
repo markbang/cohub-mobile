@@ -11,6 +11,8 @@ npm run native:android
 npm run native:ios
 ```
 
+Native Android builds also compile `sandboxd`, the device Runtime's file bridge, from the pinned `reference/cohub` submodule. They need `git submodule update --init reference/cohub`, Go at the version in `reference/cohub/apps/sandbox/go.mod`, and the NDK React Native pins. Upstream `sandboxd` does not build for 32-bit ABIs, so `armeabi-v7a` and `x86` APKs ship without the device Runtime.
+
 `npm run doctor` first runs `expo install --check` offline against the installed Expo SDK's bundled dependency map, then runs the remaining Expo Doctor checks. An incompatible installed dependency still fails; a new upstream patch recommendation alone does not block CI or OTA. Weekly Dependabot PRs handle dependency updates. Use `npm run doctor:upstream` to check current upstream recommendations when planning a native upgrade. This does not disable Doctor's other network-backed checks.
 
 Native dependency upgrades require a new APK/TestFlight baseline before shipping compatible OTA updates. Do not skip fingerprint validation to serve an upgrade to older binaries.

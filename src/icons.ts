@@ -47,6 +47,7 @@ import MessageSquare from "lucide-react-native/icons/message-square";
 import Maximize2 from "lucide-react-native/icons/maximize-2";
 import Minimize2 from "lucide-react-native/icons/minimize-2";
 import Monitor from "lucide-react-native/icons/monitor";
+import Smartphone from "lucide-react-native/icons/smartphone";
 import Mic from "lucide-react-native/icons/mic";
 import Paperclip from "lucide-react-native/icons/paperclip";
 import Palette from "lucide-react-native/icons/palette";
@@ -121,6 +122,7 @@ export const icons = {
   maximize: Maximize2,
   minimize: Minimize2,
   monitor: Monitor,
+  smartphone: Smartphone,
   mic: Mic,
   more: Ellipsis,
   paperclip: Paperclip,

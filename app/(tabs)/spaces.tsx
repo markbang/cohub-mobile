@@ -1,21 +1,25 @@
 import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
-import { ActivityIndicator, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { AccountAvatar } from "@/src/components/AccountAvatar";
+import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
+import { useToast } from "@/src/components/Toast";
 import { SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { personalSpaceActivity, selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
 import { useApp } from "@/src/data/context";
+import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing } from "@/src/data/device-runtime";
+import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme, typography } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
@@ -63,6 +67,15 @@ export default function SpacesScreen() {
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const toast = useToast();
+  const deviceInstances = useDeviceRuntimeInstances();
+  const [placement, setPlacement] = useState<"cloud" | "device">("cloud");
+  const [folder, setFolder] = useState<DeviceFolderListing | null>(null);
+  const [pickingFolder, setPickingFolder] = useState(false);
+  const folderBrowser = useDeviceFolderBrowser(createOpen && pickingFolder);
+  const onDevice = placement === "device";
+  const linkedRunning = isDeviceRuntimeRunning(deviceInstances?.find((item) => item.spaceId === folder?.spaceId));
+  const placementReady = !onDevice || (folder !== null && !linkedRunning);
   const remoteSearch = useRemoteSearch(client, query, { enabled: filter !== "pinned", types: SPACE_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
   const spaces = useMemo(() => {
@@ -116,17 +129,45 @@ export default function SpacesScreen() {
   };
 
   const closeCreate = () => {
-    if (!creating) setCreateOpen(false);
+    if (pickingFolder) setPickingFolder(false);
+    else if (!creating) setCreateOpen(false);
+  };
+
+  const resetCreate = () => {
+    setCreateOpen(false);
+    setName("");
+    setDescription("");
+    setPlacement("cloud");
+    setFolder(null);
+  };
+
+  const selectFolder = (next: DeviceFolderListing) => {
+    setFolder(next);
+    setPickingFolder(false);
+    if (!name.trim()) setName(deviceFolderName(next));
+  };
+
+  // Connects the folder for a Space; a refusal leaves the Space created but stopped, so it is reported, not thrown.
+  const connectFolder = async (spaceId: string, root: string) => {
+    const refusal = await startDeviceRuntime(spaceId, root).catch(() => "failed" as const);
+    if (refusal) toast({ title: t(refusal === "failed" ? "deviceRuntime.error.failed" : deviceRuntimeRefusalKey(refusal)), tone: "danger" });
+  };
+
+  const openLinkedSpace = async () => {
+    if (!folder?.spaceId) return;
+    const spaceId = folder.spaceId;
+    if (!linkedRunning) await connectFolder(spaceId, folder.path);
+    resetCreate();
+    router.push({ pathname: "/space/[spaceId]", params: { spaceId } });
   };
 
   const submitCreate = async () => {
     setCreating(true);
     setCreateError(null);
     try {
-      const space = await createSpace(name, description);
-      setCreateOpen(false);
-      setName("");
-      setDescription("");
+      const space = await createSpace(name, description, { onDevice });
+      if (onDevice && folder) await connectFolder(space.id, folder.path);
+      resetCreate();
       router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : t("spaces.create.error"));
@@ -183,17 +224,49 @@ export default function SpacesScreen() {
     />
     <AdaptiveSheet
       visible={createOpen}
-      title={t("spaces.create.title")}
+      title={pickingFolder ? t("deviceRuntime.chooseFolder") : t("spaces.create.title")}
       onClose={closeCreate}
       dismissible={!creating}
       testID="create-space-sheet"
-      footer={<PrimaryButton label={t("spaces.create.action")} icon="plus" loading={creating} disabled={!name.trim()} onPress={() => void submitCreate()} />}
+      footer={pickingFolder
+        ? <PrimaryButton label={t("deviceRuntime.useFolder")} icon="check" disabled={!folderBrowser.listing || folderBrowser.loading || Boolean(folderBrowser.failure)} onPress={() => { if (folderBrowser.listing) selectFolder(folderBrowser.listing); }} />
+        : <PrimaryButton label={t("spaces.create.action")} icon="plus" loading={creating} disabled={!name.trim() || !placementReady} onPress={() => void submitCreate()} />}
     >
+      {pickingFolder ? <DeviceFolderBrowser browser={folderBrowser} /> : <>
       <Text style={[typography.caption, { color: theme.colors.textSecondary, marginBottom: 7 }]}>{t("spaces.create.name")}</Text>
-      <TextInput autoFocus value={name} onChangeText={setName} maxLength={80} placeholder={t("spaces.create.namePlaceholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: theme.colors.background }]} />
+      <TextInput autoFocus={folder === null} value={name} onChangeText={setName} maxLength={80} placeholder={t("spaces.create.namePlaceholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: theme.colors.background }]} />
       <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15, marginBottom: 7 }]}>{t("spaces.create.description")} <Text style={{ color: theme.colors.textSecondary }}>({t("common.optional")})</Text></Text>
       <TextInput value={description} onChangeText={setDescription} maxLength={240} multiline placeholder={t("spaces.create.descriptionPlaceholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 74, paddingHorizontal: 12, paddingTop: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: theme.colors.background, textAlignVertical: "top" }]} />
+      {deviceRuntimeSupported ? <>
+        <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15 }]}>{t("spaces.create.location")}</Text>
+        <View accessibilityRole="tablist" style={{ flexDirection: "row", columnGap: theme.spacing.xs }}>
+          <FilterChip label={t("spaces.create.location.cloud")} icon="cloud" selected={!onDevice} onPress={() => setPlacement("cloud")} />
+          <FilterChip label={t("deviceRuntime.thisDevice")} icon="smartphone" selected={onDevice} onPress={() => setPlacement("device")} />
+        </View>
+        {onDevice ? <>
+          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("spaces.create.location.deviceHint")}</Text>
+          <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15, marginBottom: 7 }]}>{t("spaces.create.folder")}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={folder ? `${t("deviceRuntime.changeFolder")}: ${folder.label}` : t("deviceRuntime.chooseFolder")}
+            disabled={creating}
+            onPress={() => setPickingFolder(true)}
+            style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.background })}
+          >
+            <AppIcon name="folder" size={18} color={theme.colors.textMuted} />
+            <Text style={[typography.body, { flex: 1, minWidth: 0, color: folder ? theme.colors.text : theme.colors.textFaint }]}>{folder?.label ?? t("deviceRuntime.chooseFolder")}</Text>
+            {folder ? <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("deviceRuntime.changeFolder")}</Text> : <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />}
+          </Pressable>
+          {folder?.spaceId ? <View style={{ marginTop: 8, gap: 4 }}>
+            <Text style={[typography.caption, { color: linkedRunning ? theme.colors.danger : theme.colors.textMuted }]}>{linkedRunning ? t("deviceRuntime.folderInUse") : t("spaces.create.folderLinked")}</Text>
+            <Pressable accessibilityRole="button" disabled={creating} onPress={() => void openLinkedSpace()} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}>
+              <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("spaces.create.openLinked")}</Text>
+            </Pressable>
+          </View> : null}
+        </> : null}
+      </> : null}
       {createError ? <Text style={[typography.caption, { color: theme.colors.danger, marginTop: 10 }]}>{createError}</Text> : null}
+      </>}
     </AdaptiveSheet>
   </Screen>;
 }

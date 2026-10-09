@@ -65,6 +65,7 @@ import { isOptimisticFollowup, shouldQueueFollowup } from "@/src/data/followup-q
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
+import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { loadSessionFilterMinutes } from "@/src/data/session-filter-preference";
 import { connectionDisplayState, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
@@ -808,7 +809,8 @@ export type AppContextValue = {
   modelStatusError: string | null;
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
-  createSpace: (name: string, description?: string) => Promise<SpaceRecord>;
+  /** `onDevice` creates a Space whose sandbox is a local Runtime, e.g. a folder on this device. */
+  createSpace: (name: string, description?: string, options?: { onDevice?: boolean }) => Promise<SpaceRecord>;
   refreshSpacePin: (spaceId: string) => Promise<boolean>;
   toggleSpacePin: (spaceId: string) => Promise<boolean>;
   upsertSpace: (space: SpaceRecord) => void;
@@ -889,6 +891,7 @@ export function AppProvider({
   // Prod keeps the historical scope; other environments are namespaced so a separate
   // deployment never reuses another environment's cached Spaces, Chats, or read state.
   const userKey = config.environment === "prod" ? userUuid : `${config.environment}:${userUuid}`;
+  useDeviceRuntimeSession(userKey, getAccessToken);
 
   // Child pagination effects must see this commit, not the previous page's loading flag.
   useLayoutEffect(() => {
@@ -2012,7 +2015,7 @@ export function AppProvider({
   );
 
   const createSpace = useCallback(
-    async (name: string, description?: string) => {
+    async (name: string, description?: string, options: { onDevice?: boolean } = {}) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const trimmedName = name.trim();
       if (!trimmedName) throw new Error(translate("data.spaceNameRequired"));
@@ -2020,6 +2023,7 @@ export function AppProvider({
         name: trimmedName,
         description: description?.trim() || null,
         source: "mobile",
+        ...(options.onDevice ? { config: { sandbox: { provider: "local" as const } } } : {}),
       });
       dispatch({ type: "space-upsert", space: result.space });
       void saveSpaces(userKey, [result.space]).catch(() => undefined);

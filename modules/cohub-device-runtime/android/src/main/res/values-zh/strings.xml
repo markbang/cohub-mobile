@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cohub_runtime_channel">本地 Runtime</string>
+    <string name="cohub_runtime_title">Cohub 已连接到此设备</string>
+    <plurals name="cohub_runtime_ready">
+        <item quantity="other">Agent 可以在 %d 个文件夹中工作。</item>
+    </plurals>
+    <string name="cohub_runtime_connecting">正在连接…</string>
+    <string name="cohub_runtime_disconnect">全部断开</string>
+</resources>

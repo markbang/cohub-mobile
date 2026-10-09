@@ -1,0 +1,114 @@
+import javax.inject.Inject
+
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'io.github.markbang.cohubmobile'
+version = '1.0.0'
+
+android {
+  namespace "io.github.markbang.cohubmobile.deviceruntime"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  implementation "androidx.core:core-ktx:1.17.0"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+  // The version React Native already ships, so the app keeps a single OkHttp.
+  implementation "com.squareup.okhttp3:okhttp:4.9.2"
+}
+
+// sandboxd is the upstream Cohub file bridge (Go). It is built from the pinned
+// reference/cohub submodule, cross-compiled with cgo against bionic so it resolves
+// names through Android's resolver. Upstream code does not build for 32-bit ABIs,
+// so those APKs ship without it and report the device Runtime as unavailable.
+abstract class BuildSandboxd extends DefaultTask {
+  @Internal
+  abstract DirectoryProperty getModule()
+
+  @InputFiles
+  @PathSensitive(PathSensitivity.RELATIVE)
+  abstract ConfigurableFileCollection getSources()
+
+  @Internal
+  abstract DirectoryProperty getNdkDirectory()
+
+  @Input
+  abstract Property<Integer> getApiLevel()
+
+  @Input
+  abstract ListProperty<String> getAbis()
+
+  @OutputDirectory
+  abstract DirectoryProperty getOutputDirectory()
+
+  @Inject
+  abstract ExecOperations getExec()
+
+  private static final Map<String, List<String>> TARGETS = [
+    "arm64-v8a": ["arm64", "aarch64-linux-android"],
+    "x86_64"   : ["amd64", "x86_64-linux-android"],
+  ]
+
+  @TaskAction
+  void build() {
+    def os = System.getProperty("os.name")
+    def host = os.startsWith("Linux") ? "linux-x86_64" : os.startsWith("Mac") ? "darwin-x86_64" : null
+    if (host == null) throw new GradleException("Building sandboxd needs a Linux or macOS host")
+    def source = module.get().asFile
+    if (!new File(source, "go.mod").isFile()) {
+      throw new GradleException("sandboxd source is missing at ${source}; run: git submodule update --init reference/cohub")
+    }
+    def ndk = ndkDirectory.get().asFile
+    if (!ndk.isDirectory()) throw new GradleException("NDK ${ndk.name} is missing; install it with: sdkmanager \"ndk;${ndk.name}\"")
+    def toolchain = new File(ndk, "toolchains/llvm/prebuilt/${host}/bin")
+    def output = outputDirectory.get().asFile
+    output.deleteDir()
+    abis.get().each { abi ->
+      def target = TARGETS[abi]
+      exec.exec {
+        workingDir = source
+        environment("GOOS", "android")
+        environment("GOARCH", target[0])
+        environment("CGO_ENABLED", "1")
+        environment("CC", new File(toolchain, "${target[1]}${apiLevel.get()}-clang").path)
+        // pion's ICE enumerates interfaces through wlynxg/anet, which links net's private
+        // zone cache to work around Android 11's netlink ban; Go 1.23+ needs the check off.
+        commandLine("go", "build", "-trimpath", "-buildvcs=false",
+          "-ldflags", "-s -w -checklinkname=0 -X main.buildVersion=android-mobile",
+          "-o", new File(output, "${abi}/libcohub_sandboxd.so").path, ".")
+      }
+    }
+  }
+}
+
+def requestedAbis = (findProperty("reactNativeArchitectures") ?: "armeabi-v7a,x86,x86_64,arm64-v8a")
+  .toString().split(",").collect { it.trim() }
+def sandboxdAbis = requestedAbis.findAll { it == "arm64-v8a" || it == "x86_64" }
+def sandboxSource = findProperty("cohubSandboxSource") ?: "${rootDir}/../reference/cohub/apps/sandbox"
+
+def buildSandboxd = tasks.register("buildSandboxd", BuildSandboxd) {
+  module.set(file(sandboxSource))
+  sources.from(module.map { dir ->
+    dir.asFileTree.matching {
+      include("**/*.go", "go.mod", "go.sum")
+      exclude("**/*_test.go")
+    }
+  })
+  ndkDirectory.set(androidComponents.sdkComponents.sdkDirectory.map { it.dir("ndk/${android.ndkVersion}") })
+  apiLevel.set(android.defaultConfig.minSdk ?: 24)
+  abis.set(sandboxdAbis)
+  outputDirectory.set(layout.buildDirectory.dir("generated/sandboxd"))
+}
+
+androidComponents {
+  onVariants(selector().all()) { variant ->
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(buildSandboxd) { it.outputDirectory }
+  }
+}

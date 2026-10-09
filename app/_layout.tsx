@@ -18,6 +18,7 @@ import { loadEnvironmentPreference, saveEnvironmentPreference } from "@/src/data
 import { LocaleProvider, useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
+import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
 
@@ -204,6 +205,11 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
   useEffect(() => {
     if (isInitialized) void SplashScreen.hideAsync();
   }, [isInitialized]);
+
+  // Signing out must not leave this device serving the previous account's folders.
+  useEffect(() => {
+    if (isInitialized && !isAuthenticated) signOutDeviceRuntime();
+  }, [isAuthenticated, isInitialized]);
 
   if (!isInitialized) return <LoadingScreen />;
   if (!isAuthenticated || (authError && !identity.uuid)) return <AuthScreen environment={environment} onSelectEnvironment={onSelectEnvironment} onSignIn={handleSignIn} loading={authLoading} error={authError} />;
