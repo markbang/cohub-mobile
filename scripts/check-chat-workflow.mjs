@@ -25,7 +25,7 @@ import { sessionSourceFilterKeys } from "../src/data/session-source.ts";
 import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
-import { accessTokenExpiresAt, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
+import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
@@ -1260,7 +1260,7 @@ for (const isPinned of [false, true]) {
 // Spaces also uses the capsule for the create sheet's Cloud / This device choice.
 for (const [path, labels, chips] of [
   ["../app/(tabs)/index.tsx", ["All", "Running", "Completed"], 3],
-  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 5],
+  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 6],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/, "both tabs must use the same filter component");
@@ -1281,6 +1281,54 @@ for (const [path, labels, chips] of [
       assert.equal(pressed, true);
     }
   }
+}
+// This device lists the Spaces it serves, including one no longer loaded, and leads to creating one.
+{
+  const screen = createScreenHooks();
+  const pushes = [];
+  let instances = [
+    { spaceId: "space-a", root: "/storage/emulated/0/Notes", label: "Internal storage/Notes", state: "ready", error: null },
+    { spaceId: "space-gone", root: "/storage/emulated/0/Old", label: "Internal storage/Old", state: "stopped", error: null },
+  ];
+  const state = { booting: false, spaces: [{ id: "space-a", name: "Field notes", description: null, isPinned: false }, { id: "space-b", name: "Cloud", isPinned: false }], sessions: [], sessionViews: {} };
+  const renderSpaces = loadChromeComponent("../app/(tabs)/spaces.tsx", "SpacesScreen", {
+    ...chromeScope, ...screen.hooks,
+    useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
+    useRouter: () => ({ push: (route) => pushes.push(route) }),
+    useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
+    useApp: () => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {} }),
+    useAppTheme: () => ({ colors: {}, spacing: {} }),
+    useRemoteSearch: (_client, _query, options) => ({ query: "", spaces: [], enabled: options.enabled }), useSpaceSessionCounts: () => ({}),
+    useToast: () => () => {},
+    useDeviceRuntimeInstances: () => instances, deviceRuntimeSupported: true, startDeviceRuntime: async () => null,
+    useDeviceFolderBrowser: () => ({ listing: null, loading: false, failure: null }), DeviceFolderBrowser: "DeviceFolderBrowser", DeviceSpaceRow: "DeviceSpaceRow",
+    isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
+    selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
+    Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows",
+    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
+    AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
+  });
+  const render = () => chromeNodes(screen.render(() => renderSpaces()));
+  const list = () => render().find((node) => node.type === "LegendList");
+  const deviceChip = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "FilterChip" && node.props.icon === "smartphone");
+  deviceChip().props.onPress();
+  assert.equal(deviceChip().props.selected, true);
+  assert.deepEqual(list().props.data.map((item) => [item.kind, item.instance.spaceId, item.space?.name ?? null]), [["device", "space-a", "Field notes"], ["device", "space-gone", null]], "only served Spaces are listed; an unloaded one stays manageable");
+  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] }))[0];
+  assert.equal(row.type, "DeviceSpaceRow");
+  row.props.onPress();
+  assert.deepEqual(pushes.splice(0), [{ pathname: "/space/[spaceId]", params: { spaceId: "space-a" } }]);
+  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("old");
+  assert.deepEqual(list().props.data.map((item) => item.instance.spaceId), ["space-gone"], "a query also matches the folder");
+  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("");
+  instances = [];
+  const empty = list().props.ListEmptyComponent;
+  assert.equal(empty.props.title, "spaces.empty.device.title");
+  empty.props.action.onPress();
+  const sheet = render().find((node) => node.type === "AdaptiveSheet");
+  assert.equal(sheet.props.visible, true);
+  assert.ok(chromeNodes(sheet).some((node) => node.type === "FilterChip" && node.props.icon === "smartphone" && node.props.selected), "creating from the empty state starts on this device");
+  screen.unmount();
 }
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", chromeScope);
 for (const state of ["idle", "connecting", "reconnecting", "open"]) {
@@ -3174,6 +3222,13 @@ assert.equal(deviceFolderName({ label: "Internal storage" }), "Internal storage"
 assert.equal(deviceRuntimeStateKey(null), "deviceRuntime.notConnected");
 assert.equal(deviceRuntimeStateKey({ state: "error", error: "conflict" }), "deviceRuntime.error.conflict");
 assert.equal(deviceRuntimeStateKey({ state: "error", error: null }), "deviceRuntime.error.failed");
+assert.deepEqual(conflictedDeviceRuntimes([
+  { spaceId: "conflict", state: "error", error: "conflict" },
+  { spaceId: "forbidden", state: "error", error: "forbidden" },
+  { spaceId: "failed", state: "error", error: null },
+  { spaceId: "stopped", state: "stopped", error: null },
+  { spaceId: "ready", state: "ready", error: null },
+]).map((instance) => instance.spaceId), ["conflict"], "only a lost lease reconnects on its own; forbidden and user-stopped Spaces stay stopped");
 assert.equal(deviceRuntimeRefusalKey("declined"), "deviceRuntime.accessRequired");
 assert.equal(deviceRuntimeRefusalKey("space_in_use"), "deviceRuntime.spaceInUse");
 assert.equal(deviceDisplayStateKey({ sharedWith: null, control: true, error: null }, "space-1"), "deviceRuntime.display.notShared");

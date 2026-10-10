@@ -1,9 +1,10 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import nativeDeviceRuntime from "@/modules/cohub-device-runtime";
 import { config } from "@/src/config";
 import {
   accessTokenExpiresAt,
+  conflictedDeviceRuntimes,
   DEVICE_RUNTIME_TOKEN_MARGIN_MS,
   runtimeGatewayOrigin,
   type DeviceDisplayStatus,
@@ -45,7 +46,8 @@ async function supplyAccessToken(getAccessToken: GetAccessToken, forceRefresh: b
 
 /**
  * Connects the device Runtime to the signed-in account: folders bound by this account resume,
- * other accounts' folders stop, and the Runtime asks this session for access tokens.
+ * other accounts' folders stop, and the Runtime asks this session for access tokens. Returning to the
+ * foreground reconnects Spaces that lost their lease while the app was suspended.
  */
 export function useDeviceRuntimeSession(account: string, getAccessToken: GetAccessToken) {
   useEffect(() => {
@@ -56,6 +58,20 @@ export function useDeviceRuntimeSession(account: string, getAccessToken: GetAcce
     });
     return () => subscription.remove();
   }, [account, getAccessToken]);
+  useEffect(() => {
+    if (!native) return;
+    const runtime = native;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || !runtime.hasStorageAccess()) return;
+      // One retry per return to the foreground; a lasting conflict fails again on its own.
+      for (const instance of conflictedDeviceRuntimes(runtime.list())) {
+        void runtime.start(instance.spaceId, instance.root).then((refusal) => {
+          if (refusal) console.warn(`[device-runtime] could not reconnect ${instance.spaceId}: ${refusal}`);
+        }, (error: unknown) => console.warn(`[device-runtime] could not reconnect ${instance.spaceId}`, error));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 }
 
 /** Disconnects every folder; called when the account signs out. */

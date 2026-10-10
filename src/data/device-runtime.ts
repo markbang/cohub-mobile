@@ -30,6 +30,14 @@ export function isDeviceRuntimeRunning(instance: DeviceRuntimeInstance | null | 
   return instance?.state === "connecting" || instance?.state === "ready";
 }
 
+/**
+ * Spaces the device stopped serving because another Runtime held the lease, which is usually this
+ * device's own connection lost while the app was suspended. Forbidden and user-disconnected Spaces stay stopped.
+ */
+export function conflictedDeviceRuntimes(instances: readonly DeviceRuntimeInstance[]): DeviceRuntimeInstance[] {
+  return instances.filter((instance) => instance.state === "error" && instance.error === "conflict");
+}
+
 export function deviceFolderName(listing: Pick<DeviceFolderListing, "label">): string {
   return listing.label.split("/").filter(Boolean).at(-1) ?? listing.label;
 }

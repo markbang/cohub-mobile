@@ -170,6 +170,8 @@ export const en = {
   "spaces.searching": "Searching Cohub",
   "spaces.empty.pinned.title": "No pinned Spaces",
   "spaces.empty.pinned.body": "Pin a Space to keep it in this view.",
+  "spaces.empty.device.title": "No Spaces on this device",
+  "spaces.empty.device.body": "Create a Space on this device so its agents can work in one of your folders.",
   "spaces.empty.matching.title": "No matching Spaces",
   "spaces.empty.matching.body": "Try another name or description.",
   "spaces.empty.none.title": "No Spaces yet",

@@ -166,6 +166,8 @@ export const zh: Record<TranslationKey, string> = {
   "spaces.searching": "正在搜索 Cohub",
   "spaces.empty.pinned.title": "没有置顶的空间",
   "spaces.empty.pinned.body": "置顶一个空间，让它保留在此视图中。",
+  "spaces.empty.device.title": "本设备上还没有空间",
+  "spaces.empty.device.body": "在本设备上创建空间，Agent 就能在你的某个文件夹里工作。",
   "spaces.empty.matching.title": "没有匹配的空间",
   "spaces.empty.matching.body": "试试其他名称或描述。",
   "spaces.empty.none.title": "还没有空间",

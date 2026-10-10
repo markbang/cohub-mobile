@@ -7,6 +7,7 @@ import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { AccountAvatar } from "@/src/components/AccountAvatar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
+import { DeviceSpaceRow } from "@/src/components/DeviceSpaceRow";
 import { useToast } from "@/src/components/Toast";
 import { SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SpaceRow } from "@/src/components/SpaceRow";
@@ -14,7 +15,7 @@ import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { personalSpaceActivity, selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
 import { useApp } from "@/src/data/context";
-import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing } from "@/src/data/device-runtime";
+import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme, typography } from "@/src/theme";
@@ -25,7 +26,10 @@ import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
-  | { kind: "remote"; hit: RemoteSpaceSearchHit };
+  | { kind: "remote"; hit: RemoteSpaceSearchHit }
+  | { kind: "device"; instance: DeviceRuntimeInstance; space: SpaceListSpace | null };
+/** "device" lists the Spaces this device serves, where their connection and screen sharing are managed. */
+type SpacesTabFilter = SpaceFilter | "device";
 const SPACE_SEARCH_TYPES = ["space"] as const;
 
 export default function SpacesScreen() {
@@ -59,7 +63,7 @@ export default function SpacesScreen() {
   const [query, setQuery] = useState("");
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);
-  const [filter, setFilter] = useState<SpaceFilter>("recent");
+  const [filter, setFilter] = useState<SpacesTabFilter>("recent");
   const [pinningSpaceId, setPinningSpaceId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -76,12 +80,13 @@ export default function SpacesScreen() {
   const onDevice = placement === "device";
   const linkedRunning = isDeviceRuntimeRunning(deviceInstances?.find((item) => item.spaceId === folder?.spaceId));
   const placementReady = !onDevice || (folder !== null && !linkedRunning);
-  const remoteSearch = useRemoteSearch(client, query, { enabled: filter !== "pinned", types: SPACE_SEARCH_TYPES });
+  const remoteSearch = useRemoteSearch(client, query, { enabled: filter !== "pinned" && filter !== "device", types: SPACE_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
   const spaces = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
     const personalActivity = personalSpaceActivity(Object.values(state.sessionViews), userUuid);
-    const candidates = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: filter === "recent" && trimmedQuery ? "all" : filter, now });
+    const listFilter = filter === "device" || (filter === "recent" && trimmedQuery) ? "all" : filter;
+    const candidates = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now });
     return candidates.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   }, [filter, now, state.spaces, state.sessions, state.sessionViews, spaceList.overview, spaceList.visits, trimmedQuery, userUuid]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
@@ -98,6 +103,15 @@ export default function SpacesScreen() {
   const countSpaceIds = useMemo(() => visibleSpaceIds.filter((id) => !spaceById.get(id)?.description?.trim()), [spaceById, visibleSpaceIds]);
   const spaceSessionCounts = useSpaceSessionCounts(client, countSpaceIds);
   const listItems = useMemo<SpaceListItem[]>(() => {
+    if (filter === "device") {
+      const needle = trimmedQuery.toLowerCase();
+      const known = new Map<string, SpaceListSpace>(state.spaces.map((space) => [space.id, space]));
+      return (deviceInstances ?? []).flatMap((instance) => {
+        const space = known.get(instance.spaceId) ?? null;
+        const matches = !needle || [space ? displaySpaceName(space) : null, space?.description, instance.label].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false);
+        return matches ? [{ kind: "device" as const, instance, space }] : [];
+      });
+    }
     if (!trimmedQuery) return spaces.map((space) => ({ kind: "local", space }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
@@ -106,7 +120,7 @@ export default function SpacesScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote" as const, hit })),
       ...spaces.filter((space) => !remoteIds.has(space.id)).map((space) => ({ kind: "local" as const, space })),
     ];
-  }, [remoteSearch.query, remoteSearch.spaces, spaces, trimmedQuery]);
+  }, [deviceInstances, filter, remoteSearch.query, remoteSearch.spaces, spaces, state.spaces, trimmedQuery]);
 
   // LegendList memoizes each row on [item, extraData]; async counts and pin state are
   // read by renderItem but never change `listItems`, so they must flow through extraData.
@@ -178,7 +192,9 @@ export default function SpacesScreen() {
 
   const searchEmpty = remoteSearch.query === trimmedQuery && remoteSearch.loading && trimmedQuery.length >= 2 && listItems.length === 0
     ? <View style={{ flex: 1, minHeight: 180, alignItems: "center", justifyContent: "center" }}><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View>
-    : <EmptyState icon={filter === "pinned" ? "pin" : trimmedQuery ? "search" : "layers"} title={filter === "pinned" ? t("spaces.empty.pinned.title") : trimmedQuery ? t("spaces.empty.matching.title") : t("spaces.empty.none.title")} action={filter === "pinned" || trimmedQuery ? { icon: "x", label: t("spaces.action.clearFilters"), onPress: () => { setFilter("recent"); setQuery(""); } } : undefined} />;
+    : filter === "device" && !trimmedQuery
+      ? <EmptyState icon="smartphone" title={t("spaces.empty.device.title")} description={t("spaces.empty.device.body")} action={{ icon: "plus", label: t("spaces.action.create"), onPress: () => { setCreateError(null); setPlacement("device"); setCreateOpen(true); } }} />
+      : <EmptyState icon={filter === "pinned" ? "pin" : trimmedQuery ? "search" : "layers"} title={filter === "pinned" ? t("spaces.empty.pinned.title") : trimmedQuery ? t("spaces.empty.matching.title") : t("spaces.empty.none.title")} action={filter === "pinned" || trimmedQuery ? { icon: "x", label: t("spaces.action.clearFilters"), onPress: () => { setFilter("recent"); setQuery(""); } } : undefined} />;
 
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
@@ -199,8 +215,8 @@ export default function SpacesScreen() {
       data={listItems}
       extraData={rowExtraData}
       estimatedItemSize={80}
-      keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
-      renderItem={({ item }) => item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
+      keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
+      renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
       refreshing={pullRefreshing}
       onRefresh={refreshOnPull}
       viewabilityConfig={viewabilityConfig}
@@ -215,6 +231,7 @@ export default function SpacesScreen() {
           <FilterChip label={t("spaces.filter.recent")} selected={filter === "recent"} onPress={() => setFilter("recent")} />
           <FilterChip label={t("spaces.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
           <FilterChip label={t("spaces.filter.pinned")} icon="pin" selected={filter === "pinned"} onPress={() => setFilter("pinned")} />
+          {deviceRuntimeSupported ? <FilterChip label={t("deviceRuntime.thisDevice")} icon="smartphone" selected={filter === "device"} onPress={() => setFilter("device")} /> : null}
         </View>
         {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View style={{ alignItems: "flex-end", minHeight: 16 }}><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text selectable style={[typography.micro, { color: theme.colors.danger, flex: 1 }]}>{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
