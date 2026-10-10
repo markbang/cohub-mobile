@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.16](https://github.com/markbang/cohub-mobile/compare/v2.2.15...v2.2.16) (2026-10-10)
+
+
+### Features
+
+* **android:** share this screen with a Space the device serves ([e3978dc](https://github.com/markbang/cohub-mobile/commit/e3978dc3bc2d731953045ec2c8f21c0eadec7aab))
+
+
+### CI
+
+* **ios:** stop distributing to external TestFlight testers ([2488f3c](https://github.com/markbang/cohub-mobile/commit/2488f3c66f8a1a3436672c3c151fc6b18623cb5d))
+
 ## [2.2.15](https://github.com/markbang/cohub-mobile/compare/v2.2.14...v2.2.15) (2026-10-10)
 
 
