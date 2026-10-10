@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.17](https://github.com/markbang/cohub-mobile/compare/v2.2.16...v2.2.17) (2026-10-10)
+
+
+### Features
+
+* **android:** manage this device's Spaces from the Spaces tab ([25ce79d](https://github.com/markbang/cohub-mobile/commit/25ce79d71b0a1e580c66871effc13d6023a9fc41))
+
 ## [2.2.16](https://github.com/markbang/cohub-mobile/compare/v2.2.15...v2.2.16) (2026-10-10)
 
 
