@@ -8,8 +8,8 @@ import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
-import { deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
-import { deviceRuntimeSupported, startDeviceRuntime, stopDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
+import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
+import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
@@ -523,6 +523,7 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
           <ActionButton label={t("deviceRuntime.chooseFolder")} icon="folder" disabled={busy} onPress={() => setPicking(true)} />
         )}
       </View>
+      <DeviceDisplayBlock spaceId={spaceId} serving={running} />
       <DeviceFolderPickerSheet
         visible={picking}
         onClose={() => setPicking(false)}
@@ -531,6 +532,57 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
           void update(() => startDeviceRuntime(spaceId, folder.path));
         }}
       />
+    </View>
+  );
+}
+
+function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: boolean }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const status = useDeviceDisplayStatus();
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  if (!status) return null;
+  const sharingHere = status.sharedWith === spaceId;
+
+  const update = async (action: () => Promise<"declined" | "failed" | null> | void) => {
+    if (busy) return;
+    setBusy(true);
+    setHint(null);
+    try {
+      const outcome = await action();
+      if (outcome) setHint(t(outcome === "declined" ? "deviceRuntime.display.declined" : "deviceRuntime.display.failed"));
+    } catch {
+      setHint(t("deviceRuntime.display.failed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={{ marginTop: 20 }}>
+      <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("deviceRuntime.display.title")}</Text>
+      <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
+      <View style={[styles.portRow, { backgroundColor: theme.colors.surfaceRaised }]}>
+        <AppIcon name="monitor" size={18} color={sharingHere ? theme.colors.success : theme.colors.textMuted} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t(deviceDisplayStateKey(status, spaceId))}</Text>
+          {status.sharedWith && !sharingHere ? <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
+        </View>
+        {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+      </View>
+      {hint ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: 8 }]}>{hint}</Text> : null}
+      <View style={styles.inviteRow}>
+        {sharingHere ? (
+          <>
+            <ActionButton label={t("deviceRuntime.display.stop")} icon="x" disabled={busy} onPress={() => void update(stopDeviceDisplay)} />
+            {!status.control ? <ActionButton label={t("deviceRuntime.display.allowControl")} icon="settings" disabled={busy} onPress={() => void update(openDeviceControlSettings)} /> : null}
+          </>
+        ) : (
+          <ActionButton label={t("deviceRuntime.display.share")} icon="monitor" disabled={busy || !serving} onPress={() => void update(() => shareDeviceDisplay(spaceId))} />
+        )}
+      </View>
+      {sharingHere && !status.control ? <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 8 }]}>{t("deviceRuntime.display.controlHint")}</Text> : null}
     </View>
   );
 }

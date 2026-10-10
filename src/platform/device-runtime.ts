@@ -6,6 +6,7 @@ import {
   accessTokenExpiresAt,
   DEVICE_RUNTIME_TOKEN_MARGIN_MS,
   runtimeGatewayOrigin,
+  type DeviceDisplayStatus,
   type DeviceFolderListing,
   type DeviceRuntimeInstance,
   type DeviceRuntimeRefusal,
@@ -107,4 +108,45 @@ export async function startDeviceRuntime(spaceId: string, root: string): Promise
 
 export function stopDeviceRuntime(spaceId: string) {
   requireNative().stop(spaceId);
+}
+
+let displayStatus: DeviceDisplayStatus | null = null;
+let displayChanges: { remove(): void } | null = null;
+const displayListeners = new Set<() => void>();
+
+function subscribeDisplay(listener: () => void) {
+  if (!native) return () => undefined;
+  displayListeners.add(listener);
+  if (!displayChanges) {
+    displayChanges = native.addListener("onDisplayChange", (event) => {
+      displayStatus = event;
+      displayListeners.forEach((notify) => notify());
+    });
+    displayStatus = native.displayStatus();
+  }
+  return () => {
+    displayListeners.delete(listener);
+    if (displayListeners.size > 0) return;
+    displayChanges?.remove();
+    displayChanges = null;
+  };
+}
+
+/** This screen's sharing state, live; null where the device cannot serve Spaces. */
+export function useDeviceDisplayStatus(): DeviceDisplayStatus | null {
+  return useSyncExternalStore(subscribeDisplay, () => displayStatus);
+}
+
+/** Shares this screen with a Space this device serves, after the system capture consent. */
+export function shareDeviceDisplay(spaceId: string): Promise<"declined" | "failed" | null> {
+  return requireNative().shareDisplay(spaceId);
+}
+
+export function stopDeviceDisplay() {
+  requireNative().stopDisplay();
+}
+
+export async function openDeviceControlSettings(): Promise<null> {
+  await requireNative().openControlSettings();
+  return null;
 }

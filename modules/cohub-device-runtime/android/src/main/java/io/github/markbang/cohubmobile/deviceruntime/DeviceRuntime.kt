@@ -7,7 +7,10 @@ import android.os.Environment
 import android.os.storage.StorageManager
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import io.github.markbang.cohubmobile.deviceruntime.display.DeviceDisplay
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,6 +104,9 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     val tokens = AccessTokens()
 
+    /** This screen, shared with at most one Space this device serves. */
+    val display: DeviceDisplay by lazy { DeviceDisplay(context, CoroutineScope(SupervisorJob() + Dispatchers.Default)) }
+
     /** Gateway origin (`wss://host`) of the signed-in environment. */
     @Volatile
     var gatewayOrigin: String? = null
@@ -130,6 +136,7 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     /** Sign-out disconnects every folder; they stay bound and can be reconnected after signing in. */
     fun signOut() {
+        display.stop()
         synchronized(lock) {
             account = null
             gatewayOrigin = null
@@ -181,6 +188,8 @@ class DeviceRuntime private constructor(private val context: Context) {
         null
     }
 
+    fun serving(spaceId: String): Boolean = instances.value.any { it.spaceId == spaceId && it.running }
+
     /** Reconnects folders the user never disconnected, e.g. after the process was killed. */
     fun resume() {
         val wanted = synchronized(lock) { account != null && enabledBindings.value.isNotEmpty() }
@@ -197,6 +206,7 @@ class DeviceRuntime private constructor(private val context: Context) {
     }
 
     fun stopAll() {
+        display.stop()
         synchronized(lock) {
             bindings = bindings.map { it.copy(enabled = false) }
             live.clear()

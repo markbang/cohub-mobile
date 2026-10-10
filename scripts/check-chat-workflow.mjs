@@ -25,7 +25,7 @@ import { sessionSourceFilterKeys } from "../src/data/session-source.ts";
 import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
-import { accessTokenExpiresAt, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
+import { accessTokenExpiresAt, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
@@ -3176,6 +3176,10 @@ assert.equal(deviceRuntimeStateKey({ state: "error", error: "conflict" }), "devi
 assert.equal(deviceRuntimeStateKey({ state: "error", error: null }), "deviceRuntime.error.failed");
 assert.equal(deviceRuntimeRefusalKey("declined"), "deviceRuntime.accessRequired");
 assert.equal(deviceRuntimeRefusalKey("space_in_use"), "deviceRuntime.spaceInUse");
+assert.equal(deviceDisplayStateKey({ sharedWith: null, control: true, error: null }, "space-1"), "deviceRuntime.display.notShared");
+assert.equal(deviceDisplayStateKey({ sharedWith: "space-2", control: false, error: null }, "space-1"), "deviceRuntime.display.notShared");
+assert.equal(deviceDisplayStateKey({ sharedWith: "space-1", control: false, error: null }, "space-1"), "deviceRuntime.display.sharing");
+assert.equal(deviceDisplayStateKey({ sharedWith: "space-1", control: true, error: null }, "space-1"), "deviceRuntime.display.sharingControl");
 
 const spaceListCalls = [];
 const pagedSpaces = await listAllSpaces({ spaces: { list: async (options) => {

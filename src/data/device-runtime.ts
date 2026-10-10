@@ -1,8 +1,8 @@
 import { decode } from "js-base64";
-import type { DeviceFolderListing, DeviceRuntimeError, DeviceRuntimeInstance, DeviceRuntimeRefusal } from "@/modules/cohub-device-runtime";
+import type { DeviceDisplayStatus, DeviceFolderListing, DeviceRuntimeError, DeviceRuntimeInstance, DeviceRuntimeRefusal } from "@/modules/cohub-device-runtime";
 import type { TranslationKey } from "@/src/i18n/en";
 
-export type { DeviceFolderListing, DeviceRuntimeInstance, DeviceRuntimeRefusal } from "@/modules/cohub-device-runtime";
+export type { DeviceDisplayStatus, DeviceFolderListing, DeviceRuntimeInstance, DeviceRuntimeRefusal } from "@/modules/cohub-device-runtime";
 
 /** Native caches a token until this long before it expires; must match AccessTokens.kt. */
 export const DEVICE_RUNTIME_TOKEN_MARGIN_MS = 120_000;
@@ -53,4 +53,9 @@ export function deviceRuntimeRefusalKey(refusal: DeviceRuntimeRefusal | "decline
   if (refusal === "folder_in_use") return "deviceRuntime.folderInUse";
   if (refusal === "space_in_use") return "deviceRuntime.spaceInUse";
   return "deviceRuntime.folderUnavailable";
+}
+
+export function deviceDisplayStateKey(status: DeviceDisplayStatus, spaceId: string): TranslationKey {
+  if (status.sharedWith !== spaceId) return "deviceRuntime.display.notShared";
+  return status.control ? "deviceRuntime.display.sharingControl" : "deviceRuntime.display.sharing";
 }

@@ -22,6 +22,8 @@ dependencies {
   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
   // The version React Native already ships, so the app keeps a single OkHttp.
   implementation "com.squareup.okhttp3:okhttp:4.9.2"
+  // The display wire protocol is JSON; this is the version the app already resolves.
+  implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
 }
 
 // sandboxd is the upstream Cohub file bridge (Go). It is built from the pinned

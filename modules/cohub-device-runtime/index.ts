@@ -27,8 +27,16 @@ export type DeviceFolderListing = {
   volumes: DeviceVolume[];
 };
 
+/** This screen: the Space it is shared with, whether Accessibility control is on, and the last sharing failure. */
+export type DeviceDisplayStatus = {
+  sharedWith: string | null;
+  control: boolean;
+  error: string | null;
+};
+
 type DeviceRuntimeEvents = {
   onChange(event: { instances: DeviceRuntimeInstance[] }): void;
+  onDisplayChange(event: DeviceDisplayStatus): void;
   onTokenRequest(event: { forceRefresh: boolean }): void;
 };
 
@@ -46,6 +54,12 @@ declare class CohubDeviceRuntimeModule extends NativeModule<DeviceRuntimeEvents>
   browse(path: string | null): Promise<DeviceFolderListing>;
   start(spaceId: string, root: string): Promise<DeviceRuntimeRefusal | null>;
   stop(spaceId: string): void;
+  displayStatus(): DeviceDisplayStatus;
+  /** Asks for the system capture consent; rejects with `ERR_NOT_SERVING` unless this device serves the Space. */
+  shareDisplay(spaceId: string): Promise<"declined" | "failed" | null>;
+  stopDisplay(): void;
+  /** Opens Accessibility settings, or App info once Android has blocked them as restricted settings. */
+  openControlSettings(): Promise<void>;
 }
 
 /** Null on iOS: only the Android app can serve device folders. */

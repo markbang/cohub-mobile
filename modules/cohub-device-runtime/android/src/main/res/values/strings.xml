@@ -8,4 +8,9 @@
     </plurals>
     <string name="cohub_runtime_connecting">Connecting…</string>
     <string name="cohub_runtime_disconnect">Disconnect all</string>
+    <string name="cohub_display_sharing">Sharing this screen with a Space</string>
+    <string name="cohub_display_sharing_control">Sharing this screen; the Space can control it</string>
+    <string name="cohub_display_stop">Stop sharing</string>
+    <string name="cohub_display_control_restricted">Tap ⋮ and choose Allow restricted settings, then turn on Cohub in Accessibility.</string>
+    <string name="cohub_display_control_description">Lets a Space you share this screen with read the controls on it, and tap, swipe and type. It only works while you share the screen, and only on what you can see.</string>
 </resources>
