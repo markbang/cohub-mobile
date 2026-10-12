@@ -5,11 +5,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
@@ -38,13 +40,23 @@ class SandboxBridge(
     /** True while the gateway has this bridge registered. */
     val connected: StateFlow<Boolean> = registered.asStateFlow()
 
-    suspend fun run(ready: StateFlow<Boolean>): Nothing {
+    /**
+     * sandboxd registers against the Runtime lease, so it runs only while the relay holds it. A bridge
+     * that outlived a relay drop races the relay's re-registration, is refused with 409, and sandboxd
+     * then waits five minutes before retrying while the relay is long back.
+     */
+    suspend fun run(ready: StateFlow<Boolean>) {
+        ready.collectLatest { held -> if (held) supervise() }
+    }
+
+    private suspend fun supervise(): Nothing {
         var attempts = 0
         while (true) {
-            ready.first { it }
             val startedAt = clock()
             runCatching { runOnce() }.onFailure { error ->
                 if (error is CancellationException) throw error
+                // A relay drop stops the process; its closed pipes are not a start failure.
+                currentCoroutineContext().ensureActive()
                 Log.w(TAG, "sandboxd failed to start", error)
             }
             if (clock() - startedAt > STABLE_MS) attempts = 0
