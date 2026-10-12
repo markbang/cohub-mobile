@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.2.18](https://github.com/markbang/cohub-mobile/compare/v2.2.17...v2.2.18) (2026-10-12)
+
+
+### Features
+
+* **android:** keep the process foreground while screen control is on ([a0b75ae](https://github.com/markbang/cohub-mobile/commit/a0b75ae0c7fc292273c04bbf017ed2562da79208))
+
+
+### Fixes
+
+* **android:** stop the screen-capture crash and log why control turns off ([a150d3e](https://github.com/markbang/cohub-mobile/commit/a150d3ed30465e753d66f9a79fc4f0660f60a52a))
+
 ## [2.2.17](https://github.com/markbang/cohub-mobile/compare/v2.2.16...v2.2.17) (2026-10-12)
 
 
