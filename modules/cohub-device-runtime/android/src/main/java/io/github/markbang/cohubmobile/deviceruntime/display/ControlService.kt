@@ -24,15 +24,18 @@ class ControlService : AccessibilityService() {
     override fun onServiceConnected() {
         attachKeepAlive()
         DisplayControl.connected(this)
+        Log.i(TAG, "Control connected on pid ${android.os.Process.myPid()}, keep-alive ${if (keepAlive != null) "attached" else "missing"}")
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
+        Log.i(TAG, "Control unbound")
         DisplayControl.disconnected(this)
         detachKeepAlive()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
+        Log.i(TAG, "Control destroyed")
         DisplayControl.disconnected(this)
         detachKeepAlive()
         super.onDestroy()

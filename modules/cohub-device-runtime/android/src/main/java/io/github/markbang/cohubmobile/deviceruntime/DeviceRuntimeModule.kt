@@ -1,6 +1,8 @@
 package io.github.markbang.cohubmobile.deviceruntime
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.app.AppOpsManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -36,6 +38,41 @@ private class NotServingException :
 private class GatewayOriginException(origin: String) :
     CodedException("ERR_GATEWAY_ORIGIN", "Gateway origin must be a wss:// origin without a path, received: $origin", null)
 
+/**
+ * Why the previous runs of this package ended. Android records this per package, so it survives a
+ * restart and tells a force stop (which also turns the accessibility service off) apart from a
+ * crash, an LMK kill or a freezer freeze.
+ */
+private fun previousExitReasons(context: Context): String {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "unsupported"
+    val manager = context.getSystemService(ActivityManager::class.java) ?: return "unavailable"
+    return manager.getHistoricalProcessExitReasons(context.packageName, 0, 3).joinToString("; ") { info ->
+        val reason = when (info.reason) {
+            ApplicationExitInfo.REASON_EXIT_SELF -> "exit_self"
+            ApplicationExitInfo.REASON_SIGNALED -> "signaled:${info.status}"
+            ApplicationExitInfo.REASON_LOW_MEMORY -> "low_memory"
+            ApplicationExitInfo.REASON_CRASH -> "crash"
+            ApplicationExitInfo.REASON_CRASH_NATIVE -> "crash_native"
+            ApplicationExitInfo.REASON_ANR -> "anr"
+            ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "init_failure"
+            ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "permission_change"
+            ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "excessive_resource_usage"
+            ApplicationExitInfo.REASON_USER_REQUESTED -> "user_requested"
+            ApplicationExitInfo.REASON_USER_STOPPED -> "user_stopped"
+            ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "dependency_died"
+            ApplicationExitInfo.REASON_OTHER -> "other"
+            else -> info.reason.toString()
+        }
+        "$reason[${info.description ?: ""}]"
+    }
+}
+
+/** Whether the system still has this package's accessibility service switched on. */
+private fun controlServiceEnabled(context: Context): Boolean =
+    context.getSystemService(android.view.accessibility.AccessibilityManager::class.java)
+        .getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+        .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
+
 /** JS face of [DeviceRuntime]; Android only. Sign-in stays in JS, which supplies tokens on request. */
 class DeviceRuntimeModule : Module() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -58,6 +95,12 @@ class DeviceRuntimeModule : Module() {
         OnCreate {
             val runtime = deviceRuntime
             runtime.tokens.requester = requester
+            // One line per process start: whether the system still has control switched on, and how the
+            // previous process ended. Both matter when screen control seems to turn itself off.
+            android.util.Log.i(
+                "CohubControl",
+                "Process ${android.os.Process.myPid()} started; accessibility enabled=${controlServiceEnabled(context)}; previous exits: ${previousExitReasons(context)}",
+            )
             scope.launch {
                 runtime.instances.collect { instances ->
                     sendEvent("onChange", mapOf("instances" to instances.map(RuntimeInstance::toMap)))

@@ -18,11 +18,13 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.scale
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
+import kotlin.coroutines.resume
 
 private const val TAG = "CohubDisplay"
 
@@ -180,8 +182,24 @@ internal class ScreenCapture(
         } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
             throw DisplayError(DisplayError.FAILED, "the screen produced no frame")
         } finally {
-            reader.close()
+            // The listener runs on the display thread and copies out of the frame's buffer, so closing
+            // the reader from this thread can free that buffer mid-copy and crash the process. Cancel
+            // the listener and close behind any frame callback already queued on that thread instead.
+            onDisplayThread {
+                reader.setOnImageAvailableListener(null, null)
+                reader.close()
+            }
         }
+    }
+
+    /** Runs [block] on the display thread, after the frame callbacks already queued there. */
+    private suspend fun onDisplayThread(block: () -> Unit) = suspendCancellableCoroutine { continuation ->
+        val run = {
+            runCatching(block).onFailure { Log.w(TAG, "Capture cleanup failed", it) }
+            if (continuation.isActive) continuation.resume(Unit)
+        }
+        // A quit thread refuses the work; nothing is reading the frame then.
+        if (!handler.post(run)) run()
     }
 
     private fun encode(bitmap: Bitmap, format: String, quality: Int, maxSize: Int): Capture {
