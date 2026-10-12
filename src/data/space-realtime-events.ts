@@ -20,8 +20,12 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
     case "session.created":
     case "session.updated": {
       const session = event.payload.session as Partial<SessionRecord> | undefined;
-      if (typeof event.sessionId !== "string" || !session || session.id !== event.sessionId || session.spaceId !== spaceId || typeof session.updatedAt !== "string" || !Number.isFinite(Date.parse(session.updatedAt))) throw new Error("Invalid realtime Chat metadata. Reopen the Space to retry.");
+      if (typeof event.sessionId !== "string" || !session || session.id !== event.sessionId || session.spaceId !== spaceId || (session.updatedAt !== undefined && (typeof session.updatedAt !== "string" || !Number.isFinite(Date.parse(session.updatedAt))))) throw new Error("Invalid realtime Chat metadata. Reopen the Space to retry.");
       change.sessionId = event.sessionId;
+      change.prefixes.push("chats", "running:");
+      change.exact.push(`space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
+      // Partial updates (e.g. activeTurn-only) carry no revision, so they cannot order metadata.
+      if (session.updatedAt === undefined) break;
       const metadata: Partial<SessionRecord> = { id: session.id, spaceId, updatedAt: session.updatedAt };
       for (const key of ["title", "source", "latestMessageText", "lastMessageId", "lastMessageAt"] as const) {
         const value = session[key];
@@ -30,8 +34,6 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
         metadata[key] = value;
       }
       change.session = metadata;
-      change.prefixes.push("chats", "running:");
-      change.exact.push(`space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
       break;
     }
     case "session.turn.created":
@@ -65,4 +67,18 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       break;
   }
   return change;
+}
+
+const USER_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set(["session.created", "session.updated", "session.turn.created", "session.turn.updated", "session.turn.finalized"]);
+
+/**
+ * Creators and participants receive Session snapshots and Turn-state projections in
+ * their user room for every Space, without joining it. Held rows reconcile in place;
+ * only a Chat this account has not loaded needs a list read.
+ */
+export function userSessionRealtimeChange(event: SpaceRealtimeEvent, isListed: (sessionId: string) => boolean): SpaceChange {
+  if (!USER_SESSION_EVENT_TYPES.has(event.type)) return { exact: [], prefixes: [] };
+  const change = spaceRealtimeChange(event);
+  if (!change.sessionId) return change;
+  return { ...change, exact: [], prefixes: isListed(change.sessionId) ? [] : ["chats", "running:"] };
 }

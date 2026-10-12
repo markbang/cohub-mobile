@@ -73,7 +73,7 @@ export default function ChatsScreen() {
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
   useSyncScope("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
-  const dataError = (filter === "running" ? runningQuery.error : filterPreference.error ?? state.sessionsError ?? sourceSessions.error) ?? sourcePreference.error ?? state.error ?? state.realtimeError ?? state.sessionStatusError;
+  const dataError = (filter === "running" ? runningQuery.error : filterPreference.error ?? state.sessionsError ?? sourceSessions.error) ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
   const remoteSearch = useRemoteSearch(client, query, { enabled: filter === "all" && sourceFilter === "all", types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
   const sessionsRef = useRef(baseSessions);

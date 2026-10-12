@@ -25,7 +25,7 @@ import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-schedul
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
-import { spaceRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
+import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionSourceFilterKeys, type SessionSourceFilter } from "@/src/data/session-source";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { createStreamBatch } from "@/src/data/chat-rendering";
@@ -1318,7 +1318,8 @@ export function AppProvider({
     if (!client || state.booting) return;
     const stopChats = sync.watch("chats", { run: refreshChats, intervalMs: () => 60_000, minRefreshMs: 2_000 });
     const stopStatuses = sync.watch("chat-statuses", {
-      intervalMs: () => 5_000,
+      // User-room Turn projections carry live status; polling only reconciles missed events.
+      intervalMs: () => connectionStateRef.current === "open" ? 30_000 : 5_000,
       minRefreshMs: 5_000,
       run: async () => {
         const sessions = new Map(statusSessionsRef.current);
@@ -1354,20 +1355,38 @@ export function AppProvider({
     return () => { stopChats(); stopStatuses(); stopRunningDiscovery(); stopSpaces(); };
   }, [client, dispatch, discoverRunningSessions, refreshChats, refreshSessionStatuses, state.booting, sync]);
 
+  const applyRealtimeChange = useCallback((change: ReturnType<typeof spaceRealtimeChange>) => {
+    if (change.sessionId) {
+      sessionEventRevisions.current.set(change.sessionId, ++sessionEventRevision.current);
+      if (change.session) dispatch({ type: "session-realtime-meta", sessionId: change.sessionId, session: change.session });
+      if (change.turn) dispatch({ type: "session-realtime-turn", sessionId: change.sessionId, turn: change.turn });
+    }
+    for (const key of change.exact) sync.invalidate(key);
+    for (const prefix of change.prefixes) sync.invalidatePrefix(prefix);
+  }, [dispatch, sync]);
+
   const handleSpaceEvent = useCallback((event: SpaceRealtimeEvent) => {
     try {
-      const change = spaceRealtimeChange(event);
-      if (change.sessionId) {
-        sessionEventRevisions.current.set(change.sessionId, ++sessionEventRevision.current);
-        if (change.session) dispatch({ type: "session-realtime-meta", sessionId: change.sessionId, session: change.session });
-        if (change.turn) dispatch({ type: "session-realtime-turn", sessionId: change.sessionId, turn: change.turn });
-      }
-      for (const key of change.exact) sync.invalidate(key);
-      for (const prefix of change.prefixes) sync.invalidatePrefix(prefix);
+      applyRealtimeChange(spaceRealtimeChange(event));
     } catch (error) {
       dispatch({ type: "realtime-error", message: errorMessage(error, "Unable to synchronize Space events") });
     }
-  }, [dispatch, sync]);
+  }, [applyRealtimeChange, dispatch]);
+
+  // The socket also delivers watched Space rooms here; reapplying their Turn state is idempotent.
+  useEffect(() => {
+    if (!client) return;
+    const isListed = (sessionId: string) => stateRef.current.sessions.some((session) => session.id === sessionId)
+      || Object.values(stateRef.current.runningSessions).some((query) => query?.sessions.some((session) => session.id === sessionId));
+    return client.onUserEvent((event) => {
+      try {
+        applyRealtimeChange(userSessionRealtimeChange(event, isListed));
+      } catch (error) {
+        // One malformed background event must not block the lists; status polling reconciles it.
+        console.warn("[mobile-realtime] skipped user Session event", event.type, event.sessionId, error);
+      }
+    });
+  }, [applyRealtimeChange, client]);
 
   const spaceRealtime = useMemo(() => client ? createSpaceRealtime({
     subscribe: (spaceId, listener) => client.space(spaceId).subscribe(listener),
