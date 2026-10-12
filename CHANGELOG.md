@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.17](https://github.com/markbang/cohub-mobile/compare/v2.2.16...v2.2.17) (2026-10-12)
+
+
+### Features
+
+* **android:** manage this device's Spaces from the Spaces tab ([25ce79d](https://github.com/markbang/cohub-mobile/commit/25ce79d71b0a1e580c66871effc13d6023a9fc41))
+* **chats:** follow Chat status from user-room realtime events ([0f68609](https://github.com/markbang/cohub-mobile/commit/0f68609bce90f075052718a55a822c788bc35981))
+* **chats:** keep Running current from realtime Turn state ([9acd657](https://github.com/markbang/cohub-mobile/commit/9acd657ea3fa4f150cc271b1898a430331a4ed93))
+
+
+### Fixes
+
+* **android:** keep screen control enabled after the app is swiped away ([52f6911](https://github.com/markbang/cohub-mobile/commit/52f6911e397a78ce37120940b907653d634525f7))
+* **android:** restart the file bridge when the Runtime relay recovers ([10aa1d7](https://github.com/markbang/cohub-mobile/commit/10aa1d7873818cae993ff2bb4def19dc62939423))
+
 ## [2.2.16](https://github.com/markbang/cohub-mobile/compare/v2.2.15...v2.2.16) (2026-10-10)
 
 
