@@ -385,7 +385,7 @@ jobs:
       - name: Download iOS provisioning profile
         if: inputs.profile == 'production'
         id: profiles
-        uses: apple-actions/download-provisioning-profiles@v6
+        uses: apple-actions/download-provisioning-profiles@v7
         with:
           bundle-id: ${{ steps.identifiers.outputs.ios_bundle_id }}
           profile-type: IOS_APP_STORE
