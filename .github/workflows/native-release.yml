@@ -168,7 +168,7 @@ jobs:
 
       # sandboxd, the device Runtime's file bridge, is built from the pinned reference/cohub submodule.
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: reference/cohub/apps/sandbox/go.mod
           cache-dependency-path: reference/cohub/apps/sandbox/go.sum
