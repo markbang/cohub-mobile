@@ -22,7 +22,7 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       const session = event.payload.session as Partial<SessionRecord> | undefined;
       if (typeof event.sessionId !== "string" || !session || session.id !== event.sessionId || session.spaceId !== spaceId || (session.updatedAt !== undefined && (typeof session.updatedAt !== "string" || !Number.isFinite(Date.parse(session.updatedAt))))) throw new Error("Invalid realtime Chat metadata. Reopen the Space to retry.");
       change.sessionId = event.sessionId;
-      change.prefixes.push("chats", "running:");
+      change.prefixes.push("chats");
       change.exact.push(`space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
       // Partial updates (e.g. activeTurn-only) carry no revision, so they cannot order metadata.
       if (session.updatedAt === undefined) break;
@@ -44,7 +44,8 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       change.sessionId = event.sessionId;
       change.turn = { id: turn.id, ...(turn.sequence === undefined ? {} : { sequence: turn.sequence }), ...(turn.status === undefined ? {} : { status: turn.status }), ...(turn.updatedAt === undefined ? {} : { updatedAt: turn.updatedAt }) };
       change.exact.push("chat-statuses", `space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
-      change.prefixes.push("chats", "running:");
+      // Running membership follows the Turn state in place; account scans only reconcile.
+      change.prefixes.push("chats");
       break;
     }
     case "space.fs.changed":
@@ -74,11 +75,12 @@ const USER_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set(["session.created"
 /**
  * Creators and participants receive Session snapshots and Turn-state projections in
  * their user room for every Space, without joining it. Held rows reconcile in place;
- * only a Chat this account has not loaded needs a list read.
+ * only a Chat this account has not loaded needs a list read (or, once running, a
+ * single Chat read by the caller).
  */
 export function userSessionRealtimeChange(event: SpaceRealtimeEvent, isListed: (sessionId: string) => boolean): SpaceChange {
   if (!USER_SESSION_EVENT_TYPES.has(event.type)) return { exact: [], prefixes: [] };
   const change = spaceRealtimeChange(event);
   if (!change.sessionId) return change;
-  return { ...change, exact: [], prefixes: isListed(change.sessionId) ? [] : ["chats", "running:"] };
+  return { ...change, exact: [], prefixes: isListed(change.sessionId) ? [] : ["chats"] };
 }

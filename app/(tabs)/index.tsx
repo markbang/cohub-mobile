@@ -65,7 +65,7 @@ export default function ChatsScreen() {
   const runningQuery = state.runningSessions[sourceFilter] ?? emptyRunningSessions;
   const knownSessions = sourceFilter === "all" ? state.sessions : sourceSessionList;
   const baseSessions = useMemo(() => filter === "running" ? runningSessionCandidates(runningQuery.sessions, knownSessions) : knownSessions, [filter, knownSessions, runningQuery.sessions]);
-  useSyncScope(`running:${sourceFilter}`, () => discoverRunningSessions(sourceFilter), 30_000, filter === "running" && !state.booting, 30_000);
+  useSyncScope(`running:${sourceFilter}`, () => discoverRunningSessions(sourceFilter), 300_000, filter === "running" && !state.booting, 30_000);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {

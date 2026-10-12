@@ -21,7 +21,7 @@ import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
 import { hasFinalAssistantForTurn, liveStreamStatusFromPatch, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
-import { sessionSourceFilterKeys } from "../src/data/session-source.ts";
+import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
 import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
@@ -230,14 +230,14 @@ const finishedTask = spaceRealtimeChange({ type: "task.updated", spaceId: "space
 assert.ok(finishedTask.exact.includes("task:task") && finishedTask.exact.includes("space:space:resources"));
 const statusChange = spaceRealtimeChange({ type: "session.turn.updated", spaceId: "space", sessionId: "chat", payload: { turn: { id: "turn", sequence: 2, status: "running", updatedAt: "2026-09-16T00:00:00Z" } } });
 assert.equal(statusChange.turn.status, "running");
-assert.ok(statusChange.prefixes.includes("running:") && statusChange.prefixes.includes("chats"));
+assert.ok(statusChange.prefixes.includes("chats") && !statusChange.prefixes.includes("running:"), "Turn events update Running in place instead of rescanning the account");
 assert.throws(() => spaceRealtimeChange({ type: "session.updated", spaceId: "space", sessionId: "chat", payload: { session: { id: "other", spaceId: "space" } } }), /Invalid realtime/);
 assert.throws(() => spaceRealtimeChange({ type: "session.turn.updated", spaceId: "space", sessionId: "chat", payload: { turn: { id: "turn", status: "bogus" } } }), /Invalid realtime/);
 const userTurnProjection = { type: "session.turn.updated", spaceId: "unwatched", sessionId: "chat", payload: { turn: { id: "turn", sessionId: "chat", sequence: 3, status: "completed", executionKind: "agent", updatedAt: "2026-10-12T00:00:00Z", errorMessage: null, summary: {}, meta: { userMessageId: null } } } };
 const listedUserTurn = userSessionRealtimeChange(userTurnProjection, (id) => id === "chat");
 assert.deepEqual(listedUserTurn.turn, { id: "turn", sequence: 3, status: "completed", updatedAt: "2026-10-12T00:00:00Z" }, "user-room Turn projections update status for Chats in unwatched Spaces");
 assert.deepEqual([listedUserTurn.exact, listedUserTurn.prefixes], [[], []], "a held Chat reconciles a user-room projection without HTTP reads");
-assert.deepEqual(userSessionRealtimeChange(userTurnProjection, () => false).prefixes, ["chats", "running:"], "an unloaded Chat is fetched through the list and Running discovery");
+assert.deepEqual(userSessionRealtimeChange(userTurnProjection, () => false).prefixes, ["chats"], "an unloaded Chat refreshes the list head; Running admits it with a single Chat read");
 const userSnapshot = userSessionRealtimeChange({ type: "session.updated", spaceId: "unwatched", sessionId: "chat", payload: { session: { id: "chat", spaceId: "unwatched", updatedAt: "2026-10-12T00:00:01Z", latestMessageText: "done", lastMessageAt: "2026-10-12T00:00:01Z" } } }, () => true);
 assert.equal(userSnapshot.session.latestMessageText, "done");
 assert.deepEqual(userSessionRealtimeChange({ type: "space.fs.changed", spaceId: "unwatched", payload: {} }, () => false), { exact: [], prefixes: [] }, "user-room handling ignores Space-only events delivered on the shared socket");
@@ -1921,8 +1921,9 @@ inspectPagination(contextSource);
 assert.ok(paginationCallback && stateSyncHook && timeoutSource);
 const listReducerSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
 const latestStatusSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "updateLatestTurn");
-const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
-  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status),
+const reducerHelperSources = ["preferNewerSession", "mergeSessionItem", "placeRunningSession"].map((name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource)).join("\n");
+const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionSourceFilterOf", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionSourceFilterOf,
 );
 const listSyncState = {
   sessions: syncRows, sessionsPagesLoaded: 2, sessionsHasMore: true, sessionsCursor: "tail-cursor", sessionsPageBoundary: { lastMessageAt: syncRows.at(-1).lastMessageAt },
@@ -1966,6 +1967,22 @@ assert.equal(failedScanState.runningSessions.all.sessions, discoveredState.runni
 assert.equal(failedScanState.runningSessions.all.error, "discovery failed");
 const unrelatedEvent = reduceListSync(discoveredState, { type: "session-realtime-turn", sessionId: "other-user-chat", turn: runningTurn });
 assert.deepEqual(unrelatedEvent.runningSessions.all.sessions, discoveredState.runningSessions.all.sessions, "Space room membership alone does not admit a Chat into the user inbox");
+assert.equal(unrelatedEvent.runningSessions, discoveredState.runningSessions, "an unknown Chat leaves Running untouched until it is read");
+const settledEventState = reduceListSync(discoveredState, { type: "session-realtime-turn", sessionId: runningFixture.id, turn: { id: "active", sequence: 9, status: "completed", updatedAt: completedTurn.updatedAt } });
+assert.deepEqual(settledEventState.runningSessions.all.sessions, [], "a settled Turn removes its Chat from Running without waiting for a scan");
+const sourceBuckets = { ...listSyncState, runningSessions: { all: { ...emptyRunningSessions, loaded: true }, web: { ...emptyRunningSessions, loaded: true }, other: { ...emptyRunningSessions, loaded: true } } };
+const cliChat = { ...runningFixture, id: "cli-chat", source: "cli", activeTurn: null };
+const foundState = reduceListSync(sourceBuckets, { type: "running-session-found", session: { ...cliChat, activeTurn: { id: "cli-turn", sequence: 1, status: "running" } } });
+assert.deepEqual([foundState.runningSessions.all.sessions.map((item) => item.id), foundState.runningSessions.other.sessions.map((item) => item.id), foundState.runningSessions.web.sessions.length], [["cli-chat"], ["cli-chat"], 0], "a Chat read after a live Turn joins All and its own source bucket");
+assert.equal(reduceListSync(sourceBuckets, { type: "running-session-found", session: cliChat }).runningSessions, sourceBuckets.runningSessions, "an idle Chat read does not join Running");
+const listedWebChat = { ...syncRows[0], source: null, activeTurn: null };
+const liveListedState = reduceListSync({ ...sourceBuckets, sessions: [listedWebChat] }, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "running", updatedAt: "2026-10-12T00:00:00Z" } });
+assert.deepEqual([liveListedState.runningSessions.all.sessions.length, liveListedState.runningSessions.web.sessions.length, liveListedState.runningSessions.other.sessions.length], [1, 1, 0], "a loaded legacy web Chat joins the web bucket live");
+const followupState = reduceListSync(reduceListSync(liveListedState, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-followup", sequence: 3, status: "queued", updatedAt: "2026-10-12T00:00:01Z" } }), { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "completed", updatedAt: "2026-10-12T00:00:02Z" } });
+assert.equal(followupState.runningSessions.all.sessions.length, 1, "a queued follow-up keeps the Chat in Running after the earlier Turn settles");
+const noScanBucket = reduceListSync({ ...listSyncState, sessions: [listedWebChat] }, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "running", updatedAt: "2026-10-12T00:00:00Z" } });
+assert.deepEqual([noScanBucket.runningSessions.all.loaded, noScanBucket.runningSessions.web], [false, undefined], "live rows never claim scan coverage or create unscanned source buckets");
+assert.deepEqual(["web", "web_app", "Web App", null, "", "channel:web", "cli", "feishu:group", "channel_discord", "custom"].map(sessionSourceFilterOf), ["web", "web", "web", "web", "web", "web", "other", "other", "other", "other"], "source buckets mirror the server source keys");
 const pageTimeout = new Function("HOME_REQUEST_TIMEOUT_MS", "translate", `${ts.transpileModule(timeoutSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText}; return withTimeout;`)(15000, (_key, values) => `Timed out: ${values.label}`);
 function paginationHarness(listSessions) {
   const stateRef = { current: { sessionsLoadingMore: true, sessionsHasMore: true, sessionsCursor: "old-page", refreshing: false, sessionsPageBoundary: recentBoundary } };

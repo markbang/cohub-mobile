@@ -26,7 +26,7 @@ import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
-import { sessionSourceFilterKeys, type SessionSourceFilter } from "@/src/data/session-source";
+import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { createStreamBatch } from "@/src/data/chat-rendering";
 import {
@@ -248,6 +248,7 @@ type Action =
   | { type: "running-end"; source: SessionSourceFilter; error?: string }
   | { type: "realtime-error"; message: string | null }
   | { type: "session-realtime-turn"; sessionId: string; turn: Partial<LatestSessionTurn> }
+  | { type: "running-session-found"; session: UserSessionListItem }
   | { type: "session-realtime-meta"; sessionId: string; session: Partial<SessionRecord> }
   | { type: "spaces-sync"; spaces?: SpaceRecord[]; error?: string }
   | { type: "sessions-more-start" }
@@ -374,6 +375,33 @@ function mergeSessionItem(current: UserSessionListItem | undefined, incoming: Us
     : { ...current, ...incoming, space: incoming.space ?? current.space };
 }
 
+/** Realtime keeps Running membership current between account scans; settled Chats leave every bucket. */
+function placeRunningSession(state: AppState, sessionId: string, found?: UserSessionListItem): AppState["runningSessions"] {
+  const buckets = Object.values(state.runningSessions);
+  const session = found
+    ?? state.sessions.find((item) => item.id === sessionId)
+    ?? buckets.flatMap((query) => query?.sessions ?? []).find((item) => item.id === sessionId);
+  if (!session) return state.runningSessions;
+  const running = sessionListStatus(session, state.sessionLatestTurns[sessionId], state.sessionTurnStatuses) === "running";
+  const source = sessionSourceFilterOf(session.source);
+  const runningSessions = { ...state.runningSessions };
+  let changed = false;
+  for (const filter of ["all", "web", "other"] as const) {
+    const current = runningSessions[filter];
+    // Source buckets exist only after their own scan; a live row must not imply coverage.
+    if (!current && filter !== "all") continue;
+    const query = current ?? emptyRunningSessions;
+    const existing = query.sessions.find((item) => item.id === sessionId);
+    const belongs = running && (filter === "all" || filter === source);
+    if (!belongs && !existing) continue;
+    if (belongs && existing && !found) continue;
+    const others = query.sessions.filter((item) => item.id !== sessionId);
+    runningSessions[filter] = { ...query, sessions: belongs ? sortByRecent([...others, existing ? mergeSessionItem(existing, session) : session]) : others };
+    changed = true;
+  }
+  return changed ? runningSessions : state.runningSessions;
+}
+
 function preserveSpacePin(current: SpaceRecord | undefined, incoming: SpaceRecord) {
   return incoming.isPinned === undefined && current?.isPinned !== undefined
     ? { ...incoming, isPinned: current.isPinned }
@@ -453,10 +481,13 @@ function reducer(state: AppState, action: Action): AppState {
       const known = action.turn.id ? state.sessionTurnStatuses[action.turn.id] : null;
       const turn = reconcileTurnStatusPatch(known ?? state.sessionLatestTurns[action.sessionId], action.turn);
       const next = updateLatestTurn(state, action.sessionId, turn);
-      const session = state.sessions.find((item) => item.id === action.sessionId);
-      const running = state.runningSessions.all ?? emptyRunningSessions;
-      if (!session || !turn || !isActiveTurnStatus(turn.status) || running.sessions.some((item) => item.id === session.id)) return next;
-      return { ...next, runningSessions: { ...next.runningSessions, all: { ...running, sessions: sortByRecent([...running.sessions, session]) } } };
+      if (!turn) return next;
+      const runningSessions = placeRunningSession(next, action.sessionId);
+      return runningSessions === next.runningSessions ? next : { ...next, runningSessions };
+    }
+    case "running-session-found": {
+      const runningSessions = placeRunningSession(state, action.session.id, action.session);
+      return runningSessions === state.runningSessions ? state : { ...state, runningSessions };
     }
     case "session-realtime-meta": {
       const patch = (session: UserSessionListItem) => session.id === action.sessionId ? { ...session, ...preferNewerSession(session, { ...session, ...action.session }) } : session;
@@ -1184,7 +1215,6 @@ export function AppProvider({
         const unchanged = sessions.filter((session) => !changed.has(session.id));
         for (const session of unchanged) statusSessionsRef.current.set(session.id, session);
         dispatch({ type: "running-success", source, sessions, changedSessionIds });
-        void refreshSessionStatuses(unchanged, { silent: true, activeOnly: true });
       } catch (error) {
         if (generation === statusGenerationRef.current && !controller.signal.aborted) {
           dispatch({ type: "running-end", source, error: errorMessage(error, "Unable to discover running Chats. Check your connection and retry.") });
@@ -1200,7 +1230,7 @@ export function AppProvider({
       if (runningDiscoveryRequests.current.get(source) === request) runningDiscoveryRequests.current.delete(source);
     }).catch(() => undefined);
     return request;
-  }, [client, dispatch, refreshSessionStatuses]);
+  }, [client, dispatch]);
 
   const loadMoreSessions = useCallback(async () => {
     if (sessionsMoreRequestRef.current) return sessionsMoreRequestRef.current;
@@ -1333,8 +1363,9 @@ export function AppProvider({
         await refreshSessionStatuses(active, { silent: true, activeOnly: true });
       },
     });
+    // User-room Turn projections keep Running current; the account scan only seeds and reconciles.
     const stopRunningDiscovery = sync.watch("running:all", {
-      intervalMs: () => 120_000,
+      intervalMs: () => 300_000,
       minRefreshMs: 30_000,
       run: discoverRunningSessions,
     });
@@ -1376,17 +1407,38 @@ export function AppProvider({
   // The socket also delivers watched Space rooms here; reapplying their Turn state is idempotent.
   useEffect(() => {
     if (!client) return;
+    let disposed = false;
+    const finding = new Set<string>();
     const isListed = (sessionId: string) => stateRef.current.sessions.some((session) => session.id === sessionId)
       || Object.values(stateRef.current.runningSessions).some((query) => query?.sessions.some((session) => session.id === sessionId));
-    return client.onUserEvent((event) => {
+    // One read admits a Chat that starts outside the loaded pages, instead of an account-wide scan.
+    const findRunningSession = async (spaceId: string, sessionId: string) => {
+      if (finding.has(sessionId)) return;
+      finding.add(sessionId);
       try {
-        applyRealtimeChange(userSessionRealtimeChange(event, isListed));
+        const { space, session } = await withTimeout(client.space(spaceId).session(sessionId).get(), "Loading a running Chat");
+        if (disposed) return;
+        dispatch({ type: "running-session-found", session: { ...session, space: { id: space.id, name: space.name ?? "", slug: space.slug, publicProfile: space.publicProfile ?? null } } });
+      } catch (error) {
+        // The periodic Running scan reconciles a Chat this read missed.
+        console.warn("[mobile-realtime] failed to load a running Chat", sessionId, error);
+      } finally {
+        finding.delete(sessionId);
+      }
+    };
+    const stop = client.onUserEvent((event) => {
+      try {
+        const listed = typeof event.sessionId === "string" && isListed(event.sessionId);
+        const change = userSessionRealtimeChange(event, () => listed);
+        applyRealtimeChange(change);
+        if (!listed && change.sessionId && change.turn?.status && isActiveTurnStatus(change.turn.status) && typeof event.spaceId === "string") void findRunningSession(event.spaceId, change.sessionId);
       } catch (error) {
         // One malformed background event must not block the lists; status polling reconciles it.
         console.warn("[mobile-realtime] skipped user Session event", event.type, event.sessionId, error);
       }
     });
-  }, [applyRealtimeChange, client]);
+    return () => { disposed = true; stop(); };
+  }, [applyRealtimeChange, client, dispatch]);
 
   const spaceRealtime = useMemo(() => client ? createSpaceRealtime({
     subscribe: (spaceId, listener) => client.space(spaceId).subscribe(listener),
