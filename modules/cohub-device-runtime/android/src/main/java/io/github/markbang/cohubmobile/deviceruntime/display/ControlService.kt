@@ -13,6 +13,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
+import io.github.markbang.cohubmobile.deviceruntime.DeviceRuntime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,10 @@ class ControlService : AccessibilityService() {
         attachKeepAlive()
         DisplayControl.connected(this)
         Log.i(TAG, "Control connected on pid ${android.os.Process.myPid()}, keep-alive ${if (keepAlive != null) "attached" else "missing"}")
+        // Raise the Runtime's foreground service, which keeps this process in the foreground while
+        // control is on, even with no Space connected.
+        runCatching { DeviceRuntime.get(applicationContext).resume() }
+            .onFailure { Log.w(TAG, "Control could not raise the Runtime service", it) }
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {

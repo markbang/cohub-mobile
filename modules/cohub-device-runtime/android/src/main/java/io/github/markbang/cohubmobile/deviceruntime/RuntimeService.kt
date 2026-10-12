@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import io.github.markbang.cohubmobile.deviceruntime.display.DisplayControl
 import io.github.markbang.cohubmobile.deviceruntime.display.DisplayStatus
 import io.github.markbang.cohubmobile.deviceruntime.display.launchDisplayProvider
 import kotlinx.coroutines.CoroutineScope
@@ -85,6 +86,11 @@ class RuntimeService : Service() {
                 combine(runtime.instances, runtime.display.status) { instances, display -> instances to display }
                     .collect { (instances, display) -> showNotification(instances, display) }
             }
+            // Screen control outlives a disconnected Space: the accessibility service keeps the
+            // Runtime ready, and a process in the foreground is far less likely to be killed or
+            // force-stopped by the system when its task is swiped away. A force stop would turn the
+            // user's accessibility switch off in system settings.
+            scope.launch(Dispatchers.Main.immediate) { DisplayControl.service.collect { reconcile(runtime.enabled.value) } }
             // Drop the media projection type once sharing ends, keeping the folders connected.
             scope.launch(Dispatchers.Main.immediate) {
                 runtime.display.status.map { it.sharedWith != null }.distinctUntilChanged().drop(1)
@@ -148,9 +154,17 @@ class RuntimeService : Service() {
     private fun reconcile(wanted: List<Binding>) {
         val gateway = runtime.gatewayOrigin
         runtime.display.status.value.sharedWith?.let { shared -> if (wanted.none { it.spaceId == shared }) runtime.display.stop() }
-        if (wanted.isEmpty() || gateway == null || !runtime.hasStorageAccess()) {
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        val serving = wanted.isNotEmpty() && gateway != null && runtime.hasStorageAccess()
+        if (!serving) {
+            sessions.values.forEach { it.job.cancel() }
+            sessions.clear()
+            // Screen control alone keeps the service up, so the process stays in the foreground; a
+            // force stop would switch the user's accessibility service off in system settings.
+            if (DisplayControl.service.value != null) enterForeground(runtime.display.status.value.sharedWith != null)
+            else {
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
             return
         }
         val roots = wanted.associate { it.spaceId to it.root }
@@ -219,7 +233,7 @@ class RuntimeService : Service() {
     }
 
     private fun showNotification(instances: List<RuntimeInstance>, display: DisplayStatus) {
-        if (instances.none { it.running }) return
+        if (instances.none { it.running } && DisplayControl.service.value == null) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(instances, display))
     }
 
@@ -230,6 +244,7 @@ class RuntimeService : Service() {
             sharing && display.control -> getString(R.string.cohub_display_sharing_control)
             sharing -> getString(R.string.cohub_display_sharing)
             ready > 0 -> resources.getQuantityString(R.plurals.cohub_runtime_ready, ready, ready)
+            display.control -> getString(R.string.cohub_display_control_only)
             else -> getString(R.string.cohub_runtime_connecting)
         }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -245,11 +260,14 @@ class RuntimeService : Service() {
             )
             builder.addAction(0, getString(R.string.cohub_display_stop), stopSharing)
         }
-        val stop = PendingIntent.getService(
-            this, 1, Intent(this, RuntimeService::class.java).setAction(ACTION_STOP_ALL), PendingIntent.FLAG_IMMUTABLE,
-        )
+        // While only screen control keeps the service up, there is nothing to disconnect.
+        if (instances.any { it.running }) {
+            val stop = PendingIntent.getService(
+                this, 1, Intent(this, RuntimeService::class.java).setAction(ACTION_STOP_ALL), PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, getString(R.string.cohub_runtime_disconnect), stop)
+        }
         return builder
-            .addAction(0, getString(R.string.cohub_runtime_disconnect), stop)
             .setOngoing(true)
             .setSilent(true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)

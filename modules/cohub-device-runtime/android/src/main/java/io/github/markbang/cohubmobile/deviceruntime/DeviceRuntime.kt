@@ -190,10 +190,14 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     fun serving(spaceId: String): Boolean = instances.value.any { it.spaceId == spaceId && it.running }
 
-    /** Reconnects folders the user never disconnected, e.g. after the process was killed. */
+    /**
+     * Reconnects folders the user never disconnected, e.g. after the process was killed, and keeps
+     * the foreground service up while screen control is on, so the system is less likely to stop this
+     * process (a force stop would switch the user's accessibility service off in system settings).
+     */
     fun resume() {
         val wanted = synchronized(lock) { account != null && enabledBindings.value.isNotEmpty() }
-        if (wanted && available && hasStorageAccess()) launchService()
+        if (available && ((wanted && hasStorageAccess()) || display.status.value.control)) launchService()
     }
 
     fun stop(spaceId: String) {
