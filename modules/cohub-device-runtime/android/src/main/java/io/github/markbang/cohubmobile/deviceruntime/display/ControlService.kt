@@ -3,8 +3,13 @@ package io.github.markbang.cohubmobile.deviceruntime.display
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
@@ -14,18 +19,53 @@ import kotlinx.coroutines.flow.asStateFlow
 
 @RequiresApi(Build.VERSION_CODES.R)
 class ControlService : AccessibilityService() {
+    private var keepAlive: View? = null
+
     override fun onServiceConnected() {
+        attachKeepAlive()
         DisplayControl.connected(this)
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         DisplayControl.disconnected(this)
+        detachKeepAlive()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         DisplayControl.disconnected(this)
+        detachKeepAlive()
         super.onDestroy()
+    }
+
+    /**
+     * Some ROMs force-stop a process that shows no window when its task is swiped away, and a force
+     * stop turns this service off in system settings. An invisible 1×1 accessibility overlay keeps the
+     * process counted as showing a window. It needs no extra permission, is never focused (so the
+     * element tree, which reads the active window, never sees it) and lets every touch through.
+     */
+    private fun attachKeepAlive() {
+        if (keepAlive != null) return
+        val view = View(this)
+        val params = WindowManager.LayoutParams().apply {
+            type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+            format = PixelFormat.TRANSLUCENT
+            flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            gravity = Gravity.START or Gravity.TOP
+            width = 1
+            height = 1
+        }
+        // Best effort: control works without it, the service is only more likely to be turned off.
+        runCatching { getSystemService(WindowManager::class.java).addView(view, params) }
+            .onSuccess { keepAlive = view }
+            .onFailure { Log.w(TAG, "The accessibility keep-alive window was refused", it) }
+    }
+
+    private fun detachKeepAlive() {
+        val view = keepAlive ?: return
+        keepAlive = null
+        runCatching { getSystemService(WindowManager::class.java).removeView(view) }
+            .onFailure { Log.w(TAG, "The accessibility keep-alive window could not be removed", it) }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
@@ -100,6 +140,8 @@ class ControlService : AccessibilityService() {
     }
 
     companion object {
+        private const val TAG = "CohubControl"
+
         val GLOBAL_ACTIONS = linkedMapOf(
             "back" to GLOBAL_ACTION_BACK,
             "home" to GLOBAL_ACTION_HOME,
