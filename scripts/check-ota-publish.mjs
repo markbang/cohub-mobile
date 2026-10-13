@@ -98,7 +98,7 @@ for (const publish of [publishAndroid, publishIos]) {
 // Run the real publish step against a stub CLI to check the retry decisions.
 for (const [platform, publish] of [["android", publishAndroid], ["ios", publishIos]]) {
   const script = publish.steps.find((step) => step.name === "Publish exported bundle").run;
-  const runPublish = (outcomes) => {
+  const runPublish = (outcomes, nativeFingerprint = "a".repeat(40)) => {
     const temp = mkdtempSync(join(tmpdir(), "cohub-ota-retry-"));
     try {
       mkdirSync(join(temp, "bin"));
@@ -129,6 +129,7 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
           OTA_PLATFORM: platform,
           SOURCE_COMMIT: "c".repeat(40),
           COHUB_OTA_RUNTIME_VERSION: "b".repeat(40),
+          NATIVE_SOURCE_FINGERPRINT: nativeFingerprint,
           OTA_EXPORT_DIR: join(temp, "export"),
         },
       });
@@ -138,6 +139,15 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
       rmSync(temp, { recursive: true, force: true });
     }
   };
+  if (platform === "android") {
+    const firstPublishMismatch = runPublish(["ok"], "d".repeat(40));
+    assert.equal(firstPublishMismatch.status, 0);
+    assert.equal(firstPublishMismatch.calls, 0, "a new runtime must not accept incompatible code before its first OTA establishes a server baseline");
+    assert.match(firstPublishMismatch.output, /Native fingerprint mismatch/);
+    const missingNativeFingerprint = runPublish(["ok"], "");
+    assert.notEqual(missingNativeFingerprint.status, 0, "a missing native baseline fails clearly");
+    assert.equal(missingNativeFingerprint.calls, 0);
+  }
   const recovered = runPublish([headersTimeoutLog, "Error: OTA 503: unavailable", "ok"]);
   assert.equal(recovered.status, 0, recovered.output);
   assert.equal(recovered.calls, 3, `${platform}: transient failures retry until success`);
@@ -156,6 +166,8 @@ assert.match(JSON.stringify(publishAndroid.steps), /--platform android/);
 assert.match(JSON.stringify(publishIos.steps), /--platform ios/);
 assert.equal(JSON.stringify(publishAndroid.steps).includes("dist/android"), false);
 assert.equal(JSON.stringify(publishIos.steps).includes("dist/ios"), false);
+assert.match(JSON.stringify(ota.jobs.android.steps), /cohub-android-native-fingerprint\.txt/);
+assert.equal(publishAndroid.steps.find((step) => step.name === "Publish exported bundle").env.NATIVE_SOURCE_FINGERPRINT, "${{ needs.android.outputs.fingerprint }}");
 assert.match(JSON.stringify(ota.jobs.android.steps), /assets\/fingerprint/);
 assert.match(JSON.stringify(ota.jobs.android.steps), /arm64-v8a/);
 assert.match(JSON.stringify(ota.jobs.android.steps), /--platform android/);

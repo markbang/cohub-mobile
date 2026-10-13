@@ -125,10 +125,13 @@ jobs:
           test -f "$apk" || { echo "Failed to download $asset from $tag."; exit 1; }
           runtime=$(unzip -p "$apk" assets/fingerprint | tr -d '[:space:]' | tr 'A-F' 'a-f')
           runtime=$(RUNTIME="$runtime" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.RUNTIME, "installed APK assets/fingerprint"))')
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'cohub-android-native-fingerprint.txt' --dir "$RUNNER_TEMP/native-apk"
+          native_fingerprint=$(tr -d '[:space:]' < "$RUNNER_TEMP/native-apk/cohub-android-native-fingerprint.txt")
+          native_fingerprint=$(NATIVE_FINGERPRINT="$native_fingerprint" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.NATIVE_FINGERPRINT, "released Android source fingerprint"))')
           echo "Using $tag APK runtime $runtime"
           {
             echo "runtime=$runtime"
-            echo "fingerprint=$runtime"
+            echo "fingerprint=$native_fingerprint"
           } >> "$GITHUB_OUTPUT"
 
       - name: Export Android bundle
@@ -300,6 +303,7 @@ jobs:
           OTA_PLATFORM: android
           SOURCE_COMMIT: ${{ needs.prepare.outputs.sha }}
           COHUB_OTA_RUNTIME_VERSION: ${{ needs.android.outputs.runtime }}
+          NATIVE_SOURCE_FINGERPRINT: ${{ needs.android.outputs.fingerprint }}
           OTA_EXPORT_DIR: ${{ runner.temp }}/cohub-ota-export
         run: |
           set -euo pipefail
@@ -309,11 +313,13 @@ jobs:
           test -d "$OTA_EXPORT_DIR"
           env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform "$OTA_PLATFORM" > "$RUNNER_TEMP/source-fingerprint.json"
           SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.RUNNER_TEMP + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
-          # The server rejects a bundle whose fingerprint differs from the latest update
-          # on this runtime (HTTP 409). That is the correct outcome for a commit with
-          # native/SDK changes: it cannot ride the installed binary until Native Release
-          # publishes a matching native distribution. Report the skip instead of failing
-          # the pipeline, so a release run shows the real state and the next steps.
+          NATIVE_SOURCE_FINGERPRINT=$(NATIVE_SOURCE_FINGERPRINT="$NATIVE_SOURCE_FINGERPRINT" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.NATIVE_SOURCE_FINGERPRINT, "released Android source fingerprint"))')
+          if ! SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" node --input-type=module -e 'import { assertFingerprintsMatch } from "./scripts/ota-publish.mjs"; assertFingerprintsMatch(process.env.NATIVE_SOURCE_FINGERPRINT, process.env.SOURCE_FINGERPRINT)'; then
+            echo "Android OTA skipped: source native fingerprint differs from the released APK." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Android OTA skipped::Native fingerprint changed; install a matching native distribution first."
+            exit 0
+          fi
+          # Validate against the released APK before the first OTA can register this runtime.
           COHUB_OTA_RUNTIME_VERSION="$runtime" npx expo config --type public --json > "$RUNNER_TEMP/ota-config.json"
           # Transient transport/server failures retry. Repeating is safe: blobs are
           # content-addressed, an interrupted attempt leaves at most an unserved Staged
