@@ -45,6 +45,7 @@ import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount 
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
 import { forkSessionTurn } from "../src/data/session-fork.ts";
+import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
 import { androidUpdateApkUrl, selectYaotaAndroidUpdate, validateAndroidUpdateAsset, verifyAndroidUpdateIntegrity } from "../src/data/update-assets.ts";
@@ -1624,6 +1625,38 @@ const forkedSession = await forkSessionTurn(forkClient, "space-1", "session-1", 
 assert.equal(forkedSession.id, "forked-session");
 assert.deepEqual(forkCalls, [{ spaceId: "space-1", sessionId: "session-1", turnId: "source-turn" }]);
 await assert.rejects(() => forkSessionTurn(forkClient, "", "session-1", { id: "turn-1", sourceTurnId: null }), /Cannot fork/);
+
+const relatedId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const [callerSpace, callerChat, callerTurn, reviewChat, otherSpace, docsChat] = [1, 2, 3, 4, 5, 6].map(relatedId);
+assert.deepEqual(sentFrom({ sessionId: reviewChat, meta: { origin: { kind: "prompt", spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn } } }), { spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn }, "prompted Turns link back to the caller Turn");
+assert.equal(sentFrom({ sessionId: callerChat, meta: { origin: { kind: "prompt", spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn } } }), null, "self follow-ups are already in the timeline");
+assert.deepEqual(sentSessions({ sessionId: callerChat, meta: { messagesSent: [
+  { sessionId: reviewChat, turnId: relatedId(11), kind: "prompt" },
+  { spaceId: otherSpace, sessionId: docsChat, turnId: relatedId(12), kind: "prompt" },
+  { sessionId: reviewChat, turnId: relatedId(13), kind: "prompt" },
+  { sessionId: callerChat, turnId: relatedId(14), kind: "prompt" },
+] } }, callerSpace), [
+  { spaceId: callerSpace, sessionId: reviewChat, turnId: relatedId(13), count: 2 },
+  { spaceId: otherSpace, sessionId: docsChat, turnId: relatedId(12), count: 1 },
+], "fan-out folds repeat prompts onto the latest child Turn and skips self follow-ups");
+
+const relatedGets = [];
+const relatedStore = createRelatedSessionStore({ space: (spaceId) => ({ session: (sessionId) => ({ get: async () => {
+  relatedGets.push(sessionId);
+  if (sessionId === "denied") throw Object.assign(new Error("Forbidden"), { status: 403 });
+  if (sessionId === "offline") throw new Error("Network request failed");
+  return { space: { id: spaceId }, session: { id: sessionId, title: "Review" } };
+} }) }) });
+for (const sessionId of ["ok", "ok", "denied", "offline"]) relatedStore.request({ spaceId: callerSpace, sessionId });
+await flushSync();
+assert.deepEqual(relatedGets, ["ok", "denied", "offline"], "related Chat lookups dedupe in-flight requests");
+assert.equal(relatedStore.get({ sessionId: "ok" }).session.title, "Review");
+assert.equal(relatedStore.get({ sessionId: "denied" }).status, "unavailable", "403 renders as an unavailable Chat, not a link");
+assert.equal(relatedStore.get({ sessionId: "offline" }).status, "unknown");
+relatedStore.request({ spaceId: callerSpace, sessionId: "offline" });
+relatedStore.request({ spaceId: callerSpace, sessionId: "denied" });
+await flushSync();
+assert.deepEqual(relatedGets.slice(3), ["offline"], "transient failures retry; access denials stay settled");
 
 const measurements = new MessageMeasurements();
 const measuredRows = [{ id: "a", revision: "1" }, { id: "b", revision: "1" }];
