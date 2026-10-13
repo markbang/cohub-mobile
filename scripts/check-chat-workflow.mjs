@@ -40,7 +40,7 @@ import { classifySaveConflict, isEditableTextFile, isFileConflictError } from ".
 import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-language.ts";
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
 import { connectionDisplayState, createSessionResyncCoordinator, isTransportRecovery } from "../src/data/session-reconnect.ts";
-import { isPagerHeaderTouch, panelForScrollOffset } from "../src/data/space-panel-pager.ts";
+import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget } from "../src/data/space-panel-pager.ts";
 import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
@@ -2632,12 +2632,12 @@ assert.equal(panelForScrollOffset(360, 360, 760), null);
 assert.equal(panelForScrollOffset(760, 360, 760), "files");
 assert.equal(panelForScrollOffset(150, 360, 760), "chat");
 assert.equal(panelForScrollOffset(620, 360, 760), "files");
-assert.equal(isPagerHeaderTouch(0, 56), true);
-assert.equal(isPagerHeaderTouch(55, 56), true);
-assert.equal(isPagerHeaderTouch(56, 56), false);
-assert.equal(isPagerHeaderTouch(-1, 56), false);
+assert.equal(panelSwipeTarget(344, 200, 0, 344), 344, "a short slow drag snaps back closed");
+assert.equal(panelSwipeTarget(344, 150, 0, 344), 0, "dragging past halfway opens Chats");
+assert.equal(panelSwipeTarget(344, 400, -1200, 344), 688, "a leftward flick opens Files");
+assert.equal(panelSwipeTarget(0, 300, -5000, 344), 344, "a flick from an open panel closes it instead of crossing to the other panel");
 
-// Filter touches re-render the pager to toggle scrollEnabled. Reapplying a closed-page
+// Filter touches re-render the pager to toggle the swipe. Reapplying a closed-page
 // contentOffset can reset the native scroll position even though no close was requested.
 const panelsSource = ts.createSourceFile("SpacePanels.tsx", readFileSync(new URL("../src/components/SpacePanels.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let panelPager;
@@ -2669,6 +2669,23 @@ function panelPagerHarness(initialPanel = null) {
     const [index, previous] = slot(() => null);
     if (!previous || deps.some((value, index) => value !== previous[index])) { effects.push(callback); slots[index] = deps; }
   };
+  const reactions = [];
+  const springs = [];
+  const flushReactions = () => {
+    for (const reaction of reactions) {
+      const value = reaction.prepare();
+      if (Object.is(value, reaction.previous)) continue;
+      const previous = reaction.previous;
+      reaction.previous = value;
+      reaction.react(value, previous);
+    }
+  };
+  const gestureBuilder = () => {
+    const gesture = { config: {}, handlers: {} };
+    for (const name of ["enabled", "activeOffsetX", "failOffsetY", "hitSlop"]) gesture[name] = (value) => { gesture.config[name] = value; return gesture; };
+    for (const name of ["onStart", "onUpdate", "onEnd"]) gesture[name] = (handler) => { gesture.handlers[name] = handler; return gesture; };
+    return gesture;
+  };
   const renderPanels = loadChromeComponent("../src/components/SpacePanels.tsx", "SpacePanels", {
     ...chromeScope,
     useState: (initial) => { const [index, value] = slot(() => typeof initial === "function" ? initial() : initial); return [value, (next) => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }]; },
@@ -2687,12 +2704,17 @@ function panelPagerHarness(initialPanel = null) {
     },
     useWindowDimensions: () => ({ width: viewportWidth }), useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useIsFocused: () => true,
     useAnimatedScrollHandler: (handler) => handler, useAnimatedStyle: (style) => ({ animated: style }),
+    useAnimatedRef: () => slot(() => ({ current: null }))[1],
+    useAnimatedReaction: (prepare, react) => { const [, reaction] = slot(() => { const created = { previous: undefined }; reactions.push(created); return created; }); reaction.prepare = prepare; reaction.react = react; },
+    scrollTo: (ref, x, _y, animated) => ref.current?.scrollTo({ x, animated }),
+    cancelAnimation: () => {}, withSpring: (target, _config, callback) => { springs.push(callback); return target; }, ReduceMotion: { System: "system" },
+    Gesture: { Pan: gestureBuilder }, GestureDetector: "GestureDetector",
     scheduleOnRN: (callback, ...args) => callback(...args),
     interpolate: (value, input, output) => Math.min(output[1], Math.max(output[0], value / input[1])), Extrapolation: { CLAMP: "clamp" },
     Reanimated: { ScrollView: "Pager", View: "AnimatedView" }, BackHandler: { addEventListener: () => ({ remove() {} }) },
-    PANEL_WIDTH_RATIO: 0.86, MAX_PANEL_WIDTH: 360, PANEL_SCROLL_IDLE_MS: 140, PANEL_CLOSE_SETTLE_MS: 380,
-    PANEL_SEED_RETRY_MS: 240, PANEL_SEED_FORCE_MS: 480,
-    isPagerHeaderTouch, panelForScrollOffset, recordDebugEvent: (name, fields) => diagnostics.push({ name, fields }), chatScrollTrace: { record() {} }, ChatPanel: "ChatPanel", FilesPanel: "FilesPanel",
+    PANEL_WIDTH_RATIO: 0.86, MAX_PANEL_WIDTH: 360, PANEL_CLOSE_SETTLE_MS: 380,
+    PANEL_SEED_RETRY_MS: 240, PANEL_SEED_FORCE_MS: 480, PANEL_SWIPE_SPRING: {},
+    PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, recordDebugEvent: (name, fields) => diagnostics.push({ name, fields }), chatScrollTrace: { record() {} }, ChatPanel: "ChatPanel", FilesPanel: "FilesPanel",
   });
   let tree;
   const render = () => {
@@ -2701,8 +2723,11 @@ function panelPagerHarness(initialPanel = null) {
     const pager = chromeNodes(tree).find((node) => node.type === "Pager");
     pager.props.ref.current = { scrollTo: (command) => { commands.push(command); if (measuredContent && measuredViewport) nativeX = Math.max(0, Math.min(command.x, 2 * Math.min(360, Math.max(280, viewportWidth * 0.86)))); } };
     while (effects.length) effects.shift()();
+    flushReactions();
     return pager;
   };
+  const dragged = [];
+  const swipe = () => chromeNodes(tree).find((node) => node.type === "GestureDetector").props.gesture;
   let pager = render();
   const content = (contentWidth = 2 * Math.min(360, Math.max(280, viewportWidth * 0.86)) + viewportWidth) => { measuredContent = true; pager.props.onContentSizeChange(contentWidth, 800); };
   const layout = (height = 800) => { measuredViewport = height > 0; pager.props.onLayout?.({ nativeEvent: { layout: { width: viewportWidth, height } } }); };
@@ -2720,6 +2745,20 @@ function panelPagerHarness(initialPanel = null) {
     },
     contentShift: () => style(pager.props.children[0]).transform?.[0]?.translateX ?? 0,
     scroll: (x) => { nativeX = x; pager.props.onScroll.onScroll({ contentOffset: { x } }); },
+    swipe,
+    swipeEnabled: () => swipe().config.enabled,
+    dragged,
+    drag: (translationX, velocityX = 0) => {
+      const { handlers } = swipe();
+      handlers.onStart({ translationX: Math.sign(translationX) * PANEL_SWIPE_ACTIVATION_PX });
+      flushReactions();
+      handlers.onUpdate({ translationX });
+      flushReactions();
+      dragged.push(commands.at(-1));
+      handlers.onEnd({ translationX, velocityX });
+      flushReactions();
+    },
+    landSpring: (x) => { nativeX = x; pager.props.onScroll.onScroll({ contentOffset: { x } }); while (springs.length) springs.shift()(true); flushReactions(); },
     setPanel: (panel) => { props = { ...props, activePanel: panel }; return (pager = render()); },
   };
 }
@@ -2738,7 +2777,10 @@ for (const order of ["content-first", "viewport-first"]) {
 const delayedPager = panelPagerHarness();
 assert.ok(delayedPager.nodes().some((node) => node.type === "ChatPanel"), "Chats are mounted before the first swipe reveals them");
 assert.ok(delayedPager.nodes().some((node) => node.type === "FilesPanel"), "Files are mounted and start loading before the first swipe reveals them");
-assert.equal(delayedPager.pager().props.scrollEnabled, false, "unseeded native pages cannot be dragged into view");
+assert.equal(delayedPager.pager().props.scrollEnabled, false, "the native pager never drags by itself; a slanted scroll cannot pull a panel out");
+assert.equal(delayedPager.swipeEnabled(), false, "unseeded native pages cannot be dragged into view");
+assert.deepEqual(delayedPager.swipe().config.activeOffsetX, [-PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_ACTIVATION_PX]);
+assert.deepEqual(delayedPager.swipe().config.failOffsetY, [-PANEL_SWIPE_VERTICAL_SLOP_PX, PANEL_SWIPE_VERTICAL_SLOP_PX], "vertical travel hands the touch to the timeline");
 assert.equal(delayedPager.contentShift(), -344, "only the page strip compensates for native offset zero");
 delayedPager.scroll(0);
 delayedPager.pager().props.onMomentumScrollEnd();
@@ -2748,37 +2790,26 @@ delayedPager.layout(0);
 assert.equal(delayedPager.commands.length, 0, "zero-height route-transition layouts cannot complete seeding");
 delayedPager.layout();
 delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, false, "sending scrollTo is not acknowledgement");
-delayedPager.pager().props.onScrollBeginDrag();
-assert.equal(delayedPager.contentShift(), -344, "an early drag callback cannot drop the seed compensation");
+assert.equal(delayedPager.swipeEnabled(), false, "sending scrollTo is not acknowledgement");
+assert.equal(delayedPager.contentShift(), -344, "the seed compensation holds until native acknowledges");
 delayedPager.scroll(344);
 delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, true);
-// Header touches temporarily disable the pager so the native horizontal responder cannot cancel
-// the back button or iOS edge-back gesture. Body touches leave panel swiping available.
-delayedPager.pager().props.onTouchStart({ nativeEvent: { locationY: 20 } });
-delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, false, "header touches lock the pager for navigation controls");
-delayedPager.pager().props.onTouchEnd();
-delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, true, "the pager unlocks after a header touch ends");
-delayedPager.pager().props.onTouchStart({ nativeEvent: { locationY: 80 } });
-delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, true, "body touches keep the panel pager enabled");
-assert.ok(delayedPager.diagnostics().some(({ name }) => name === "navigation.pager.drag_begin"), "pager drags are visible to diagnostics");
-assert.ok(delayedPager.diagnostics().some(({ name }) => name === "navigation.pager.header_touch_start"), "header touch starts are visible to diagnostics");
-assert.ok(delayedPager.diagnostics().some(({ name }) => name === "navigation.pager.header_touch_end"), "header touch ends are visible to diagnostics");
+assert.equal(delayedPager.swipeEnabled(), true);
+assert.deepEqual(delayedPager.swipe().config.hitSlop, { top: -56 }, "header touches never start the swipe, so the back button and iOS edge-back keep working");
 const commandsAfterSeed = delayedPager.commands.length;
 delayedPager.content();
 delayedPager.layout();
 delayedPager.render();
 assert.equal(delayedPager.commands.length, commandsAfterSeed, "stream/list re-layouts never reposition a ready pager");
 for (let cycle = 0; cycle < 2; cycle++) {
-  delayedPager.pager().props.onScrollBeginDrag();
-  delayedPager.scroll(688);
-  delayedPager.pager().props.onMomentumScrollEnd();
+  delayedPager.drag(-120, -1200);
+  assert.deepEqual(delayedPager.dragged.at(-1), { x: 344 + 120 - PANEL_SWIPE_ACTIVATION_PX, animated: false }, "the swipe follows the finger without jumping by the activation travel");
+  assert.deepEqual(delayedPager.commits.slice(-1), cycle === 0 ? [] : [null], "releasing does not commit before the spring lands");
+  delayedPager.landSpring(688);
   delayedPager.render();
+  assert.equal(delayedPager.commits.at(-1), "files", "a released flick settles once the spring lands");
   assert.ok(delayedPager.nodes().some((node) => node.type === "FilesPanel"), "every repeated swipe reveals the preloaded Files panel");
+  assert.ok(delayedPager.diagnostics().some(({ name }) => name === "navigation.pager.drag_begin"), "pager drags are visible to diagnostics");
   delayedPager.scroll(344);
   delayedPager.pager().props.onMomentumScrollEnd();
   delayedPager.render();
@@ -2804,7 +2835,7 @@ delayedPager.resize(900);
 delayedPager.layout();
 delayedPager.content();
 delayedPager.render();
-assert.equal(delayedPager.pager().props.scrollEnabled, true, "a capped-width panel can retain its confirmed offset across resize without a new scroll event");
+assert.equal(delayedPager.swipeEnabled(), true, "a capped-width panel can retain its confirmed offset across resize without a new scroll event");
 assert.equal(delayedPager.paintCoverage(), 900);
 for (const [initialPanel, offset] of [["chat", 0], ["files", 688]]) {
   const harness = panelPagerHarness(initialPanel);
@@ -2815,7 +2846,7 @@ for (const [initialPanel, offset] of [["chat", 0], ["files", 688]]) {
   assert.equal(harness.commands.at(-1).x, offset, "right-panel targets must be reachable without native scroll clamping");
   harness.scroll(offset);
   harness.render();
-  assert.equal(harness.pager().props.scrollEnabled, true);
+  assert.equal(harness.swipeEnabled(), true);
 }
 // The seed depends on one native scroll event; when the first chat frame swallows it, the
 // fallback must re-send and then force-complete, or the panel swipe stays dead for the screen.
@@ -2827,19 +2858,19 @@ for (const [initialPanel, offset] of [["chat", 0], ["files", 688]]) {
     const swallowedSeed = panelPagerHarness();
     swallowedSeed.content();
     swallowedSeed.layout();
-    assert.equal(swallowedSeed.pager().props.scrollEnabled, false, "the seed still waits for acknowledgement before enabling the gesture");
+    assert.equal(swallowedSeed.swipeEnabled(), false, "the seed still waits for acknowledgement before enabling the gesture");
     const commandsBeforeRetry = swallowedSeed.commands.length;
     timer.tick(240);
     swallowedSeed.render();
     assert.ok(swallowedSeed.commands.length > commandsBeforeRetry, "a swallowed seed acknowledgement is re-issued once");
-    assert.equal(swallowedSeed.pager().props.scrollEnabled, false, "the retry alone cannot mark the pager ready");
+    assert.equal(swallowedSeed.swipeEnabled(), false, "the retry alone cannot mark the pager ready");
     timer.tick(480);
     swallowedSeed.render();
-    assert.equal(swallowedSeed.pager().props.scrollEnabled, true, "a second unacknowledged seed force-completes instead of deadlocking the gesture");
+    assert.equal(swallowedSeed.swipeEnabled(), true, "a second unacknowledged seed force-completes instead of deadlocking the gesture");
     assert.equal(swallowedSeed.contentShift(), 0, "forcing the seed drops the stale page-strip compensation");
     swallowedSeed.scroll(344);
     swallowedSeed.render();
-    assert.equal(swallowedSeed.pager().props.scrollEnabled, true, "the pager stays usable after a forced seed");
+    assert.equal(swallowedSeed.swipeEnabled(), true, "the pager stays usable after a forced seed");
   } finally { timer.reset(); }
 }
 const closingSeed = panelPagerHarness("files");
@@ -2852,7 +2883,7 @@ assert.equal(closingSeed.nativeX(), 344);
 assert.ok(closingSeed.nodes().some((node) => node.type === "FilesPanel"), "closing before seed acknowledgement keeps the preloaded panel mounted");
 closingSeed.scroll(344);
 closingSeed.render();
-assert.equal(closingSeed.pager().props.scrollEnabled, true);
+assert.equal(closingSeed.swipeEnabled(), true);
 assert.ok(panelsSource.text.includes("pagerSeed"), "The first paint must compensate until native scroll reaches the closed page");
 assert.equal(panelsSource.text.includes("activePanelRef.current ?? visiblePanelRef.current"), false, "width realignment must not follow a pre-seed visiblePanel onto the Chats page");
 assert.ok(pagerAttributes.some((attribute) => attribute.name.getText(panelsSource) === "onContentSizeChange"), "The pager still initializes its position on first layout");
@@ -2861,6 +2892,7 @@ const markdownPatch = readFileSync(new URL("../scripts/patch-enriched-markdown.m
 assert.ok(markdownPatch.includes("NestedHorizontalScrollView"), "Code-block scrolling must use a nested HorizontalScrollView that can claim the drag");
 assert.ok(markdownPatch.includes("dispatchTouchEvent"), "Code-block scrolling must claim in dispatchTouchEvent; OnTouchListener never sees ACTION_DOWN");
 assert.equal(markdownPatch.includes("setOnTouchListener {"), false, "OnTouchListener never sees ACTION_DOWN once the code TextView consumes it");
+assert.doesNotMatch(markdownPatch, /ACTION_DOWN -> \{[^}]*requestDisallowInterceptTouchEvent/, "claiming on ACTION_DOWN cancels the panel swipe even at a code block's edge");
 const messageContent = readFileSync(new URL("../src/components/MessageContent.tsx", import.meta.url), "utf8");
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");

@@ -1,16 +1,11 @@
 /**
- * The chat/files pager is an outer horizontal scroller. A chat message can contain a nested
- * horizontal scroller (Markdown code block or table). Android gives the outer scroller priority
- * unless the inner one calls `requestDisallowInterceptTouchEvent`.
+ * Markdown code blocks and tables are nested horizontal scrollers that must win their own drag
+ * over the timeline and the gesture-handler panel swipe. On Android a native
+ * `requestDisallowInterceptTouchEvent(true)` does both.
  *
- * React Native's pager only yields to another `ReactHorizontalScrollView`, so a vanilla
- * `HorizontalScrollView` never wins. An OnTouchListener also cannot claim the drag: the child
- * TextView consumes ACTION_DOWN, the listener never runs, and MOVE is intercepted by the pager.
- *
- * Claim in `dispatchTouchEvent` (it sees every event that hits the scroller) and only keep the
- * drag while this view can actually scroll that way. A vertical drag, or a horizontal drag at the
- * edge / on a block that does not overflow, is handed back so the timeline and pager still work.
- * Touches that do not start on a nested scroller are untouched.
+ * Claim in `dispatchTouchEvent` (an OnTouchListener never sees ACTION_DOWN: the child TextView
+ * consumes it), only once the drag has a direction and only while the view can scroll that way.
+ * Claiming on ACTION_DOWN would cancel the panel swipe even at the block's edge.
  *
  * Applied on install because the patch has to land inside the dependency's native sources. The
  * proper fix belongs upstream; this only holds the line until it ships.
@@ -37,16 +32,9 @@ import kotlin.math.abs
 /**
  * Cohub postinstall patch (scripts/patch-enriched-markdown.mjs). Not upstream.
  *
- * The chat/files pager is a ReactHorizontalScrollView. RN only yields a
- * horizontal drag to another ReactHorizontalScrollView, so a vanilla
- * HorizontalScrollView in a Markdown code block/table never wins — the pager
- * opens instead of scrolling the code.
- *
- * Claim in dispatchTouchEvent (OnTouchListener never sees ACTION_DOWN: the
- * child TextView consumes it). Keep the drag only while this view can actually
- * scroll that way; a vertical drag, or a horizontal drag at the edge, is
- * handed back so the timeline and pager still work. Nested scrolling is off
- * so leftover motion cannot also drag the pager.
+ * Claims the drag once it has a direction and only while this view can scroll
+ * that way; claiming on ACTION_DOWN would cancel the panel swipe at the edge.
+ * Nested scrolling is off so leftover motion cannot drag an ancestor.
  */
 internal class NestedHorizontalScrollView(context: Context) : HorizontalScrollView(context) {
   private var downX = 0f
@@ -62,9 +50,6 @@ internal class NestedHorizontalScrollView(context: Context) : HorizontalScrollVi
       MotionEvent.ACTION_DOWN -> {
         downX = event.rawX
         downY = event.rawY
-        if (canScrollHorizontally(1) || canScrollHorizontally(-1)) {
-          parent?.requestDisallowInterceptTouchEvent(true)
-        }
       }
       MotionEvent.ACTION_MOVE -> {
         val dx = event.rawX - downX

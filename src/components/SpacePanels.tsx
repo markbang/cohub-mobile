@@ -4,8 +4,9 @@ import type { CohubClient, SpaceFsEntry, UserSessionListItem } from "@neta-art/c
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions, type GestureResponderEvent } from "react-native";
-import Reanimated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Reanimated, { cancelAnimation, Extrapolation, interpolate, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, ReduceMotion } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionSearchRow } from "@/src/components/SearchResultRow";
@@ -27,7 +28,7 @@ import {
   type SessionLabel,
   type SessionSourceGroup,
 } from "@/src/data/session-labels";
-import { isPagerHeaderTouch, panelForScrollOffset, type PanelName } from "@/src/data/space-panel-pager";
+import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, type PanelName } from "@/src/data/space-panel-pager";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { AppIcon, Avatar, IconButton, PrimaryButton, SearchField, TopBar } from "@/src/ui";
@@ -52,25 +53,22 @@ type SpacePanelsProps = {
 
 const PANEL_WIDTH_RATIO = 0.86;
 const MAX_PANEL_WIDTH = 360;
-/** Time without scroll events before the pager commits to its nearest page. */
-const PANEL_SCROLL_IDLE_MS = 140;
 /** A programmatic close has no drag-end event; give the native scroll animation time to land. */
 const PANEL_CLOSE_SETTLE_MS = 380;
 /** The seed needs one native scroll event; re-issue the scroll, then force-complete the seed. */
 const PANEL_SEED_RETRY_MS = 240;
 const PANEL_SEED_FORCE_MS = 480;
 
+type SwipePhase = "idle" | "dragging" | "released" | "settled";
+
+const PANEL_SWIPE_SPRING = { duration: 300, dampingRatio: 1, overshootClamping: true } as const;
+
 /**
- * Push-style pager. The Chats/Files gesture is a native horizontal scroll, which is also the
- * only arbitration Android gives us: the ScrollView intercepts a horizontal drag and the text
- * underneath receives ACTION_CANCEL (so a long press never turns into a selection mid-swipe),
- * while a text selection keeps precedence because the native text view sets
- * FLAG_DISALLOW_INTERCEPT, which disables that interception.
- *
- * Markdown code blocks (and tables) are a nested HorizontalScrollView. RN's pager only yields
- * to another ReactHorizontalScrollView, so those blocks claim or release the drag themselves
- * (see scripts/patch-enriched-markdown.mjs). Do not disable the pager for a whole message just
- * because the markdown contains a fence — that blocks the panel swipe on almost every reply.
+ * Push-style pager. The native ScrollView never drags itself: it would intercept any drag past
+ * its slop, however slanted. A pan that only activates near horizontal drives it instead.
+ * Native views that claim the touch (scrolling timeline, text selection, scrollable code blocks;
+ * see scripts/patch-enriched-markdown.mjs) cancel the pan. Do not disable the pager for messages
+ * containing a fence — that blocks the swipe on almost every reply.
  */
 export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {
   const theme = useAppTheme();
@@ -82,18 +80,15 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
   const centerOffset = panelWidth;
   // The right panel aligns to the viewport's right edge, not its left edge.
   const filesOffset = 2 * panelWidth;
-  const snapOffsets = useMemo(() => [0, centerOffset, filesOffset], [centerOffset, filesOffset]);
-  const pagerRef = useRef<ScrollView>(null);
+  const pagerRef = useAnimatedRef<Reanimated.ScrollView>();
   const scrollOffset = useSharedValue(centerOffset);
   const scrim = useSharedValue(activePanel ? 1 : 0);
   const shownPanel = useSharedValue<PanelName | 0>(activePanel ?? 0);
-  const [pagerScrollEnabled, setPagerScrollEnabled] = useState(true);
+  const [pagerSwipeEnabled, setPagerSwipeEnabled] = useState(true);
   const [visiblePanel, setVisiblePanel] = useState<PanelName | null>(activePanel);
   const [interactive, setInteractive] = useState(Boolean(activePanel));
   const visiblePanelRef = useRef<PanelName | null>(activePanel);
   const activePanelRef = useRef<PanelName | null>(activePanel);
-  const headerTouchActiveRef = useRef(false);
-  const chipsTouchActiveRef = useRef(false);
   const pagerHeaderTouchHeight = (edgeToEdge ? insets.top : 0) + edgeChrome.headerMinHeight;
   const layoutRef = useRef({ width: 0, height: 0, contentWidth: 0 });
   const [pagerReady, setPagerReady] = useState(false);
@@ -106,6 +101,11 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
   const pagerNativeX = useSharedValue(0);
   const pagerObserved = useSharedValue(false);
   const seedFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Only changes during a swipe; negative until then so mounting does not scroll.
+  const swipeOffset = useSharedValue(-1);
+  const swipeOrigin = useSharedValue(0);
+  const swipeStart = useSharedValue(0);
+  const swipePhase = useSharedValue<SwipePhase>("idle");
 
   const clearSeedFallback = useCallback(() => {
     if (seedFallbackRef.current === null) return;
@@ -139,7 +139,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
     };
     tick(0);
     // State setters are stable identities and stay out of the dependency list.
-  }, [clearSeedFallback, pagerSeed, pagerTarget]);
+  }, [clearSeedFallback, pagerRef, pagerSeed, pagerTarget]);
 
   const seedPager = useCallback(() => {
     if (pagerSeed.get() === 0) return;
@@ -160,7 +160,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
       return;
     }
     armSeedFallback(target);
-  }, [armSeedFallback, centerOffset, filesOffset, pagerLayoutReady, pagerNativeX, pagerObserved, pagerSeed, pagerTarget, panelWidth, width]);
+  }, [armSeedFallback, centerOffset, filesOffset, pagerLayoutReady, pagerNativeX, pagerObserved, pagerRef, pagerSeed, pagerTarget, panelWidth, width]);
 
   const acknowledgeSeed = useCallback((offset: number) => {
     if (pagerSeed.get() !== 0 || Math.abs(pagerTarget.get() - offset) > 1) return;
@@ -208,13 +208,9 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
     else commitClosed();
   }, [centerOffset, clearIdleTimer, commitClosed, commitOpen, filesOffset, pagerSeed, scrollOffset]);
 
-  const scheduleSettle = useCallback(() => {
-    clearIdleTimer();
-    idleTimer.current = setTimeout(settle, PANEL_SCROLL_IDLE_MS);
-  }, [clearIdleTimer, settle]);
-
   const closePanel = useCallback(() => {
     clearIdleTimer();
+    cancelAnimation(swipeOffset);
     pagerTarget.set(centerOffset);
     if (pagerSeed.get() !== 0) {
       commitClosed();
@@ -226,7 +222,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
       pagerRef.current?.scrollTo({ x: centerOffset, animated: true });
       idleTimer.current = setTimeout(settle, PANEL_CLOSE_SETTLE_MS);
     }
-  }, [centerOffset, clearIdleTimer, commitClosed, onActivePanelChange, pagerSeed, pagerTarget, scrim, seedPager, settle]);
+  }, [centerOffset, clearIdleTimer, commitClosed, onActivePanelChange, pagerSeed, pagerTarget, pagerRef, scrim, seedPager, settle, swipeOffset]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -277,52 +273,63 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
     setInteractive(Boolean(activePanel));
     shownPanel.set(activePanel ?? 0);
     clearIdleTimer();
+    cancelAnimation(swipeOffset);
     const target = activePanel === "chat" ? 0 : activePanel === "files" ? filesOffset : centerOffset;
     pagerTarget.set(target);
     if (pagerSeed.get() !== 0) seedPager();
     else pagerRef.current?.scrollTo({ x: target, animated: true });
-  }, [activePanel, centerOffset, clearIdleTimer, filesOffset, pagerSeed, pagerTarget, seedPager, shownPanel]);
+  }, [activePanel, centerOffset, clearIdleTimer, filesOffset, pagerRef, pagerSeed, pagerTarget, seedPager, shownPanel, swipeOffset]);
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.value * 0.52 }));
   const pagerPaintStyle = useAnimatedStyle(() => {
     if (pagerSeed.value === 0) return { transform: [{ translateX: 0 }] };
     return { transform: [{ translateX: pagerNativeX.value - pagerTarget.value }] };
   });
-  const handleScrollBeginDrag = useCallback(() => {
-    recordDebugEvent("navigation.pager.drag_begin", { pagerReady, pagerScrollEnabled });
+  const handleSwipeBegin = useCallback(() => {
+    recordDebugEvent("navigation.pager.drag_begin", { pagerReady, pagerSwipeEnabled });
     clearIdleTimer();
-  }, [clearIdleTimer, pagerReady, pagerScrollEnabled]);
-  const handleScrollEndDrag = useCallback(() => {
-    recordDebugEvent("navigation.pager.drag_end", { pagerReady, pagerScrollEnabled });
-    scheduleSettle();
-  }, [pagerReady, pagerScrollEnabled, scheduleSettle]);
-
-  const handlePagerTouchStart = useCallback((event: GestureResponderEvent) => {
-    // The pager is a native horizontal responder. Lock it for top chrome touches so iOS's
-    // edge-back gesture and the header's Pressables do not get cancelled by the pager.
-    if (!isPagerHeaderTouch(event.nativeEvent.locationY, pagerHeaderTouchHeight)) return;
-    headerTouchActiveRef.current = true;
-    recordDebugEvent("navigation.pager.header_touch_start", {
-      locationY: event.nativeEvent.locationY,
-      headerHeight: pagerHeaderTouchHeight,
-      pagerReady,
-      pagerScrollEnabled,
-    });
-    setPagerScrollEnabled(false);
-  }, [pagerHeaderTouchHeight, pagerReady, pagerScrollEnabled]);
-  const releasePagerHeaderTouch = useCallback((phase: "end" | "cancel") => {
-    if (!headerTouchActiveRef.current) return;
-    headerTouchActiveRef.current = false;
-    recordDebugEvent(`navigation.pager.header_touch_${phase}`, { pagerReady, pagerScrollEnabled });
-    setPagerScrollEnabled(!chipsTouchActiveRef.current);
-  }, [pagerReady, pagerScrollEnabled]);
-  const handlePagerTouchEnd = useCallback(() => { releasePagerHeaderTouch("end"); }, [releasePagerHeaderTouch]);
-  const handlePagerTouchCancel = useCallback(() => { releasePagerHeaderTouch("cancel"); }, [releasePagerHeaderTouch]);
+  }, [clearIdleTimer, pagerReady, pagerSwipeEnabled]);
+  const handleSwipeEnd = useCallback(() => {
+    recordDebugEvent("navigation.pager.drag_end", { pagerReady, pagerSwipeEnabled });
+  }, [pagerReady, pagerSwipeEnabled]);
+  useAnimatedReaction(() => swipeOffset.get(), (offset) => {
+    if (offset >= 0) scrollTo(pagerRef, offset, 0, false);
+  }, [pagerRef, swipeOffset]);
+  useAnimatedReaction(() => swipePhase.get(), (phase, previous) => {
+    if (phase === previous) return;
+    if (phase === "dragging") scheduleOnRN(handleSwipeBegin);
+    else if (phase === "released") scheduleOnRN(handleSwipeEnd);
+    else if (phase === "settled") scheduleOnRN(settle);
+  }, [handleSwipeBegin, handleSwipeEnd, settle, swipePhase]);
+  const swipe = useMemo(() => Gesture.Pan()
+    .enabled(pagerReady && pagerSwipeEnabled)
+    .activeOffsetX([-PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_ACTIVATION_PX])
+    .failOffsetY([-PANEL_SWIPE_VERTICAL_SLOP_PX, PANEL_SWIPE_VERTICAL_SLOP_PX])
+    // Keep the header for the back button and iOS edge-back.
+    .hitSlop({ top: -pagerHeaderTouchHeight })
+    .onStart((event) => {
+      // Continue from the current offset without jumping by the activation travel.
+      cancelAnimation(swipeOffset);
+      swipeOffset.set(scrollOffset.get());
+      swipeStart.set(scrollOffset.get());
+      swipeOrigin.set(scrollOffset.get() + event.translationX);
+      swipePhase.set("dragging");
+    })
+    .onUpdate((event) => {
+      swipeOffset.set(Math.min(filesOffset, Math.max(0, swipeOrigin.get() - event.translationX)));
+    })
+    .onEnd((event) => {
+      const offset = Math.min(filesOffset, Math.max(0, swipeOrigin.get() - event.translationX));
+      const target = panelSwipeTarget(swipeStart.get(), offset, event.velocityX, panelWidth);
+      swipeOffset.set(withSpring(target, { ...PANEL_SWIPE_SPRING, velocity: -event.velocityX, reduceMotion: ReduceMotion.System }, (finished) => {
+        if (!finished) return;
+        scrollOffset.set(target);
+        swipePhase.set("settled");
+      }));
+      swipePhase.set("released");
+    }), [filesOffset, pagerHeaderTouchHeight, pagerReady, pagerSwipeEnabled, panelWidth, scrollOffset, swipeOffset, swipeOrigin, swipePhase, swipeStart]);
   const handleChipsTouchChange = useCallback((touching: boolean) => {
-    // The filter chips are a nested horizontal ScrollView; it only wins its drag while the
-    // pager is not scrolling, so touch-start there disables the pager for this gesture.
-    chipsTouchActiveRef.current = touching;
-    setPagerScrollEnabled(!touching && !headerTouchActiveRef.current);
+    setPagerSwipeEnabled(!touching);
   }, []);
 
   const pageStyle = (panel: PanelName) => [
@@ -339,6 +346,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
 
   return (
     <View style={[styles.nativeRoot, { backgroundColor: theme.colors.background }]} collapsable={false}>
+      <GestureDetector gesture={swipe}>
       <Reanimated.ScrollView
         ref={pagerRef}
         horizontal
@@ -348,16 +356,8 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
         bounces={false}
         overScrollMode="never"
         scrollEventThrottle={16}
-        scrollEnabled={pagerReady && pagerScrollEnabled}
-        snapToOffsets={snapOffsets}
-        decelerationRate="fast"
-        disableIntervalMomentum
+        scrollEnabled={false}
         onScroll={scrollHandler}
-        onTouchStart={handlePagerTouchStart}
-        onTouchEnd={handlePagerTouchEnd}
-        onTouchCancel={handlePagerTouchCancel}
-        onScrollBeginDrag={handleScrollBeginDrag}
-        onScrollEndDrag={handleScrollEndDrag}
         onMomentumScrollBegin={clearIdleTimer}
         onMomentumScrollEnd={settle}
         onLayout={({ nativeEvent: { layout } }) => {
@@ -400,6 +400,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
           </View>
         </Reanimated.View>
       </Reanimated.ScrollView>
+      </GestureDetector>
     </View>
   );
 }
