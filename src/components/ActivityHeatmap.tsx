@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Text, View } from "react-native";
 import type { SpaceUsageHourlyStat } from "@neta-art/cohub";
-import { useAppTheme, typography } from "@/src/theme";
+import { colorWithOpacity, useAppTheme, typography } from "@/src/theme";
 import { localDateKey } from "@/src/data/activity";
 import { useTranslation } from "@/src/i18n";
 
@@ -71,12 +71,11 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({ hourly, days }: H
     if (isEmpty) return "transparent";
     if (intensity === 0) return theme.colors.border;
     
-    // GitHub-style color scale with better contrast
-    if (intensity < 0.25) return `${theme.colors.accent}33`; // 20%
-    if (intensity < 0.5) return `${theme.colors.accent}66`;  // 40%
-    if (intensity < 0.75) return `${theme.colors.accent}99`; // 60%
-    if (intensity < 0.9) return `${theme.colors.accent}cc`;  // 80%
-    return theme.colors.accent; // 100%
+    if (intensity < 0.25) return colorWithOpacity(theme.colors.accent, 0.2);
+    if (intensity < 0.5) return colorWithOpacity(theme.colors.accent, 0.4);
+    if (intensity < 0.75) return colorWithOpacity(theme.colors.accent, 0.6);
+    if (intensity < 0.9) return colorWithOpacity(theme.colors.accent, 0.8);
+    return theme.colors.accent;
   };
 
   const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: "short" });

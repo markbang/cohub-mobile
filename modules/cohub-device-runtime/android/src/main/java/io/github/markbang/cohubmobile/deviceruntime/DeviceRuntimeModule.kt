@@ -139,6 +139,12 @@ class DeviceRuntimeModule : Module() {
 
         Function("hasStorageAccess") { deviceRuntime.hasStorageAccess() }
 
+        Function("isControlKeepAliveEnabled") { deviceRuntime.controlKeepAliveEnabled.value }
+
+        Function("setControlKeepAliveEnabled") { enabled: Boolean ->
+            deviceRuntime.setControlKeepAliveEnabled(enabled)
+        }
+
         AsyncFunction("requestStorageAccess") { promise: Promise ->
             if (deviceRuntime.hasStorageAccess()) return@AsyncFunction promise.resolve(true)
             val activity = appContext.currentActivity ?: throw Exceptions.MissingActivity()

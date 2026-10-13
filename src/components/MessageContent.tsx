@@ -432,7 +432,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   const inputTokens = inputTokenValue > 0 ? formatTokenCount(inputTokenValue) : null;
   const outputTokens = typeof message.usage?.output === "number" && Number.isFinite(message.usage.output) && message.usage.output > 0 ? formatTokenCount(message.usage.output) : null;
   const side = isUser ? "user" : "assistant";
-  const textColor = isUser ? theme.colors.userBubbleText : undefined;
+  const textColor = isUser ? theme.colors.userBubbleText : theme.colors.assistantBubbleText;
   const copyText = messageText(message);
   const maxWidth = getBubbleMaxWidth(availableWidth ?? width);
   const clock = formatMessageClock(message.createdAt);

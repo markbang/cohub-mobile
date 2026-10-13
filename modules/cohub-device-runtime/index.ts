@@ -44,6 +44,9 @@ declare class CohubDeviceRuntimeModule extends NativeModule<DeviceRuntimeEvents>
   /** Android 11+ with the bundled sandboxd for this ABI. */
   isAvailable(): boolean;
   hasStorageAccess(): boolean;
+  isControlKeepAliveEnabled(): boolean;
+  /** Persists and applies idle Accessibility foreground keep-alive; active Runtimes still require a notification. */
+  setControlKeepAliveEnabled(enabled: boolean): void;
   /** Opens the All files access page and resolves with the result when the user returns. */
   requestStorageAccess(): Promise<boolean>;
   configure(account: string, gatewayOrigin: string): void;

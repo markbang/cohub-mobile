@@ -42,6 +42,75 @@ The app uses native screens for Chats, Spaces, Activity, Profile, session timeli
 - Android screen sharing: share this phone's screen with a Space it serves so people can watch and steer it from the web and agents can use it; control needs Cohub enabled in Accessibility
 - Native Logto PKCE, `cohub://` deep links, notification tap routing, APNs/FCM token acquisition, and GitHub-native build profiles
 
+## Deployment endpoints
+
+The login screen can select production or development and remembers the choice. `EXPO_PUBLIC_COHUB_ENV`
+sets the build-time default; optional endpoint overrides are documented in `.env.example`.
+
+| Environment | API | Gateway |
+|-------------|-----|---------|
+| Production | `https://capi.neta.art` | `wss://cgateway.neta.art/ws` |
+| Development | `https://capi-dev.neta.art` | `wss://cgateway-dev.neta.art/ws` |
+
+These accelerated origins serve the same deployments. Authentication endpoints, Logto App IDs, the
+OAuth resource identifier (`https://api.talesofai`), and public/deep-link origins are unchanged.
+
+## Android device Runtime policy
+
+The Android module owns system services, permissions, and their required notifications. Product policy
+is set through `src/platform/device-runtime.ts`, not hardcoded into service lifecycle callbacks.
+
+- `setDeviceControlKeepAliveEnabled(boolean)` persists and applies optional foreground keep-alive
+  while Accessibility is enabled and no Space is connected. `isDeviceControlKeepAliveEnabled()` reads
+  the current native value. Both require a supported Android device Runtime.
+- JS startup currently sets this policy to `false`, including before sign-in. Native defaults to
+  `false` and retains the last configured value across process restarts, so Accessibility can start
+  without JS. This is device-wide policy, not account data; sign-out does not change it.
+- Disabling it leaves Accessibility enabled and removes the idle foreground notification. Connected
+  Spaces and screen sharing still keep their required foreground service and notification. Optional
+  keep-alive improves process priority but cannot guarantee survival on every Android ROM.
+- After installing a native build containing this interface, changing the JS startup value or wiring
+  these methods to a setting can ship through a compatible OTA. The value changes when that JS runs;
+  downloading an OTA alone does not update native preferences. New permissions, system capabilities,
+  dependencies, and native implementation fixes still require a new APK.
+
+## Config Space colors
+
+The mobile app follows the signed-in user's global Config Space, resolved with the SDK's
+`spaces.getOwnedBySlug("config")`. Its `.cohub/theme.css` overrides the existing mobile palette across
+screens; it does not use the currently open Space or hardcode a Space ID. Settings > Appearance has
+an enable switch, a refresh action, and load/error/partial-support states. Custom colors take
+precedence over pure-black surfaces; switching custom colors off restores the native palette.
+
+Supported root selectors are `:root`, `html`, `*`, `[data-theme]`, and `[data-theme="light"/"dark"]`,
+including compound selectors and `:where()`, `:is()`, and `:not()` over those selectors. Source order,
+specificity, `!important`, and `prefers-color-scheme` media queries are respected (the queries use the
+app's selected light/dark mode). The supported
+colors include hex, named colors, RGB/HSL/HWB, Lab/LCH/OKLab/OKLCH, CSS `color()` spaces,
+`light-dark()`, nested `var()` with defaults, and `color-mix()` with transparency and hue interpolation.
+Colors are converted to native sRGB. CSS neutral/brand scales feed their semantic roles; references
+to unchanged base variables use the mobile palette rather than reproducing a web preset exactly.
+
+Mapped tokens cover `--bg-primary`, `--bg-content`, `--bg-surface`, `--bg-elevated`, `--bg-active`,
+`--text-primary/secondary/tertiary/placeholder`, borders, `--brand` and its states/contrast,
+`--success/warning/error/info-*`, `--error-fg`, overlay-control color, shadow color, and
+`--chat-user-message-bg/fg` / `--chat-assistant-message-bg/fg`. Mobile also recognizes
+`--chat-user-message-link`, `--chat-user-message-code-bg`, and `--chat-user-message-meta`.
+Dependent bubble and status colors update when their shared semantic colors change.
+
+CSS layout, component selectors, fonts, arbitrary at-rules, imports, URLs as colors, `calc()`,
+relative color expressions, and non-color styling are not executed. Unsupported mapped colors
+keep their native values and produce a warning; invalid stylesheets keep the last valid theme.
+Files are limited to 256 KiB. Inline UTF-8/base64 and SDK-provided HTTPS download delivery are
+supported without forwarding credentials. The user-scoped SQLite cache renders first and the
+server reconciles it; foreground/reconnect, watched Config file events, and periodic foreground
+refreshes revalidate it. File deletion or access rejection removes cached colors. Sign-out/account
+changes dispose the old reader, clear its cache, and prevent late results from applying.
+
+This is JS-only behavior, including its two runtime dependencies (`css-tree` and `culori`); no new
+native module or permissions are required. OTA publication must still pass the repository's native
+fingerprint compatibility check.
+
 ## Thanks
 
 [Cohub](https://github.com/talesofai/cohub)

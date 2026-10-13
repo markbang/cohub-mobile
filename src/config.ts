@@ -39,14 +39,14 @@ const environmentDefaults: Record<
   { apiOrigin: string; gatewayOrigin: string; authEndpoint: string; logtoAppId: string }
 > = {
   dev: {
-    apiOrigin: "https://api-dev.cohub.live",
-    gatewayOrigin: "wss://gateway-dev.cohub.live/ws",
+    apiOrigin: "https://capi-dev.neta.art",
+    gatewayOrigin: "wss://cgateway-dev.neta.art/ws",
     authEndpoint: "https://dev-auth.neta.art/",
     logtoAppId: "vpikk7sl9zwvefiptowtn",
   },
   prod: {
-    apiOrigin: "https://api.cohub.live",
-    gatewayOrigin: "wss://gateway.cohub.live/ws",
+    apiOrigin: "https://capi.neta.art",
+    gatewayOrigin: "wss://cgateway.neta.art/ws",
     authEndpoint: "https://auth.neta.art/",
     logtoAppId: "16ai0wao2mud3xqkbzqo0",
   },

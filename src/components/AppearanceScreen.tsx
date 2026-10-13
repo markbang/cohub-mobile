@@ -1,7 +1,12 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
+import { useApp } from "@/src/data/context";
 import { Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  getAppThemeColors,
+  setCustomThemeEnabled,
+  useCustomThemeState,
   setFontScalePreference,
   setPureBlackPreference,
   setThemePreference,
@@ -57,6 +62,11 @@ export function AppearanceContent() {
   const preference = useThemePreference();
   const pureBlack = usePureBlackPreference();
   const fontScalePreference = useFontScalePreference();
+  const customTheme = useCustomThemeState();
+  const { sync } = useApp();
+  const [savingCustomTheme, setSavingCustomTheme] = useState(false);
+  const customStatus = customTheme.loading ? "appearance.custom.loading"
+    : customTheme.css === null ? "appearance.custom.empty" : "appearance.custom.body";
   const { width } = useWindowDimensions();
   const previewWidth = Math.max(108, Math.min(124, (width - 48) / 3.05));
 
@@ -115,6 +125,41 @@ export function AppearanceContent() {
           );
         })}
       </ScrollView>
+
+      <View style={[styles.group, { marginTop: 16, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.settingRow, { borderBottomColor: theme.colors.border }]}>
+          <View style={[styles.settingIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
+            <AppIcon name="palette" size={17} color={theme.colors.textMuted} />
+          </View>
+          <View style={styles.settingText}>
+            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("appearance.custom.title")}</Text>
+            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{t(customStatus)}</Text>
+          </View>
+          <Switch
+            accessibilityLabel={t("appearance.custom.title")}
+            value={customTheme.enabled}
+            disabled={savingCustomTheme}
+            onValueChange={(value) => {
+              setSavingCustomTheme(true);
+              void setCustomThemeEnabled(value).catch(() => undefined).finally(() => setSavingCustomTheme(false));
+            }}
+            trackColor={{ false: theme.colors.borderStrong, true: theme.colors.accentBorder }}
+            thumbColor={customTheme.enabled ? theme.colors.accent : theme.colors.textFaint}
+            ios_backgroundColor={theme.colors.borderStrong}
+          />
+        </View>
+        {customTheme.error || customTheme.warnings.length ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+            <Text accessibilityRole="alert" selectable style={[typography.caption, { color: theme.colors.danger }]}>
+              {customTheme.error ?? t("appearance.custom.partial")}
+            </Text>
+            {customTheme.warnings.length ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>{customTheme.warnings.join("\n")}</Text> : null}
+          </View>
+        ) : null}
+        <Pressable accessibilityRole="button" onPress={() => sync.invalidate("config-theme")} style={({ pressed }) => ({ padding: 16, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
+          <Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>{t("appearance.custom.refresh")}</Text>
+        </Pressable>
+      </View>
 
       <View style={[styles.group, { marginTop: 16, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={[styles.settingRow, { borderBottomColor: theme.colors.border }]}>
@@ -197,11 +242,7 @@ function appliedModeLabel(mode: AppTheme["mode"], pureBlack: boolean, t: (key: T
 
 function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: { label: string; mode: "light" | "dark"; pureBlack: boolean; selected: boolean; width: number; onPress: () => void }) {
   const theme = useAppTheme();
-  const colors: PreviewColors = mode === "light"
-    ? { background: "#f7f7f5", surface: "#ffffff", surfaceRaised: "#eceeea", border: "#d9ddd7", accent: "#b85427", text: "#1d2024", textMuted: "#68717a" }
-    : pureBlack
-      ? { background: "#000000", surface: "#070809", surfaceRaised: "#15171a", border: "#25292f", accent: "#f08349", text: "#f7f8fa", textMuted: "#a2aab6" }
-      : { background: "#0f1114", surface: "#171a1f", surfaceRaised: "#22262e", border: "#2d333c", accent: "#f08349", text: "#f7f8fa", textMuted: "#a2aab6" };
+  const colors: PreviewColors = getAppThemeColors(mode, pureBlack);
   return (
     <View style={{ width }}>
       <Pressable

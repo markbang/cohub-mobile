@@ -25,11 +25,12 @@ class ControlService : AccessibilityService() {
     override fun onServiceConnected() {
         attachKeepAlive()
         DisplayControl.connected(this)
+        val runtime = DeviceRuntime.get(applicationContext)
+        if (runtime.shouldKeepControlAlive()) {
+            runCatching { runtime.resume() }
+                .onFailure { Log.w(TAG, "Control could not start the configured keep-alive service", it) }
+        }
         Log.i(TAG, "Control connected on pid ${android.os.Process.myPid()}, keep-alive ${if (keepAlive != null) "attached" else "missing"}")
-        // Raise the Runtime's foreground service, which keeps this process in the foreground while
-        // control is on, even with no Space connected.
-        runCatching { DeviceRuntime.get(applicationContext).resume() }
-            .onFailure { Log.w(TAG, "Control could not raise the Runtime service", it) }
     }
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {

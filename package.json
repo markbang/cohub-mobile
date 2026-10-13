@@ -10,6 +10,8 @@
     "@react-native-async-storage/async-storage": "~2.2.0",
     "@shikijs/langs": "^4.4.3",
     "@shikijs/themes": "^4.4.3",
+    "css-tree": "^3.2.1",
+    "culori": "^4.0.2",
     "expo": "~57.0.23",
     "expo-application": "~57.0.3",
     "expo-asset": "~57.0.17",
@@ -52,6 +54,8 @@
     "unicode-segmenter": "^0.17.3"
   },
   "devDependencies": {
+    "@types/css-tree": "^2.3.11",
+    "@types/culori": "^4.0.1",
     "@types/react": "~19.2.2",
     "eslint": "9.39.5",
     "eslint-config-expo": "~57.0.2",

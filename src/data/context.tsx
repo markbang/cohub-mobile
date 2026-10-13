@@ -19,6 +19,7 @@ import { config } from "@/src/config";
 import { createMobileClient } from "@/src/data/client";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
+import { useConfigTheme } from "@/src/data/use-config-theme";
 import { useSpaceListData } from "@/src/data/use-space-list";
 import { listAllSpaces } from "@/src/data/space-list";
 import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-scheduler";
@@ -1446,6 +1447,8 @@ export function AppProvider({
     error: (message) => dispatch({ type: "realtime-error", message }),
   }) : null, [client, dispatch, handleSpaceEvent]);
 
+  const clearConfigTheme = useConfigTheme(client, userKey, sync, spaceRealtime);
+
   useEffect(() => {
     if (!spaceRealtime) return;
     spaceRealtime.setActive(NativeAppState.currentState === "active");
@@ -2230,6 +2233,7 @@ export function AppProvider({
     statusSessionsRef.current.clear();
     resetSpaceList();
     clearSlashCommandCache();
+    await clearConfigTheme();
     await clearUserCache(userKey);
     setModels([]);
     setModelsError(null);
@@ -2240,7 +2244,7 @@ export function AppProvider({
     spacePinMutationVersionsRef.current.clear();
     spacePinPendingMutationsRef.current.clear();
     setState({ ...initialState, booting: false, refreshing: false });
-  }, [resetSpaceList, userKey]);
+  }, [clearConfigTheme, resetSpaceList, userKey]);
 
   const activityItems = useMemo<ActivityItem[]>(() => {
     return state.sessions.slice(0, 30).flatMap((session) => {

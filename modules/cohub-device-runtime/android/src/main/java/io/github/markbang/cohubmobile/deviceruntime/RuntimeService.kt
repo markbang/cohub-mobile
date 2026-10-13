@@ -81,20 +81,22 @@ class RuntimeService : Service() {
         }
         if (share != null) startSharing(share)
         if (watching == null) {
-            watching = scope.launch(Dispatchers.Main.immediate) { runtime.enabled.collect(::reconcile) }
-            scope.launch {
-                combine(runtime.instances, runtime.display.status) { instances, display -> instances to display }
+            watching = scope.launch(Dispatchers.Main.immediate) {
+                combine(runtime.enabled, runtime.controlKeepAliveEnabled, DisplayControl.service) { wanted, _, _ -> wanted }
+                    .collect(::reconcile)
+            }
+            scope.launch(Dispatchers.Main.immediate) {
+                combine(runtime.instances, runtime.display.status, runtime.controlKeepAliveEnabled) { instances, display, _ -> instances to display }
                     .collect { (instances, display) -> showNotification(instances, display) }
             }
-            // Screen control outlives a disconnected Space: the accessibility service keeps the
-            // Runtime ready, and a process in the foreground is far less likely to be killed or
-            // force-stopped by the system when its task is swiped away. A force stop would turn the
-            // user's accessibility switch off in system settings.
-            scope.launch(Dispatchers.Main.immediate) { DisplayControl.service.collect { reconcile(runtime.enabled.value) } }
             // Drop the media projection type once sharing ends, keeping the folders connected.
             scope.launch(Dispatchers.Main.immediate) {
                 runtime.display.status.map { it.sharedWith != null }.distinctUntilChanged().drop(1)
-                    .collect { projecting -> if (!projecting) enterForeground(projecting = false) }
+                    .collect { projecting ->
+                        if (!projecting && (runtime.instances.value.any { it.running } || runtime.shouldKeepControlAlive())) {
+                            enterForeground(projecting = false)
+                        }
+                    }
             }
         }
         // Tokens come from the running app, so a process the system restarts without it could not
@@ -158,10 +160,9 @@ class RuntimeService : Service() {
         if (!serving) {
             sessions.values.forEach { it.job.cancel() }
             sessions.clear()
-            // Screen control alone keeps the service up, so the process stays in the foreground; a
-            // force stop would switch the user's accessibility service off in system settings.
-            if (DisplayControl.service.value != null) enterForeground(runtime.display.status.value.sharedWith != null)
-            else {
+            if (runtime.shouldKeepControlAlive()) {
+                enterForeground(projecting = false)
+            } else {
                 ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -233,7 +234,7 @@ class RuntimeService : Service() {
     }
 
     private fun showNotification(instances: List<RuntimeInstance>, display: DisplayStatus) {
-        if (instances.none { it.running } && DisplayControl.service.value == null) return
+        if (runtime.instances.value.none { it.running } && !runtime.shouldKeepControlAlive()) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(instances, display))
     }
 
@@ -244,7 +245,7 @@ class RuntimeService : Service() {
             sharing && display.control -> getString(R.string.cohub_display_sharing_control)
             sharing -> getString(R.string.cohub_display_sharing)
             ready > 0 -> resources.getQuantityString(R.plurals.cohub_runtime_ready, ready, ready)
-            display.control -> getString(R.string.cohub_display_control_only)
+            runtime.shouldKeepControlAlive() -> getString(R.string.cohub_display_control_only)
             else -> getString(R.string.cohub_runtime_connecting)
         }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -260,7 +261,6 @@ class RuntimeService : Service() {
             )
             builder.addAction(0, getString(R.string.cohub_display_stop), stopSharing)
         }
-        // While only screen control keeps the service up, there is nothing to disconnect.
         if (instances.any { it.running }) {
             val stop = PendingIntent.getService(
                 this, 1, Intent(this, RuntimeService::class.java).setAction(ACTION_STOP_ALL), PendingIntent.FLAG_IMMUTABLE,

@@ -8,6 +8,7 @@ import android.os.storage.StorageManager
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import io.github.markbang.cohubmobile.deviceruntime.display.DeviceDisplay
+import io.github.markbang.cohubmobile.deviceruntime.display.DisplayControl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -101,6 +102,7 @@ class DeviceRuntime private constructor(private val context: Context) {
     private var account: String? = null
     private val snapshot = MutableStateFlow<List<RuntimeInstance>>(emptyList())
     private val enabledBindings = MutableStateFlow<List<Binding>>(emptyList())
+    private val controlKeepAlive = MutableStateFlow(prefs.getBoolean(KEY_CONTROL_KEEP_ALIVE, false))
 
     val tokens = AccessTokens()
 
@@ -115,6 +117,20 @@ class DeviceRuntime private constructor(private val context: Context) {
     val instances: StateFlow<List<RuntimeInstance>> = snapshot.asStateFlow()
 
     internal val enabled: StateFlow<List<Binding>> = enabledBindings.asStateFlow()
+
+    val controlKeepAliveEnabled: StateFlow<Boolean> = controlKeepAlive.asStateFlow()
+
+    /** Device-wide policy, retained when Accessibility starts without JS or a signed-in account. */
+    fun setControlKeepAliveEnabled(enabled: Boolean) {
+        synchronized(lock) {
+            prefs.edit { putBoolean(KEY_CONTROL_KEEP_ALIVE, enabled) }
+            controlKeepAlive.value = enabled
+        }
+        if (enabled) resume()
+    }
+
+    internal fun shouldKeepControlAlive(): Boolean =
+        controlKeepAlive.value && DisplayControl.service.value != null
 
     val available: Boolean
         get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && bridgeBinary.canExecute()
@@ -190,14 +206,10 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     fun serving(spaceId: String): Boolean = instances.value.any { it.spaceId == spaceId && it.running }
 
-    /**
-     * Reconnects folders the user never disconnected, e.g. after the process was killed, and keeps
-     * the foreground service up while screen control is on, so the system is less likely to stop this
-     * process (a force stop would switch the user's accessibility service off in system settings).
-     */
+    /** Reconnects folders the user never disconnected, e.g. after the process was killed. */
     fun resume() {
         val wanted = synchronized(lock) { account != null && enabledBindings.value.isNotEmpty() }
-        if (available && ((wanted && hasStorageAccess()) || display.status.value.control)) launchService()
+        if (available && ((wanted && hasStorageAccess()) || shouldKeepControlAlive())) launchService()
     }
 
     fun stop(spaceId: String) {
@@ -299,6 +311,7 @@ class DeviceRuntime private constructor(private val context: Context) {
     companion object {
         private const val PREFS = "cohub-device-runtime"
         private const val KEY_BINDINGS = "bindings"
+        private const val KEY_CONTROL_KEEP_ALIVE = "control-keep-alive"
         private const val MAX_FOLDERS = 10_000
         private val PRIVATE = listOf("Android/data", "Android/obb")
 

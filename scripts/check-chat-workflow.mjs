@@ -49,6 +49,8 @@ import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLi
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
 import { androidUpdateApkUrl, selectYaotaAndroidUpdate, validateAndroidUpdateAsset, verifyAndroidUpdateIntegrity } from "../src/data/update-assets.ts";
 import { isSettingsSection, settingsMenu } from "../src/data/settings-navigation.ts";
+import { colorWithOpacity, compileConfigTheme, CONFIG_THEME_PATH, MAX_THEME_CSS_LENGTH } from "../src/data/config-theme.ts";
+import { decode as decodeBase64 } from "js-base64";
 import { parseBrowserPreference } from "../src/data/browser-preference.ts";
 import { channelHealthState, createSettingsChannel, createWeChatLoginPoller, isChannelProvider, missingChannelField } from "../src/data/channel-settings.ts";
 
@@ -382,6 +384,7 @@ const chromeScope = {
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
   StyleSheet: { create: (styles) => styles },
   COMPOSER_TEXT_PADDING,
+  colorWithOpacity,
   edgeChrome: { headerMinHeight: 56, fade: 24 },
   recordDebugEvent: () => {},
   useTranslation: () => ({ t: (key) => key }),
@@ -1082,7 +1085,7 @@ for (const success of ["#238552", "#62c994"]) {
   assert.equal(selected, activityDays[0].date);
   assert.equal(chromeNodes(renderHeatmap({ days: activityDays })).find((node) => node.type === "Pressable").props.accessibilityState.selected, true);
 }
-for (const background of ["#f7f7f5", "#0f1114", "#000000"]) {
+for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
   const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
   let backCount = 0;
@@ -1094,7 +1097,8 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000"]) {
   const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", useAppTheme: () => ({ colors: { background } }) });
   for (const edge of ["top", "bottom"]) {
     const scrim = renderScrim({ edge });
-    assert.deepEqual(scrim.props.colors, [background, `${background}f5`, `${background}b8`, `${background}00`]);
+    assert.deepEqual(scrim.props.colors, [background, colorWithOpacity(background, 245 / 255), colorWithOpacity(background, 184 / 255), colorWithOpacity(background, 0)]);
+    assert.ok(scrim.props.colors.every((color) => /^#[\da-f]{6}(?:[\da-f]{2})?$/.test(color)), "custom alpha colors must not become invalid ten-digit gradient colors");
     assert.equal(scrim.props.pointerEvents, "none", "the fade never intercepts scrolling or button presses");
     assert.equal(scrim.props.start.y, edge === "top" ? 0 : 1);
     assert.equal(scrim.props.end.y, edge === "top" ? 1 : 0);
@@ -3237,10 +3241,235 @@ assert.equal(latestUnreadAssistantIndex(messages, 6), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 7), -1);
 assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta: null }], null), -1);
 
+// Config Space colors use the same stylesheet globally, without executing page CSS.
+{
+  const themeExports = {};
+  const source = ts.transpileModule(readFileSync(new URL("../src/theme.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  const storage = new Map();
+  const dependencies = {
+    "@react-native-async-storage/async-storage": { __esModule: true, default: { setItem: async (key, value) => storage.set(key, value) } },
+    "react-native": { useColorScheme: () => "light" },
+    react: { useEffect: () => {}, useSyncExternalStore: (_, snapshot) => snapshot() },
+    "@/src/data/config-theme": { compileConfigTheme },
+  };
+  new Function("require", "exports", source)((name) => dependencies[name], themeExports);
+  const bases = { light: themeExports.getAppThemeColors("light", false), dark: themeExports.getAppThemeColors("dark", false) };
+  assert.equal(colorWithOpacity("#12345680", 0.5), "#12345640");
+  assert.equal(colorWithOpacity("#123456", 0.2), "#12345633");
+  const compile = (css) => compileConfigTheme(css, bases);
+  assert.deepEqual(compile("").light, {}, "a missing theme preserves the exact existing palette");
+  const colors = compile(`
+    :where(:root, [data-theme]) { --brand-400: oklch(70% .15 180); --bg-primary: light-dark(#fff, #123); --rgb: 20 30 40; --bg-surface: rgb(var(--rgb) / 50%); }
+    :root { --brand: var(--brand-400); --text-primary: var(--missing, hsl(0 0% 90%)); --chat-user-message-bg: #456; --chat-user-message-fg: white; }
+    [data-theme="light"] { --brand: rebeccapurple; --brand-soft: color-mix(in srgb, var(--brand) 20%, transparent); }
+    @media (prefers-color-scheme: dark) { :root { --border-primary: color(display-p3 1 0 0); } }
+    .message { --bg-primary: red; }
+    @media (min-width: 900px) { :root { --brand: yellow; } }
+    @import url(https://example.invalid/theme.css);
+  `);
+  assert.equal(colors.light.background, "#ffffffff");
+  assert.equal(colors.dark.background, "#112233ff");
+  assert.equal(colors.light.surface, "#141e2880");
+  assert.equal(colors.light.accent, "#663399ff");
+  assert.equal(colors.dark.accent, "#00bca2ff");
+  assert.equal(colors.light.accentSoft, "#66339933", "mixing transparent uses premultiplied alpha");
+  assert.equal(colors.dark.border, "#ff0000ff", "wide-gamut colors convert to native sRGB");
+  assert.equal(colors.light.userBubble, "#445566ff");
+  const pair = compile(':root{--chat-assistant-message-bg:white;--chat-assistant-message-fg:#123;--text-reading:#456}');
+  assert.equal(pair.dark.assistantBubble, "#ffffffff");
+  assert.equal(pair.dark.assistantBubbleText, "#112233ff", "a custom bubble surface keeps its companion foreground");
+  assert.equal(compile(':root{--text-reading:#456}').dark.assistantBubbleText, "#445566ff");
+  assert.equal(colors.light.userBubbleText, "#ffffffff");
+  assert.ok(colors.warnings.some((value) => value.includes("@import")));
+  assert.equal(compile(':root{--brand:red!important}html{--brand:blue}').dark.accent, "#ff0000ff");
+  assert.equal(compile(':root[data-theme="dark"]{--brand:red}:root{--brand:blue}').dark.accent, "#ff0000ff");
+  assert.equal(compile(':root:not([data-theme="light"]){--brand:red}').light.accent, undefined);
+  assert.equal(compile(':root:not([data-theme="light"]){--brand:red}').dark.accent, "#ff0000ff");
+  assert.equal(compile(':root{--brand:color-mix(in srgb,red 10%,blue 10%)}').dark.accent, "#80008033", "weights below 100% reduce alpha");
+  assert.equal(compile(':root{--neutral-0:#eeaa22}').dark.text, "#eeaa22ff", "neutral scale overrides reach their semantic roles");
+  assert.equal(compile(':root{--brand:color-mix(in srgb,var(--neutral-0),black)}').dark.accent?.length, 9);
+  assert.equal(compile(':root{--brand:color-mix(in srgb,color-mix(in srgb,red,blue),white)}').dark.accent, "#bf80bfff");
+  assert.equal(compile(':root{--brand:color-mix(in oklch longer hue,red,blue)}').dark.accent?.length, 9);
+  const invalid = compile(':root{--brand:var(--loop);--loop:var(--brand);--text-primary:url(https://example.invalid/image)}');
+  assert.equal(invalid.light.accent, undefined);
+  assert.ok(invalid.warnings.length > 0, "invalid colors keep only their native defaults and report unsupported tokens");
+  assert.throws(() => compile("a".repeat(MAX_THEME_CSS_LENGTH + 1)), /256 KiB/);
+  assert.throws(() => compile(':root[ { --brand: red; }'), /syntax/);
+  const owner = themeExports.beginConfigTheme();
+  owner.update({ css: ':root{--brand:#abcdef}', spaceId: "config", loading: false, error: null });
+  assert.equal(themeExports.getAppThemeColors("dark", false).accent, "#abcdefff");
+  await themeExports.setCustomThemeEnabled(false);
+  assert.equal(themeExports.getAppThemeColors("dark", false).accent, bases.dark.accent);
+  await themeExports.setCustomThemeEnabled(true);
+  const nextOwner = themeExports.beginConfigTheme();
+  owner.update({ css: ':root{--brand:red}', spaceId: "old", loading: false, error: null });
+  owner.dispose();
+  assert.equal(themeExports.getAppThemeColors("dark", false).accent, bases.dark.accent, "old-account work cannot publish or clear the new account theme");
+  nextOwner.dispose();
+}
+{
+  const source = ts.transpileModule(readFileSync(new URL("../src/data/config-theme-sync.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  const downloads = [];
+  new Function("require", "exports", "fetch", source)((name) => name === "js-base64" ? { decode: decodeBase64 } : { CONFIG_THEME_PATH, MAX_THEME_CSS_LENGTH }, exports, async (url, options) => {
+    downloads.push({ url, options });
+    return { ok: true, headers: { get: () => null }, text: async () => ":root{--brand:blue}" };
+  });
+  const downloadClient = { space: () => ({ files: { read: async () => ({ size: 20, delivery: "url", url: "https://assets.example/theme.css", content: "", encoding: "utf-8" }) } }) };
+  assert.equal(await exports.readConfigThemeCss(downloadClient, "config", new AbortController().signal), ":root{--brand:blue}");
+  assert.equal(downloads[0].options.credentials, "omit", "signed theme downloads never forward authentication credentials");
+  downloadClient.space = () => ({ files: { read: async () => ({ size: 20, delivery: "url", url: "http://assets.example/theme.css", content: "", encoding: "utf-8" }) } });
+  await assert.rejects(exports.readConfigThemeCss(downloadClient, "config", new AbortController().signal), /HTTPS/);
+  assert.equal(downloads.length, 1);
+  const cached = Promise.withResolvers();
+  const updates = [], writes = [], rooms = [];
+  let css = ":root{--brand:red}", readError = null, ownedError = null;
+  const client = {
+    spaces: { getOwnedBySlug: async (slug) => { assert.equal(slug, "config"); if (ownedError) throw ownedError; return { id: "config" }; } },
+    space: (id) => ({ files: { read: async (path) => {
+      assert.equal(id, "config"); assert.equal(path, CONFIG_THEME_PATH);
+      if (readError) throw readError;
+      return { size: css.length, encoding: "base64", content: Buffer.from(css).toString("base64") };
+    } } }),
+  };
+  const theme = exports.createConfigThemeSync({ client, cache: { read: () => cached.promise, write: async (value) => writes.push(value), clear: async () => writes.push("cleared") }, publish: (value) => updates.push(value), watchSpace: (id) => rooms.push(id) });
+  const hydration = theme.hydrate();
+  await theme.refresh();
+  cached.resolve({ spaceId: "stale", css: "stale" });
+  await hydration;
+  assert.equal(updates.at(-1).css, css, "a slow cache read cannot overwrite confirmed server state");
+  readError = new Error("offline");
+  await assert.rejects(theme.refresh(), /offline/);
+  assert.equal(updates.at(-1).css, css, "network errors retain the account's last confirmed palette");
+  readError = { status: 404 };
+  await theme.refresh();
+  assert.equal(updates.at(-1).css, null, "deleting theme.css authoritatively removes cached colors");
+  readError = null;
+  await theme.refresh();
+  ownedError = { status: 403 };
+  await assert.rejects(theme.refresh());
+  assert.equal(updates.at(-1).spaceId, null, "access rejection removes colors and the watched room");
+  ownedError = null;
+  await theme.refresh();
+  await theme.clear();
+  assert.equal(updates.at(-1).css, null);
+  theme.dispose();
+  await theme.clearStored();
+  assert.equal(rooms.at(-1), null);
+  const offlineCache = Promise.withResolvers();
+  ownedError = new Error("offline");
+  const offlineUpdates = [];
+  const offline = exports.createConfigThemeSync({ client, cache: { read: () => offlineCache.promise, write: async () => {}, clear: async () => {} }, publish: (value) => offlineUpdates.push(value), watchSpace: () => {} });
+  const offlineHydration = offline.hydrate();
+  await assert.rejects(offline.refresh(), /offline/);
+  offlineCache.resolve({ spaceId: "config", css: "cached" });
+  await offlineHydration;
+  assert.equal(offlineUpdates.at(-1).css, "cached", "cache-first colors remain available when the first server request fails");
+  assert.equal(offlineUpdates.at(-1).loading, false);
+  assert.equal(offlineUpdates.at(-1).error, "offline", "late hydration must not hide the refresh failure or leave loading stuck");
+  offline.dispose();
+  ownedError = null;
+  const delayed = Promise.withResolvers();
+  client.spaces.getOwnedBySlug = () => delayed.promise;
+  const lateUpdates = [];
+  const late = exports.createConfigThemeSync({ client, cache: { read: async () => null, write: async () => {}, clear: async () => {} }, publish: (value) => lateUpdates.push(value), watchSpace: () => {} });
+  const pending = late.refresh();
+  const count = lateUpdates.length;
+  late.dispose();
+  delayed.resolve({ id: "config" });
+  await pending;
+  assert.equal(lateUpdates.length, count, "late responses cannot revive a signed-out theme");
+  assert.equal(writes.at(-1), "cleared");
+}
+
+// Environment selection shares accelerated origins without changing OAuth identity or explicit overrides.
+{
+  const source = ts.transpileModule(readFileSync(new URL("../src/config.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  const extra = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8")).expo.extra;
+  function loadConfig(env = {}, configuredExtra = extra) {
+    const exports = {};
+    new Function("require", "exports", "process", source)((name) => {
+      if (name === "expo-constants") return { __esModule: true, default: { expoConfig: { extra: configuredExtra } } };
+      if (name === "expo-linking") return { createURL: (path) => `cohub://${path}` };
+      throw new Error(`Unexpected config dependency: ${name}`);
+    }, exports, { env });
+    return exports;
+  }
+  const module = loadConfig();
+  assert.equal(module.defaultEnvironment, "prod");
+  assert.equal(module.config.apiOrigin, "https://capi.neta.art");
+  assert.equal(module.config.gatewayOrigin, "wss://cgateway.neta.art/ws");
+  const reference = module.config;
+  module.setActiveEnvironment("dev");
+  assert.equal(module.config, reference, "environment switches retain the shared config identity");
+  assert.equal(module.config.apiOrigin, "https://capi-dev.neta.art");
+  assert.equal(module.config.gatewayOrigin, "wss://cgateway-dev.neta.art/ws");
+  assert.equal(module.config.authEndpoint, "https://dev-auth.neta.art/");
+  assert.equal(module.config.logtoAppId, "vpikk7sl9zwvefiptowtn");
+  assert.equal(module.config.apiResource, "https://api.talesofai");
+  module.setActiveEnvironment("prod");
+  assert.equal(module.config.authEndpoint, "https://auth.neta.art/");
+  assert.equal(module.config.logtoAppId, "16ai0wao2mud3xqkbzqo0");
+  assert.equal(loadConfig({ EXPO_PUBLIC_COHUB_ENV: "dev" }).config.apiOrigin, "https://capi-dev.neta.art");
+  assert.equal(loadConfig({}, {}).config.gatewayOrigin, "wss://cgateway.neta.art/ws", "JS defaults match app.json even without Expo extra");
+  const overridden = loadConfig({ EXPO_PUBLIC_API_ORIGIN: " https://api.example.test ", EXPO_PUBLIC_GATEWAY_ORIGIN: " wss://gateway.example.test/ws " });
+  for (const environment of ["prod", "dev"]) {
+    const resolved = overridden.resolveConfig(environment);
+    assert.equal(resolved.apiOrigin, "https://api.example.test");
+    assert.equal(resolved.gatewayOrigin, "wss://gateway.example.test/ws");
+  }
+}
+
 // Device Runtime: relays live at the gateway root, and tokens carry their expiry to native.
-assert.equal(runtimeGatewayOrigin("wss://gateway.cohub.live/ws"), "wss://gateway.cohub.live");
-assert.equal(runtimeGatewayOrigin("wss://gateway-dev.cohub.live/ws/"), "wss://gateway-dev.cohub.live");
-for (const invalid of ["ws://gateway.cohub.live/ws", "wss://gateway.cohub.live", "wss://gateway.cohub.live/realtime"]) assert.throws(() => runtimeGatewayOrigin(invalid), /wss:\/\/<host>\/ws/);
+{
+  const source = ts.transpileModule(readFileSync(new URL("../src/platform/device-runtime.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  const calls = [];
+  let enabled = true;
+  const nativeRuntime = {
+    isAvailable: () => true,
+    isControlKeepAliveEnabled: () => enabled,
+    setControlKeepAliveEnabled: (value) => { enabled = value; calls.push(value); },
+  };
+  function loadPlatform(os, runtime) {
+    const exports = {};
+    const dependencies = {
+      react: {},
+      "react-native": { Platform: { OS: os } },
+      "@/modules/cohub-device-runtime": { __esModule: true, default: runtime },
+      "@/src/config": { config: {} },
+      "@/src/data/device-runtime": {},
+    };
+    new Function("require", "exports", source)((name) => {
+      assert.ok(name in dependencies, `Unexpected device Runtime dependency: ${name}`);
+      return dependencies[name];
+    }, exports);
+    return exports;
+  }
+  const platform = loadPlatform("android", nativeRuntime);
+  assert.deepEqual(calls, [false], "JS startup disables idle keep-alive even before sign-in");
+  assert.equal(platform.isDeviceControlKeepAliveEnabled(), false);
+  platform.setDeviceControlKeepAliveEnabled(true);
+  assert.equal(platform.isDeviceControlKeepAliveEnabled(), true);
+  platform.setDeviceControlKeepAliveEnabled(false);
+  assert.deepEqual(calls, [false, true, false], "policy changes cross the native interface immediately");
+  const unavailable = loadPlatform("android", { isAvailable: () => false });
+  assert.throws(() => unavailable.setDeviceControlKeepAliveEnabled(true), /cannot serve a Space/);
+  const ios = loadPlatform("ios", nativeRuntime);
+  assert.equal(ios.deviceRuntimeSupported, false);
+  assert.throws(() => ios.isDeviceControlKeepAliveEnabled(), /cannot serve a Space/);
+  assert.deepEqual(calls, [false, true, false], "unsupported platforms do not configure native services");
+}
+assert.equal(runtimeGatewayOrigin("wss://cgateway.neta.art/ws"), "wss://cgateway.neta.art");
+assert.equal(runtimeGatewayOrigin("wss://cgateway-dev.neta.art/ws/"), "wss://cgateway-dev.neta.art");
+for (const invalid of ["ws://cgateway.neta.art/ws", "wss://cgateway.neta.art", "wss://cgateway.neta.art/realtime"]) assert.throws(() => runtimeGatewayOrigin(invalid), /wss:\/\/<host>\/ws/);
 const jwt = (payload) => `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
 assert.equal(accessTokenExpiresAt(jwt({ exp: 1_800_000_000 })), 1_800_000_000_000);
 assert.equal(accessTokenExpiresAt(jwt({ sub: "user" })), null);

@@ -15,6 +15,9 @@ import {
 
 const native = Platform.OS === "android" && nativeDeviceRuntime?.isAvailable() ? nativeDeviceRuntime : null;
 
+// Product policy lives in JS; native retains it for Accessibility starts without a JS runtime.
+native?.setControlKeepAliveEnabled(false);
+
 /** Whether this device can serve a folder as a Space's local Runtime (Android 11+, 64-bit). */
 export const deviceRuntimeSupported = native !== null;
 
@@ -23,6 +26,15 @@ type GetAccessToken = (options?: { forceRefresh?: boolean }) => Promise<string |
 function requireNative() {
   if (!native) throw new Error("This device cannot serve a Space.");
   return native;
+}
+
+export function isDeviceControlKeepAliveEnabled(): boolean {
+  return requireNative().isControlKeepAliveEnabled();
+}
+
+/** Changes idle Accessibility keep-alive, not required notifications for connected Spaces or sharing. */
+export function setDeviceControlKeepAliveEnabled(enabled: boolean): void {
+  requireNative().setControlKeepAliveEnabled(enabled);
 }
 
 async function supplyAccessToken(getAccessToken: GetAccessToken, forceRefresh: boolean) {

@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
-import { edgeChrome, useAppTheme } from "@/src/theme";
+import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
 
 export function useEdgeChrome(options?: { reserveComposer?: boolean }) {
   const insets = useSafeAreaInsets();
@@ -22,7 +22,7 @@ export function EdgeScrim({ edge, style }: { edge: "top" | "bottom"; style?: Sty
   return <LinearGradient
     pointerEvents="none"
     accessible={false}
-    colors={[colors.background, `${colors.background}f5`, `${colors.background}b8`, `${colors.background}00`]}
+    colors={[colors.background, colorWithOpacity(colors.background, 245 / 255), colorWithOpacity(colors.background, 184 / 255), colorWithOpacity(colors.background, 0)]}
     locations={[0, 0.45, 0.75, 1]}
     start={{ x: 0, y: edge === "top" ? 0 : 1 }}
     end={{ x: 0, y: edge === "top" ? 1 : 0 }}

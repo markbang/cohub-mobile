@@ -1,6 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { compileConfigTheme, type ConfigThemePalette } from "@/src/data/config-theme";
+import type { ConfigThemeUpdate } from "@/src/data/config-theme-sync";
+export { colorWithOpacity } from "@/src/data/config-theme";
 
 export const edgeChrome = { headerMinHeight: 56, fade: 24 } as const;
 
@@ -29,6 +32,7 @@ export type AppTheme = {
     userBubbleCodeBackground: string;
     userBubbleMeta: string;
     assistantBubble: string;
+    assistantBubbleText: string;
     success: string;
     successSoft: string;
     warning: string;
@@ -81,6 +85,7 @@ const darkTheme: AppTheme = {
     userBubbleCodeBackground: "rgba(15, 17, 20, 0.24)",
     userBubbleMeta: "rgba(255, 246, 240, 0.88)",
     assistantBubble: "#22262e",
+    assistantBubbleText: "#f7f8fa",
     success: "#62c994",
     successSoft: "#1d3329",
     warning: "#e6b85c",
@@ -136,6 +141,7 @@ const lightTheme: AppTheme = {
     userBubbleCodeBackground: "rgba(29, 32, 36, 0.18)",
     userBubbleMeta: "rgba(255, 255, 255, 0.88)",
     assistantBubble: "#eceee9",
+    assistantBubbleText: "#1d2024",
     success: "#238552",
     successSoft: "#e7f5ed",
     warning: "#986b12",
@@ -260,17 +266,98 @@ export async function setPureBlackPreference(next: boolean) {
   await AsyncStorage.setItem(PURE_BLACK_PREFERENCE_KEY, String(next));
 }
 
+export type CustomThemeState = ConfigThemeUpdate & { enabled: boolean; warnings: string[] };
+const CUSTOM_THEME_ENABLED_KEY = "cohub:mobile:custom-theme-enabled:v1";
+let customThemeState: CustomThemeState = { spaceId: null, css: null, enabled: true, loading: false, error: null, warnings: [] };
+let customPalette: ConfigThemePalette = { light: {}, dark: {}, warnings: [] };
+let customThemeOwner: symbol | null = null;
+let customEnabledLoaded = false;
+let customEnabledLoad: Promise<void> | null = null;
+const customThemeListeners = new Set<() => void>();
+const notifyCustomTheme = () => customThemeListeners.forEach((listener) => listener());
+
+export function beginConfigTheme(): { update(value: ConfigThemeUpdate): void; dispose(): void } {
+  const owner = Symbol("config-theme");
+  customThemeOwner = owner;
+  customPalette = { light: {}, dark: {}, warnings: [] };
+  customThemeState = { ...customThemeState, spaceId: null, css: null, loading: true, error: null, warnings: [] };
+  notifyCustomTheme();
+  return {
+    update(value) {
+      if (customThemeOwner !== owner) return;
+      if (value.css !== customThemeState.css) {
+        customPalette = value.css === null ? { light: {}, dark: {}, warnings: [] }
+          : compileConfigTheme(value.css, { light: lightTheme.colors, dark: darkTheme.colors });
+      }
+      customThemeState = { ...customThemeState, ...value, warnings: customPalette.warnings };
+      notifyCustomTheme();
+    },
+    dispose() {
+      if (customThemeOwner !== owner) return;
+      customThemeOwner = null;
+      customPalette = { light: {}, dark: {}, warnings: [] };
+      customThemeState = { ...customThemeState, spaceId: null, css: null, loading: false, error: null, warnings: [] };
+      notifyCustomTheme();
+    },
+  };
+}
+
+export async function setCustomThemeEnabled(enabled: boolean): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CUSTOM_THEME_ENABLED_KEY, String(enabled));
+    customEnabledLoaded = true;
+    customThemeState = { ...customThemeState, enabled };
+    notifyCustomTheme();
+  } catch (error) {
+    customThemeState = { ...customThemeState, error: "Unable to save the custom theme preference. Retry in Appearance." };
+    notifyCustomTheme();
+    throw error;
+  }
+}
+
+function subscribeCustomTheme(listener: () => void): () => void {
+  customThemeListeners.add(listener);
+  return () => { customThemeListeners.delete(listener); };
+}
+
+export function useCustomThemeState(): CustomThemeState {
+  const snapshot = useSyncExternalStore(subscribeCustomTheme, () => customThemeState);
+  useEffect(() => {
+    if (customEnabledLoaded || customEnabledLoad) return;
+    customEnabledLoad = AsyncStorage.getItem(CUSTOM_THEME_ENABLED_KEY).then((value) => {
+      if (customEnabledLoaded) return;
+      customEnabledLoaded = true;
+      customThemeState = { ...customThemeState, enabled: value !== "false" };
+      notifyCustomTheme();
+    }).catch(() => {
+      customEnabledLoaded = true;
+      customThemeState = { ...customThemeState, error: "Unable to load the custom theme preference. Retry in Appearance." };
+      notifyCustomTheme();
+    }).finally(() => { customEnabledLoad = null; });
+  }, []);
+  return snapshot;
+}
+
+export function getAppThemeColors(mode: AppTheme["mode"], pureBlack: boolean): AppTheme["colors"] {
+  const base = mode === "light" ? lightTheme : pureBlack ? pureBlackDarkTheme : darkTheme;
+  return customThemeState.enabled ? { ...base.colors, ...customPalette[mode] } : base.colors;
+}
+
 export function useAppTheme(): AppTheme {
   const colorScheme = useColorScheme();
   const preference = useThemePreference();
   const pureBlack = usePureBlackPreference();
   const fontScale = useFontScalePreference();
+  const custom = useCustomThemeState();
   const mode = preference === "system"
     ? colorScheme === "light" ? "light" : "dark"
     : preference;
   const base = mode === "light" ? lightTheme : pureBlack ? pureBlackDarkTheme : darkTheme;
-  // A new theme identity re-renders themed components so they pick up the scaled typography tokens.
-  return useMemo(() => (fontScale === "default" ? base : { ...base }), [base, fontScale]);
+  const overrides = custom.enabled ? customPalette[mode] : null;
+  return useMemo(() => {
+    if (overrides && Object.keys(overrides).length) return { ...base, colors: { ...base.colors, ...overrides } };
+    return fontScale === "default" ? base : { ...base };
+  }, [base, fontScale, overrides]);
 }
 
 export type FontScalePreference = "small" | "default" | "large" | "xlarge";
