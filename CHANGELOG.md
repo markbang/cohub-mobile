@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.19](https://github.com/markbang/cohub-mobile/compare/v2.2.18...v2.2.19) (2026-10-13)
+
+
+### Features
+
+* **mobile:** share Config Space colors and control idle runtime keep-alive ([8288e15](https://github.com/markbang/cohub-mobile/commit/8288e1548fa63b0bbde3b63602389b2b4618399b))
+
 ## [2.2.18](https://github.com/markbang/cohub-mobile/compare/v2.2.17...v2.2.18) (2026-10-12)
 
 
