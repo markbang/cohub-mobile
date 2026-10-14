@@ -1,10 +1,11 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
-import type { MessageRecord, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
+import type { MessageRecord, SessionListFork, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 import { isOptimisticFollowup } from "./followup-queue";
 
 export type CachedHome = {
   spaces: SpaceRecord[];
   sessions: UserSessionListItem[];
+  forks: SessionListFork[];
 };
 
 export type ComposerDraftScope =
@@ -56,6 +57,13 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
       payload TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_key, session_id)
+    );
+    CREATE TABLE IF NOT EXISTS session_forks (
+      user_key TEXT NOT NULL,
+      child_session_id TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_key, child_session_id)
     );
     CREATE TABLE IF NOT EXISTS messages (
       user_key TEXT NOT NULL,
@@ -113,7 +121,7 @@ function parse<T>(value: string): T | null {
 
 export async function hydrateHome(userKey: string): Promise<CachedHome> {
   const db = await database();
-  const [spaceRows, sessionRows] = await Promise.all([
+  const [spaceRows, sessionRows, forkRows] = await Promise.all([
     db.getAllAsync<{ payload: string }>(
       "SELECT payload FROM spaces WHERE user_key = ? ORDER BY updated_at DESC",
       userKey,
@@ -122,6 +130,7 @@ export async function hydrateHome(userKey: string): Promise<CachedHome> {
       "SELECT payload FROM sessions WHERE user_key = ? ORDER BY updated_at DESC",
       userKey,
     ),
+    db.getAllAsync<{ payload: string }>("SELECT payload FROM session_forks WHERE user_key = ?", userKey),
   ]);
   return {
     spaces: spaceRows.flatMap((row) => {
@@ -130,6 +139,10 @@ export async function hydrateHome(userKey: string): Promise<CachedHome> {
     }),
     sessions: sessionRows.flatMap((row) => {
       const value = parse<UserSessionListItem>(row.payload);
+      return value ? [value] : [];
+    }),
+    forks: forkRows.flatMap((row) => {
+      const value = parse<SessionListFork>(row.payload);
       return value ? [value] : [];
     }),
   };
@@ -163,12 +176,27 @@ async function writeSessions(db: SQLiteDatabase, userKey: string, sessions: read
   }
 }
 
+async function writeSessionForks(db: SQLiteDatabase, userKey: string, forks: readonly SessionListFork[], now: number) {
+  if (forks.length === 0) return;
+  const statement = await db.prepareAsync(
+    `INSERT OR REPLACE INTO session_forks (user_key, child_session_id, payload, updated_at) VALUES (?, ?, ?, ?)`,
+  );
+  try {
+    for (const fork of forks) {
+      await statement.executeAsync(userKey, fork.childSessionId, JSON.stringify(fork), now);
+    }
+  } finally {
+    await statement.finalizeAsync();
+  }
+}
+
 export async function saveHome(userKey: string, home: CachedHome) {
   const db = await database();
   const now = Date.now();
   await db.withTransactionAsync(async () => {
     await writeSpaces(db, userKey, home.spaces, now);
     await writeSessions(db, userKey, home.sessions, now);
+    await writeSessionForks(db, userKey, home.forks, now);
   });
 }
 
@@ -181,11 +209,14 @@ export async function saveSpaces(userKey: string, spaces: readonly SpaceRecord[]
 }
 
 /** Persist individual Chats without rewriting the rest of the home cache. */
-export async function saveSessions(userKey: string, sessions: readonly UserSessionListItem[]) {
-  if (sessions.length === 0) return;
+export async function saveSessions(userKey: string, sessions: readonly UserSessionListItem[], forks: readonly SessionListFork[] = []) {
+  if (sessions.length === 0 && forks.length === 0) return;
   const db = await database();
   const now = Date.now();
-  await db.withTransactionAsync(() => writeSessions(db, userKey, sessions, now));
+  await db.withTransactionAsync(async () => {
+    await writeSessions(db, userKey, sessions, now);
+    await writeSessionForks(db, userKey, forks, now);
+  });
 }
 
 /** Drop cached chat rows last written before the cutoff (cache retention). */
@@ -194,6 +225,7 @@ export async function pruneUserCache(userKey: string, cutoff: number) {
   await db.withTransactionAsync(async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
+    await db.runAsync("DELETE FROM session_forks WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
   });
 }
@@ -350,6 +382,7 @@ export async function clearUserCache(userKey: string) {
   await db.withTransactionAsync(async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM session_forks WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM spaces WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM composer_drafts WHERE user_key = ?", userKey);

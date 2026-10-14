@@ -87,3 +87,22 @@ function SentSessionRow({ session, single = false, client, lookupSession, onOpen
     {unavailable ? null : <AppIcon name="chevron-right" size={14} color={theme.colors.textFaint} />}
   </Pressable>;
 }
+
+export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: RelatedSessionLinkProps & { origin: RelatedSessionRef }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const view = useRelatedSession(client, origin, lookupSession(origin.sessionId));
+  const title = relatedTitle(view);
+  const unavailable = view.status === "unavailable";
+  const label = title ? t("session.forkedFrom", { title }) : unavailable ? t("session.forkedFromUnavailable") : t("session.forkedFromChat");
+  const color = unavailable ? theme.colors.textFaint : theme.colors.textMuted;
+  return <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 10 }}>
+    <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={({ pressed }) => ({ maxWidth: "78%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
+      <AppIcon name="git-fork" size={13} color={color} />
+      <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color }]}>{label}</Text>
+      {unavailable ? null : <AppIcon name="chevron-right" size={13} color={theme.colors.textFaint} />}
+    </Pressable>
+    <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+  </View>;
+}

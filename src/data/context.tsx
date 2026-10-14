@@ -3,6 +3,7 @@ import type {
   ContentBlock,
   MessageRecord,
   ModelStatusResponse,
+  SessionListFork,
   SessionRecord,
   SessionTurnIndexItem,
   SessionTurnRecord,
@@ -60,6 +61,7 @@ import type {
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns, nextTurnSequence, turnSequenceForMessage, withFallbackUserContent } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
+import { mergeSessionForks } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions, mentionDisplayText } from "@/src/data/space-mentions";
 import { clearSlashCommandCache } from "@/src/data/use-composer-slash";
 import { isOptimisticFollowup, shouldQueueFollowup } from "@/src/data/followup-queue";
@@ -228,6 +230,7 @@ const initialState: AppState = {
   sessionsPageBoundary: null,
   sessionsPagesLoaded: 0,
   sessionsLoadingMore: false,
+  sessionForks: {},
   sessionLatestTurns: {},
   sessionTurnStatuses: {},
   sessionStatusRequests: 0,
@@ -239,10 +242,10 @@ const initialState: AppState = {
 };
 
 type Action =
-  | { type: "hydrate"; spaces: SpaceRecord[]; sessions: UserSessionListItem[] }
+  | { type: "hydrate"; spaces: SpaceRecord[]; sessions: UserSessionListItem[]; forks: SessionListFork[] }
   | { type: "home-start"; silent?: boolean }
-  | { type: "home-success"; spaces: SpaceRecord[]; sessions: UserSessionListItem[]; sessionsHasMore?: boolean; sessionsCursor?: string | null; sessionsPageBoundary: SessionPageBoundary | null; spacesError?: string; sessionsError?: string; silent?: boolean; requestStartedAt: number }
-  | { type: "sessions-head-success"; sessions: UserSessionListItem[]; hasMore: boolean; cursor: string | null; boundary: SessionPageBoundary | null; requestStartedAt: number }
+  | { type: "home-success"; spaces: SpaceRecord[]; sessions: UserSessionListItem[]; sessionsHasMore?: boolean; sessionsCursor?: string | null; sessionsPageBoundary: SessionPageBoundary | null; spacesError?: string; sessionsError?: string; silent?: boolean; requestStartedAt: number; forks: SessionListFork[] }
+  | { type: "sessions-head-success"; sessions: UserSessionListItem[]; forks: SessionListFork[]; hasMore: boolean; cursor: string | null; boundary: SessionPageBoundary | null; requestStartedAt: number }
   | { type: "sessions-head-error"; message: string }
   | { type: "running-start"; source: SessionSourceFilter }
   | { type: "running-success"; source: SessionSourceFilter; sessions: UserSessionListItem[]; changedSessionIds: string[]; complete?: boolean }
@@ -253,7 +256,7 @@ type Action =
   | { type: "session-realtime-meta"; sessionId: string; session: Partial<SessionRecord> }
   | { type: "spaces-sync"; spaces?: SpaceRecord[]; error?: string }
   | { type: "sessions-more-start" }
-  | { type: "sessions-more-success"; sessions: UserSessionListItem[]; hasMore: boolean; cursor: string | null; boundary: SessionPageBoundary | null }
+  | { type: "sessions-more-success"; sessions: UserSessionListItem[]; forks: SessionListFork[]; hasMore: boolean; cursor: string | null; boundary: SessionPageBoundary | null }
   | { type: "sessions-more-error"; message: string }
   | { type: "session-status-start"; silent?: boolean }
   | { type: "session-status-reset" }
@@ -289,6 +292,7 @@ type Action =
   | { type: "stream-lifecycle"; sessionId: string; provider: string | null; model: string | null }
   | { type: "stream-clear"; sessionId: string }
   | { type: "session-upsert"; session: UserSessionListItem }
+  | { type: "session-forks"; forks: SessionListFork[] }
   | { type: "space-upsert"; space: SpaceRecord };
 
 function isLiveMessage(message: MessageRecord) {
@@ -416,6 +420,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         spaces: sortByRecent(action.spaces),
         sessions: sortByRecent(action.sessions),
+        sessionForks: mergeSessionForks(state.sessionForks, action.forks),
         booting: false,
       };
     case "home-start":
@@ -440,6 +445,7 @@ function reducer(state: AppState, action: Action): AppState {
         sessionsPageBoundary: action.silent && state.sessionsPagesLoaded > 1 && action.sessionsHasMore ? state.sessionsPageBoundary : action.sessionsPageBoundary,
         sessionsPagesLoaded: action.silent && action.sessionsHasMore ? Math.max(1, state.sessionsPagesLoaded) : 1,
         sessionsLoadingMore: false,
+        sessionForks: mergeSessionForks(state.sessionForks, action.forks),
       };
     }
     case "sessions-head-success": {
@@ -451,6 +457,7 @@ function reducer(state: AppState, action: Action): AppState {
         sessionsCursor: keepTail ? state.sessionsCursor : action.cursor,
         sessionsPageBoundary: keepTail ? state.sessionsPageBoundary : action.boundary,
         sessionsPagesLoaded: keepTail ? state.sessionsPagesLoaded : 1,
+        sessionForks: mergeSessionForks(state.sessionForks, action.forks),
         sessionsError: null,
         error: null,
         lastSyncedAt: new Date().toISOString(),
@@ -516,7 +523,7 @@ function reducer(state: AppState, action: Action): AppState {
         }),
         ...action.sessions.filter((session) => !existingIds.has(session.id)),
       ];
-      return { ...state, sessionsLoadingMore: false, sessions: sortByRecent(merged), sessionsHasMore: action.hasMore, sessionsCursor: action.cursor, sessionsPageBoundary: action.boundary, sessionsPagesLoaded: state.sessionsPagesLoaded + 1 };
+      return { ...state, sessionsLoadingMore: false, sessions: sortByRecent(merged), sessionsHasMore: action.hasMore, sessionsCursor: action.cursor, sessionsPageBoundary: action.boundary, sessionsPagesLoaded: state.sessionsPagesLoaded + 1, sessionForks: mergeSessionForks(state.sessionForks, action.forks) };
     }
     case "sessions-more-error":
       return { ...state, sessionsLoadingMore: false, sessionsError: action.message };
@@ -788,6 +795,10 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       };
     }
+    case "session-forks": {
+      const sessionForks = mergeSessionForks(state.sessionForks, action.forks);
+      return sessionForks === state.sessionForks ? state : { ...state, sessionForks };
+    }
     case "space-upsert": {
       const exists = state.spaces.some((space) => space.id === action.space.id);
       return {
@@ -848,6 +859,7 @@ export type AppContextValue = {
   upsertSpace: (space: SpaceRecord) => void;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   forkSession: (spaceId: string, sessionId: string, turn: Pick<SessionTurnRecord, "id" | "sourceTurnId">) => Promise<SessionRecord>;
+  rememberSessionForks: (forks: SessionListFork[]) => void;
   clearCache: () => Promise<void>;
   applyCacheRetention: () => Promise<void>;
   loadSessionReadSequence: (sessionId: string) => Promise<number | null>;
@@ -1082,7 +1094,7 @@ export function AppProvider({
           (spaces) => ({ status: "fulfilled" as const, value: spaces }),
           (reason: unknown) => ({ status: "rejected" as const, reason }),
         ),
-        withTimeout(activeClient.user.listSessions({ limit: 60 }), "Loading Chats").then(
+        withTimeout(activeClient.user.listSessions({ limit: 60, includeForks: true }), "Loading Chats").then(
           (sessions) => ({ ...sessions, page: sessionPageState(sessions) }),
         ).then(
           (sessions) => ({ status: "fulfilled" as const, value: sessions }),
@@ -1130,13 +1142,14 @@ export function AppProvider({
       const sessionsHasMore = sessionsResult.status === "fulfilled" ? sessionsResult.value.page.hasMore : stateRef.current.sessionsHasMore;
       const sessionsCursor = sessionsResult.status === "fulfilled" ? sessionsResult.value.page.cursor : stateRef.current.sessionsCursor;
       const sessionsPageBoundary = sessionsResult.status === "fulfilled" ? sessionsResult.value.page.boundary : stateRef.current.sessionsPageBoundary;
+      const forks = sessionsResult.status === "fulfilled" ? sessionsResult.value.forks ?? [] : [];
       const sessionsError = sessionsResult.status === "rejected"
         ? `Chats could not be refreshed: ${errorMessage(sessionsResult.reason, translate("data.requestFailed"))}`
         : undefined;
-      dispatch({ type: "home-success", spaces, sessions, sessionsHasMore, sessionsCursor, sessionsPageBoundary, spacesError, sessionsError, silent: options.silent, requestStartedAt });
+      dispatch({ type: "home-success", spaces, sessions, forks, sessionsHasMore, sessionsCursor, sessionsPageBoundary, spacesError, sessionsError, silent: options.silent, requestStartedAt });
       void refreshSessionStatuses(sessions, options);
       if (!options.silent) dispatch({ type: "usage-start" });
-      void saveHome(userKey, { spaces, sessions }).catch((error) => {
+      void saveHome(userKey, { spaces, sessions, forks }).catch((error) => {
         console.warn("[mobile-cache] failed to save home", error);
       });
       if (!options.silent) {
@@ -1169,11 +1182,12 @@ export function AppProvider({
     const requestStartedAt = Date.now();
     const request = (async () => {
       try {
-        const response = await withTimeout(client.user.listSessions({ limit: 60 }), "Loading Chats");
+        const response = await withTimeout(client.user.listSessions({ limit: 60, includeForks: true }), "Loading Chats");
         if (generation !== homeRefreshGenerationRef.current) return;
         const page = sessionPageState(response);
-        dispatch({ type: "sessions-head-success", sessions: response.sessions, ...page, requestStartedAt });
-        void saveSessions(userKey, response.sessions).catch(() => undefined);
+        const forks = response.forks ?? [];
+        dispatch({ type: "sessions-head-success", sessions: response.sessions, forks, ...page, requestStartedAt });
+        void saveSessions(userKey, response.sessions, forks).catch(() => undefined);
         // Status enrichment cannot hold or disable the independent list-discovery timer.
         void refreshSessionStatuses(response.sessions, { silent: true });
       } catch (error) {
@@ -1241,13 +1255,14 @@ export function AppProvider({
     const task = (async () => {
       dispatch({ type: "sessions-more-start" });
       try {
-        const response = await withTimeout(client.user.listSessions({ limit: 60, cursor: current.sessionsCursor }), "Loading more Chats");
+        const response = await withTimeout(client.user.listSessions({ limit: 60, cursor: current.sessionsCursor, includeForks: true }), "Loading more Chats");
         if (generation !== homeRefreshGenerationRef.current) return;
         const page = sessionPageState(response, current.sessionsCursor, current.sessionsPageBoundary);
         const nextSessions = response.sessions;
-        dispatch({ type: "sessions-more-success", sessions: nextSessions, ...page });
+        const forks = response.forks ?? [];
+        dispatch({ type: "sessions-more-success", sessions: nextSessions, forks, ...page });
         void refreshSessionStatuses(nextSessions);
-        void saveSessions(userKey, nextSessions).catch(() => undefined);
+        void saveSessions(userKey, nextSessions, forks).catch(() => undefined);
       } catch (error) {
         if (generation === homeRefreshGenerationRef.current) dispatch({ type: "sessions-more-error", message: errorMessage(error, translate("data.chatsLoadFailed")) });
       }
@@ -2193,12 +2208,20 @@ export function AppProvider({
     if (!client) throw new Error(translate("data.stillConnecting"));
     const result = await forkSessionTurn(client, spaceId, sessionId, turn);
     const parent = stateRef.current.sessions.find((item) => item.id === sessionId);
-    const session = { ...result, space: parent?.space ?? null };
+    const session = { ...result.session, space: parent?.space ?? null };
+    const fork: SessionListFork = { ...result.fork, parentTitle: parent?.title ?? null, firstUserTextAfterFork: null };
     dispatch({ type: "session-upsert", session });
-    void saveSessions(userKey, [session]).catch(() => undefined);
+    dispatch({ type: "session-forks", forks: [fork] });
+    void saveSessions(userKey, [session], [fork]).catch(() => undefined);
     sync.invalidate();
-    return result;
+    return result.session;
   }, [client, dispatch, sync, userKey]);
+
+  const rememberSessionForks = useCallback((forks: SessionListFork[]) => {
+    if (forks.length === 0) return;
+    dispatch({ type: "session-forks", forks });
+    void saveSessions(userKey, [], forks).catch(() => undefined);
+  }, [dispatch, userKey]);
 
   const renameSession = useCallback(
     async (sessionId: string, title: string) => {
@@ -2314,6 +2337,7 @@ export function AppProvider({
       upsertSpace,
       renameSession,
       forkSession,
+      rememberSessionForks,
       clearCache,
       applyCacheRetention,
       loadSessionReadSequence: loadSessionReadSequenceForUser,
@@ -2360,6 +2384,7 @@ export function AppProvider({
       refreshSession,
       renameSession,
       forkSession,
+      rememberSessionForks,
       sendMessage,
       sendNewMessage,
       loadComposerDraftForUser,

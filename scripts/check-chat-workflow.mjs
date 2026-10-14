@@ -44,7 +44,8 @@ import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScroll
 import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
-import { forkSessionTurn } from "../src/data/session-fork.ts";
+import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
+import { buildSessionForkTree, mergeSessionForks } from "../src/data/session-fork-tree.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
@@ -575,7 +576,7 @@ for (const [tab, component, expectedRequests] of [
   const requests = [];
   let pending = Promise.withResolvers();
   const request = (resource) => { requests.push(resource); return pending.promise; };
-  const state = { booting: false, refreshing: true, spaces: [], sessions: [], sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {}, runningSessions: {}, sessionStatusRequests: 0 };
+  const state = { booting: false, refreshing: true, spaces: [], sessions: [], sessionForks: {}, sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {}, runningSessions: {}, sessionStatusRequests: 0 };
   const spaceList = { loading: true, overview: {}, visits: [], refresh: () => request("spaces") };
   const activityData = { loading: true, credits: { data: { netUsd: 1 }, error: null }, days: { data: [], error: null }, activity: { data: { hourly: [], days: 91 }, error: null }, refresh: () => request("activity") };
   const renderTab = loadChromeComponent(`../app/(tabs)/${tab}.tsx`, component, {
@@ -604,7 +605,7 @@ for (const [tab, component, expectedRequests] of [
     useDeviceRuntimeInstances: () => null, deviceRuntimeSupported: false, startDeviceRuntime: async () => null,
     useDeviceFolderBrowser: () => ({ listing: null, loading: false, failure: null, load: async () => {} }), DeviceFolderBrowser: "DeviceFolderBrowser",
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey,
-    sessionFilterCutoff, normalizeSearchQuery, selectSpaceList: () => [], personalSpaceActivity: () => new Map(), emptyRunningSessions, runningSessionCandidates, sessionListStatus,
+    sessionFilterCutoff, normalizeSearchQuery, buildSessionForkTree, selectSpaceList: () => [], personalSpaceActivity: () => new Map(), emptyRunningSessions, runningSessionCandidates, sessionListStatus,
     CHAT_SEARCH_TYPES: ["chat", "space"], SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
@@ -1039,9 +1040,9 @@ for (const [tab, component, expectedRequests] of [
       }
     },
     useSyncScope: (key, run, interval, enabled = true) => { if (enabled) jobs.set(key, { run, interval }); },
-    useApp: () => ({ state: {}, sync: { invalidate() {}, invalidatePrefix() {} }, prefetchSession() {}, refreshSessionStatuses: async () => {} }),
+    useApp: () => ({ state: { sessionForks: {} }, sync: { invalidate() {}, invalidatePrefix() {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} }),
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
-    fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
+    buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", PanelFilterChip: "PanelFilterChip", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
   });
@@ -1622,9 +1623,23 @@ const forkClient = {
   }),
 };
 const forkedSession = await forkSessionTurn(forkClient, "space-1", "session-1", { id: "child-turn", sourceTurnId: "source-turn" });
-assert.equal(forkedSession.id, "forked-session");
+assert.equal(forkedSession.session.id, "forked-session");
 assert.deepEqual(forkCalls, [{ spaceId: "space-1", sessionId: "session-1", turnId: "source-turn" }]);
 await assert.rejects(() => forkSessionTurn(forkClient, "", "session-1", { id: "turn-1", sourceTurnId: null }), /Cannot fork/);
+
+const inherited = (sequence, source = "parent") => ({ id: `t${sequence}`, sequence, sourceSessionId: source, sourceTurnId: `src${sequence}` });
+const own = (sequence) => ({ id: `t${sequence}`, sequence, sourceSessionId: "child" });
+assert.deepEqual(forkPoint([inherited(1), inherited(2), own(3)], "child", true), { sequence: 2, sessionId: "parent", turnId: "src2" }, "the fork point sits after the inherited prefix");
+assert.deepEqual(forkPoint([inherited(1), inherited(2)], "child", false), { sequence: 2, sessionId: "parent", turnId: "src2" }, "a fresh fork ends at its anchor");
+assert.equal(forkPoint([inherited(1), inherited(2)], "child", true), null, "an unloaded newer page may still be inherited");
+
+const at = (minutes) => new Date(Date.UTC(2026, 0, 1, 0, minutes)).toISOString();
+const chat = (id, minutes) => ({ id, lastMessageAt: at(minutes), updatedAt: at(minutes) });
+const edge = (childSessionId, parentSessionId, extra = {}) => ({ childSessionId, parentSessionId, ...extra });
+const forks = mergeSessionForks({}, [edge("fork-a", "parent"), edge("fork-b", "parent"), edge("nested", "fork-a"), edge("orphan", "unlisted"), edge("hidden", null)]);
+const tree = buildSessionForkTree([chat("recent", 50), chat("nested", 40), chat("parent", 30), chat("fork-b", 20), chat("orphan", 10), chat("fork-a", 5), chat("hidden", 1)], forks);
+assert.deepEqual(tree.map((row) => [row.session.id, row.tree.depth]), [["recent", 0], ["parent", 0], ["fork-a", 1], ["nested", 1], ["fork-b", 1], ["orphan", 0], ["hidden", 0]], "forks nest one level under their listed ancestor, ordered by latest activity in each branch");
+assert.equal(mergeSessionForks(forks, [edge("fork-a", "parent")]), forks, "an unchanged read keeps the edge map identity");
 
 const relatedId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const [callerSpace, callerChat, callerTurn, reviewChat, otherSpace, docsChat] = [1, 2, 3, 4, 5, 6].map(relatedId);
@@ -1959,8 +1974,8 @@ assert.ok(paginationCallback && stateSyncHook && timeoutSource);
 const listReducerSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
 const latestStatusSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "updateLatestTurn");
 const reducerHelperSources = ["preferNewerSession", "mergeSessionItem", "placeRunningSession"].map((name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource)).join("\n");
-const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionSourceFilterOf", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
-  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionSourceFilterOf,
+const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionSourceFilterOf", "mergeSessionForks", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionSourceFilterOf, mergeSessionForks,
 );
 const listSyncState = {
   sessions: syncRows, sessionsPagesLoaded: 2, sessionsHasMore: true, sessionsCursor: "tail-cursor", sessionsPageBoundary: { lastMessageAt: syncRows.at(-1).lastMessageAt },
@@ -3260,9 +3275,20 @@ const liveRowScope = {
   chatScrollTrace: { isRecording: () => false }, trackRow: () => {},
   MessageBubble: "MessageBubble", TurnMarker: "TurnMarker", LiveReply: "LiveReply",
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
-  handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null,
+  handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
 };
-const renderLiveRow = new Function(...Object.keys(liveRowScope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(liveRowScope));
+const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
+const renderLiveRow = compileRenderMessage(liveRowScope);
+{
+  const forkMessages = [
+    { id: "inherited-user", role: "user", meta: { turnSequence: 1 } },
+    { id: "inherited-reply", role: "assistant", meta: { turnSequence: 1 } },
+    { id: "own-user", role: "user", meta: { turnSequence: 2 } },
+  ];
+  const renderForkRow = compileRenderMessage({ ...liveRowScope, client: null, lookupSession: () => null, openRelatedSession: () => {}, messages: forkMessages, replyAnchor: null, forkOrigin: { sequence: 1, ref: { spaceId: "space", sessionId: "parent", turnId: "anchor" } } });
+  const dividers = forkMessages.map((item, index) => chromeNodes(renderForkRow({ item, index })).filter((node) => node.type === "ForkedFromDivider").length);
+  assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
+}
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
 assert.equal(typeof ownerRow.props.onLayout, "function");
@@ -3934,6 +3960,7 @@ assert.equal(schemaRuns, 1, "concurrent cache readers share completed schema ini
 await cacheModule.saveHome("user-a", {
   spaces: [{ id: "space-a" }, { id: "space-b" }],
   sessions: [{ id: "chat-a", spaceId: "space-a" }, { id: "chat-b", spaceId: "space-b" }],
+  forks: [],
 });
 const cacheMessages = [
   { id: "message-a", sequence: 2, meta: { _mobileLive: true, turnId: "turn-a" }, text: "answer" },

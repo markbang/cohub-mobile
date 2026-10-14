@@ -1,4 +1,4 @@
-import type { ContentBlock, MessageRecord, SessionRecord, SpaceRecord } from "@neta-art/cohub";
+import type { ContentBlock, MessageRecord, SessionListFork, SessionRecord, SpaceRecord } from "@neta-art/cohub";
 import * as Crypto from "expo-crypto";
 import { translate, getActiveLocale } from "@/src/i18n/core";
 import { mentionDisplayText } from "@/src/data/space-mentions";
@@ -14,6 +14,14 @@ export function displaySpaceName(space: Partial<Pick<SpaceRecord, "name" | "titl
 export function displaySessionTitle(session: Pick<SessionRecord, "title" | "latestMessageText">) {
   // Titles and previews can carry mention markup from any client; show it as `@Label`.
   return mentionDisplayText(session.title ?? "").trim() || mentionDisplayText(session.latestMessageText ?? "").trim().split("\n")[0]?.slice(0, 64) || translate("session.untitled");
+}
+
+/** A fork keeps its parent's title until renamed, so its first own prompt tells siblings apart. */
+export function displayForkSessionTitle(session: Pick<SessionRecord, "title" | "latestMessageText">, fork: Pick<SessionListFork, "parentTitle" | "firstUserTextAfterFork"> | null) {
+  const forkText = mentionDisplayText(fork?.firstUserTextAfterFork ?? "").replace(/\s+/g, " ").trim();
+  const own = mentionDisplayText(session.title ?? "").trim();
+  if (forkText && (!own || own === mentionDisplayText(fork?.parentTitle ?? "").trim())) return forkText.slice(0, 64);
+  return displaySessionTitle(session);
 }
 
 export function initials(value: string) {

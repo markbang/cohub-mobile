@@ -11,6 +11,7 @@ import type {
   UserSessionListItem,
 } from "@neta-art/cohub";
 
+import type { SessionForks } from "./session-fork-tree";
 import type { LatestSessionTurn, SessionPageBoundary } from "./session-status";
 import type { RunningSessionsSnapshot } from "./running-sessions";
 import type { SessionSourceFilter } from "./session-source";
@@ -100,6 +101,7 @@ export type AppState = {
   sessionsPageBoundary: SessionPageBoundary | null;
   sessionsPagesLoaded: number;
   sessionsLoadingMore: boolean;
+  sessionForks: SessionForks;
   sessionLatestTurns: Record<string, LatestSessionTurn | null>;
   sessionTurnStatuses: Record<string, LatestSessionTurn | null>;
   sessionStatusRequests: number;

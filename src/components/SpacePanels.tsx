@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/immutability -- Reanimated shared values are intentionally mutated by gesture worklets. */
 /* eslint-disable react-hooks/set-state-in-effect -- controlled panel state synchronizes the native animation surface. */
-import type { CohubClient, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
+import type { CohubClient, SessionListFork, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
+import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
@@ -437,7 +438,7 @@ function cursorAfterOldestSession(sessions: UserSessionListItem[]) {
 }
 
 type ChatPanelItem =
-  | { kind: "local"; session: UserSessionListItem }
+  | { kind: "local"; session: UserSessionListItem; fork: SessionListFork | null; tree: SessionTreePosition | null }
   | { kind: "remote"; hit: RemoteSessionSearchHit };
 
 type ChatListFilter =
@@ -448,7 +449,7 @@ type ChatListFilter =
 function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; sessions: UserSessionListItem[]; client: CohubClient | null; onChipsTouchChange: (touching: boolean) => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string, target?: SessionNavigationTarget) => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { state, sync, prefetchSession, refreshSessionStatuses } = useApp();
+  const { state, sync, prefetchSession, refreshSessionStatuses, rememberSessionForks } = useApp();
   const [query, setQuery] = useState("");
   const [extraSessions, setExtraSessions] = useState<UserSessionListItem[]>([]);
   const [scopeCursor, setScopeCursor] = useState<string | null>(null);
@@ -551,8 +552,11 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     matchesListFilter(session),
   );
   const sessionsById = useMemo(() => new Map(displaySessions.map((session) => [session.id, session])), [displaySessions]);
+  const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatPanelItem[]>(() => {
-    if (!trimmedQuery) return filteredSessions.map((session) => ({ kind: "local", session }));
+    const flatSession = (session: UserSessionListItem) => ({ kind: "local" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
+    if (!trimmedQuery && listFilter.kind === "all") return buildSessionForkTree(filteredSessions, sessionForks).map((row) => ({ kind: "local", ...row }));
+    if (!trimmedQuery) return filteredSessions.map(flatSession);
     const remoteSessions = remoteQueryMatches
       ? remoteSearch.sessions.filter((hit) => {
         const session = sessionsById.get(hit.sessionId);
@@ -564,9 +568,9 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     const remoteIds = new Set(remoteSessions.map((hit) => hit.sessionId));
     return [
       ...remoteSessions.map((hit) => ({ kind: "remote" as const, hit })),
-      ...filteredSessions.filter((session) => !remoteIds.has(session.id)).map((session) => ({ kind: "local" as const, session })),
+      ...filteredSessions.filter((session) => !remoteIds.has(session.id)).map(flatSession),
     ];
-  }, [filteredSessions, labelSessionIds, listFilter, remoteQueryMatches, remoteSearch.sessions, sessionsById, trimmedQuery]);
+  }, [filteredSessions, labelSessionIds, listFilter, remoteQueryMatches, remoteSearch.sessions, sessionForks, sessionsById, trimmedQuery]);
   // LegendList memoizes each row on [item, extraData]; the row reads client/theme/locale,
   // which never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(() => ({ client, t, theme, prefetchSession }), [client, t, theme, prefetchSession]);
@@ -581,8 +585,9 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     const generation = scopeGenerationRef.current;
     try {
       const cursor = scopeCursor ?? cursorAfterOldestSession(sessions);
-      const response = await client.space(spaceId).sessions.list({ limit: 60, ...(cursor ? { cursor } : {}) });
+      const response = await client.space(spaceId).sessions.list({ limit: 60, includeForks: true, ...(cursor ? { cursor } : {}) });
       if (generation !== scopeGenerationRef.current) return;
+      rememberSessionForks(response.forks ?? []);
       tailLoadedRef.current = true;
       setExtraSessions((current) => mergePanelSessions(current, response.sessions, spaceId, spaceName));
       void refreshSessionStatuses(response.sessions, { silent: true });
@@ -600,8 +605,9 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     const generation = scopeGenerationRef.current;
     const requestStartedAt = Date.now();
     try {
-      const response = await client.space(spaceId).sessions.list({ limit: 60 });
+      const response = await client.space(spaceId).sessions.list({ limit: 60, includeForks: true });
       if (generation !== scopeGenerationRef.current) return;
+      rememberSessionForks(response.forks ?? []);
       setExtraSessions((current) => reconcileSessionHead(current, response.sessions, response.pageInfo?.hasMore === true, requestStartedAt));
       if (!tailLoadedRef.current) {
         setScopeCursor(response.pageInfo?.nextCursor ?? null);
@@ -666,7 +672,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         keyExtractor={(item) => item.kind === "remote" ? `remote:${item.hit.sessionId}` : `local:${item.session.id}`}
         renderItem={({ item }) => item.kind === "remote"
           ? <SessionSearchRow hit={item.hit} showSpace={false} onPress={(target) => onOpenSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />
-          : <SessionRow session={item.session} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
+          : <SessionRow session={item.session} fork={item.fork} tree={item.tree} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable style={[typography.micro, { color: theme.colors.danger, marginHorizontal: 14, marginTop: 8 }]}>{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} style={({ pressed }) => ({ minHeight: 40, marginHorizontal: 14, marginTop: 8, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text style={[typography.caption, { color: theme.colors.accent }]}>{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}

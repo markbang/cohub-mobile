@@ -23,11 +23,12 @@ import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { emptyRunningSessions, runningSessionCandidates } from "@/src/data/running-sessions";
 import { SpaceRow } from "@/src/components/SpaceRow";
+import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type Filter = "all" | "running" | "completed";
 type ChatListItem =
-  | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem }
+  | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
   | { kind: "remote-session"; hit: RemoteSessionSearchHit }
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit };
@@ -108,8 +109,11 @@ export default function ChatsScreen() {
   const countSpaceIds = useMemo(() => localSpaces.filter((space) => !space.description?.trim()).map((space) => space.id), [localSpaces]);
   // Search results reuse already-probed counts; they do not fan out probes of their own.
   const spaceSessionCounts = useSpaceSessionCounts(client, countSpaceIds, { probe: false });
+  const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatListItem[]>(() => {
-    if (!trimmedQuery || filter !== "all" || sourceFilter !== "all") return localSessions.map((session) => ({ kind: "local-session", session }));
+    const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
+    if (!trimmedQuery && filter === "all" && sourceFilter === "all") return buildSessionForkTree(localSessions, sessionForks).map((row) => ({ kind: "local-session", ...row }));
+    if (!trimmedQuery || filter !== "all" || sourceFilter !== "all") return localSessions.map(flatSession);
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
@@ -117,11 +121,11 @@ export default function ChatsScreen() {
     const remoteSpaceIds = new Set(remoteSpaces.map((hit) => hit.spaceId));
     return [
       ...remoteSessions.map((hit) => ({ kind: "remote-session" as const, hit })),
-      ...localSessions.filter((session) => !remoteSessionIds.has(session.id)).map((session) => ({ kind: "local-session" as const, session })),
+      ...localSessions.filter((session) => !remoteSessionIds.has(session.id)).map(flatSession),
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [filter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sourceFilter, trimmedQuery]);
+  }, [filter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, trimmedQuery]);
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
@@ -186,7 +190,7 @@ export default function ChatsScreen() {
         keyExtractor={(item) => item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
-          if (item.kind === "local-session") return <SessionRow session={item.session} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
+          if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}

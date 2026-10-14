@@ -840,6 +840,9 @@ export const en = {
 
   // Sessions / spaces rows
   "session.untitled": "Untitled conversation",
+  "session.forkedFrom": "Forked from “{title}”",
+  "session.forkedFromChat": "Forked from another chat",
+  "session.forkedFromUnavailable": "Forked from a chat you can't access",
   "session.noMessages": "No messages yet",
   "space.fallbackName": "Space",
   "space.readyForWork": "Ready for work",

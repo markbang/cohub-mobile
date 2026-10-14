@@ -813,6 +813,9 @@ export const zh: Record<TranslationKey, string> = {
 
   // Sessions / spaces rows
   "session.untitled": "未命名对话",
+  "session.forkedFrom": "分叉自「{title}」",
+  "session.forkedFromChat": "分叉自其他聊天",
+  "session.forkedFromUnavailable": "分叉自无权访问的聊天",
   "session.noMessages": "还没有消息",
   "space.fallbackName": "空间",
   "space.readyForWork": "准备就绪",
