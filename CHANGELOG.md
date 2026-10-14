@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.20](https://github.com/markbang/cohub-mobile/compare/v2.2.19...v2.2.20) (2026-10-14)
+
+
+### Features
+
+* **chat:** link prompted chats to their caller ([24ff985](https://github.com/markbang/cohub-mobile/commit/24ff98518f638a4d186a194792ac95de955c8665))
+* **chats:** group forked Chats under their parent and mark the fork point ([00ed6dd](https://github.com/markbang/cohub-mobile/commit/00ed6dd8868c5109dec7abfb1b5871e86c90cc45))
+
+
+### Fixes
+
+* **chat:** require a horizontal swipe to open space panels ([31ee52b](https://github.com/markbang/cohub-mobile/commit/31ee52badc5a3e99ba7ee18791d72cd43e8f42d9))
+* **ios:** tighten the floating tab bar's bottom inset ([44e09c2](https://github.com/markbang/cohub-mobile/commit/44e09c229d6dc2e54f356f77a92843bdcb96e597))
+* **ota:** verify Android source against the released native baseline ([31e436f](https://github.com/markbang/cohub-mobile/commit/31e436f88ad66b31cd3182c30df7ca40509b4c62))
+
 ## [2.2.19](https://github.com/markbang/cohub-mobile/compare/v2.2.18...v2.2.19) (2026-10-13)
 
 
