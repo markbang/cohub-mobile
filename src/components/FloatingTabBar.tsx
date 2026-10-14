@@ -13,10 +13,18 @@ const BAR_BOTTOM_MARGIN = 8;
 const INDICATOR_DURATION = 250;
 const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
 
+const IOS_HOME_INDICATOR_OVERLAP = 14;
+
+function barBottomOffset(bottomInset: number) {
+  // iOS's home-indicator inset is sized for edge-to-edge content; like the system tab bar, a floating bar can sit partly inside it.
+  if (Platform.OS === "ios") return Math.max(bottomInset - IOS_HOME_INDICATOR_OVERLAP, BAR_BOTTOM_MARGIN * 2);
+  return Math.max(bottomInset, BAR_BOTTOM_MARGIN) + BAR_BOTTOM_MARGIN;
+}
+
 /** Space the floating bar occupies at the bottom of a tab screen. */
 export function useFloatingTabBarInset() {
   const insets = useSafeAreaInsets();
-  return BAR_HEIGHT + Math.max(insets.bottom, BAR_BOTTOM_MARGIN) + BAR_BOTTOM_MARGIN + 16;
+  return BAR_HEIGHT + barBottomOffset(insets.bottom) + 16;
 }
 
 export function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
@@ -77,7 +85,7 @@ export function FloatingTabBar({ state, descriptors, navigation, insets }: Botto
         right: 0,
         bottom: 0,
         paddingHorizontal: BAR_HORIZONTAL_MARGIN,
-        paddingBottom: Math.max(insets.bottom, BAR_BOTTOM_MARGIN) + BAR_BOTTOM_MARGIN,
+        paddingBottom: barBottomOffset(insets.bottom),
       }, barStyle]}
     >
       <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
