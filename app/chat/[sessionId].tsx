@@ -159,7 +159,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { state, client, connectionState, refreshHome, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
+  const { state, client, connectionUnavailable, refreshHome, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
   const view = useSession(sessionId);
   const session = view.session ?? state.sessions.find((item) => item.id === sessionId) ?? null;
   const sessionSummary = state.sessions.find((item) => item.id === sessionId) ?? null;
@@ -1078,7 +1078,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       <Animated.View ref={sendRootRef} collapsable={false} style={{ flex: 1, minHeight: 0 }}>
         <EdgeHeader onLayout={onHeaderLayout}>
         <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} /><View ref={moreButtonRef} collapsable={false}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View></>} />
-        <ConnectionBanner state={connectionState} />
+        <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <Pressable onPress={() => void refreshSession(sessionId)} style={({ pressed }) => ({ marginHorizontal: 16, marginTop: 12, padding: 11, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.dangerSoft, flexDirection: "row", alignItems: "center", gap: 8 })}><AppIcon name="alert" size={16} color={theme.colors.danger} /><Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{view.error}</Text><Text style={[typography.caption, { color: theme.colors.danger }]}>{t("common.retry")}</Text></Pressable> : null}
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} style={{ flex: 1, minHeight: 0, backgroundColor: theme.colors.background }}>
@@ -1238,7 +1238,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { state, client, connectionState, sendNewMessage, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
+  const { state, client, connectionUnavailable, sendNewMessage, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
   const runtime = useSpaceRuntime(spaceId);
   const space = state.spaces.find((item) => item.id === spaceId) ?? null;
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
@@ -1364,7 +1364,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
       <View ref={sendRootRef} collapsable={false} style={{ flex: 1, minHeight: 0 }}>
         <EdgeHeader onLayout={onHeaderLayout}>
         <TopBar transparent title={spaceName} onBack={() => router.back()} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} />
-        <ConnectionBanner state={connectionState} />
+        <ConnectionBanner visible={connectionUnavailable} />
         </EdgeHeader>
         <View style={{ flex: 1, minHeight: 0, paddingTop: headerHeight }}>
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 18 }}>

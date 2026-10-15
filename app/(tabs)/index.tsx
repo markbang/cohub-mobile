@@ -41,7 +41,7 @@ export default function ChatsScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
   const isFocused = useIsFocused();
-  const { state, client, connectionState, refreshHome, refreshChats, discoverRunningSessions, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
+  const { state, client, connectionUnavailable, refreshHome, refreshChats, discoverRunningSessions, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
   const filterPreference = useSessionFilterPreference();
   const [cutoff, setCutoff] = useState(() => sessionFilterCutoff(filterPreference.minutes, Date.now()));
   const searchRef = useRef<TextInput>(null);
@@ -176,7 +176,7 @@ export default function ChatsScreen() {
         account={<AccountAvatar />}
         onCreate={() => router.push("/new-chat")}
       />
-      <ConnectionBanner state={connectionState} />
+      <ConnectionBanner visible={connectionUnavailable} />
       {dataError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>
       <LegendList

@@ -31,6 +31,79 @@ export function isTransportRecovery(previous: ConnectionState, next: ConnectionS
   return previous === "reconnecting" || previous === "closed" || previous === "error";
 }
 
+type RealtimeRecoveryOptions = {
+  reconnect: () => void;
+  onUnavailableChange: (unavailable: boolean) => void;
+  isActive: () => boolean;
+  graceMs: number;
+  retryBaseMs: number;
+  retryMaxMs: number;
+};
+
+/**
+ * The SDK stops reconnecting after two failed token reads during socket auth,
+ * which a slow mobile network causes as readily as a revoked session. Retry a
+ * stopped socket with backoff, and report it only after a grace period.
+ */
+export function createRealtimeRecovery(options: RealtimeRecoveryOptions) {
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let graceTimer: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+  let stopped = false;
+  let unavailable = false;
+
+  const clearRetry = () => {
+    if (retryTimer !== null) clearTimeout(retryTimer);
+    retryTimer = null;
+  };
+  const clearGrace = () => {
+    if (graceTimer !== null) clearTimeout(graceTimer);
+    graceTimer = null;
+  };
+  const setUnavailable = (next: boolean) => {
+    if (unavailable === next) return;
+    unavailable = next;
+    options.onUnavailableChange(next);
+  };
+
+  return {
+    update(snapshot: ConnectionStateSnapshot) {
+      if (snapshot.state === "open") {
+        attempt = 0;
+        stopped = false;
+        clearRetry();
+        clearGrace();
+        setUnavailable(false);
+        return;
+      }
+      if (snapshot.state !== "closed" || snapshot.willReconnect === true) return;
+      stopped = true;
+      if (!unavailable && graceTimer === null) {
+        graceTimer = setTimeout(() => {
+          graceTimer = null;
+          setUnavailable(true);
+        }, options.graceMs);
+      }
+      clearRetry();
+      const delay = Math.min(options.retryBaseMs * 2 ** attempt, options.retryMaxMs);
+      attempt += 1;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        if (options.isActive()) options.reconnect();
+      }, delay);
+    },
+    foreground() {
+      if (!stopped) return;
+      clearRetry();
+      options.reconnect();
+    },
+    dispose() {
+      clearRetry();
+      clearGrace();
+    },
+  };
+}
+
 export type SessionResyncReason = "transport-open" | "foreground" | "out-of-sync";
 
 type ResyncCoordinatorOptions = {

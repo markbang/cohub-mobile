@@ -39,7 +39,7 @@ import { followupPreviewText, queuedFollowupTurns, followupQueueItems, isOptimis
 import { classifySaveConflict, isEditableTextFile, isFileConflictError } from "../src/data/code-file.ts";
 import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-language.ts";
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
-import { connectionDisplayState, createSessionResyncCoordinator, isTransportRecovery } from "../src/data/session-reconnect.ts";
+import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery } from "../src/data/session-reconnect.ts";
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget } from "../src/data/space-panel-pager.ts";
 import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
@@ -1350,12 +1350,12 @@ for (const [path, labels, chips] of [
   assert.ok(chromeNodes(sheet).some((node) => node.type === "FilterChip" && node.props.icon === "smartphone" && node.props.selected), "creating from the empty state starts on this device");
   screen.unmount();
 }
-const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", chromeScope);
-for (const state of ["idle", "connecting", "reconnecting", "open"]) {
-  assert.equal(renderConnectionBanner({ state }), null, `routine ${state} state must not show a banner`);
-}
-for (const state of ["closed", "error"]) {
-  const nodes = chromeNodes(renderConnectionBanner({ state }));
+const fadeAnimation = { duration: () => fadeAnimation };
+const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } } });
+assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
+{
+  const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
+  assert.equal(nodes[0].props.style.position, "absolute", "the banner overlays content instead of resizing the header");
   assert.ok(nodes.some((node) => node.type === "AppIcon" && node.props.name === "cloud-off"));
   assert.deepEqual(nodes.filter((node) => node.type === "Text").flatMap((node) => node.props.children), ["ui.banner.unavailable"], "actual connection failures remain visible");
 }
@@ -2456,6 +2456,45 @@ assert.equal(connectionDisplayState({ state: "closed", willReconnect: false }), 
 assert.equal(connectionDisplayState({ state: "open" }), "open");
 assert.equal(connectionDisplayState({ state: "connecting" }), "connecting");
 assert.equal(connectionDisplayState({ state: "reconnecting" }), "reconnecting");
+
+mock.timers.enable({ apis: ["setTimeout"] });
+try {
+  let reconnects = 0;
+  let active = true;
+  const unavailable = [];
+  const recovery = createRealtimeRecovery({
+    reconnect: () => { reconnects += 1; },
+    onUnavailableChange: (value) => unavailable.push(value),
+    isActive: () => active,
+    graceMs: 5_000,
+    retryBaseMs: 2_000,
+    retryMaxMs: 30_000,
+  });
+  recovery.update({ state: "closed", willReconnect: true });
+  mock.timers.tick(60_000);
+  assert.equal(reconnects, 0, "SDK-managed reconnects need no app retry");
+  recovery.update({ state: "closed", willReconnect: false });
+  mock.timers.tick(2_000);
+  recovery.update({ state: "open" });
+  mock.timers.tick(10_000);
+  assert.deepEqual([reconnects, unavailable], [1, []], "a quick recovery never shows the banner");
+  recovery.update({ state: "closed", willReconnect: false });
+  mock.timers.tick(2_000);
+  recovery.update({ state: "closed", willReconnect: false });
+  mock.timers.tick(4_000);
+  assert.deepEqual([reconnects, unavailable], [3, [true]], "retries back off while the banner stays up");
+  active = false;
+  recovery.update({ state: "closed", willReconnect: false });
+  mock.timers.tick(8_000);
+  assert.equal(reconnects, 3, "no retries in the background");
+  active = true;
+  recovery.foreground();
+  recovery.update({ state: "open" });
+  assert.deepEqual([reconnects, unavailable], [4, [true, false]]);
+  recovery.dispose();
+} finally {
+  mock.timers.reset();
+}
 
 mock.timers.enable({ apis: ["setTimeout"] });
 try {

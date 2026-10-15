@@ -20,7 +20,7 @@ export default function ActivityScreen() {
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
-  const { connectionState } = useApp();
+  const { connectionUnavailable } = useApp();
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const subscriptions = useBillingHistory("subscriptions");
@@ -40,9 +40,9 @@ export default function ActivityScreen() {
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
       <TopBar transparent title={t("activity.title")} leading={<AccountAvatar />} />
+      <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>
     <ScrollView ref={scrollRef} style={{ flex: 1 }} contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
-      <ConnectionBanner state={connectionState} />
       <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} style={{ padding: theme.spacing.lg, gap: theme.spacing.sm }} pressedStyle={{ backgroundColor: theme.colors.surfacePressed }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm }}>
           <AppIcon name="database" size={17} color={theme.colors.accent} />

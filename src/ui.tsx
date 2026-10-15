@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { G, Path, Rect } from "react-native-svg";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { icons, type IconName } from "@/src/icons";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { getComposerActionState } from "@/src/data/composer-state";
@@ -29,7 +30,8 @@ import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
-import type { ActivityItem, ConnectionState } from "@/src/data/types";
+import { motion } from "@/src/motion";
+import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
@@ -364,11 +366,16 @@ export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string
   </View>;
 }
 
-export function ConnectionBanner({ state }: { state: ConnectionState }) {
+export function ConnectionBanner({ visible }: { visible: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  if (state !== "closed" && state !== "error") return null;
-  return <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, paddingVertical: 8, backgroundColor: theme.colors.dangerSoft }}><AppIcon name="cloud-off" size={14} color={theme.colors.danger} /><Text style={[typography.caption, { color: theme.colors.danger }]}>{t("ui.banner.unavailable")}</Text></View>;
+  if (!visible) return null;
+  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" style={styles.connectionBannerLayer}>
+    <View accessible accessibilityRole="alert" style={[styles.connectionBanner, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
+      <AppIcon name="cloud-off" size={14} color={theme.colors.danger} />
+      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.text }]}>{t("ui.banner.unavailable")}</Text>
+    </View>
+  </Animated.View>;
 }
 
 export function DataError({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -435,6 +442,8 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingTop: 22, paddingBottom: 10 },
   emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, minHeight: 260 },
   dataError: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginTop: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
+  connectionBannerLayer: { position: "absolute", top: "100%", left: 16, right: 16, marginTop: 8, alignItems: "center" },
+  connectionBanner: { flexDirection: "row", alignItems: "center", gap: 7, maxWidth: "100%", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   dataErrorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   searchField: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },

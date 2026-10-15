@@ -71,7 +71,7 @@ import { getInstallationId } from "@/src/platform/installation";
 import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { loadSessionFilterMinutes } from "@/src/data/session-filter-preference";
-import { connectionDisplayState, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
+import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
 import {
   displaySessionTitle,
   displaySpaceName,
@@ -84,6 +84,9 @@ const HOME_REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_RESYNC_DEBOUNCE_MS = 250;
 // Mirrors the web client: never re-seed the same session's stream more than once per window.
 const OUT_OF_SYNC_RESYNC_COOLDOWN_MS = 15_000;
+const REALTIME_UNAVAILABLE_GRACE_MS = 5_000;
+const REALTIME_RETRY_BASE_MS = 2_000;
+const REALTIME_RETRY_MAX_MS = 30_000;
 
 function withTimeout<T>(promise: Promise<T>, label: string) {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -825,6 +828,7 @@ export type AppContextValue = {
   refreshChats: () => Promise<void>;
   discoverRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
   connectionState: ConnectionState;
+  connectionUnavailable: boolean;
   installationId: string | null;
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
   refreshHome: (options?: { silent?: boolean }) => Promise<void>;
@@ -887,6 +891,7 @@ export function AppProvider({
   const [sync] = useState(() => createSyncScheduler({ active: NativeAppState.currentState === "active" }));
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const connectionStateRef = useRef<ConnectionState>("idle");
+  const [connectionUnavailable, setConnectionUnavailable] = useState(false);
   const stateRef = useRef(state);
   const subscriptions = useRef(new Map<string, () => void>());
   const sessionSpaces = useRef(new Map<string, string>());
@@ -1334,15 +1339,34 @@ export function AppProvider({
 
   useEffect(() => {
     if (!client) return;
-    return client.onConnection((snapshot) => {
+    const recovery = createRealtimeRecovery({
+      // The SDK exposes no reconnect; subscribing restarts a stopped socket.
+      reconnect: () => client.onUserEvent(() => undefined)(),
+      onUnavailableChange: setConnectionUnavailable,
+      isActive: () => NativeAppState.currentState === "active",
+      graceMs: REALTIME_UNAVAILABLE_GRACE_MS,
+      retryBaseMs: REALTIME_RETRY_BASE_MS,
+      retryMaxMs: REALTIME_RETRY_MAX_MS,
+    });
+    const appState = NativeAppState.addEventListener("change", (next) => {
+      if (next === "active") recovery.foreground();
+    });
+    const stopConnection = client.onConnection((snapshot) => {
       const previous = connectionStateRef.current;
       connectionStateRef.current = snapshot.state;
       const displayState = connectionDisplayState(snapshot);
       if (displayState) setConnectionState(displayState);
+      recovery.update(snapshot);
       if (!isTransportRecovery(previous, snapshot.state)) return;
       for (const sessionId of subscriptions.current.keys()) resyncCoordinatorRef.current.request(sessionId, "transport-open");
       sync.invalidate();
     });
+    return () => {
+      stopConnection();
+      appState.remove();
+      recovery.dispose();
+      setConnectionUnavailable(false);
+    };
   }, [client, sync]);
 
   useEffect(() => {
@@ -2304,6 +2328,7 @@ export function AppProvider({
       refreshChats,
       discoverRunningSessions,
       connectionState,
+      connectionUnavailable,
       installationId,
       getAccessToken,
       refreshHome,
@@ -2359,6 +2384,7 @@ export function AppProvider({
       saveSessionReadSequenceForUser,
       closeSession,
       connectionState,
+      connectionUnavailable,
       createSpace,
       getAccessToken,
       refreshSpacePin,
