@@ -262,8 +262,8 @@
 
     <script>
       // Resolve the Android APK the same way the app does (src/data/update-assets.ts):
-      // newest Available arm64-v8a record from the Yaota catalog, where the record's
-      // url must match the canonical /apk/cohub-v<version>-android-<abi>.apk path.
+      // newest Available arm64-v8a record from the app-scoped Yaota catalog, whose
+      // download URL must stay on ORIGIN under /apk/.
       // On any failure the anchors keep their GitHub Releases fallback href.
       (() => {
         const ORIGIN = "https://mobile.talesofai.com";
@@ -282,22 +282,34 @@
         };
 
         const apkUrl = (version) => `${ORIGIN}/apk/cohub-v${version}-android-${ABI}.apk`;
+        const isAllowedUrl = (value) => {
+          try {
+            const url = new URL(value);
+            return url.origin === ORIGIN && !url.search && !url.hash && /^\/apk\/(?!.*\.\.)[^/]+(?:\/[^/]+)*$/.test(url.pathname);
+          } catch {
+            return false;
+          }
+        };
 
         const pickNewest = (payload) => {
-          if (!payload || !Array.isArray(payload.apks)) return null;
+          if (!payload) return null;
+          const items = Array.isArray(payload.releases)
+            ? payload.releases.flatMap((group) => (group && Array.isArray(group.apks) ? group.apks : []))
+            : Array.isArray(payload.apks) ? payload.apks : [];
           let newest = null;
-          for (const item of payload.apks) {
+          for (const item of items) {
             if (!item || typeof item !== "object") continue;
             const version = typeof item.version === "string" ? item.version.trim() : "";
             const arch = typeof item.arch === "string" ? item.arch.trim() : "";
             const status = typeof item.status === "string" ? item.status.trim() : "Available";
-            const size = Number(item.size);
+            const size = Number(item.sizeBytes ?? item.size);
             const sha256 = typeof item.sha256 === "string" ? item.sha256.trim().toLowerCase() : "";
             if (!VERSION.test(version) || arch !== ABI || status !== "Available") continue;
             if (!Number.isSafeInteger(size) || size <= 0 || !SHA256.test(sha256)) continue;
-            if (typeof item.url === "string" && item.url.trim() !== apkUrl(version)) continue;
-            if (typeof item.url !== "string") continue;
-            if (!newest || isNewer(version, newest.version)) newest = { version, size };
+            const rawUrl = typeof item.downloadUrl === "string" ? item.downloadUrl.trim() : typeof item.url === "string" ? item.url.trim() : "";
+            const url = rawUrl || apkUrl(version);
+            if (!isAllowedUrl(url)) continue;
+            if (!newest || isNewer(version, newest.version)) newest = { version, size, url };
           }
           return newest;
         };
@@ -306,14 +318,14 @@
 
         const apply = (release) => {
           document.querySelectorAll("[data-dl-android]").forEach((el) => {
-            el.href = apkUrl(release.version);
+            el.href = release.url;
           });
           document.querySelectorAll("[data-dl-android-note]").forEach((el) => {
             el.textContent = `v${release.version} · ${formatSize(release.size)}`;
           });
         };
 
-        fetch(`${ORIGIN}/api/apks`, { headers: { Accept: "application/json" } })
+        fetch(`${ORIGIN}/api/apk/catalog?app_id=cohub-mobile`, { headers: { Accept: "application/json" } })
           .then((response) => (response.ok ? response.json() : null))
           .then((payload) => {
             const release = pickNewest(payload);
