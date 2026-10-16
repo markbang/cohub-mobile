@@ -71,7 +71,6 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
         {labels.length > 3 ? <View style={{ paddingHorizontal: 6, paddingVertical: 2, justifyContent: "center" }}><Text style={[typography.micro, { color: theme.colors.textFaint }]}>+{labels.length - 3}</Text></View> : null}
       </View> : null}
     </View>
-    <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
   </>;
   const rowStyle = { flexDirection: "row" as const, alignItems: "center" as const, gap: 12, minHeight: branch ? 60 : showSpace ? 76 : 68, paddingHorizontal: showSpace ? 18 : 16, paddingVertical: ROW_PADDING_Y, backgroundColor: "transparent", borderBottomWidth: tree && !tree.lastInGroup ? 0 : 1, borderBottomColor: theme.colors.border };
   const rowPressedStyle = { backgroundColor: theme.colors.surfacePressed };
