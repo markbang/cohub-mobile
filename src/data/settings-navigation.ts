@@ -19,13 +19,19 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
   return typeof value === "string" && Object.hasOwn(settingsSections, value);
 }
 
+type SettingsMenuItem = { labelKey: TranslationKey; icon: IconName; href: string };
+
 export const settingsMenu = [
-  { labelKey: "profile.appearance.title", icon: "palette", href: "/appearance" },
-  { labelKey: "profile.language.title", icon: "globe", href: "/language" },
-  { labelKey: "settings.browser.title", icon: "external-link", href: "/settings/browser" },
-  ...(["chats", "notifications", "channels", "rules"] as const).map((section) => ({
+  { labelKey: "settings.group.general", items: [
+    { labelKey: "profile.appearance.title", icon: "palette", href: "/appearance" },
+    { labelKey: "profile.language.title", icon: "globe", href: "/language" },
+    { labelKey: "settings.browser.title", icon: "external-link", href: "/settings/browser" },
+  ] },
+  { labelKey: "settings.group.workspace", items: (["chats", "notifications", "channels", "rules"] as const).map((section) => ({
     ...settingsSections[section], href: `/settings/${section}` as const,
-  })),
-  { labelKey: "settings.storage.title", icon: "database", href: "/settings/storage" },
-  { labelKey: "profile.about.title", icon: "info", href: "/about" },
-] as const satisfies readonly { labelKey: TranslationKey; icon: IconName; href: string }[];
+  })) },
+  { labelKey: "settings.group.app", items: [
+    { labelKey: "settings.storage.title", icon: "database", href: "/settings/storage" },
+    { labelKey: "profile.about.title", icon: "info", href: "/about" },
+  ] },
+] as const satisfies readonly { labelKey: TranslationKey; items: readonly SettingsMenuItem[] }[];

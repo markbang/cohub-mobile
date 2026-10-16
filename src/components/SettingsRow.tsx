@@ -3,14 +3,16 @@ import { Pressable, Text, View } from "react-native";
 import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, type IconName } from "@/src/ui";
 
-export function SettingsRow({ icon, title, value, children, onPress, disabled = false, danger = false }: {
+export function SettingsRow({ icon, title, value, detail, children, onPress, disabled = false, danger = false, last = false }: {
   icon: IconName;
   title: string;
   value?: string;
+  detail?: string;
   children?: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
   danger?: boolean;
+  last?: boolean;
 }) {
   const theme = useAppTheme();
   const content = <>
@@ -19,6 +21,7 @@ export function SettingsRow({ icon, title, value, children, onPress, disabled = 
       <Text style={[typography.body, { color: danger ? theme.colors.danger : theme.colors.text }]}>{title}</Text>
       {value ? <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{value}</Text> : null}
     </View>
+    {detail ? <Text numberOfLines={1} style={[typography.body, { flexShrink: 1, maxWidth: "45%", textAlign: "right", color: theme.colors.textMuted }]}>{detail}</Text> : null}
     {children}
     {onPress ? <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} /> : null}
   </>;
@@ -29,7 +32,7 @@ export function SettingsRow({ icon, title, value, children, onPress, disabled = 
     flexDirection: "row" as const,
     alignItems: "center" as const,
     gap: theme.spacing.md,
-    borderBottomWidth: 1,
+    borderBottomWidth: last ? 0 : 1,
     borderBottomColor: theme.colors.border,
   };
   return onPress ? <Pressable

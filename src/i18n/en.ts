@@ -334,6 +334,9 @@ export const en = {
   // Settings — shell
   "settings.title": "Settings",
   "settings.subtitle": "Account, app, and workspace preferences",
+  "settings.group.general": "General",
+  "settings.group.workspace": "Workspace",
+  "settings.group.app": "App",
   "settings.section.profile": "Profile",
   "settings.section.activity": "Activity",
   "settings.section.notifications": "Notifications",

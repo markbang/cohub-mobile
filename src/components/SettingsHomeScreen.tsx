@@ -14,7 +14,7 @@ import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { useAppTheme, useThemePreference, typography } from "@/src/theme";
-import { AppIcon, Avatar, TopBar, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, Avatar, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
 export function SettingsHomeScreen() {
   const theme = useAppTheme();
@@ -25,7 +25,7 @@ export function SettingsHomeScreen() {
   const router = useRouter();
   const { signOut } = useProfileSession();
   const { name, email, avatar } = useCurrentUser();
-  const { connectionState, clearCache } = useApp();
+  const { clearCache } = useApp();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +55,13 @@ export function SettingsHomeScreen() {
     }
   };
 
+  const detailFor = (href: string) => {
+    if (href === "/appearance") return t(`appearance.theme.${appearance}`);
+    if (href === "/language") return t(language === "system" ? "language.option.system" : language === "en" ? "language.device.english" : "language.device.chinese");
+    if (href === "/settings/browser") return t(browser.preference === "in-app" ? "settings.browser.inApp" : "settings.browser.system");
+    return undefined;
+  };
+
   return <Screen>
     <TopBar title={t("settings.title")} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }} keyboardShouldPersistTaps="handled">
@@ -62,31 +69,40 @@ export function SettingsHomeScreen() {
         accessibilityRole="button"
         accessibilityLabel={t("settings.section.profile")}
         onPress={() => router.push("/settings/profile")}
-        style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: theme.spacing.lg, padding: theme.spacing.lg, marginBottom: theme.spacing.md, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface })}
+        style={({ pressed }) => ({ alignItems: "center", gap: theme.spacing.md, paddingVertical: theme.spacing.lg, marginBottom: theme.spacing.sm, opacity: pressed ? 0.7 : 1 })}
       >
-        <Link.AppleZoomTarget><Avatar name={name} uri={avatar} size={52} online={connectionState === "open"} /></Link.AppleZoomTarget>
-        <View style={{ flex: 1, minWidth: 0, gap: theme.spacing.xs }}>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{name}</Text>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{email || t("settings.section.profile")}</Text>
+        <View>
+          <Link.AppleZoomTarget><Avatar name={name} uri={avatar} size={84} /></Link.AppleZoomTarget>
+          <View style={{ position: "absolute", right: -5, bottom: -1, width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised, borderWidth: 2, borderColor: theme.colors.background }}>
+            <AppIcon name="square-pen" size={15} color={theme.colors.textSecondary} />
+          </View>
         </View>
-        <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
+        <View style={{ alignItems: "center", gap: theme.spacing.xs, paddingHorizontal: theme.spacing.xl }}>
+          <Text numberOfLines={1} style={[typography.title, { color: theme.colors.text }]}>{name}</Text>
+          {email ? <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted }]}>{email}</Text> : null}
+        </View>
       </Pressable>
       <View testID="settings-list">
-        {settingsMenu.map((item) => <SettingsRow
-          key={item.href}
-          icon={item.icon}
-          title={t(item.labelKey)}
-          value={item.href === "/appearance" ? t(`appearance.theme.${appearance}`) : item.href === "/language" ? t(language === "system" ? "language.option.system" : language === "en" ? "language.device.english" : "language.device.chinese") : item.href === "/settings/browser" ? t(browser.preference === "in-app" ? "settings.browser.inApp" : "settings.browser.system") : undefined}
-          onPress={() => router.push(item.href)}
-        />)}
+        {settingsMenu.map((group) => <SettingsGroup key={group.labelKey} label={t(group.labelKey)}>
+          {group.items.map((item, index) => <SettingsRow
+            key={item.href}
+            icon={item.icon}
+            title={t(item.labelKey)}
+            detail={detailFor(item.href)}
+            last={index === group.items.length - 1}
+            onPress={() => router.push(item.href)}
+          />)}
+        </SettingsGroup>)}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("common.signOut")}
-        disabled={signingOut}
-        onPress={() => { setError(null); setSignOutOpen(true); }}
-        style={({ pressed }) => ({ marginTop: theme.spacing.xl, minHeight: 48, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.dangerSoft : "transparent" })}
-      ><Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
+      <SettingsGroup>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("common.signOut")}
+          disabled={signingOut}
+          onPress={() => { setError(null); setSignOutOpen(true); }}
+          style={({ pressed }) => ({ minHeight: 52, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.dangerSoft : theme.colors.surface })}
+        ><Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
+      </SettingsGroup>
       <Pressable testID="settings.version" accessibilityRole="button" accessibilityLabel={t("profile.version")} onPress={unlockDebug} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
         <Text style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center" }]}>Cohub Mobile · {version}</Text>
       </Pressable>

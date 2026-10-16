@@ -156,6 +156,17 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   );
 }
 
+/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label. */
+export function SettingsGroup({ label, children }: { label?: string; children: ReactNode }) {
+  const theme = useAppTheme();
+  return (
+    <View style={styles.settingsGroup}>
+      {label ? <Text accessibilityRole="header" style={[typography.caption, styles.settingsGroupLabel, { color: theme.colors.textMuted }]}>{label}</Text> : null}
+      <View style={[styles.settingsGroupCard, { backgroundColor: theme.colors.surface }]}>{children}</View>
+    </View>
+  );
+}
+
 export function SectionHeader({ title, action }: { title: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   const theme = useAppTheme();
   return (
@@ -446,6 +457,9 @@ const styles = StyleSheet.create({
   connectionBanner: { flexDirection: "row", alignItems: "center", gap: 7, maxWidth: "100%", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
   dataErrorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  settingsGroup: { paddingHorizontal: 16, marginBottom: 26 },
+  settingsGroupLabel: { paddingHorizontal: 16, paddingBottom: 8 },
+  settingsGroupCard: { borderRadius: 18, borderCurve: "continuous", overflow: "hidden" },
   searchField: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
   composer: { paddingHorizontal: 8, paddingVertical: 8, gap: 8, borderRadius: 18, borderCurve: "continuous", borderWidth: 1, overflow: "hidden" },

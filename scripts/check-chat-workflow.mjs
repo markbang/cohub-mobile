@@ -282,10 +282,11 @@ assert.equal(reconcileSessionHead(syncRows, [], true, 300000), syncRows, "an emp
 
 assert.equal(isSettingsSection("channels"), true);
 for (const invalid of [undefined, ["channels"], "constructor", "__proto__", "appearance"]) assert.equal(isSettingsSection(invalid), false);
-assert.equal(new Set(settingsMenu.map((item) => item.href)).size, settingsMenu.length);
-assert.ok(settingsMenu.some((item) => item.href === "/settings/storage"));
-assert.ok(settingsMenu.some((item) => item.href === "/settings/channels"));
-assert.ok(settingsMenu.some((item) => item.href === "/settings/browser"));
+const settingsItems = settingsMenu.flatMap((group) => group.items);
+assert.equal(new Set(settingsItems.map((item) => item.href)).size, settingsItems.length);
+assert.ok(settingsItems.some((item) => item.href === "/settings/storage"));
+assert.ok(settingsItems.some((item) => item.href === "/settings/channels"));
+assert.ok(settingsItems.some((item) => item.href === "/settings/browser"));
 assert.equal(parseBrowserPreference(null), "system");
 assert.equal(parseBrowserPreference("in-app"), "in-app");
 assert.throws(() => parseBrowserPreference("embedded"), /Invalid browser preference/);

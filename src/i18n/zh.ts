@@ -322,6 +322,9 @@ export const zh: Record<TranslationKey, string> = {
   // Settings — shell
   "settings.title": "设置",
   "settings.subtitle": "账户、应用与工作区偏好",
+  "settings.group.general": "通用",
+  "settings.group.workspace": "工作区",
+  "settings.group.app": "应用",
   "settings.section.profile": "个人资料",
   "settings.section.activity": "动态",
   "settings.section.notifications": "通知",
