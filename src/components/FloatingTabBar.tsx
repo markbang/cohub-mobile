@@ -27,7 +27,7 @@ export function useFloatingTabBarInset() {
   return BAR_HEIGHT + barBottomOffset(insets.bottom) + 16;
 }
 
-export function FloatingTabBar({ state, descriptors, navigation, insets }: BottomTabBarProps) {
+export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
   const theme = useAppTheme();
   const [barWidth, setBarWidth] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -105,10 +105,10 @@ export function FloatingTabBar({ state, descriptors, navigation, insets }: Botto
             const label = typeof options.title === "string" ? options.title : route.name;
             const color = focused ? theme.colors.accent : theme.colors.textMuted;
             const onPress = () => {
-              const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+              const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
               if (focused || event.defaultPrevented) return;
               if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => undefined);
-              navigation.navigate(route.name, route.params);
+              navigateToTab(route.key);
             };
             return (
               <Pressable
@@ -118,7 +118,7 @@ export function FloatingTabBar({ state, descriptors, navigation, insets }: Botto
                 accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
                 testID={options.tabBarButtonTestID}
                 onPress={onPress}
-                onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
+                onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
                 style={({ pressed }) => [styles.item, pressed ? { opacity: 0.65 } : null]}
               >
                 {options.tabBarIcon?.({ focused, color, size: 19 })}
