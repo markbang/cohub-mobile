@@ -20,6 +20,28 @@ updates:
           - "react-dom"
           - "react-native"
           - "react-native-*"
+    ignore:
+      # SDK and React Native releases move together and are aligned with `expo install`,
+      # so let these groups carry patch updates only.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # The lint config pins ESLint 9 and typescript-eslint supports TypeScript <6.1.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: chore
       include: scope
