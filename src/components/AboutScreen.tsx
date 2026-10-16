@@ -63,7 +63,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
       const name = `cohub-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`;
       const file = directory.createFile(name, "application/jsonl");
       if (!file.exists) file.create();
-      file.write(text);
+      await file.write(text);
       setNotice({ title: t("about.export.saved.title"), message: t("about.export.saved.body", { name }) });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

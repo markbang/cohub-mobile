@@ -52,6 +52,7 @@ assert.ok(
   "Release version bumps must not change the OTA runtime fingerprint",
 );
 assert.ok(fingerprintConfig.sourceSkips.includes("PackageJsonAndroidAndIosScriptsIfNotContainRun"));
+assert.equal(fingerprintConfig.preset, "strict", "Patched native sources in node_modules must change the fingerprint");
 
 const parse = (file) => YAML.parse(readFileSync(file, "utf8"), { uniqueKeys: true });
 const ota = parse(".github/workflows/publish-ota.yml");
@@ -339,6 +340,7 @@ try {
     console.log('baseline checked');
     process.exit(Number(process.env.BASELINE_EXIT || 0));
   `);
+  writeFileSync(join(doctorFixture, "node_modules/expo-doctor/package.json"), JSON.stringify({ name: "expo-doctor", exports: { ".": "./build/index.js" } }));
   writeFileSync(join(doctorFixture, "node_modules/expo-doctor/build/index.js"), `
     const assert = require('node:assert/strict');
     assert.equal(process.env.EXPO_OFFLINE, undefined);
