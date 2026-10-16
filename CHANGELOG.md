@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.2.21](https://github.com/markbang/cohub-mobile/compare/v2.2.20...v2.2.21) (2026-10-16)
+
+
+### Features
+
+* **new-chat:** add Space search and recent-first ordering to the picker ([f33ed7e](https://github.com/markbang/cohub-mobile/commit/f33ed7ecc06fe05f237173804dda4d61693fac38))
+* **settings:** group the settings home into inset cards ([f2fc775](https://github.com/markbang/cohub-mobile/commit/f2fc7752ef4c29d47eedf057f125ed98d6be442f))
+
+
+### Fixes
+
+* **ci:** build the app scheme instead of the first Pods scheme ([b3d1e83](https://github.com/markbang/cohub-mobile/commit/b3d1e8355fdd6e7b5afc07d31b7b9fee844b381d))
+* **ci:** require a single Xcode project when resolving the scheme ([50bbca9](https://github.com/markbang/cohub-mobile/commit/50bbca9ae09a654cb9c24201149ba5cc7257e353))
+* **landing:** resolve Android download from app-scoped Yaota catalog ([31e0071](https://github.com/markbang/cohub-mobile/commit/31e0071d355578038a3d43313e68813e414dbaea))
+* **realtime:** retry stopped sockets and float the connection banner ([e4c296b](https://github.com/markbang/cohub-mobile/commit/e4c296b3361dcb1e72ac658e1b5c0ec22ab5c999))
+
+
+### Documentation
+
+* **agents:** add a native-modules skill for OTA-safe native changes ([45b377b](https://github.com/markbang/cohub-mobile/commit/45b377b272a5a2b7fc18dec23104760b746339ff))
+
+
+### CI
+
+* bump setup-go and download-provisioning-profiles to v7 ([0b649df](https://github.com/markbang/cohub-mobile/commit/0b649df3ab9edd9724643d97ef33417ae77b58b1))
+* **dependabot:** hold TypeScript minors for typescript-eslint ([bf37289](https://github.com/markbang/cohub-mobile/commit/bf372897f4ab5d8b301cdbf67e8a69ad40a6c588))
+* **dependabot:** limit SDK-aligned groups to patch updates ([6909a64](https://github.com/markbang/cohub-mobile/commit/6909a6425bb8b4b61b876bc96537da7bb6d5617f))
+
 ## [2.2.20](https://github.com/markbang/cohub-mobile/compare/v2.2.19...v2.2.20) (2026-10-14)
 
 
