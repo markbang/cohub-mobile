@@ -15,13 +15,13 @@ import path from "node:path";
 
 const MARKER = "// cohub: nested horizontal scroll claims its own drag";
 const OLD_MARKER = "// cohub: claim gestures that start on a code block";
-const ANDROID_VIEWS = "node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/views";
+const ANDROID_VIEWS = "node_modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments";
 const HELPER_RELATIVE = `${ANDROID_VIEWS}/NestedHorizontalScrollView.kt`;
 const CODE_BLOCK_RELATIVE = `${ANDROID_VIEWS}/CodeBlockContainerView.kt`;
 const TABLE_RELATIVE = `${ANDROID_VIEWS}/TableContainerView.kt`;
-const IOS_CODE_BLOCK_RELATIVE = "node_modules/react-native-enriched-markdown/ios/views/ENRMCodeBlockContainerView.m";
+const IOS_CODE_BLOCK_RELATIVE = "node_modules/react-native-enriched-markdown/ios/segments/ENRMCodeBlockContainerView.m";
 
-const HELPER_SOURCE = `package com.swmansion.enriched.markdown.views
+const HELPER_SOURCE = `package com.swmansion.enriched.markdown.segments
 
 import android.content.Context
 import android.view.MotionEvent
@@ -178,7 +178,7 @@ function applyNestedAndroidScrollView(source, label) {
 function patchIosCodeBlock(source) {
   if (source.includes("ENRMNestedHorizontalScrollView")) return source;
   const insertAnchor = `#if !TARGET_OS_OSX
-@interface ENRMCodeBlockContainerView () <UIContextMenuInteractionDelegate>
+@interface ENRMCodeBlockContainerView () <UIContextMenuInteractionDelegate, UIGestureRecognizerDelegate>
 @end
 #endif`;
   const scrollAnchor = "  _scrollView = [[RCTUIScrollView alloc] init];\n";
