@@ -940,22 +940,43 @@ for (const [tab, component, expectedRequests] of [
 // New Chat preserves cached spaces, separates initial loading/error/empty, and offers a next step.
 {
   const runner = createScreenHooks();
-  const state = { spaces: [], booting: true, refreshing: false, spacesError: null, error: null };
+  const state = { spaces: [], sessions: [], booting: true, refreshing: false, spacesError: null, error: null };
+  const visits = [];
   let retries = 0;
   let destination;
   const renderNewChat = loadChromeComponent("../app/new-chat.tsx", "NewChatScreen", {
-    ...formScope, ...runner.hooks, EmptyState: "EmptyState",
+    ...formScope, ...runner.hooks, EmptyState: "EmptyState", SearchField: "SearchField", FlatList: "FlatList",
     useLocalSearchParams: () => ({}), useRouter: () => ({ dismissTo: (path) => { destination = path; } }),
-    useApp: () => ({ state, refreshHome: async () => { retries++; } }), displaySpaceName: (space) => space.name,
+    useApp: () => ({ state, refreshHome: async () => { retries++; }, spaceList: { visits } }), displaySpaceName: (space) => space.name,
+    selectSpaceList, normalizeSearchQuery, useSafeAreaInsets: () => ({ bottom: 0 }),
   });
-  const render = () => chromeNodes(runner.render(renderNewChat));
+  const render = () => {
+    const nodes = chromeNodes(runner.render(renderNewChat));
+    const list = nodes.find((node) => node.type === "FlatList");
+    return list.props.data.length === 0 ? [...nodes, ...chromeNodes(list.props.ListEmptyComponent)] : nodes;
+  };
   assert.ok(render().some((node) => node.type === "LoadingRows"));
-  assert.equal(render().some((node) => node.type === "EmptyState"), false);
+  assert.equal(render().some((node) => node.type === "SearchField"), false, "no search field before there is anything to search");
   state.booting = false; state.spacesError = "offline";
   assert.equal(render().some((node) => node.type === "EmptyState"), false);
   render().find((node) => node.type === "DataError").props.onRetry(); assert.equal(retries, 1);
   state.spaces = [{ id: "space", name: "Cached Space" }];
-  assert.ok(render().some((node) => node.props.children?.includes("Cached Space")), "cached choices stay usable during a refresh failure");
+  const list = render().find((node) => node.type === "FlatList");
+  assert.deepEqual(list.props.data.map((space) => space.name), ["Cached Space"], "cached choices stay usable during a refresh failure");
+  assert.ok(render().some((node) => node.type === "SearchField"));
+
+  // Recently used Spaces come first, and the query filters the full list.
+  const now = Date.now();
+  state.spaces = [{ id: "stale", name: "Stale Space" }, { id: "fresh", name: "Fresh Space" }];
+  visits.push({ spaceId: "fresh", timestamp: now - 60_000 });
+  assert.deepEqual(render().find((node) => node.type === "FlatList").props.data.map((space) => space.id), ["fresh", "stale"], "the picker leads with recently used Spaces");
+  const field = render().find((node) => node.type === "SearchField");
+  field.props.onChangeText("stale");
+  assert.deepEqual(render().find((node) => node.type === "FlatList").props.data.map((space) => space.id), ["stale"], "the query filters Spaces by name or description");
+  field.props.onChangeText("missing");
+  assert.ok(render().some((node) => node.type === "EmptyState"), "an unmatched query offers an empty state instead of a blank list");
+  field.props.onChangeText("");
+
   state.spaces = []; state.spacesError = null;
   render().find((node) => node.type === "EmptyState").props.action.onPress();
   assert.equal(destination, "/(tabs)/spaces");
