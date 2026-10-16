@@ -8,7 +8,7 @@ import FileCode from "lucide-react-native/icons/file-code";
 import FileImage from "lucide-react-native/icons/file-image";
 import FileSpreadsheet from "lucide-react-native/icons/file-spreadsheet";
 import FileText from "lucide-react-native/icons/file-text";
-import Music from "lucide-react-native/icons/music";
+import Music from "lucide-react-native/icons/eighth-notes";
 import Video from "lucide-react-native/icons/video";
 import { Text, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
