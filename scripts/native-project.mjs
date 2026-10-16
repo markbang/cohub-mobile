@@ -147,18 +147,16 @@ export async function findIosWorkspace(root = process.cwd()) {
 }
 
 export async function findIosScheme(workspace) {
-  const { stdout, stderr } = await execFileAsync("xcodebuild", ["-list", "-workspace", workspace], { encoding: "utf8" });
-  const output = `${stdout}\n${stderr}`;
-  const lines = output.split(/\r?\n/);
-  const headerIndex = lines.findIndex((line) => line.trim() === "Schemes:");
-  if (headerIndex < 0) throw new Error(`Could not find schemes in ${workspace}`);
-  for (const line of lines.slice(headerIndex + 1)) {
-    const candidate = line.trim();
-    if (!candidate) continue;
-    if (candidate.endsWith("Tests") || candidate === "Pods") continue;
-    return candidate;
-  }
-  throw new Error(`Could not resolve an application scheme in ${workspace}`);
+  // `xcodebuild -list` lists every scheme in the workspace, including CocoaPods' `boost`.
+  // Only the app's own project produces the `Cohub.app` bundle the release step consumes.
+  const project = (await readdir(resolve(workspace, ".."))).find((name) => name.endsWith(".xcodeproj"));
+  if (!project) throw new Error(`Expected an application Xcode project next to ${workspace}`);
+  const projectPath = resolve(workspace, "..", project);
+  const shared = resolve(projectPath, "xcshareddata", "xcschemes");
+  const schemes = await readdir(shared);
+  const names = schemes.filter((name) => name.endsWith(".xcscheme")).map((name) => name.slice(0, -".xcscheme".length));
+  if (names.length !== 1) throw new Error(`Expected one shared scheme in ${projectPath}, found ${names.length}`);
+  return names[0];
 }
 
 async function findFiles(root, predicate, output = []) {
