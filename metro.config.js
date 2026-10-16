@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
 
@@ -11,7 +12,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   }
   if (moduleName.startsWith("lucide-react-native/icons/")) {
     const icon = moduleName.slice("lucide-react-native/icons/".length);
-    return { filePath: path.join(lucideRoot, "dist/cjs/icons", `${icon}.js`), type: "sourceFile" };
+    const filePath = path.join(lucideRoot, "dist/cjs/icons", `${icon}.js`);
+    // Lucide keeps type stubs for renamed icons, so typecheck passes while the runtime file is gone.
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`lucide-react-native has no runtime icon "${icon}"; it was likely renamed. Find its new file in node_modules/lucide-react-native/dist/cjs/icons.`);
+    }
+    return { filePath, type: "sourceFile" };
   }
   if (defaultResolveRequest) return defaultResolveRequest(context, moduleName, platform);
   return context.resolveRequest(context, moduleName, platform);
