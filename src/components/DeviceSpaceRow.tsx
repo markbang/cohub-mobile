@@ -65,8 +65,8 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
     />
-    {/* Actions align with the row text column: row padding + avatar + its gap. */}
-    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth, paddingLeft: 16 + LIST_AVATAR_SIZE + 14 }}>
+    {/* Actions and their separator start at the row text column: row padding + avatar + its gap. */}
+    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth, marginLeft: 16 + LIST_AVATAR_SIZE + 14 }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}

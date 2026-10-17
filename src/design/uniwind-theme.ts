@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Uniwind } from "uniwind";
 import { COLOR_CSS_NAMES, TEXT_RAMP, type ColorKey } from "@/src/design/tokens";
-import { FONT_SCALE_VALUES, getAppThemeColors, useCustomThemeState, useFontScalePreference, usePureBlackPreference, useThemePreference } from "@/src/theme";
+import { FONT_SCALE_VALUES, getAppThemeColors, scaleTextMetric, useCustomThemeState, useFontScalePreference, usePureBlackPreference, useThemePreference } from "@/src/theme";
 
 /**
  * Keeps className styling in step with the same preferences `useAppTheme` reads: theme mode,
@@ -20,8 +20,8 @@ export function useUniwindThemeSync() {
 
   useEffect(() => {
     const text = Object.fromEntries(Object.entries(TEXT_RAMP).flatMap(([name, { size, lineHeight }]) => [
-      [`--text-${name}`, Math.round(size * fontScale * 2) / 2],
-      [`--text-${name}--line-height`, Math.round(lineHeight * fontScale)],
+      [`--text-${name}`, scaleTextMetric(size, fontScale, "size")],
+      [`--text-${name}--line-height`, scaleTextMetric(lineHeight, fontScale, "lineHeight")],
     ]));
     for (const mode of ["light", "dark"] as const) {
       const colors = getAppThemeColors(mode, pureBlack);

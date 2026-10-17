@@ -62,8 +62,10 @@
   --text-subhead--line-height: 18px;
   --text-caption: 12px;
   --text-caption--line-height: 16px;
+  --text-caption--font-weight: 500;
   --text-micro: 11px;
   --text-micro--line-height: 14px;
+  --text-micro--font-weight: 600;
   --text-code: 12px;
   --text-code--line-height: 19px;
   --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
@@ -118,7 +120,7 @@
       --color-fg: #f7f8fa;
       --color-fg-secondary: #d0d5dd;
       --color-fg-muted: #a2aab6;
-      --color-fg-faint: #747e8c;
+      --color-fg-faint: #8a939f;
       --color-accent: #f08349;
       --color-accent-pressed: #d96835;
       --color-accent-soft: #36251e;

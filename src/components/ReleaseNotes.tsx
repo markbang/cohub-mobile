@@ -120,7 +120,7 @@ function parseReleaseBlocks(value: string): ReleaseBlock[] {
 function ReleaseBlockView({ block }: { block: ReleaseBlock }) {
   const theme = useAppTheme();
   if (block.kind === "rule") {
-    return <View className="h-0 bg-border" />;
+    return <View className="h-px bg-border" />;
   }
   if (block.kind === "code") {
     return <CodeBlock code={block.content || " "} language={block.language} />;

@@ -249,7 +249,6 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
   );
 }
 
-/** Skeleton in the exact shape of `ListRow`, so content replaces it without a jump. */
 /** A labelled input: caption label, filled field, optional hint or inline error. */
 export function Field({ label, hint, error, children }: { label?: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
@@ -264,6 +263,7 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 /** Shared classes for a `TextInput` inside `Field`, so every form field matches. */
 export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-2.5 text-body text-fg";
 
+/** Skeleton in the exact shape of `ListRow`, so content replaces it without a jump. */
 export function LoadingRows({ count = 5 }: { count?: number }) {
   return <View accessibilityLabel="Loading" className="px-4">{Array.from({ length: count }).map((_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3.5 py-3">
     <View className="bg-surface-raised" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderRadius: LIST_AVATAR_SIZE * 0.3, borderCurve: "continuous" }} />
@@ -432,7 +432,7 @@ export function DataError({ message, onRetry }: { message: string; onRetry: () =
     <AppIcon name="cloud-off" size={18} tone="danger" />
     <View className="min-w-0 flex-1">
       <Text className="text-subhead font-semibold text-fg">{t("ui.dataError.title")}</Text>
-      <Text selectable numberOfLines={3} className="text-caption text-danger">{message}</Text>
+      <Text selectable className="text-caption text-danger">{message}</Text>
     </View>
     <IconButton name="refresh" label={t("ui.dataError.retry")} onPress={onRetry} tone="danger" />
   </View>;

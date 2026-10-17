@@ -348,8 +348,8 @@ function applyFontScale(scale: number) {
     const base = BASE_TYPOGRAPHY[token];
     typography[token] = {
       ...base,
-      fontSize: Math.round(base.fontSize * scale * 2) / 2,
-      lineHeight: Math.round(base.lineHeight * scale),
+      fontSize: scaleTextMetric(base.fontSize, scale, "size"),
+      lineHeight: scaleTextMetric(base.lineHeight, scale, "lineHeight"),
       ...(base.letterSpacing === undefined ? null : { letterSpacing: Math.round(base.letterSpacing * scale * 100) / 100 }),
     };
   }
@@ -357,6 +357,11 @@ function applyFontScale(scale: number) {
 
 export function getFontScale() {
   return FONT_SCALE_VALUES[fontScalePreference];
+}
+
+/** Rounds a ramp size for a given scale; shared by the JS ramp and the `--text-*` variables. */
+export function scaleTextMetric(size: number, scale: number, kind: "size" | "lineHeight") {
+  return kind === "size" ? Math.round(size * scale * 2) / 2 : Math.round(size * scale);
 }
 
 export function scaleFontSize(size: number) {

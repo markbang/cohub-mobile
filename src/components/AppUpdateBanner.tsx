@@ -99,7 +99,7 @@ export function AppUpdateBanner() {
           </View>
           <View style={styles.bannerText}>
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{t("update.available", { version: release.version })}</Text>
-            <Text numberOfLines={1} className="text-caption text-fg-muted mt-0">{release.title ?? t("update.viewNotes")}</Text>
+            <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{release.title ?? t("update.viewNotes")}</Text>
           </View>
           <AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} />
         </Pressable>

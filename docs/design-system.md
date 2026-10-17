@@ -80,7 +80,7 @@ The current zh copy uses 聊天 for the Chats tab and 新聊天 for the action. 
 - **Shape rule**: tags `rounded-xs` (6), controls `rounded-sm` (10), cards/menus/bubbles
   `rounded-md` (14), sheets and the composer `rounded-lg` (20), capsules `rounded-full`. Pair
   every rounded rectangle with `borderCurve: "continuous"` where the platform supports it.
-- **Type ramp** (size/line height, weight is a separate class):
+- **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ The current zh copy uses 聊天 for the Chats tab and 新聊天 for the action. 
 | `text-micro` | 11/14 | Badges, counts. Nothing smaller exists. |
 | `text-code` | 12/19 | Monospace |
 
-Weights: 400 body, 600 titles and emphasis, 700 display only. Numbers that count or change use
+Weights: 400 body, 500 captions, 600 titles, emphasis, and micro labels, 700 display only. Numbers that count or change use
 `tabular-nums`.
 
 - **Colors** keep their existing values; only names change for `className`:
@@ -109,7 +109,7 @@ Weights: 400 body, 600 titles and emphasis, 700 display only. Numbers that count
 ### 2.5 Motion
 
 Unchanged (`src/motion.ts`). Rows use background highlight on press (`active:bg-surface-pressed`),
-not scale; buttons and cards keep `PressableScale`. Tabs never slide.
+not scale and not a haptic (a touch that starts a scroll begins on a row); buttons and cards keep `PressableScale`. Tabs never slide.
 
 ## 3. Components
 
@@ -118,7 +118,7 @@ Shared primitives keep their current names and props so screens migrate without 
 | Component | Change |
 | --- | --- |
 | `AppIcon` | Adds `tone` (`fg`, `muted`, `faint`, `accent`, `success`, `warning`, `danger`) so callers stop passing hex. |
-| `IconButton` | `className` styling; sizes `sm` (32 visual, 44 target) and `md` (40/44). |
+| `IconButton` | Numeric `size` for the visual circle (icon at half of it); the touch target never drops below 44 pt. Tones `default`, `accent`, `danger`. |
 | `PrimaryButton` | Adds `variant: "primary" | "secondary" | "ghost" | "danger"`. |
 | `ListRow` (new) | 72 pt. Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
 | `AvatarStatus` (new) | Replaces `StatusPill` in lists: a Chat that is running = accent ring around the avatar, failed = `alert` badge, stopped = `stop` badge. A Space whose runtime is up keeps the small green dot on `Avatar` (`online`). `StatusPill` stays for detail headers only. |
@@ -213,7 +213,7 @@ Icons that may stand alone. Anything not listed keeps a text label.
 | More actions | `more` |
 | Back / close | `arrow-left` / `x` |
 | Retry / refresh | `refresh` |
-| Pin / unpin | `pin` / `pin-off` |
+| Pin / unpin | `pin` / `pin-off` (long-press menu, plus a named screen-reader action) |
 | Chats / count of chats | `messages` |
 | Spaces | `layers` |
 | Activity | `activity` |
