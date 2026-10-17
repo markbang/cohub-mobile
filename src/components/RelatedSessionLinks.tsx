@@ -46,7 +46,6 @@ function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessio
 }
 
 export function SentToList({ turn, spaceId, client, lookupSession, onOpen }: RelatedSessionLinkProps & { turn: Pick<SessionTurnRecord, "sessionId" | "meta">; spaceId: string }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const sessions = sentSessions(turn, spaceId);
@@ -61,7 +60,7 @@ export function SentToList({ turn, spaceId, client, lookupSession, onOpen }: Rel
       <Dot />
       <Text className="text-caption text-fg-muted">{t("turn.related.sentCount", { count: sessions.length })}</Text>
     </View>
-    <View style={{ marginLeft: 2, borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12 }}>
+    <View className="ml-0.5 border-l border-border pl-3">
       {visible.map((session) => <SentSessionRow key={`${session.spaceId}:${session.sessionId}`} session={session} client={client} lookupSession={lookupSession} onOpen={onOpen} />)}
       {collapsed ? <Pressable accessibilityRole="button" onPress={() => setExpanded(true)} className="min-h-11 justify-center active:opacity-55">
         <Text className="text-caption text-accent">{t("turn.related.showMore", { count: sessions.length - VISIBLE_SENT_SESSIONS })}</Text>

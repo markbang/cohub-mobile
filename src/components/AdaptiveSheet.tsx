@@ -151,7 +151,7 @@ export function AdaptiveSheet({
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
   const bodyMaxHeight = Math.max(160, maxHeight - (compact ? 100 : 82) - (footer ? 130 : 20));
   const resolvedContentStyle = [
-    styles.content,
+    CONTENT_PADDING,
     { paddingBottom: footer ? theme.spacing.lg : bottomPadding },
     contentStyle,
   ];
@@ -166,39 +166,34 @@ export function AdaptiveSheet({
       hardwareAccelerated
       onRequestClose={requestClose}
     >
-      <GestureHandlerRootView className="flex-1" testID={testID}>
-        <Reanimated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable accessible={false} aria-hidden tabIndex={-1} style={styles.fill} onPress={requestClose} />
+      <GestureHandlerRootView style={{ flex: 1 }} testID={testID}>
+        <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]}>
+          <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
         </Reanimated.View>
         <KeyboardAvoidingView
           pointerEvents="box-none"
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={[styles.stage, compact ? styles.compactStage : styles.desktopStage]}
+          className={`flex-1 ${compact ? "justify-end" : "items-center justify-center px-3 py-6"}`}
         >
           <Reanimated.View
             collapsable={false}
             accessibilityViewIsModal
             role="dialog"
+            className={`min-h-0 w-full overflow-hidden border-border bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
             style={[
-              styles.panel,
-              compact ? styles.compactPanel : styles.desktopPanel,
-              {
-                maxHeight,
-                height: compact && fullHeight ? maxHeight : undefined,
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
+              { borderWidth: StyleSheet.hairlineWidth, borderBottomWidth: compact ? 0 : StyleSheet.hairlineWidth, borderCurve: "continuous" },
+              { maxHeight, height: compact && fullHeight ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
             {compact ? (
               <GestureDetector gesture={pan}>
-                <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} style={styles.dragArea}>
+                <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center" style={{ userSelect: "none" }}>
                   {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
                 </View>
               </GestureDetector>
             ) : null}
-            <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+            <View className="min-h-14 flex-row items-center gap-3 border-border px-4 pb-3 pt-2" style={{ borderBottomWidth: StyleSheet.hairlineWidth }}>
               <View className="flex-1 min-w-0">
                 <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
                 {subtitle ? (
@@ -217,7 +212,7 @@ export function AdaptiveSheet({
             </View>
             {scrollable ? (
               <ScrollView
-                style={fullHeight ? styles.scroller : { maxHeight: bodyMaxHeight }}
+                style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
                 contentContainerStyle={resolvedContentStyle}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -229,13 +224,8 @@ export function AdaptiveSheet({
             )}
             {footer ? (
               <View
-                style={[
-                  styles.footer,
-                  {
-                    borderTopColor: theme.colors.border,
-                    paddingBottom: bottomPadding,
-                  },
-                ]}
+                className="border-border px-4 pt-3"
+                style={{ borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: bottomPadding }}
               >
                 {footer}
               </View>
@@ -247,79 +237,6 @@ export function AdaptiveSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  fill: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  },
-  backdrop: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "#000000",
-  },
-  stage: {
-    flex: 1,
-    paddingHorizontal: 12,
-  },
-  compactStage: {
-    justifyContent: "flex-end",
-    paddingHorizontal: 0,
-  },
-  desktopStage: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 24,
-  },
-  panel: {
-    width: "100%",
-    minHeight: 0,
-    overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  compactPanel: {
-    borderBottomWidth: 0,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-  },
-  desktopPanel: {
-    maxWidth: 500,
-    borderRadius: 16,
-  },
-  dragArea: {
-    height: 30,
-    marginBottom: -2,
-    alignItems: "center",
-    justifyContent: "center",
-    userSelect: "none",
-    zIndex: 2,
-  },
-  header: {
-    minHeight: 58,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  scroller: {
-    flex: 1,
-    minHeight: 0,
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
-  footer: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-});
+const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
+// design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
+const SCRIM = { backgroundColor: "#000000" } as const;

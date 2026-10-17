@@ -240,6 +240,7 @@ export default function FileScreen() {
       ) : showWebView && url ? (
         <WebView
           source={{ uri: url }}
+          // design-system: WebView does not take className.
           style={{ flex: 1, backgroundColor: theme.colors.background }}
           startInLoadingState
         />
@@ -304,8 +305,8 @@ function SaveBanner({
       </View>
       {conflict ? (
         <View className="flex-row items-center gap-2 pl-6">
-          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} className="min-h-9 px-3" />
-          <Pressable accessibilityRole="button" accessibilityLabel={t("file.overwriteA11y")} disabled={saving} onPress={onOverwrite} style={({ pressed }) => ({ opacity: pressed || saving ? 0.6 : 1 })}>
+          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} />
+          <Pressable accessibilityRole="button" accessibilityLabel={t("file.overwriteA11y")} disabled={saving} onPress={onOverwrite} className="min-h-11 justify-center px-2 active:opacity-60 disabled:opacity-60">
             <Text className="text-body font-semibold text-danger">{t("file.overwrite")}</Text>
           </Pressable>
         </View>

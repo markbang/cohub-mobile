@@ -5,7 +5,6 @@ import { FlatList, Image, Platform, Pressable, Text, View, useWindowDimensions }
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { clearImageViewerPayload, getImageViewerPayload, imageViewerPageIndex } from "@/src/data/image-viewer";
 import { useTranslation } from "@/src/i18n";
-import { typography } from "@/src/theme";
 import { AppIcon } from "@/src/ui";
 
 /**
@@ -37,7 +36,7 @@ export default function ImageViewerScreen() {
     borderRadius: 21,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: VIEWER.control,
   };
 
   // Explicit dimensions: the native Link.AppleZoomTarget wrapper is content-sized, so
@@ -46,17 +45,17 @@ export default function ImageViewerScreen() {
 
   if (!payload || payload.uris.length === 0) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#000000" }}>
+      <View style={{ flex: 1, backgroundColor: VIEWER.background }}>
         <StatusBar style="light" />
         <Pressable accessibilityRole="button" accessibilityLabel={t("imageViewer.close")} hitSlop={6} onPress={close} style={closeButtonStyle}>
-          <AppIcon name="x" size={22} color="#ffffff" />
+          <AppIcon name="x" size={22} color={VIEWER.foreground} />
         </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#000000" }}>
+    <View style={{ flex: 1, backgroundColor: VIEWER.background }}>
       <StatusBar style="light" />
       <FlatList
         data={payload.uris}
@@ -83,11 +82,14 @@ export default function ImageViewerScreen() {
         )}
       />
       <Pressable accessibilityRole="button" accessibilityLabel={t("imageViewer.close")} hitSlop={6} onPress={close} style={closeButtonStyle}>
-        <AppIcon name="x" size={22} color="#ffffff" />
+        <AppIcon name="x" size={22} color={VIEWER.foreground} />
       </Pressable>
       <View pointerEvents="none" style={{ position: "absolute", zIndex: 2, top: insets.top + 19, left: 18 }}>
-        <Text style={[typography.caption, { color: "#ffffff" }]}>{index + 1} / {payload.uris.length}</Text>
+        <Text className="text-caption tabular-nums" style={{ color: VIEWER.foreground }}>{index + 1} / {payload.uris.length}</Text>
       </View>
     </View>
   );
 }
+
+// design-system: the photo viewer is black in every theme so images read true; its controls are white on black.
+const VIEWER = { background: "#000000", foreground: "#ffffff", control: "rgba(255,255,255,0.14)" } as const;

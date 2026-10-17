@@ -8,7 +8,7 @@ import { subscriptionCheckoutUrl } from "@/src/data/billing-settings";
 import { openWebLink } from "@/src/platform/browser";
 import { useBillingHistory, type SubscriptionCancellation } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { EmptyState, IconButton, PrimaryButton, Screen, TopBar } from "@/src/ui";
 
 export function BillingHistoryScreen({ kind }: { kind: "history" | "subscriptions" }) {
@@ -32,7 +32,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
       </View> : null}
       {!loading && data?.list.page === page ? <>
         {data.kind === "history" ? data.list.items.map((item) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status].filter(Boolean).join(" · ")}>
-          <Text style={[typography.caption, { color: item.amountUsd < 0 ? theme.colors.text : theme.colors.success, maxWidth: "35%" }]}>{item.amountUsd > 0 ? "+" : ""}${item.amountUsd.toFixed(2)}</Text>
+          <Text className={`text-subhead font-semibold tabular-nums ${item.amountUsd < 0 ? "text-fg" : "text-success"}`} style={{ maxWidth: "35%" }}>{item.amountUsd > 0 ? "+" : ""}${item.amountUsd.toFixed(2)}</Text>
         </SettingsRow>) : data.list.items.map((item) => <View key={item.id} className="p-4 gap-2 border-b border-border bg-surface">
           <Text className="text-body font-semibold text-fg">{item.productName}</Text>
           <Text className="text-caption text-fg-secondary">{item.status} · ${item.amountUsd.toFixed(2)} · {item.billingPeriod}</Text>

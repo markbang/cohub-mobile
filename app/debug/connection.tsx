@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useApp } from "@/src/data/context";
 import type { ConnectionState } from "@/src/data/types";
-import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton, Screen, SectionHeader, StatusPill } from "@/src/ui";
 import type { IconName } from "@/src/icons";
 
@@ -14,7 +13,6 @@ function connectionTone(state: ConnectionState): "success" | "warning" | "danger
 }
 
 export default function DebugConnectionScreen() {
-  const theme = useAppTheme();
   const { state, connectionState, refreshHome, refreshSessionStatuses } = useApp();
   const [timeline, setTimeline] = useState<{ at: number; value: ConnectionState }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -48,15 +46,15 @@ export default function DebugConnectionScreen() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        <View style={{ alignItems: "center", paddingTop: 20, gap: 8 }}>
+        <View className="items-center pt-5 gap-2">
           <StatusPill label={connectionState} tone={connectionTone(connectionState)} />
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+          <Text className="text-caption text-fg-muted">
             {state.booting ? "启动中" : state.refreshing ? "刷新中" : "已就绪"}
           </Text>
         </View>
 
         <SectionHeader title="同步状态" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           <Row icon="messages" label="会话(列表)" value={String(state.sessions.length)} />
           <Row icon="layers" label="空间" value={String(state.spaces.length)} />
           <Row icon="activity" label="运行中的轮次" value={String(runningTurns)} />
@@ -69,7 +67,7 @@ export default function DebugConnectionScreen() {
         {(state.error || state.spacesError || state.sessionsError || state.sessionStatusError || state.activityError) ? (
           <>
             <SectionHeader title="错误" />
-            <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+            <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
               {state.error ? <Row icon="alert" label="error" value={state.error} tone="danger" /> : null}
               {state.spacesError ? <Row icon="alert" label="spaces" value={state.spacesError} tone="danger" /> : null}
               {state.sessionsError ? <Row icon="alert" label="sessions" value={state.sessionsError} tone="danger" /> : null}
@@ -80,17 +78,17 @@ export default function DebugConnectionScreen() {
         ) : null}
 
         <SectionHeader title={`活跃流 · ${streams.length}`} />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {streams.length === 0 ? (
-            <Text style={[typography.caption, { color: theme.colors.textMuted, padding: 14 }]}>当前没有正在流式输出的会话</Text>
+            <Text className="text-caption text-fg-muted p-4">当前没有正在流式输出的会话</Text>
           ) : streams.map(([sessionId, view]) => (
-            <View key={sessionId} style={{ paddingHorizontal: 13, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border, gap: 4 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <AppIcon name="sync" size={15} color={theme.colors.accent} />
-                <Text style={[typography.bodyMedium, { color: theme.colors.text, flex: 1 }]}>{sessionId.slice(0, 8)}</Text>
+            <View key={sessionId} className="px-3 py-2 border-b border-border gap-1">
+              <View className="flex-row items-center gap-2">
+                <AppIcon name="sync" size={15} tone="accent" />
+                <Text className="text-body font-semibold text-fg flex-1">{sessionId.slice(0, 8)}</Text>
                 <StatusPill label={view.stream?.status ?? "—"} tone={view.stream?.status === "streaming" || view.stream?.status === "pending" ? "warning" : "neutral"} />
               </View>
-              <Text style={[typography.micro, { color: theme.colors.textMuted }]}>
+              <Text className="text-micro font-semibold text-fg-muted">
                 {`turn=${view.stream?.turnId?.slice(0, 8) ?? "—"} · phase=${view.stream?.runtimePhase ?? "—"} · model=${view.stream?.runtimeModel ?? "—"} · blocks=${view.stream?.contentBlocks.length ?? 0} · intermediate=${view.stream?.intermediateMessages.length ?? 0}`}
               </Text>
             </View>
@@ -98,16 +96,16 @@ export default function DebugConnectionScreen() {
         </View>
 
         <SectionHeader title="连接状态时间线" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {timeline.map((entry, index) => (
-            <View key={`${entry.at}-${index}`} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 13, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-              <Text style={[typography.micro, { color: theme.colors.textFaint, fontVariant: ["tabular-nums"] }]}>{new Date(entry.at).toLocaleTimeString()}</Text>
+            <View key={`${entry.at}-${index}`} className="flex-row items-center gap-2 px-3 py-2 border-b border-border">
+              <Text className="text-micro tabular-nums text-fg-faint">{new Date(entry.at).toLocaleTimeString()}</Text>
               <StatusPill label={entry.value} tone={connectionTone(entry.value)} dot={false} />
             </View>
           ))}
         </View>
 
-        <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+        <View className="px-4 pt-4">
           <PrimaryButton label="重新同步 (refreshHome + statuses)" icon="refresh" loading={busy === "restart"} disabled={busy !== null} onPress={() => void restart()} />
         </View>
       </ScrollView>
@@ -116,18 +114,14 @@ export default function DebugConnectionScreen() {
 }
 
 function Row({ icon, label, value, tone = "default" }: { icon: IconName; label: string; value: string; tone?: "default" | "danger" }) {
-  const theme = useAppTheme();
   return (
-    <View style={{ minHeight: 52, paddingHorizontal: 13, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised }}>
-        <AppIcon name={icon} size={15} color={tone === "danger" ? theme.colors.danger : theme.colors.textMuted} />
+    <View className="min-h-13 px-3 py-2 flex-row items-center gap-3 border-b border-border">
+      <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
+        <AppIcon name={icon} size={15} tone={tone === "danger" ? "danger" : "muted"} />
       </View>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, width: 130 }]}>{label}</Text>
-      <Text selectable numberOfLines={3} style={[typography.caption, { color: tone === "danger" ? theme.colors.danger : theme.colors.textSecondary, flex: 1, textAlign: "right" }]}>{value}</Text>
+      <Text className="text-caption text-fg-muted w-32">{label}</Text>
+      <Text selectable numberOfLines={3} className={`text-caption flex-1 text-right ${tone === "danger" ? "text-danger" : "text-fg-secondary"}`}>{value}</Text>
     </View>
   );
 }
 
-const styles = {
-  group: { marginHorizontal: 16, borderWidth: 1, borderRadius: 14, overflow: "hidden" as const },
-} satisfies Record<string, object>;

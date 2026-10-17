@@ -1150,7 +1150,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerRef} value={composerHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
         {modelSelectorOpen ? composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerRef} title={t("model.runtimeTitle", { harness: t(`runtime.harness.${composerHarness}`) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); setModelSelectorOpen(false); }} /> : null}
         <AdaptiveSheet visible={notice !== null} title={notice?.title ?? t("common.notice")} onClose={() => setNotice(null)} scrollable={false} testID="chat-notice-sheet"><Text className="text-body text-fg-secondary">{notice?.message ?? ""}</Text></AdaptiveSheet>
-        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}><View className="flex-1 justify-center p-6" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}><View className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}><Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text><TextInput autoFocus value={renameValue} onChangeText={setRenameValue} maxLength={80} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} /><View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => setRenameOpen(false)} /><PrimaryButton label={t("common.save")} onPress={() => void saveRename()} /></View></View></View></Modal>
+        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}><View className="flex-1 justify-center p-6" style={SCRIM}><View className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}><Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text><TextInput autoFocus value={renameValue} onChangeText={setRenameValue} maxLength={80} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} /><View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => setRenameOpen(false)} /><PrimaryButton label={t("common.save")} onPress={() => void saveRename()} /></View></View></View></Modal>
       </Animated.View>
     </SpacePanels>
     </View>
@@ -1227,9 +1227,9 @@ function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
 }
 
 function TurnMarker({ sequence, status }: { sequence: number; status?: string }) {
-  const theme = useAppTheme();
-  const color = status === "failed" ? theme.colors.danger : status === "running" || status === "queued" ? theme.colors.warning : theme.colors.textFaint;
-  return <View onLayout={(event) => recordDebugEvent("chat.turn_marker.layout", { sequence, status: status ?? null, ...event.nativeEvent.layout })} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 13, paddingBottom: 2 }}><View className="flex-1 h-px bg-border" /><Text style={[typography.micro, { color }]}>#{sequence}</Text><View className="flex-1 h-px bg-border" /></View>;
+  const color = status === "failed" ? "text-danger" : status === "running" || status === "queued" ? "text-warning" : "text-fg-faint";
+  // Layout values are exact: turn markers are measured by the chat's scroll anchoring.
+  return <View onLayout={(event) => recordDebugEvent("chat.turn_marker.layout", { sequence, status: status ?? null, ...event.nativeEvent.layout })} className="flex-row items-center gap-2 px-4" style={{ paddingTop: 13, paddingBottom: 2 }}><View className="h-px flex-1 bg-border" /><Text className={`text-micro tabular-nums ${color}`}>#{sequence}</Text><View className="h-px flex-1 bg-border" /></View>;
 }
 
 function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: (created: { session: SessionRecord; transition: SendBubbleTransition | null }) => void }) {
@@ -1407,3 +1407,6 @@ function LoadMoreCapsule({ icon, label, accessibilityLabel, loading, onPress }: 
     </Pressable>
   </View>;
 }
+
+// design-system: modal scrims dim whatever theme sits underneath, so they stay black.
+const SCRIM = { backgroundColor: "rgba(0,0,0,0.6)" } as const;

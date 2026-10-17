@@ -2,7 +2,6 @@ import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
-import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, Screen, type IconName } from "@/src/ui";
 
 const INTRO = "先确认一下当前改动，再决定从哪里开始修。";
@@ -72,7 +71,6 @@ function RenderProbe({ onRender }: { onRender: () => void }) {
 }
 
 export default function DebugStreamingScreen() {
-  const theme = useAppTheme();
   const listRef = useRef<FlatList<MessageRecord>>(null);
   const followingRef = useRef(true);
   const renderCountRef = useRef(0);
@@ -172,7 +170,7 @@ export default function DebugStreamingScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={<StreamCard content={content} status="streaming" />}
       />
-      <View style={[styles.controls, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+      <View className="flex-row items-center flex-wrap gap-1.5 px-2 pt-2 pb-1.5 border-t border-border bg-background">
         <ControlChip icon="refresh" label="重开" onPress={restart} />
         <ControlChip icon={started ? "stop" : "arrow-right"} label={started ? "暂停" : "继续"} onPress={() => setStarted((current) => !current)} />
         <ControlChip icon="zap" label={`${speed}字/帧`} onPress={() => setSpeedIndex((current) => (current + 1) % SPEEDS.length)} />
@@ -180,8 +178,8 @@ export default function DebugStreamingScreen() {
         <ControlChip icon="file-text" label={long ? "长文" : "短文"} onPress={() => setLong((current) => !current)} />
         <ControlChip icon={tools ? "check" : "x"} label={tools ? "工具" : "无工具"} onPress={() => setTools((current) => !current)} />
       </View>
-      <View style={[styles.metrics, { borderTopColor: theme.colors.border }]}>
-        <Text testID="debug.streaming.metrics" style={[typography.micro, { color: theme.colors.textMuted, flex: 1 }]}>
+      <View className="px-3 pb-2 border-t border-border">
+        <Text testID="debug.streaming.metrics" className="text-micro font-semibold text-fg-muted flex-1">
           重渲染 {renders} · 已输出 {Math.min(visible, totalChars).toLocaleString()} / {totalChars.toLocaleString()} 字 · 约 {(speed * 1000 / FRAME_MS).toLocaleString()} 字/秒
         </Text>
       </View>
@@ -190,16 +188,11 @@ export default function DebugStreamingScreen() {
 }
 
 function ControlChip({ label, icon, onPress }: { label: string; icon?: IconName; onPress: () => void }) {
-  const theme = useAppTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 9, borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, flexDirection: "row", alignItems: "center", gap: 4 })}>
-      {icon ? <AppIcon name={icon} size={12} color={theme.colors.textMuted} /> : null}
-      <Text style={[typography.micro, { color: theme.colors.textSecondary }]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} className="min-h-8 px-2 rounded-full border border-border bg-surface active:bg-surface-pressed flex-row items-center gap-1">
+      {icon ? <AppIcon name={icon} size={12} tone="muted" /> : null}
+      <Text className="text-micro font-semibold text-fg-secondary">{label}</Text>
     </Pressable>
   );
 }
 
-const styles = {
-  controls: { flexDirection: "row" as const, alignItems: "center" as const, flexWrap: "wrap" as const, gap: 6, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, borderTopWidth: 1 },
-  metrics: { paddingHorizontal: 12, paddingBottom: 8, borderTopWidth: 1 },
-} satisfies Record<string, object>;

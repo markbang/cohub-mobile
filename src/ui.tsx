@@ -57,7 +57,9 @@ export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidt
 export function CohubLogo({ size = 36 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 192 192">
+      {/* design-system: the Cohub logo keeps its brand colors in every theme. */}
       <Rect width={192} height={192} rx={32} fill="#ff4500" />
+      {/* design-system: logo glyph */}
       <G transform="translate(0,192) scale(0.1,-0.1)" fill="#ffffff">
         <Path d="M853 1314 c-63 -23 -128 -86 -164 -160 -27 -54 -33 -79 -37 -157 -10 -196 63 -332 205 -383 53 -18 160 -17 219 3 92 31 184 151 184 240 0 21 -5 23 -45 23 -43 0 -45 -1 -55 -38 -13 -52 -48 -101 -89 -129 -27 -18 -48 -23 -98 -23 -77 0 -120 16 -156 60 -50 59 -61 96 -61 210 -1 89 3 113 22 155 28 61 47 82 95 107 48 24 152 26 195 4 36 -19 80 -69 88 -102 5 -21 12 -24 55 -24 27 0 49 4 49 8 0 5 -7 29 -16 55 -18 54 -74 115 -129 142 -54 25 -203 31 -262 9z" />
       </G>

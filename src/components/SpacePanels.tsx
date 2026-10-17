@@ -73,7 +73,6 @@ const PANEL_SWIPE_SPRING = { duration: 300, dampingRatio: 1, overshootClamping: 
  * containing a fence — that blocks the swipe on almost every reply.
  */
 export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -341,8 +340,6 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
       width: panelWidth,
       paddingTop: edgeToEdge ? insets.top : 0,
       paddingBottom: insets.bottom,
-      backgroundColor: theme.colors.background,
-      borderColor: theme.colors.border,
     },
   ];
 
@@ -353,7 +350,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
         ref={pagerRef}
         horizontal
         keyboardShouldPersistTaps="handled"
-        style={[styles.pager, { backgroundColor: theme.colors.background }]}
+        className="flex-1 bg-background"
         showsHorizontalScrollIndicator={false}
         bounces={false}
         overScrollMode="never"
@@ -377,6 +374,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
             not correct it, which pushed the composer below the visible area. */}
         <Reanimated.View style={[styles.pages, { width: 2 * panelWidth + width }, pagerPaintStyle]}>
           <View
+            className="border-border bg-background"
             style={pageStyle("chat")}
             pointerEvents={interactive && visiblePanel === "chat" ? "auto" : "none"}
             accessibilityViewIsModal={interactive && visiblePanel === "chat"}
@@ -385,13 +383,14 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
           >
             <ChatPanel spaceId={spaceId} spaceName={spaceName} sessions={sessions} client={client} onChipsTouchChange={handleChipsTouchChange} onClose={closePanel} onNewChat={() => { closePanel(); onNewChat(); }} onOpenSession={(sessionId, target) => { closePanel(); onOpenSession(sessionId, target); }} />
           </View>
-          <View style={[styles.contentPage, { width, backgroundColor: theme.colors.background }]} accessibilityElementsHidden={visiblePanel !== null} importantForAccessibility={visiblePanel ? "no-hide-descendants" : "auto"}>
+          <View className="h-full bg-background" style={{ width }} accessibilityElementsHidden={visiblePanel !== null} importantForAccessibility={visiblePanel ? "no-hide-descendants" : "auto"}>
             {children}
             <Reanimated.View style={[styles.backdrop, scrimStyle]} pointerEvents={interactive ? "auto" : "none"}>
-              <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.close")} style={styles.fill} onPress={closePanel} />
+              <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.close")} className="flex-1" onPress={closePanel} />
             </Reanimated.View>
           </View>
           <View
+            className="border-border bg-background"
             style={pageStyle("files")}
             pointerEvents={interactive && visiblePanel === "files" ? "auto" : "none"}
             accessibilityViewIsModal={interactive && visiblePanel === "files"}
@@ -768,12 +767,11 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
 }
 
 const styles = {
-  pager: { flex: 1 },
   pages: { flexDirection: "row" as const, height: "100%" as const },
-  contentPage: { height: "100%" as const },
+  // design-system: the panel's edge shadow and scrim are darkness, not a themed hue, so they stay black.
   panelPage: { height: "100%" as const, borderLeftWidth: 1, borderRightWidth: 1, shadowColor: "#000000", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.25, shadowRadius: 18, elevation: 12 },
   panelPageLeft: { borderLeftWidth: 0 },
   panelPageRight: { borderRightWidth: 0 },
-  fill: { flex: 1 } as const,
+  // design-system: scrim, see panelPage.
   backdrop: { position: "absolute" as const, top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "#000000" },
 } satisfies Record<string, object>;

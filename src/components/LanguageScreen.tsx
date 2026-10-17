@@ -7,7 +7,6 @@ import {
   type AppLocale,
   type LocalePreference,
 } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
 import { AppIcon, SettingsGroup, TopBar, Screen, SectionHeader } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 
@@ -65,7 +64,6 @@ export function LanguageScreen() {
 }
 
 export function LanguageContent() {
-  const theme = useAppTheme();
   const { t, preference, setPreference } = useTranslation();
 
   return (
@@ -95,8 +93,7 @@ export function LanguageContent() {
                 accessibilityState={{ selected, checked: selected }}
                 aria-checked={selected}
                 onPress={() => void setPreference(option.value)}
-                className="min-h-14 flex-row items-center gap-3 bg-surface px-4 py-2.5 active:bg-surface-pressed"
-                style={index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.border } : null}
+                className={`min-h-14 flex-row items-center gap-3 border-border bg-surface px-4 py-2.5 active:bg-surface-pressed`} style={index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth } : null}
               >
                 <View className={`size-9 items-center justify-center rounded-sm ${selected ? "bg-accent" : "bg-surface-raised"}`}>
                   <Text className={`text-caption font-semibold ${selected ? "text-on-accent" : "text-fg-muted"}`}>{option.code}</Text>

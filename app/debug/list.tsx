@@ -2,7 +2,6 @@ import type { MessageRecord } from "@neta-art/cohub";
 import { useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
-import { typography, useAppTheme } from "@/src/theme";
 import { Screen } from "@/src/ui";
 
 const NOW = new Date().toISOString();
@@ -36,22 +35,21 @@ function debugMessage(index: number): MessageRecord {
 }
 
 export default function DebugListScreen() {
-  const theme = useAppTheme();
   const listRef = useRef<FlatList<MessageRecord>>(null);
   const [count, setCount] = useState<(typeof SIZES)[number]>(500);
   const messages = useMemo(() => Array.from({ length: count }, (_, index) => debugMessage(index)), [count]);
 
   return (
     <Screen>
-      <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+      <View className="flex-row gap-2 px-3 py-2">
         {SIZES.map((size) => (
-          <Pressable key={size} accessibilityRole="tab" accessibilityState={{ selected: count === size }} onPress={() => setCount(size)} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: count === size ? theme.colors.accentBorder : theme.colors.border, backgroundColor: count === size ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface, justifyContent: "center" })}>
-            <Text style={[typography.caption, { color: count === size ? theme.colors.accent : theme.colors.textMuted }]}>{size}</Text>
+          <Pressable key={size} accessibilityRole="tab" accessibilityState={{ selected: count === size }} onPress={() => setCount(size)} className={`min-h-8 justify-center rounded-full px-3 ${count === size ? "bg-accent-soft" : "bg-surface active:bg-surface-pressed"}`}>
+            <Text className={`text-caption ${count === size ? "text-accent" : "text-fg-muted"}`}>{size}</Text>
           </Pressable>
         ))}
-        <View style={{ flex: 1 }} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Scroll to latest" onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: false })} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, justifyContent: "center" })}>
-          <Text style={[typography.caption, { color: theme.colors.textSecondary }]}>回到底部</Text>
+        <View className="flex-1" />
+        <Pressable accessibilityRole="button" accessibilityLabel="Scroll to latest" onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: false })} className="min-h-8 px-3 rounded-full border border-border bg-surface active:bg-surface-pressed justify-center">
+          <Text className="text-caption text-fg-secondary">回到底部</Text>
         </Pressable>
       </View>
       <FlatList

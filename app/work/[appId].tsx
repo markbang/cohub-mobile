@@ -59,6 +59,7 @@ export default function WorkScreen() {
     {error ? <DataError message={error} onRetry={() => void load()} /> : null}
     {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <WebView
       source={{ uri: contentUrl }}
+      // design-system: WebView does not take className.
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       originWhitelist={["https://*"]}
       javaScriptEnabled

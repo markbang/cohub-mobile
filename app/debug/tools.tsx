@@ -1,7 +1,6 @@
 import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
 import { ScrollView, Text, View } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
-import { typography, useAppTheme } from "@/src/theme";
 import { Screen } from "@/src/ui";
 
 const NOW = new Date().toISOString();
@@ -56,12 +55,11 @@ const MESSAGE = {
 } as MessageRecord;
 
 export default function DebugToolsScreen() {
-  const theme = useAppTheme();
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ paddingVertical: 12 }} keyboardShouldPersistTaps="handled">
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+        <View className="px-4 pb-2">
+          <Text className="text-caption text-fg-muted">
             点击工具行展开或收起；展开态内部输出可纵向滚动。
           </Text>
         </View>
