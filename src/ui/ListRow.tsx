@@ -2,11 +2,12 @@ import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
+export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
 export type ListRowStatus = "running" | "failed" | "stopped" | null;
 
 /**
- * The two-line row behind every content list (docs/design-system.md §2.2): identity and time
+ * The two-line, 72pt row behind every content list (docs/design-system.md §2.2): identity and time
  * on line 1, context on line 2, state carried by the leading glyph. The separator starts at the
  * text column so leading avatars read as one column.
  */
@@ -29,12 +30,12 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   compact?: boolean;
 }) {
   const body = <>
-    {leading ? <View className="justify-center pr-3">{leading}</View> : null}
+    {leading ? <View className="justify-center pr-3.5">{leading}</View> : null}
     <View
-      className="min-w-0 flex-1 flex-row items-center gap-2 border-border py-2.5 pr-4"
+      className="min-w-0 flex-1 flex-row items-center gap-2 border-border py-3 pr-4"
       style={separator ? styles.separator : null}
     >
-      <View className="min-w-0 flex-1 justify-center gap-0.5">
+      <View className="min-w-0 flex-1 justify-center gap-1">
         <View className="flex-row items-center gap-1.5">
           {titlePrefix}
           <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
@@ -50,7 +51,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       {accessory}
     </View>
   </>;
-  const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-13" : "min-h-16"}`;
+  const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-14" : "min-h-18"}`;
   if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} testID={testID} className={shell}>{body}</View>;
   return (
     <Pressable

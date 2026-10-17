@@ -16,7 +16,7 @@ import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/d
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppIcon, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
-import { ListRow, Meta } from "@/src/ui/ListRow";
+import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatNumber, formatRelativeTime, sortByRecent } from "@/src/utils";
 
 type Params = { spaceId?: string | string[] };
@@ -443,7 +443,7 @@ export default function SpaceScreen() {
 
 function ResourceRow({ icon, tone, status, title, meta, subtitle, onPress }: { icon: IconName; tone: IconTone; status?: string; title: string; meta?: string; subtitle: string; onPress?: () => void }) {
   return <ListRow
-    leading={<View className="flex-1 justify-center"><View className="size-10 items-center justify-center rounded-sm bg-surface" style={{ borderCurve: "continuous" }}><AppIcon name={icon} size={18} tone={tone} /></View></View>}
+    leading={<View className="flex-1 justify-center"><View className="items-center justify-center rounded-sm bg-surface" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderCurve: "continuous" }}><AppIcon name={icon} size={20} tone={tone} /></View></View>}
     title={title}
     meta={meta}
     subtitle={subtitle}

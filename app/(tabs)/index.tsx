@@ -183,7 +183,7 @@ export default function ChatsScreen() {
         ref={listRef}
         data={listItems}
         extraData={rowExtraData}
-        estimatedItemSize={64}
+        estimatedItemSize={72}
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
