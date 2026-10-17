@@ -390,6 +390,8 @@ function chromeNodes(node) {
 const chromeScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
+  // Design-system primitives render as named placeholders, like the components above.
+  Field: "Field", FIELD_INPUT_CLASS: "", Segmented: "Segmented", ListRow: "ListRow", Meta: "Meta", Tag: "Tag", AvatarStatus: "AvatarStatus", LIST_AVATAR_SIZE: 46,
   StyleSheet: { create: (styles) => styles },
   COMPOSER_TEXT_PADDING,
   colorWithOpacity,
