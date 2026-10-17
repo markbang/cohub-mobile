@@ -31,7 +31,7 @@ optimizes for *text comfort*. Settings are rare, so they optimize for *clarity*.
 | Time | Compact relative | `3m`, `2h`, `Mon`, `Oct 3`. Never "Active 3 minutes ago". |
 | Primary action in a sheet or empty state | Verb label (+ icon) | Text stays where the action is the point of the screen. |
 | Destructive confirmation | Verb label | "Sign out", "Delete". Never icon-only. |
-| Navigation tabs | Icon only | Three well-known metaphors; the selected tab shows a filled indicator. Labels stay as accessibility labels. |
+| Navigation tabs | Icon + label | Tabs name destinations, so they always keep their words (platform convention). The selected tab shows an accent capsule. |
 
 An icon is allowed to replace text only when it is in the **icon dictionary** (§6). Anything
 else keeps its words. Icon-only controls get a long-press hint in a later phase if usage shows
@@ -127,13 +127,13 @@ Shared primitives keep their current names and props so screens migrate without 
 | `SettingsGroup`/`SettingsRow` | 52 pt rows, inset separators, `rounded-md` group. |
 | `EmptyState`, `DataError`, `LoadingRows` | Skeleton matches the 64 pt `ListRow`; errors use an icon retry button. |
 | `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`. |
-| `FloatingTabBar` | Icon only, 52 pt, `shadow-float`. |
+| `FloatingTabBar` | Icon + label, 58 pt, content-width capsule, `shadow-float`. |
 
 ## 4. Screens
 
 ### Tab bar
-Icon-only floating bar (messages, layers, activity), selected tab = accent icon on an
-`accent-soft` capsule. Height 60 → 52.
+Floating bar with icon above a short label (messages, layers, activity); the selected tab is accent on an
+`accent-soft` capsule. The bar hugs its three 80 pt slots instead of spanning the screen. Height 58.
 
 ### Chats
 - Header: account avatar · "Chats" · search · new chat (unchanged structure).
