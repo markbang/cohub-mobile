@@ -189,7 +189,7 @@ export default function DebugUpdatesScreen() {
           <View style={{ padding: 14, gap: 10 }}>
             {(["production", "staging"] as const).filter((channel) => channel !== currentUpdateChannel()).map((channel) => <PrimaryButton
               key={channel}
-              label={`切换到 ${channel} 并重启`}
+              label={`切换到 ${channel}`}
               icon="layers"
               loading={busy === `channel:${channel}`}
               disabled={!updatesEnabled || busy !== null}
