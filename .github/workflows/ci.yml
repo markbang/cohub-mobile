@@ -45,6 +45,11 @@ jobs:
       - name: Run quality checks
         run: npm run check
 
+      # Not in `npm run check`: package.json scripts are part of the OTA fingerprint, so adding
+      # one would strand installed builds. Fold it in with the next native release.
+      - name: Check design tokens
+        run: node --no-warnings --experimental-strip-types scripts/design-tokens.mjs --check
+
       - name: Audit production dependencies
         run: node scripts/check-audit.mjs
 

@@ -1,3 +1,4 @@
+import "../global.css";
 import { translate } from "@/src/i18n/core";
 import { LogtoProvider, useLogto } from "@logto/rn";
 import type { UnauthorizedContext } from "@neta-art/cohub";
@@ -17,6 +18,7 @@ import { AppProvider } from "@/src/data/context";
 import { loadEnvironmentPreference, saveEnvironmentPreference } from "@/src/data/environment-preference";
 import { LocaleProvider, useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
+import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
@@ -54,6 +56,7 @@ function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 10_000, 
 }
 
 export default function RootLayout() {
+  useUniwindThemeSync();
   // Code blocks, the file viewer, and the code editor all reference "SpaceMono";
   // keep the splash up until the bundled font is registered.
   const [fontsLoaded, fontError] = useFonts({ SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf") });
