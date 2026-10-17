@@ -230,7 +230,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <NativeInteractionBridge />
       <ToastProvider>
-        <View style={{ flex: 1 }}>
+        <View className="flex-1">
           {/* Deeper screens use the platform transition: the iOS push (with its interactive back
               swipe) and Android's own forward animation. Overriding it replaces a platform behavior
               with an imitation. */}
@@ -272,5 +272,5 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
 
 function LoadingScreen() {
   const theme = useAppTheme();
-  return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.background }}><ActivityIndicator size="small" color={theme.colors.accent} /></View>;
+  return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="small" color={theme.colors.accent} /></View>;
 }

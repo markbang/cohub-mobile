@@ -22,7 +22,7 @@ export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile 
   return <ComposerMenu anchorRef={anchorRef} title={t("chat.attachment.title")} onClose={onClose} preferredWidth={240} testID="chat-attachment-menu">
     <ScrollView className="shrink" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} style={({ pressed }) => [styles.action, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
-        <AppIcon name={action.icon} size={22} color={theme.colors.textSecondary} />
+        <AppIcon name={action.icon} size={22} tone="secondary" />
         <Text className="text-body text-fg flex-1">{action.label}</Text>
       </Pressable>)}
     </ScrollView>

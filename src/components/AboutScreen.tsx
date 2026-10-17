@@ -108,7 +108,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
       <SectionHeader title={t("about.section.diagnostics")} />
       <View style={[styles.group, { marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={styles.row}>
-          <View style={[styles.rowIcon, { backgroundColor: theme.colors.accentSoft }]}><AppIcon name="activity" size={17} color={theme.colors.accent} /></View>
+          <View style={[styles.rowIcon, { backgroundColor: theme.colors.accentSoft }]}><AppIcon name="activity" size={17} tone="accent" /></View>
           <View style={styles.rowText}><Text className="text-body font-semibold text-fg">{t("about.diagnostics.title")}</Text><Text className="text-caption text-fg-muted mt-0.5">{t("about.diagnostics.detail")}</Text></View>
           <Switch accessibilityLabel={t("about.diagnostics.title")} value={diagnostics.enabled} onValueChange={(value) => void diagnostics.setEnabled(value)} />
         </View>
@@ -162,13 +162,13 @@ function AboutRow({ icon, title, detail, onPress }: { icon: IconName; title: str
   const content = (
     <View style={styles.row}>
       <View style={[styles.rowIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
-        <AppIcon name={icon} size={17} color={theme.colors.textMuted} />
+        <AppIcon name={icon} size={17} tone="muted" />
       </View>
       <View style={styles.rowText}>
         <Text className="text-body font-semibold text-fg">{title}</Text>
         <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{detail}</Text>
       </View>
-      {onPress ? <AppIcon name="external-link" size={16} color={theme.colors.textFaint} /> : null}
+      {onPress ? <AppIcon name="external-link" size={16} tone="faint" /> : null}
     </View>
   );
   return onPress ? (
@@ -177,7 +177,7 @@ function AboutRow({ icon, title, detail, onPress }: { icon: IconName; title: str
       accessibilityLabel={title}
       onPress={onPress}
      
-      style={({ pressed }) => ({ backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}
+      className="active:bg-surface-pressed"
     >
       {content}
     </Pressable>

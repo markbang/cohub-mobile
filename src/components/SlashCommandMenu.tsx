@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type 
 import { slashCommandLabel, type SlashCommandItem } from "@/src/data/slash-commands";
 import type { SlashCommandMenuState } from "@/src/data/use-composer-slash";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { IconButton } from "@/src/ui";
 
 /** Non-modal so the composer keeps focus and the keyboard while the query is typed. */
@@ -20,7 +20,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("slash.title")}</Text>
-        <Text numberOfLines={1} style={[typography.micro, { color: menu.failed ? theme.colors.danger : theme.colors.textMuted }]}>{status}</Text>
+        <Text numberOfLines={1} className={`text-micro font-semibold ${menu.failed ? "text-danger" : "text-fg-muted"}`}>{status}</Text>
       </View>
       <IconButton name="x" label={t("slash.dismiss")} size={40} onPress={onDismiss} />
     </View>

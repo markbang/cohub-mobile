@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ReleaseNotes } from "@/src/components/ReleaseNotes";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton } from "@/src/ui";
 import { openWebLink } from "@/src/platform/browser";
 import {
@@ -95,13 +95,13 @@ export function AppUpdateBanner() {
           })}
         >
           <View style={[styles.bannerIcon, { backgroundColor: theme.colors.accentSoft }]}>
-            <AppIcon name="download" size={17} color={theme.colors.accent} />
+            <AppIcon name="download" size={17} tone="accent" />
           </View>
           <View style={styles.bannerText}>
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{t("update.available", { version: release.version })}</Text>
             <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{release.title ?? t("update.viewNotes")}</Text>
           </View>
-          <AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} />
+          <AppIcon name="chevron-right" size={17} tone="faint" />
         </Pressable>
       </View>
 
@@ -202,7 +202,7 @@ export function AppUpdateDetailsSheet({
     >
       <View style={[styles.releaseSummary, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border }]}>
         <View style={[styles.releaseSummaryIcon, { backgroundColor: theme.colors.accentSoft }]}>
-          <AppIcon name="download" size={20} color={theme.colors.accent} />
+          <AppIcon name="download" size={20} tone="accent" />
         </View>
         <View style={styles.releaseSummaryText}>
           <Text className="text-headline font-semibold text-fg">{release.title ?? `Cohub ${release.version}`}</Text>
@@ -214,7 +214,7 @@ export function AppUpdateDetailsSheet({
       </View>
 
       <View style={[styles.releaseNotice, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
-        <AppIcon name="info" size={17} color={theme.colors.accent} />
+        <AppIcon name="info" size={17} tone="accent" />
         <Text className="text-body text-fg-secondary flex-1">
           {progress?.phase === "downloading" ? t("update.status.downloading", { percent: Math.round(progress.fraction * 100) })
             : progress?.phase === "verifying" ? t("update.status.verifying")
@@ -233,9 +233,9 @@ export function AppUpdateDetailsSheet({
           onPress={() => void runOperation(() => openAndroidInstallPermissionSettings())}
           style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, opacity: pressed || opening ? 0.55 : 1 }]}
         >
-          <AppIcon name="shield" size={16} color={theme.colors.accent} />
+          <AppIcon name="shield" size={16} tone="accent" />
           <Text className="text-body font-semibold text-accent flex-1">{t("update.installPermission")}</Text>
-          <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
+          <AppIcon name="chevron-right" size={16} tone="faint" />
         </Pressable>
       ) : null}
 
@@ -250,9 +250,9 @@ export function AppUpdateDetailsSheet({
         disabled={opening}
         style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent", opacity: opening ? 0.55 : 1 }]}
       >
-        <AppIcon name="external-link" size={16} color={theme.colors.accent} />
+        <AppIcon name="external-link" size={16} tone="accent" />
         <Text className="text-body font-semibold text-accent flex-1">{t("update.openOnGitHub")}</Text>
-        <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
+        <AppIcon name="chevron-right" size={16} tone="faint" />
       </Pressable>
       {error ? <Text selectable className="text-caption text-danger mt-2">{error}</Text> : null}
     </AdaptiveSheet>
@@ -322,13 +322,13 @@ export function AppUpdateRow() {
         })}
       >
         <View style={[styles.updateRowIcon, { backgroundColor: release ? theme.colors.accentSoft : theme.colors.surfaceRaised }]}>
-          {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={17} color={theme.colors.accent} />}
+          {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={17} tone="accent" />}
         </View>
         <View className="flex-1 min-w-0">
           <Text className="text-body font-semibold text-fg">{title}</Text>
-          <Text numberOfLines={2} style={[typography.caption, { color: release ? theme.colors.accent : theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
+          <Text numberOfLines={2} className={`text-caption mt-0.5 ${release ? "text-accent" : "text-fg-muted"}`}>{detail}</Text>
         </View>
-        {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={17} color={theme.colors.textFaint} /> : null}
+        {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={17} tone="faint" /> : null}
       </Pressable>
       {release ? <AppUpdateDetailsSheet key={`row-${release.version}`} release={release} visible={detailsOpen} onClose={() => setDetailsOpen(false)} /> : null}
     </>

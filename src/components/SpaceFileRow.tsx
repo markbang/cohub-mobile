@@ -94,7 +94,7 @@ export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: S
         <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textMuted, marginTop: compact ? 2 : 3 }]}>{detail}</Text>
       </View>
       {!compact ? <Text className="text-micro font-semibold text-fg-faint">{entry.mtimeMs ? formatRelativeTime(new Date(entry.mtimeMs).toISOString()) : ""}</Text> : null}
-      <AppIcon name="chevron-right" size={compact ? 15 : 16} color={theme.colors.textFaint} />
+      <AppIcon name="chevron-right" size={compact ? 15 : 16} tone="faint" />
     </PressableScale>
   );
 }

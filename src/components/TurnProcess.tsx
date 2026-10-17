@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { MessageContent } from "@/src/components/MessageContent";
 import type { StreamView } from "@/src/data/types";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon } from "@/src/ui";
 
 export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
@@ -42,13 +42,13 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
   }, [client, expanded, loadKey, objectKey, spaceId, t, turn.id, turn.sessionId]);
   const summary = turn.intermediateSummary;
   if (!objectKey && !summary?.messageCount && !summary?.toolCallCount) return null;
-  return <View style={{ marginHorizontal: 18, marginVertical: 6 }}>
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
+  return <View className="mx-4 my-1.5">
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
       <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text style={[typography.caption, { color: theme.colors.textMuted, flex: 1 }]}>{summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}{turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}</Text>
+      <Text className="text-caption text-fg-muted flex-1">{summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}{turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}</Text>
     </Pressable>
     {expanded ? <View style={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, gap: 8 }}>
-      {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text style={[typography.caption, { color: theme.colors.danger }]}>{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("turn.notArchived")}</Text> : content === null ? <ActivityIndicator color={theme.colors.accent} /> : content.length ? <MessageContent content={content} /> : <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("turn.none")}</Text>}
+      {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <ActivityIndicator color={theme.colors.accent} /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
     </View> : null}
   </View>;
 }
@@ -69,13 +69,13 @@ export function StreamingTurnProcess({ messages }: { messages: StreamView["inter
     return { content: blocks, toolCount: tools };
   }, [messages]);
   if (messages.length === 0) return null;
-  return <View style={{ marginHorizontal: 18, marginVertical: 6 }}>
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
+  return <View className="mx-4 my-1.5">
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
       <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text style={[typography.caption, { color: theme.colors.textMuted, flex: 1 }]}>{t("turn.steps", { steps: messages.length, tools: toolCount })}</Text>
+      <Text className="text-caption text-fg-muted flex-1">{t("turn.steps", { steps: messages.length, tools: toolCount })}</Text>
     </Pressable>
     {expanded ? <View style={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, gap: 8 }}>
-      {content.length ? <MessageContent content={content} /> : <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("turn.none")}</Text>}
+      {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
     </View> : null}
   </View>;
 }

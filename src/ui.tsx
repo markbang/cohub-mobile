@@ -378,26 +378,26 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               accessibilityState={{ expanded: layout.expanded }}
               onPress={() => setExpanded(!layout.expanded)}
               style={({ pressed }) => [styles.composerExpandButton, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
-            ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={17} color={theme.colors.textMuted} /></Pressable> : null}
+            ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={17} tone="muted" /></Pressable> : null}
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-1.5">
-          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onAttach(); }} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: pressed || attachmentMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} color={theme.colors.textSecondary} /></Pressable>
+          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onAttach(); }} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: pressed || attachmentMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
           {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: harnessLabel ?? "Cohub" })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onHarnessPress?.(); }} style={({ pressed }) => [styles.composerHarness, { backgroundColor: pressed || harnessMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.5 : 1 }]}>
-            <AppIcon name={harnessLabel === "Cohub" ? "cloud" : "monitor"} size={16} color={theme.colors.textSecondary} />
+            <AppIcon name={harnessLabel === "Cohub" ? "cloud" : "monitor"} size={16} tone="secondary" />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{harnessLabel}</Text>
-            <AppIcon name="chevron-down" size={13} color={theme.colors.textMuted} />
+            <AppIcon name="chevron-down" size={13} tone="muted" />
           </Pressable> : null}
           {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onModelPress(); }} style={({ pressed }) => [styles.composerModel, { backgroundColor: pressed || modelMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.5 : 1 }]}>
-            <AppIcon name="zap" size={18} color={theme.colors.textSecondary} />
+            <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelStatus === "unknown" ? null : <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: modelStatus === "available" ? theme.colors.success : modelStatus === "degraded" ? theme.colors.warning : theme.colors.danger }} />}
-            <AppIcon name="chevron-down" size={14} color={theme.colors.textMuted} />
+            <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={onVoice} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: voiceActive ? (pressed ? theme.colors.accentBorder : theme.colors.accentSoft) : pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} color={voiceActive ? theme.colors.accent : theme.colors.textSecondary} />}</Pressable> : null}
+          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={onVoice} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: voiceActive ? (pressed ? theme.colors.accentBorder : theme.colors.accentSoft) : pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { if (canStop) onStop?.(); else onSend(); }} style={({ pressed }) => [styles.sendButton, { backgroundColor: canStop ? (pressed ? theme.colors.textSecondary : theme.colors.text) : canSend ? (pressed ? theme.colors.accentPressed : theme.colors.accent) : theme.colors.surfaceRaised }]}>
-            {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} color={theme.colors.accentText} /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} color={canSend ? theme.colors.accentText : theme.colors.textFaint} />}
+            {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
           </Pressable>
         </View>
       </View>
@@ -409,9 +409,9 @@ export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string
   const theme = useAppTheme();
   const { t } = useTranslation();
   return <View style={[styles.attachmentChip, { minHeight: 44, backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
-    {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} color={theme.colors.accent} />}
+    {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
     <Text numberOfLines={1} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={15} color={theme.colors.textMuted} /></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={15} tone="muted" /></Pressable>
   </View>;
 }
 

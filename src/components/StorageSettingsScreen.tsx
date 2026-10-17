@@ -72,10 +72,10 @@ export function StorageSettingsScreen() {
           accessibilityState={{ checked: retention === option, disabled: busy }}
           disabled={busy}
           onPress={() => void selectRetention(option)}
-          style={({ pressed }) => ({ minHeight: 52, flexDirection: "row", alignItems: "center", gap: theme.spacing.md, padding: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}
+          className="min-h-13 flex-row items-center gap-3 p-3 border-b border-border active:bg-surface-pressed"
         >
           <Text className="text-body flex-1 text-fg">{retentionLabel(option, t)}</Text>
-          {retention === option ? <AppIcon name="check" size={18} color={theme.colors.accent} /> : null}
+          {retention === option ? <AppIcon name="check" size={18} tone="accent" /> : null}
         </Pressable>)}
       </View>}
       {error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}

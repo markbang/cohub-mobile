@@ -261,7 +261,7 @@ export default function FileScreen() {
           <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
             {file.kind === "text" && file.size > MAX_EDITABLE_CODE_BYTES ? (
               <View className="flex-row items-center gap-2 mb-2">
-                <AppIcon name="alert" size={14} color={theme.colors.textMuted} />
+                <AppIcon name="alert" size={14} tone="muted" />
                 <Text className="text-caption text-fg-muted flex-1">
                   {t("file.tooLarge")}
                 </Text>
@@ -295,12 +295,11 @@ function SaveBanner({
   onReload: () => void;
   onOverwrite: () => void;
 }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <View className="bg-danger-soft border-b border-border px-4 py-2 gap-2">
       <View className="flex-row items-center gap-2">
-        <AppIcon name="alert" size={15} color={theme.colors.danger} />
+        <AppIcon name="alert" size={15} tone="danger" />
         <Text className="text-caption text-danger flex-1">{message}</Text>
       </View>
       {conflict ? (
@@ -322,7 +321,7 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
   return (
     <View style={styles.errorState}>
       <View style={[styles.errorIcon, { backgroundColor: theme.colors.dangerSoft }]}>
-        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} color={theme.colors.danger} />
+        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} tone="danger" />
       </View>
       <Text className="text-headline font-semibold text-fg text-center mt-4">
         {isDirectory ? t("file.folder.title") : t("file.error.title")}
@@ -332,7 +331,7 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
       </Text>
       <View style={styles.errorActions}>
         <PrimaryButton label={t("files.backToFiles")} icon="arrow-left" onPress={onBack} className="min-h-11 px-4" />
-        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
+        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} className="min-h-11 justify-center px-3 active:opacity-60"><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
       </View>
     </View>
   );

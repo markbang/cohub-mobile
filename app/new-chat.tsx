@@ -67,7 +67,7 @@ export default function NewChatScreen() {
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{displaySpaceName(space)}</Text>
             {space.description ? <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{space.description}</Text> : null}
           </View>
-          <AppIcon name="arrow-right" size={18} color={selected ? theme.colors.accent : theme.colors.textFaint} />
+          <AppIcon name="arrow-right" size={18} tone={selected ? "accent" : "faint"} />
         </Pressable>;
       }}
     />

@@ -41,7 +41,7 @@ function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessio
     <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={({ pressed }) => ({ maxWidth: "86%", minHeight: 32, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
       <Dot />
       <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textMuted }]}>{label}</Text>
-      {unavailable ? null : <AppIcon name="chevron-right" size={13} color={theme.colors.textFaint} />}
+      {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
     </Pressable>
   </View>;
 }
@@ -64,7 +64,7 @@ export function SentToList({ turn, spaceId, client, lookupSession, onOpen }: Rel
     </View>
     <View style={{ marginLeft: 2, borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12 }}>
       {visible.map((session) => <SentSessionRow key={`${session.spaceId}:${session.sessionId}`} session={session} client={client} lookupSession={lookupSession} onOpen={onOpen} />)}
-      {collapsed ? <Pressable accessibilityRole="button" onPress={() => setExpanded(true)} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", opacity: pressed ? 0.55 : 1 })}>
+      {collapsed ? <Pressable accessibilityRole="button" onPress={() => setExpanded(true)} className="min-h-11 justify-center active:opacity-55">
         <Text className="text-caption text-accent">{t("turn.related.showMore", { count: sessions.length - VISIBLE_SENT_SESSIONS })}</Text>
       </Pressable> : null}
     </View>
@@ -79,12 +79,12 @@ function SentSessionRow({ session, single = false, client, lookupSession, onOpen
   const unavailable = view.status === "unavailable";
   const name = title ?? (unavailable ? t("turn.related.unavailable") : t("turn.related.otherChat"));
   const label = single ? title ? t("turn.related.sentTo", { title }) : unavailable ? t("turn.related.unavailable") : t("turn.related.sentToChat") : name;
-  return <Pressable accessibilityRole="link" accessibilityLabel={unavailable ? label : t("turn.related.open", { title: name })} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(session)} style={({ pressed }) => ({ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, opacity: pressed ? 0.55 : 1 })}>
+  return <Pressable accessibilityRole="link" accessibilityLabel={unavailable ? label : t("turn.related.open", { title: name })} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(session)} className="min-h-11 flex-row items-center gap-2 active:opacity-55">
     {single ? <Dot /> : null}
     <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textSecondary }]}>{label}</Text>
     {session.count > 1 ? <Text style={[typography.caption, { color: theme.colors.textFaint, fontVariant: ["tabular-nums"] }]}>×{session.count}</Text> : null}
     <View className="flex-1" />
-    {unavailable ? null : <AppIcon name="chevron-right" size={14} color={theme.colors.textFaint} />}
+    {unavailable ? null : <AppIcon name="chevron-right" size={14} tone="faint" />}
   </Pressable>;
 }
 
@@ -101,7 +101,7 @@ export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: Rel
     <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={({ pressed }) => ({ maxWidth: "78%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
       <AppIcon name="git-fork" size={13} color={color} />
       <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color }]}>{label}</Text>
-      {unavailable ? null : <AppIcon name="chevron-right" size={13} color={theme.colors.textFaint} />}
+      {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
     </Pressable>
     <View className="h-px flex-1 bg-border" />
   </View>;

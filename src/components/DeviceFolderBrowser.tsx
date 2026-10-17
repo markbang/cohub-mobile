@@ -6,7 +6,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import type { DeviceFolderListing } from "@/src/data/device-runtime";
 import { useTranslation } from "@/src/i18n";
 import { browseDeviceFolder } from "@/src/platform/device-runtime";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { PrimaryButton } from "@/src/ui";
 
 export type DeviceFolderBrowserState = ReturnType<typeof useDeviceFolderBrowser>;
@@ -59,25 +59,25 @@ export function DeviceFolderBrowser({ browser }: { browser: DeviceFolderBrowserS
   const { listing, loading, failure, load } = browser;
   const activeVolume = listing?.volumes.find((volume) => listing.path === volume.path || listing.path.startsWith(`${volume.path}/`))?.path;
 
-  return <View style={{ minHeight: 240 }}>
+  return <View className="min-h-60">
     {listing && listing.volumes.length > 1 ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ columnGap: theme.spacing.xs }}>
       {listing.volumes.map((volume) => <FilterChip key={volume.path} label={volume.label} icon="database" selected={activeVolume === volume.path} onPress={() => void load(volume.path)} />)}
     </ScrollView> : null}
-    {listing ? <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, paddingVertical: theme.spacing.sm }}>
-      <Text selectable style={[typography.bodyMedium, { color: theme.colors.text, flexShrink: 1 }]}>{listing.label}</Text>
-      {listing.spaceId ? <View style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: 2, borderRadius: theme.radius.pill, backgroundColor: theme.colors.surfaceRaised }}>
-        <Text style={[typography.micro, { color: theme.colors.textMuted }]}>{t("deviceRuntime.linked")}</Text>
+    {listing ? <View className="flex-row items-center gap-2 py-2">
+      <Text selectable className="text-body font-semibold text-fg shrink">{listing.label}</Text>
+      {listing.spaceId ? <View className="px-2 py-0.5 rounded-full bg-surface-raised">
+        <Text className="text-micro font-semibold text-fg-muted">{t("deviceRuntime.linked")}</Text>
       </View> : null}
       {loading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
     </View> : null}
-    {failure ? <View style={{ gap: theme.spacing.md, paddingVertical: theme.spacing.md }}>
-      <Text accessibilityRole="alert" style={[typography.body, { color: theme.colors.textSecondary }]}>{failure}</Text>
+    {failure ? <View className="gap-3 py-3">
+      <Text accessibilityRole="alert" className="text-body text-fg-secondary">{failure}</Text>
       <PrimaryButton label={t("common.retry")} icon="refresh" disabled={loading} onPress={() => void load(listing?.path)} />
     </View> : listing ? <View style={{ opacity: loading ? 0.6 : 1, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
       {listing.parent ? <SettingsRow icon="arrow-up" title={t("deviceRuntime.parentFolder")} disabled={loading} onPress={() => void load(listing.parent ?? undefined)} /> : null}
       {listing.folders.map((folder) => <SettingsRow key={folder.path} icon="folder" title={folder.name} disabled={loading} onPress={() => void load(folder.path)} />)}
-      {listing.folders.length === 0 ? <Text style={[typography.body, { color: theme.colors.textFaint, paddingVertical: theme.spacing.md }]}>{t("deviceRuntime.noSubfolders")}</Text> : null}
-    </View> : <View style={{ flex: 1, minHeight: 200, alignItems: "center", justifyContent: "center" }}>
+      {listing.folders.length === 0 ? <Text className="text-body text-fg-faint py-3">{t("deviceRuntime.noSubfolders")}</Text> : null}
+    </View> : <View className="flex-1 min-h-50 items-center justify-center">
       <ActivityIndicator color={theme.colors.accent} />
     </View>}
   </View>;

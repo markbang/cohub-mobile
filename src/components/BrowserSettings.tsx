@@ -39,10 +39,10 @@ export function BrowserSettings() {
           onPress={() => void select(option)}
           style={({ pressed }) => ({ minHeight: 56, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, opacity: saving ? 0.6 : 1 })}
         >
-          <AppIcon name={option === "system" ? "external-link" : "globe"} size={20} color={theme.colors.textMuted} />
+          <AppIcon name={option === "system" ? "external-link" : "globe"} size={20} tone="muted" />
           <Text style={[typography.body, { flex: 1, color: selected ? theme.colors.accent : theme.colors.text }]}>{title}</Text>
           <View className="w-6 h-6 items-center justify-center">
-            {selected ? <AppIcon name="check" size={18} color={theme.colors.accent} /> : null}
+            {selected ? <AppIcon name="check" size={18} tone="accent" /> : null}
           </View>
         </Pressable>;
       })}

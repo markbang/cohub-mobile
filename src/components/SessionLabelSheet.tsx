@@ -171,7 +171,7 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
             style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, borderRadius: 11, backgroundColor: pressed ? theme.colors.surfacePressed : assigned ? theme.colors.accentSoft : "transparent" })}
           >
             <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: assigned ? theme.colors.accent : theme.colors.borderStrong, backgroundColor: assigned ? theme.colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
-              {assigned ? <AppIcon name="check" size={15} color={theme.colors.accentText} /> : null}
+              {assigned ? <AppIcon name="check" size={15} tone="onAccent" /> : null}
             </View>
             <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
             {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
