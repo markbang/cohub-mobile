@@ -14,6 +14,7 @@ import { SessionSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
 import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
+import { FilterChip } from "@/src/components/FilterChip";
 import { edgeChrome, useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
@@ -346,7 +347,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
   ];
 
   return (
-    <View style={[styles.nativeRoot, { backgroundColor: theme.colors.background }]} collapsable={false}>
+    <View className="flex-1 min-h-0 overflow-hidden bg-background" collapsable={false}>
       <GestureDetector gesture={swipe}>
       <Reanimated.ScrollView
         ref={pagerRef}
@@ -639,7 +640,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   ];
   const chipRow = <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
     {filterChips.map((chip) => (
-      <PanelFilterChip
+      <FilterChip
         key={chip.key}
         label={chip.label}
         icon={chip.icon}
@@ -650,7 +651,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     {labelsError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.retryLabelsA11y")} onPress={() => setLabelsReloadToken((value) => value + 1)}><Text className="text-caption text-accent">{t("space.panel.retryLabels")}</Text></Pressable> : null}
   </ScrollView>;
   return (
-    <View style={styles.panelContent}>
+    <View className="flex-1 min-h-0">
       <TopBar title={spaceName} subtitle={t("space.panel.chats")} leading={<Avatar name={spaceName} uri={displaySessions.find((session) => session.space?.publicProfile?.avatarUrl)?.space?.publicProfile?.avatarUrl} size={38} />} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("space.panel.chats") })} onPress={onClose} />} />
       <View className="px-4 pt-3 pb-2 gap-2">
         <PrimaryButton label={t("space.newChat")} icon="plus" onPress={onNewChat} className="min-h-11" />
@@ -676,16 +677,11 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
-        ListEmptyComponent={<View style={styles.emptyPanel}>{emptyLoading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" />}<Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
+        ListEmptyComponent={<View className="flex-1 min-h-45 items-center justify-center p-6">{emptyLoading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" />}<Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={() => setLabelsReloadToken((value) => value + 1)} onClose={closeLabelSheet} onChanged={() => { setLabelSessionIds(new Set()); setLabelsReloadToken((value) => value + 1); }} /> : null}
     </View>
   );
-}
-
-function PanelFilterChip({ label, icon, selected, onPress }: { label: string; icon?: React.ComponentProps<typeof AppIcon>["name"]; selected: boolean; onPress: () => void }) {
-  const theme = useAppTheme();
-  return <Pressable accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: selected ? theme.colors.accentBorder : theme.colors.border, backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface, flexDirection: "row", alignItems: "center", gap: 5 })}>{icon ? <AppIcon name={icon} size={13} tone={selected ? "accent" : "muted"} /> : null}<Text className={`text-caption ${selected ? "text-accent" : "text-fg-muted"}`}>{label}</Text></Pressable>;
 }
 
 function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpenFile, onOpenFilesPage }: { enabled?: boolean; spaceId: string; spaceName: string; client: CohubClient | null; onClose: () => void; onOpenFile: (path: string) => void; onOpenFilesPage: () => void }) {
@@ -747,14 +743,14 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
   const rowExtraData = useMemo(() => ({ t, theme }), [t, theme]);
 
   return (
-    <View style={styles.panelContent}>
+    <View className="flex-1 min-h-0">
       <TopBar title={path ? spacePathName(path) : t("files.title")} subtitle={path ? `${spaceName} / ${path}` : spaceName} actions={<><IconButton name="external-link" label={t("space.panel.openFullFiles")} onPress={onOpenFilesPage} /><IconButton name="x" label={t("ui.sheet.close", { title: t("files.title") })} onPress={onClose} /></>} />
-      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} style={({ pressed }) => [styles.parentBar, { borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
+      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} className="min-h-11 flex-row items-center gap-2 border-b border-border px-3.5 active:bg-surface-pressed"><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
-        <View style={styles.emptyPanel}><ActivityIndicator size="small" color={theme.colors.accent} /><Text className="text-caption text-fg-muted mt-2">{t("files.loading")}</Text></View>
+        <View className="flex-1 min-h-45 items-center justify-center p-6"><ActivityIndicator size="small" color={theme.colors.accent} /><Text className="text-caption text-fg-muted mt-2">{t("files.loading")}</Text></View>
       ) : error && entries.length === 0 ? (
-        <View style={styles.emptyPanel}><AppIcon name="cloud-off" size={25} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
+        <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="cloud-off" size={25} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
       ) : (
         <LegendList
           estimatedItemSize={68}
@@ -764,7 +760,7 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
           keyExtractor={(item) => item.path}
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24, flexGrow: entries.length === 0 ? 1 : undefined }}
           renderItem={({ item }) => <SpaceFileRow entry={item} compact onPress={() => openEntry(item)} />}
-          ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name="folder-open" size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
+          ListEmptyComponent={<View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="folder-open" size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
         />
       )}
     </View>
@@ -772,7 +768,6 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
 }
 
 const styles = {
-  nativeRoot: { flex: 1, minHeight: 0, overflow: "hidden" as const },
   pager: { flex: 1 },
   pages: { flexDirection: "row" as const, height: "100%" as const },
   contentPage: { height: "100%" as const },
@@ -781,7 +776,4 @@ const styles = {
   panelPageRight: { borderRightWidth: 0 },
   fill: { flex: 1 } as const,
   backdrop: { position: "absolute" as const, top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "#000000" },
-  panelContent: { flex: 1, minHeight: 0 },
-  emptyPanel: { flex: 1, minHeight: 180, alignItems: "center" as const, justifyContent: "center" as const, padding: 24 },
-  parentBar: { minHeight: 40, paddingHorizontal: 14, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, borderBottomWidth: 1 },
 } satisfies Record<string, object>;

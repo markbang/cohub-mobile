@@ -3,7 +3,6 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDi
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "expo-router";
 import { AppIcon, type IconName } from "@/src/ui";
-import { useAppTheme, typography } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
 
@@ -23,7 +22,6 @@ type AnchoredActionMenuProps = {
 };
 
 export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID }: AnchoredActionMenuProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -64,9 +62,9 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
       accessibilityRole="menu"
       accessibilityLabel={title}
       onAccessibilityEscape={onClose}
-      style={[styles.menu, layout, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}
+      className="absolute overflow-hidden rounded-md border-border bg-surface-raised shadow-float" style={[layout, { borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
     >
-      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
+      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-1.5">
         {actions.map((action) => <Pressable
           key={action.title}
           accessibilityRole="menuitem"
@@ -74,10 +72,10 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
           onPress={() => { onClose(); action.onPress(); }}
-          style={({ pressed }) => [styles.action, { opacity: action.disabled ? 0.45 : 1, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
+          className="min-h-12 flex-row items-center gap-3.5 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
         >
           <AppIcon name={action.icon} size={21} tone="secondary" />
-          <Text style={[typography.body, styles.label, { color: theme.colors.text }]}>{action.title}</Text>
+          <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
         </Pressable>)}
       </ScrollView>
     </View> : null}
@@ -86,8 +84,4 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
 
 const styles = StyleSheet.create({
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 20, elevation: 20 },
-  menu: { position: "absolute", borderRadius: 14, borderCurve: "continuous", borderWidth: StyleSheet.hairlineWidth, overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
-  content: { paddingVertical: 6 },
-  action: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 14 },
-  label: { flex: 1, minWidth: 0 },
 });

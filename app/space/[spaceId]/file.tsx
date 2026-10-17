@@ -315,12 +315,11 @@ function SaveBanner({
 }
 
 function FileError({ message, onRetry, onBack }: { message: string; onRetry: () => void; onBack: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const isDirectory = /not a file|directory|folder/i.test(message);
   return (
-    <View style={styles.errorState}>
-      <View style={[styles.errorIcon, { backgroundColor: theme.colors.dangerSoft }]}>
+    <View className="flex-1 items-center justify-center p-6">
+      <View className="w-13 h-13 rounded-md items-center justify-center bg-danger-soft">
         <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} tone="danger" />
       </View>
       <Text className="text-headline font-semibold text-fg text-center mt-4">
@@ -329,7 +328,7 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
       <Text selectable className="text-body text-fg-muted text-center mt-1.5 max-w-80">
         {isDirectory ? t("file.folder.body") : message}
       </Text>
-      <View style={styles.errorActions}>
+      <View className="flex-row items-center gap-2 mt-4">
         <PrimaryButton label={t("files.backToFiles")} icon="arrow-left" onPress={onBack} className="min-h-11 px-4" />
         {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} className="min-h-11 justify-center px-3 active:opacity-60"><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
       </View>
@@ -337,24 +336,3 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
   );
 }
 
-const styles = {
-  errorState: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    padding: 24,
-  },
-  errorIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  errorActions: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    marginTop: 18,
-  },
-} satisfies Record<string, object>;
