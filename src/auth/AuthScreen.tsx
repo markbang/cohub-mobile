@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppIcon, BrandMark } from "@/src/ui";
+import { AppIcon, BrandMark, Segmented } from "@/src/ui";
 import type { CohubEnvironment } from "@/src/config";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -21,16 +20,15 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const [pressed, setPressed] = useState(false);
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top + 30, paddingBottom: insets.bottom + 24 }]}>
+    <View className="flex-1 justify-between bg-background px-5" style={{ paddingTop: insets.top + 30, paddingBottom: insets.bottom + 24 }}>
       <View className="items-center">
         <BrandMark size={54} />
         <Text className="text-display font-bold text-fg mt-5">Cohub</Text>
         <Text className="text-body text-fg-muted mt-2 text-center max-w-72">{t("auth.tagline")}</Text>
       </View>
 
-      <View style={styles.center}>
+      <View className="w-full max-w-105 self-center">
         <View className="flex-row items-center gap-3 border rounded-md p-4 border-border bg-surface">
           <View className="w-10 h-10 rounded-md items-center justify-center bg-accent-soft"><AppIcon name="sparkles" size={20} tone="accent" /></View>
           <View className="flex-1">
@@ -47,33 +45,15 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
         </View>
       </View>
 
-      <View style={styles.footer}>
+      <View className="w-full max-w-105 self-center">
         <View className="mb-3">
           <Text className="text-micro font-semibold text-fg-faint mb-2">{t("auth.environment")}</Text>
-          <View className="min-h-11 border rounded-lg flex-row overflow-hidden border-border-strong">
-            {ENVIRONMENT_OPTIONS.map((option, index) => {
-              const selected = environment === option.value;
-              const label = t(option.labelKey);
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="radio"
-                  accessibilityLabel={label}
-                  accessibilityState={{ selected, checked: selected, disabled: loading }}
-                  aria-checked={selected}
-                  disabled={loading}
-                  onPress={() => onSelectEnvironment(option.value)}
-                  style={({ pressed }) => [
-                    styles.segment,
-                    index > 0 ? { borderLeftWidth: 1, borderLeftColor: theme.colors.borderStrong } : null,
-                    { backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent" },
-                  ]}
-                >
-                  <Text className={`text-caption ${selected ? "text-accent" : "text-fg-secondary"}`}>{label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Segmented
+            disabled={loading}
+            value={environment}
+            onChange={onSelectEnvironment}
+            options={ENVIRONMENT_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+          />
         </View>
         {error ? <View className="flex-row items-center gap-2 border rounded-md p-3 mb-2 bg-danger-soft border-danger"><AppIcon name="alert" size={16} tone="danger" /><Text className="text-caption text-danger flex-1">{error}</Text></View> : null}
         <Pressable
@@ -81,9 +61,7 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
           accessibilityLabel={t("auth.continue")}
           disabled={loading}
           onPress={() => void onSignIn()}
-          onPressIn={() => setPressed(true)}
-          onPressOut={() => setPressed(false)}
-          style={[styles.signIn, { backgroundColor: pressed ? theme.colors.accentPressed : theme.colors.accent, opacity: loading ? 0.65 : 1 }]}
+          className={`min-h-13 flex-row items-center justify-center gap-2 rounded-sm bg-accent active:bg-accent-pressed ${loading ? "opacity-65" : ""}`}
         >
           {loading ? <ActivityIndicator color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} tone="onAccent" />}
           <Text className="text-body font-semibold text-on-accent">{loading ? t("auth.opening") : t("auth.continue")}</Text>
@@ -93,11 +71,3 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: 22, justifyContent: "space-between" },
-  center: { width: "100%", maxWidth: 420, alignSelf: "center" },
-  footer: { width: "100%", maxWidth: 420, alignSelf: "center" },
-  segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center" },
-  signIn: { minHeight: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
-});

@@ -217,7 +217,6 @@ export default function FilesScreen() {
 }
 
 function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPress: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <Pressable
@@ -225,10 +224,7 @@ function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPre
       accessibilityLabel={parentPath ? t("files.backTo", { name: parentPath }) : t("files.backToFiles")}
       onPress={onPress}
      
-      style={({ pressed }) => [
-        styles.parentBar,
-        { borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.background },
-      ]}
+      className="min-h-11 flex-row items-center gap-2 border-b border-border bg-background px-4 active:bg-surface-pressed"
     >
       <AppIcon name="arrow-left" size={16} tone="muted" />
       <Text numberOfLines={1} className="text-caption text-fg-secondary">
@@ -250,14 +246,3 @@ function FilesError({ message, onRetry }: { message: string; onRetry: () => void
     </View>
   );
 }
-
-const styles = {
-  parentBar: {
-    minHeight: 42,
-    paddingHorizontal: 16,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    borderBottomWidth: 1,
-  },
-} satisfies Record<string, object>;

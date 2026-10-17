@@ -4,7 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { sentFrom, sentSessions, type RelatedSessionRef, type RelatedSessionView, type SentSession } from "@/src/data/related-sessions";
 import { useRelatedSession } from "@/src/data/use-related-session";
 import { useTranslation } from "@/src/i18n";
-import { colorWithOpacity, typography, useAppTheme } from "@/src/theme";
+import { colorWithOpacity, useAppTheme } from "@/src/theme";
 import { AppIcon } from "@/src/ui";
 import { displaySessionTitle } from "@/src/utils";
 
@@ -31,16 +31,15 @@ export function SentFromLink({ turn, client, lookupSession, onOpen }: RelatedSes
 }
 
 function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessionLinkProps & { sourceRef: RelatedSessionRef }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const view = useRelatedSession(client, sourceRef, lookupSession(sourceRef.sessionId));
   const title = relatedTitle(view);
   const unavailable = view.status === "unavailable";
   const label = title ? t("turn.related.from", { title }) : unavailable ? t("turn.related.fromUnavailable") : t("turn.related.fromChat");
   return <View className="items-end px-4 mt-1">
-    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={({ pressed }) => ({ maxWidth: "86%", minHeight: 32, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
+    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={{ maxWidth: "86%" }} className="min-h-11 flex-row items-center gap-1.5 active:opacity-55">
       <Dot />
-      <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textMuted }]}>{label}</Text>
+      <Text numberOfLines={1} className={`shrink text-caption ${unavailable ? "text-fg-faint" : "text-fg-muted"}`}>{label}</Text>
       {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
     </Pressable>
   </View>;
@@ -72,7 +71,6 @@ export function SentToList({ turn, spaceId, client, lookupSession, onOpen }: Rel
 }
 
 function SentSessionRow({ session, single = false, client, lookupSession, onOpen }: RelatedSessionLinkProps & { session: SentSession; single?: boolean }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const view = useRelatedSession(client, session, lookupSession(session.sessionId));
   const title = relatedTitle(view);
@@ -81,8 +79,8 @@ function SentSessionRow({ session, single = false, client, lookupSession, onOpen
   const label = single ? title ? t("turn.related.sentTo", { title }) : unavailable ? t("turn.related.unavailable") : t("turn.related.sentToChat") : name;
   return <Pressable accessibilityRole="link" accessibilityLabel={unavailable ? label : t("turn.related.open", { title: name })} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(session)} className="min-h-11 flex-row items-center gap-2 active:opacity-55">
     {single ? <Dot /> : null}
-    <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textSecondary }]}>{label}</Text>
-    {session.count > 1 ? <Text style={[typography.caption, { color: theme.colors.textFaint, fontVariant: ["tabular-nums"] }]}>×{session.count}</Text> : null}
+    <Text numberOfLines={1} className={`shrink text-caption ${unavailable ? "text-fg-faint" : "text-fg-secondary"}`}>{label}</Text>
+    {session.count > 1 ? <Text className="text-caption tabular-nums text-fg-faint">×{session.count}</Text> : null}
     <View className="flex-1" />
     {unavailable ? null : <AppIcon name="chevron-right" size={14} tone="faint" />}
   </Pressable>;
@@ -98,9 +96,9 @@ export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: Rel
   const color = unavailable ? theme.colors.textFaint : theme.colors.textMuted;
   return <View className="flex-row items-center gap-2 px-4 pt-2">
     <View className="h-px flex-1 bg-border" />
-    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={({ pressed }) => ({ maxWidth: "78%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
+    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={{ maxWidth: "78%" }} className="min-h-11 flex-row items-center gap-1.5 active:opacity-55">
       <AppIcon name="git-fork" size={13} color={color} />
-      <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color }]}>{label}</Text>
+      <Text numberOfLines={1} className={`shrink text-caption ${unavailable ? "text-fg-faint" : "text-fg-muted"}`}>{label}</Text>
       {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
     </Pressable>
     <View className="h-px flex-1 bg-border" />
