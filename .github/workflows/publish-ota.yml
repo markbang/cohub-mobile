@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Full 40-character commit SHA from origin/main. Main pushes publish github.sha.
+        description: Full 40-character commit SHA. Production requires a main commit; staging accepts any pushed branch. Main pushes publish github.sha.
         required: false
         type: string
       channel:
@@ -55,7 +55,13 @@ jobs:
           set -euo pipefail
           sha=$(node --input-type=module -e 'import { parseCommitSha } from "./scripts/ota-publish.mjs"; process.stdout.write(parseCommitSha(process.env.COMMIT))')
           channel=$(CHANNEL="$CHANNEL" node --input-type=module -e 'import { parseChannel } from "./scripts/ota-publish.mjs"; process.stdout.write(parseChannel(process.env.CHANNEL))')
-          git merge-base --is-ancestor "$sha" origin/main
+          # Production serves every installed build, so it only ships reviewed main commits.
+          # Staging only reaches builds switched to it from the debug menu, so it may preview a pushed branch.
+          if [ "$channel" = "production" ]; then
+            git merge-base --is-ancestor "$sha" origin/main || { echo "Production OTA must publish a commit on main."; exit 1; }
+          else
+            git cat-file -e "$sha^{commit}" || { echo "Commit $sha is not in this repository. Push its branch first."; exit 1; }
+          fi
           git checkout --force --detach "$sha"
           {
             echo "sha=$sha"

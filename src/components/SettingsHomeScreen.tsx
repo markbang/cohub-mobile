@@ -13,6 +13,7 @@ import { useApp } from "@/src/data/context";
 import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
+import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useAppTheme, useThemePreference, typography } from "@/src/theme";
 import { AppIcon, Avatar, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
@@ -30,6 +31,8 @@ export function SettingsHomeScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const version = getInstalledAppVersion();
+  // Preview channels are opted into from the debug menu; keep that visible outside it.
+  const updateChannel = currentUpdateChannel();
   const openDebug = useCallback(() => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     router.push("/debug");
@@ -104,7 +107,7 @@ export function SettingsHomeScreen() {
         ><Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
       </SettingsGroup>
       <Pressable testID="settings.version" accessibilityRole="button" accessibilityLabel={t("profile.version")} onPress={unlockDebug} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
-        <Text style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center" }]}>Cohub Mobile · {version}</Text>
+        <Text style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center" }]}>Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
       </Pressable>
     </ScrollView>
     <AdaptiveSheet
