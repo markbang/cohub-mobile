@@ -193,7 +193,7 @@ export default function FilesScreen() {
             <SpaceFileRow entry={item} onPress={() => openEntry(item)} onLongPress={() => showFileActions(item)} />
           )}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
+            <View className="flex-1 items-center justify-center p-6">
               <AppIcon name="folder-open" size={26} tone="muted" />
               <Text className="text-body text-fg-muted mt-2">
                 {currentPath ? t("files.emptyFolder") : t("files.emptyWorkspace")}
@@ -241,7 +241,7 @@ function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPre
 function FilesError({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return (
-    <View style={styles.errorState}>
+    <View className="flex-1 items-center justify-center p-6">
       <AppIcon name="cloud-off" size={26} tone="danger" />
       <Text className="text-body text-danger text-center mt-2">
         {message}
@@ -259,17 +259,5 @@ const styles = {
     alignItems: "center" as const,
     gap: 8,
     borderBottomWidth: 1,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    padding: 24,
-  },
-  errorState: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    padding: 24,
   },
 } satisfies Record<string, object>;

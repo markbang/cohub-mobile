@@ -132,20 +132,20 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
     const cost = modelCostLabel(entry);
     const summary = [entry.provider, context].filter(Boolean).join(" · ");
     return <View style={[styles.modelRow, { backgroundColor: selected ? theme.colors.surfaceRaised : "transparent" }]}>
-      <View style={styles.modelMainRow}>
+      <View className="flex-row items-center">
         <Pressable testID={`model-option-${entry.provider}-${entry.id}`} accessibilityRole="radio" accessibilityLabel={`${t("model.use", { name: modelDisplayName(entry) })}, ${modelAvailabilityLabel(modelAvailabilityLevel(modelStatus?.[entry.id]))}`} accessibilityState={{ checked: selected }} onPress={() => selectEntry(entry, levels.length > 1 ? selectedLevel : undefined)} style={({ pressed }) => [styles.modelSelect, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
-          <View style={styles.modelIcon}><ModelBrandMark entry={entry} /></View>
-          <View style={styles.modelText}>
+          <View className="w-7 h-7 items-center justify-center"><ModelBrandMark entry={entry} /></View>
+          <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{modelDisplayName(entry)}</Text>
-            <View style={styles.modelSummary}><ModelStatusDot status={modelStatus?.[entry.id] ?? null} /><Text numberOfLines={1} className="text-caption text-fg-muted flex-1">{summary}</Text></View>
+            <View className="flex-row items-center gap-1"><ModelStatusDot status={modelStatus?.[entry.id] ?? null} /><Text numberOfLines={1} className="text-caption text-fg-muted flex-1">{summary}</Text></View>
           </View>
-          <View style={styles.selectionMark}>{selected ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>
+          <View className="w-5 h-5 items-center justify-center">{selected ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>
         </Pressable>
         <Pressable testID={`model-settings-${entry.provider}-${entry.id}`} accessibilityRole="button" accessibilityLabel={t("model.options", { name: modelDisplayName(entry) })} accessibilityState={{ expanded: optionsOpen }} onPress={() => setOptionsOpenFor(optionsOpen ? null : key)} style={({ pressed }) => [styles.optionsTrigger, { backgroundColor: pressed || optionsOpen ? theme.colors.surfacePressed : "transparent" }]}>
           <AppIcon name="settings" size={18} tone={optionsOpen ? "accent" : "muted"} />
         </Pressable>
       </View>
-      {optionsOpen ? <View testID={`model-details-${entry.provider}-${entry.id}`} style={[styles.modelDetails, { borderTopColor: theme.colors.border }]}>
+      {optionsOpen ? <View testID={`model-details-${entry.provider}-${entry.id}`} className="border-t mx-2 py-2 gap-1 border-border">
         <Text className="text-body font-semibold text-fg">{modelDisplayName(entry)}</Text>
         <Text selectable className="text-caption text-fg-muted">{entry.provider} · {entry.id}</Text>
         {context ? <Text className="text-caption text-fg-muted">{context}</Text> : null}
@@ -159,7 +159,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
   };
 
   return <ComposerMenu anchorRef={anchorRef} title={title ?? t("model.title")} onClose={onClose} preferredWidth={360} fillHeight testID="chat-model-selector-menu">
-    <View style={[styles.searchRow, { borderBottomColor: theme.colors.border }]}>
+    <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-1.5 border-b border-border">
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} className="text-body flex-1 min-w-0 text-fg py-2" returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
       {loading || modelStatusLoading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : null}
@@ -177,13 +177,13 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
       keyboardShouldPersistTaps="always"
             ListHeaderComponent={<>
         <Pressable testID="model-option-automatic" accessibilityRole="radio" accessibilityLabel={automaticLabel ?? t("model.automaticA11y")} accessibilityState={{ checked: currentModel === null }} onPress={() => { onSelect(null); setOptionsOpenFor(null); }} style={({ pressed }) => [styles.automaticRow, { backgroundColor: pressed ? theme.colors.surfacePressed : currentModel === null ? theme.colors.surfaceRaised : "transparent" }]}>
-          <View style={styles.modelIcon}><AppIcon name="sparkles" size={22} tone="secondary" /></View>
-          <View style={styles.modelText}><Text className="text-body font-semibold text-fg">{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} className="text-caption text-fg-muted">{automaticDetail ?? t("model.automaticDetail")}</Text></View>
-          <View style={styles.selectionMark}>{currentModel === null ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>
+          <View className="w-7 h-7 items-center justify-center"><AppIcon name="sparkles" size={22} tone="secondary" /></View>
+          <View className="flex-1 min-w-0"><Text className="text-body font-semibold text-fg">{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} className="text-caption text-fg-muted">{automaticDetail ?? t("model.automaticDetail")}</Text></View>
+          <View className="w-5 h-5 items-center justify-center">{currentModel === null ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>
         </Pressable>
         {error ? <View className="flex-row items-center gap-2 p-2"><Text className="text-caption text-danger flex-1">{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
       </>}
-      ListEmptyComponent={error && !loading ? null : <View style={styles.centerState}>
+      ListEmptyComponent={error && !loading ? null : <View className="min-h-25 items-center justify-center p-4">
         {loading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="search" size={22} tone="muted" />}
         <Text className="text-caption text-fg-muted text-center mt-2">{t(loading ? "model.loading" : "model.noMatch")}</Text>
       </View>}
@@ -192,16 +192,8 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
 }
 
 const styles = {
-  searchRow: { minHeight: 52, flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingLeft: 16, paddingRight: 6, borderBottomWidth: 1 },
   automaticRow: { minHeight: 56, marginBottom: 2, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 10 },
   modelRow: { marginBottom: 2, borderRadius: 8 },
-  modelMainRow: { flexDirection: "row" as const, alignItems: "center" as const },
   modelSelect: { flex: 1, minWidth: 0, minHeight: 56, paddingLeft: 10, paddingRight: 4, paddingVertical: 8, borderRadius: 8, flexDirection: "row" as const, alignItems: "center" as const, gap: 10 },
-  modelIcon: { width: 28, height: 28, alignItems: "center" as const, justifyContent: "center" as const },
-  modelText: { flex: 1, minWidth: 0 },
-  modelSummary: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5 },
-  selectionMark: { width: 20, height: 20, alignItems: "center" as const, justifyContent: "center" as const },
   optionsTrigger: { width: 44, height: 44, borderRadius: 8, alignItems: "center" as const, justifyContent: "center" as const },
-  modelDetails: { borderTopWidth: 1, marginHorizontal: 10, paddingVertical: 10, gap: 4 },
-  centerState: { minHeight: 100, alignItems: "center" as const, justifyContent: "center" as const, padding: 16 },
 } satisfies Record<string, object>;

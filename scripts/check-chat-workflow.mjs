@@ -391,7 +391,7 @@ const chromeScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
   // Design-system primitives render as named placeholders, like the components above.
-  Field: "Field", FIELD_INPUT_CLASS: "", Segmented: "Segmented", ListRow: "ListRow", Meta: "Meta", Tag: "Tag", AvatarStatus: "AvatarStatus", LIST_AVATAR_SIZE: 46,
+  Field: "Field", FIELD_INPUT_CLASS: "", Segmented: "Segmented", ListRow: "ListRow", Meta: "Meta", Tag: "Tag", AvatarStatus: "AvatarStatus", LIST_AVATAR_SIZE: 46, FilterChip: "FilterChip",
   StyleSheet: { create: (styles) => styles },
   COMPOSER_TEXT_PADDING,
   colorWithOpacity,
@@ -1071,7 +1071,7 @@ for (const [tab, component, expectedRequests] of [
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
-    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", PanelFilterChip: "PanelFilterChip", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
+    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
   const render = () => { cursor = 0; const nodes = chromeNodes(renderPanel(props)); while (effects.length) effects.shift()(); return nodes; };
@@ -1082,7 +1082,7 @@ for (const [tab, component, expectedRequests] of [
   remoteLabels = [{ id: "web-label", name: "Created on web", source: "user", systemKey: null }];
   render();
   await jobs.get("space:space:labels").run();
-  const chip = render().find((node) => node.type === "PanelFilterChip" && node.props.label === "Created on web");
+  const chip = render().find((node) => node.type === "FilterChip" && node.props.label === "Created on web");
   assert.ok(chip, "new remote filters appear without closing the panel or pulling to refresh");
   assert.equal(labelsFetches, 2);
   chip.props.onPress();
