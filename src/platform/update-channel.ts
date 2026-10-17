@@ -23,13 +23,17 @@ export async function switchUpdateChannel(channel: UpdateChannel): Promise<Chann
   // Override keys must match the embedded headers, so the full map is sent, not just the channel.
   Updates.setUpdateRequestHeadersOverride(channel === "production" ? null : { ...embedded, "expo-channel-name": channel });
   const result = await Updates.fetchUpdateAsync().catch((error: unknown) => {
-    if (channel !== "production") Updates.setUpdateRequestHeadersOverride(null);
+    Updates.setUpdateRequestHeadersOverride(null);
     throw error;
   });
   if (result.isNew) {
     await Updates.reloadAsync();
     return "reloading";
   }
-  if (channel !== "production") Updates.setUpdateRequestHeadersOverride(null);
-  return "no-update";
+  Updates.setUpdateRequestHeadersOverride(null);
+  // Clearing the override restores production, but the running update can still be a staging
+  // bundle, which production never sends or selects. Reload so the channel takes effect.
+  if (channel !== "production") return "no-update";
+  await Updates.reloadAsync();
+  return "reloading";
 }

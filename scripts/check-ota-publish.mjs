@@ -63,10 +63,10 @@ assert.equal(ota.on.workflow_dispatch.inputs.channel.default, "production");
 assert.equal(ota.concurrency["cancel-in-progress"], false);
 assert.equal(ota.concurrency.group, "ota-publish-${{ github.event.inputs.channel || 'production' }}");
 const otaTarget = JSON.stringify(ota.jobs.prepare.steps.find((step) => step.id === "target"));
-assert.match(otaTarget, /production.*--is-ancestor/, "Production OTA must stay limited to main commits");
+assert.match(otaTarget, /if \[ \\"\$channel\\" = \\"production\\" \]; then\\n\s*git merge-base --is-ancestor/, "Production OTA must stay limited to main commits");
 assert.equal(ota.env.OTA_CLI_REPOSITORY, OTA_CLI_REPOSITORY);
 assert.equal(ota.env.OTA_CLI_REVISION, OTA_CLI_REVISION);
-assert.match(ota.jobs.prepare.if, /refs\/heads\/main/);
+assert.match(JSON.stringify(ota.jobs.prepare.steps[0]), /GITHUB_REF.*refs\/heads\/main.*exit 1/, "A dispatch from another ref fails instead of being skipped");
 const publishAndroid = ota.jobs["publish-android"];
 const publishIos = ota.jobs["publish-ios"];
 assert.deepEqual(publishAndroid.needs, ["prepare", "android"]);
@@ -84,10 +84,15 @@ for (const publish of [publishAndroid, publishIos]) {
   assert.ok(publishStep, "Each platform must publish through an explicit step");
   assert.match(publishStep.run, /--delta-bases 3/);
   assert.match(publishStep.run, /--fingerprint "\$SOURCE_FINGERPRINT"/);
-  assert.match(publishStep.run, /env -u COHUB_OTA_RUNTIME_VERSION npx @expo\/fingerprint/);
+  assert.match(publishStep.run, /OTA_INPUTS_DIR \+ "\/source-fingerprint\.json"/);
+  assert.match(publishStep.run, /--config "\$OTA_INPUTS_DIR\/ota-config\.json"/);
   assert.match(publishStep.run, /--runtime "\$runtime"/);
   assert.match(publishStep.run, /--commit "\$SOURCE_COMMIT"/);
-  assert.match(publishStep.run, /expo config --type public --json/);
+  // The selected commit may be an unreviewed branch on staging: nothing from it may execute beside the key.
+  const checkout = publish.steps.find((step) => step.uses?.startsWith("actions/checkout"));
+  assert.equal(checkout.with.ref, "${{ github.sha }}", "the secret-bearing job checks out the trusted dispatching commit");
+  assert.equal(JSON.stringify(publish.steps).includes("needs.prepare.outputs.sha }}\"}"), false);
+  assert.equal(publish.steps.some((step) => /(^|\s)(npm ci|npx )/.test((step.run ?? "").replace(/npm ci --prefix "\$RUNNER_TEMP\/ota-cli"/, ""))), false, "no target dependencies or app config run beside OTA_API_KEY");
   assert.match(publishStep.run, /PIPESTATUS/, "The publish step must capture the CLI exit status before deciding");
   assert.match(publishStep.run, /Fingerprint mismatch/, "A fingerprint-mismatch rejection must be reported as an expected skip, not a pipeline failure");
   assert.match(publishStep.run, /GITHUB_STEP_SUMMARY/, "A skipped publish must explain itself in the run summary");
@@ -107,7 +112,9 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
       mkdirSync(join(temp, "bin"));
       mkdirSync(join(temp, "ota-cli/scripts"), { recursive: true });
       mkdirSync(join(temp, "export"));
-      writeFileSync(join(temp, "bin/npx"), `#!/usr/bin/env bash\ncase "$*" in *fingerprint*) echo '{"hash":"${"a".repeat(40)}"}' ;; *) echo '{}' ;; esac\n`, { mode: 0o755 });
+      mkdirSync(join(temp, "inputs"));
+      writeFileSync(join(temp, "inputs/source-fingerprint.json"), JSON.stringify({ hash: "a".repeat(40) }));
+      writeFileSync(join(temp, "inputs/ota-config.json"), "{}");
       writeFileSync(join(temp, "bin/sleep"), "#!/usr/bin/env bash\necho \"slept $1\" >> \"$RUNNER_TEMP/sleeps\"\n", { mode: 0o755 });
       // Each call consumes the next scripted outcome: "ok" or a log line to fail with.
       writeFileSync(join(temp, "ota-cli/scripts/publish.ts"), `
@@ -134,6 +141,7 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
           COHUB_OTA_RUNTIME_VERSION: "b".repeat(40),
           NATIVE_SOURCE_FINGERPRINT: nativeFingerprint,
           OTA_EXPORT_DIR: join(temp, "export"),
+          OTA_INPUTS_DIR: join(temp, "inputs"),
         },
       });
       const read = (name) => { try { return readFileSync(join(temp, name), "utf8"); } catch { return ""; } };
@@ -178,6 +186,13 @@ assert.ok(JSON.stringify(ota.jobs.ios.steps).includes(IOS_NATIVE_FINGERPRINT_ASS
 assert.match(JSON.stringify(ota.jobs.ios.steps), /--platform ios/);
 assert.match(JSON.stringify(ota.jobs.android.steps), /cohub-ota-android-/);
 assert.match(JSON.stringify(ota.jobs.ios.steps), /cohub-ota-ios-/);
+for (const platform of ["android", "ios"]) {
+  const inputs = ota.jobs[platform].steps.find((step) => step.name === "Record publish inputs");
+  assert.match(inputs.run, new RegExp(`env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform ${platform}`), "the source fingerprint ignores the runtime override");
+  assert.match(inputs.run, /expo config --type public --json/);
+  assert.equal(inputs.env.COHUB_OTA_RUNTIME_VERSION, "${{ steps.fingerprint.outputs.runtime }}", "the uploaded config carries the installed runtime");
+  assert.equal(JSON.stringify(ota.jobs[platform]).includes("OTA_API_KEY"), false, "export jobs run the selected commit and must never see the key");
+}
 
 const nativeCi = parse(".github/workflows/native-ci.yml");
 assert.equal(Object.hasOwn(nativeCi.on, "push"), false);

@@ -32,7 +32,7 @@ env:
 jobs:
   prepare:
     name: Validate target
-    if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
+    if: github.repository == 'markbang/cohub-mobile'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -40,6 +40,14 @@ jobs:
       channel: ${{ steps.target.outputs.channel }}
       subject: ${{ steps.target.outputs.subject }}
     steps:
+      # Later jobs trust this run's own checkout, so a dispatch from another ref must stop here, visibly.
+      - name: Require a main dispatch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=Run from main::Dispatch Publish OTA from main and pass the branch commit as the 'commit' input."
+            exit 1
+          fi
+
       - name: Checkout main history
         uses: actions/checkout@v7
         with:
@@ -145,6 +153,26 @@ jobs:
           EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
         run: npx expo export --platform android --output-dir dist/android
 
+      # The selected commit's code (app config, fingerprint inputs) only runs in this job,
+      # which holds no publishing secret. The upload job consumes these files as data.
+      - name: Record publish inputs
+        env:
+          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
+          COHUB_OTA_RUNTIME_VERSION: ${{ steps.fingerprint.outputs.runtime }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/publish-inputs
+          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform android > dist/publish-inputs/source-fingerprint.json
+          npx expo config --type public --json > dist/publish-inputs/ota-config.json
+
+      - name: Upload publish inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: cohub-ota-inputs-android-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
+          path: dist/publish-inputs
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload export
         uses: actions/upload-artifact@v7
         with:
@@ -232,6 +260,26 @@ jobs:
           EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
         run: npx expo export --platform ios --output-dir dist/ios
 
+      # The selected commit's code (app config, fingerprint inputs) only runs in this job,
+      # which holds no publishing secret. The upload job consumes these files as data.
+      - name: Record publish inputs
+        env:
+          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
+          COHUB_OTA_RUNTIME_VERSION: ${{ steps.fingerprint.outputs.runtime }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/publish-inputs
+          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform ios > dist/publish-inputs/source-fingerprint.json
+          npx expo config --type public --json > dist/publish-inputs/ota-config.json
+
+      - name: Upload publish inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: cohub-ota-inputs-ios-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
+          path: dist/publish-inputs
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload export
         uses: actions/upload-artifact@v7
         with:
@@ -268,25 +316,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35  # three publish attempts, each bounded by a 5-minute response timeout
     steps:
-      - name: Checkout selected commit
+      # Only the dispatching main commit's scripts run beside OTA_API_KEY; the selected
+      # commit arrives as artifacts from its export job.
+      - name: Checkout trusted publish scripts
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: ${{ github.sha }}
 
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-
-      - name: Install app dependencies
-        run: npm ci
 
       - name: Download export
         uses: actions/download-artifact@v8
         with:
           name: cohub-ota-android-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
           path: ${{ runner.temp }}/cohub-ota-export
+
+      - name: Download publish inputs
+        uses: actions/download-artifact@v8
+        with:
+          name: cohub-ota-inputs-android-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
+          path: ${{ runner.temp }}/cohub-ota-inputs
 
       - name: Install pinned OTA CLI
         env:
@@ -305,20 +357,19 @@ jobs:
           OTA_SERVER: ${{ vars.OTA_SERVER }}
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
           OTA_PLATFORM: android
           SOURCE_COMMIT: ${{ needs.prepare.outputs.sha }}
           COHUB_OTA_RUNTIME_VERSION: ${{ needs.android.outputs.runtime }}
           NATIVE_SOURCE_FINGERPRINT: ${{ needs.android.outputs.fingerprint }}
           OTA_EXPORT_DIR: ${{ runner.temp }}/cohub-ota-export
+          OTA_INPUTS_DIR: ${{ runner.temp }}/cohub-ota-inputs
         run: |
           set -euo pipefail
           test -n "$OTA_API_KEY" || { echo "OTA_API_KEY is required."; exit 1; }
           origin=$(OTA_SERVER="$OTA_SERVER" node --input-type=module -e 'import { parseHttpsOrigin } from "./scripts/ota-publish.mjs"; process.stdout.write(parseHttpsOrigin(process.env.OTA_SERVER, "OTA_SERVER"))')
           runtime=$(COHUB_OTA_RUNTIME_VERSION="$COHUB_OTA_RUNTIME_VERSION" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.COHUB_OTA_RUNTIME_VERSION, "prepare runtime"))')
           test -d "$OTA_EXPORT_DIR"
-          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform "$OTA_PLATFORM" > "$RUNNER_TEMP/source-fingerprint.json"
-          SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.RUNNER_TEMP + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
+          SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.OTA_INPUTS_DIR + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
           NATIVE_SOURCE_FINGERPRINT=$(NATIVE_SOURCE_FINGERPRINT="$NATIVE_SOURCE_FINGERPRINT" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.NATIVE_SOURCE_FINGERPRINT, "released Android source fingerprint"))')
           if ! SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" node --input-type=module -e 'import { assertFingerprintsMatch } from "./scripts/ota-publish.mjs"; assertFingerprintsMatch(process.env.NATIVE_SOURCE_FINGERPRINT, process.env.SOURCE_FINGERPRINT)'; then
             echo "Android OTA skipped: source native fingerprint differs from the released APK." >> "$GITHUB_STEP_SUMMARY"
@@ -326,7 +377,6 @@ jobs:
             exit 0
           fi
           # Validate against the released APK before the first OTA can register this runtime.
-          COHUB_OTA_RUNTIME_VERSION="$runtime" npx expo config --type public --json > "$RUNNER_TEMP/ota-config.json"
           # Transient transport/server failures retry. Repeating is safe: blobs are
           # content-addressed, an interrupted attempt leaves at most an unserved Staged
           # release, and the concurrency group keeps a newer commit from being overtaken.
@@ -335,7 +385,7 @@ jobs:
             set +e
             OTA_SERVER="$origin" node "$RUNNER_TEMP/ota-cli/scripts/publish.ts" \
               --app-id cohub-mobile \
-              --config "$RUNNER_TEMP/ota-config.json" \
+              --config "$OTA_INPUTS_DIR/ota-config.json" \
               --runtime "$runtime" \
               --fingerprint "$SOURCE_FINGERPRINT" \
               --commit "$SOURCE_COMMIT" \
@@ -373,25 +423,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35  # three publish attempts, each bounded by a 5-minute response timeout
     steps:
-      - name: Checkout selected commit
+      # Only the dispatching main commit's scripts run beside OTA_API_KEY; the selected
+      # commit arrives as artifacts from its export job.
+      - name: Checkout trusted publish scripts
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: ${{ github.sha }}
 
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-
-      - name: Install app dependencies
-        run: npm ci
 
       - name: Download export
         uses: actions/download-artifact@v8
         with:
           name: cohub-ota-ios-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
           path: ${{ runner.temp }}/cohub-ota-export
+
+      - name: Download publish inputs
+        uses: actions/download-artifact@v8
+        with:
+          name: cohub-ota-inputs-ios-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
+          path: ${{ runner.temp }}/cohub-ota-inputs
 
       - name: Install pinned OTA CLI
         env:
@@ -410,29 +464,27 @@ jobs:
           OTA_SERVER: ${{ vars.OTA_SERVER }}
           OTA_API_KEY: ${{ secrets.OTA_API_KEY }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
           OTA_PLATFORM: ios
           SOURCE_COMMIT: ${{ needs.prepare.outputs.sha }}
           COHUB_OTA_RUNTIME_VERSION: ${{ needs.ios.outputs.runtime }}
           OTA_EXPORT_DIR: ${{ runner.temp }}/cohub-ota-export
+          OTA_INPUTS_DIR: ${{ runner.temp }}/cohub-ota-inputs
         run: |
           set -euo pipefail
           test -n "$OTA_API_KEY" || { echo "OTA_API_KEY is required."; exit 1; }
           origin=$(OTA_SERVER="$OTA_SERVER" node --input-type=module -e 'import { parseHttpsOrigin } from "./scripts/ota-publish.mjs"; process.stdout.write(parseHttpsOrigin(process.env.OTA_SERVER, "OTA_SERVER"))')
           runtime=$(COHUB_OTA_RUNTIME_VERSION="$COHUB_OTA_RUNTIME_VERSION" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.COHUB_OTA_RUNTIME_VERSION, "prepare runtime"))')
           test -d "$OTA_EXPORT_DIR"
-          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform "$OTA_PLATFORM" > "$RUNNER_TEMP/source-fingerprint.json"
-          SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.RUNNER_TEMP + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
+          SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.OTA_INPUTS_DIR + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
           # Mirrors the Android publish: a fingerprint-mismatch rejection means this
           # commit needs a new native distribution, not that the pipeline is broken.
-          COHUB_OTA_RUNTIME_VERSION="$runtime" npx expo config --type public --json > "$RUNNER_TEMP/ota-config.json"
           # Retries transient failures exactly like the Android publish.
           attempts=$(node --input-type=module -e 'import { OTA_PUBLISH_ATTEMPTS } from "./scripts/ota-publish.mjs"; process.stdout.write(String(OTA_PUBLISH_ATTEMPTS))')
           for attempt in $(seq 1 "$attempts"); do
             set +e
             OTA_SERVER="$origin" node "$RUNNER_TEMP/ota-cli/scripts/publish.ts" \
               --app-id cohub-mobile \
-              --config "$RUNNER_TEMP/ota-config.json" \
+              --config "$OTA_INPUTS_DIR/ota-config.json" \
               --runtime "$runtime" \
               --fingerprint "$SOURCE_FINGERPRINT" \
               --commit "$SOURCE_COMMIT" \
