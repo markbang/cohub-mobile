@@ -22,7 +22,7 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
           <Text className={`text-body ${danger ? "text-danger" : "text-fg"}`}>{title}</Text>
           {value ? <Text className="text-caption text-fg-muted">{value}</Text> : null}
         </View>
-        {detail ? <Text numberOfLines={1} className="max-w-45 shrink text-right text-subhead text-fg-muted">{detail}</Text> : null}
+        {detail ? <Text numberOfLines={1} className="shrink text-right text-subhead text-fg-muted" style={{ maxWidth: "45%" }}>{detail}</Text> : null}
         {children}
         {onPress ? <AppIcon name="chevron-right" size={16} tone="faint" /> : null}
       </View>

@@ -92,6 +92,10 @@ export default function ChatsScreen() {
     return () => clearInterval(timer);
   }, [filter, filterPreference.loaded, filterPreference.minutes, refreshSessionStatuses]));
 
+  // The chip counts exactly what the Running filter would list, not the raw discovery result.
+  const runningCount = useMemo(() => runningSessionCandidates(runningQuery.sessions, knownSessions)
+    .filter((session) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running").length,
+  [knownSessions, runningQuery.sessions, state.sessionLatestTurns, state.sessionTurnStatuses]);
   const localSessions = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
     return baseSessions.filter((session) => {
@@ -204,9 +208,9 @@ export default function ChatsScreen() {
         scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">
-          <View accessibilityRole="tablist" className="flex-row items-center">
+          <View accessibilityRole="tablist" className="flex-row flex-wrap items-center">
             <FilterChip label={t("chats.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
-            <FilterChip label={t("chats.filter.running")} suffix={runningQuery.loaded && runningQuery.sessions.length > 0 ? String(runningQuery.sessions.length) : undefined} selected={filter === "running"} onPress={() => setFilter("running")} />
+            <FilterChip label={t("chats.filter.running")} suffix={runningQuery.loaded && runningCount > 0 ? String(runningCount) : undefined} selected={filter === "running"} onPress={() => setFilter("running")} />
             {/* The completion window rides on the chip, so selecting it adds no extra line. */}
             <FilterChip label={t("chats.filter.completed")} suffix={filter === "completed" ? formatWindow(filterPreference.minutes) : undefined} suffixLabel={t("chats.filter.window", { minutes: filterPreference.minutes })} selected={filter === "completed"} onPress={() => setFilter("completed")} />
             <View ref={sourceButtonRef} collapsable={false} className="ml-auto">
@@ -225,6 +229,7 @@ export default function ChatsScreen() {
               </Pressable>
             </View>
           </View>
+          {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}
         ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (filter === "running" ? !runningQuery.loaded : (filter === "completed" && (state.refreshing || !filterPreference.loaded || statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized))) ? <LoadingRows count={5} /> : searchEmpty}
@@ -245,9 +250,9 @@ export default function ChatsScreen() {
   );
 }
 
-/** The completion window as a chip suffix: 30m, 24h, 7d. */
+/** The completion window as a chip suffix in its largest exact unit: 90m, 24h, 7d. */
 function formatWindow(minutes: number) {
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
-  return `${Math.round(minutes / 1440)}d`;
+  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
+  if (minutes % 60 === 0) return `${minutes / 60}h`;
+  return `${minutes}m`;
 }

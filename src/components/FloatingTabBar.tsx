@@ -1,7 +1,7 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, Pressable, Text, View } from "react-native";
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { edgeChrome, useAppTheme } from "@/src/theme";
@@ -89,7 +89,8 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       }, barStyle]}
     >
       <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
-      <View className="self-center rounded-full bg-surface p-1 shadow-float" style={{ height: BAR_HEIGHT, width: ITEM_WIDTH * routes.length + 8 }}>
+      {/* The hairline keeps the bar's edge visible on dark backgrounds, where the shadow barely shows. */}
+      <View className="self-center rounded-full border-border bg-surface p-1 shadow-float" style={{ height: BAR_HEIGHT, width: ITEM_WIDTH * routes.length + 8, borderWidth: StyleSheet.hairlineWidth }}>
         <View className="flex-1 flex-row" onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}>
           {itemWidth > 0 ? (
             <Animated.View pointerEvents="none" className="absolute bottom-0 left-0 top-0 rounded-full bg-accent-soft" style={indicatorStyle} />

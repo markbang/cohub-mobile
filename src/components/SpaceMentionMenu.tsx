@@ -37,7 +37,7 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
           <Avatar name={name} uri={item.avatarUrl} size={34} />
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{name}</Text>
-            {item.description ? <Text numberOfLines={1} className="text-caption text-fg-muted mt-0">{item.description}</Text> : null}
+            {item.description ? <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{item.description}</Text> : null}
           </View>
         </Pressable>;
       })}

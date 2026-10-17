@@ -45,7 +45,7 @@ export default function ActivityScreen() {
     </EdgeHeader>
     <ScrollView ref={scrollRef} className="flex-1" contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
       {/* One figure leads the screen: the balance, tabular so it does not shift as it updates. */}
-      <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 }} pressedStyle={{ opacity: 0.7 }}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} style={{ paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg }} pressedStyle={{ opacity: 0.7 }}>
         <View className="flex-row items-center gap-1.5">
           <AppIcon name="database" size={14} tone="muted" />
           <Text className="flex-1 text-caption font-semibold text-fg-muted">{t("settings.billing.balance")}</Text>
@@ -59,6 +59,7 @@ export default function ActivityScreen() {
           icon="sparkles"
           title={t("activity.subscription.title")}
           detail={subscriptions.data ? currentSubscription?.productName ?? t("activity.subscription.none") : t(subscriptions.error ? "settings.billing.error" : "common.loading")}
+          value={currentSubscription?.status}
           onPress={() => router.push({ pathname: "/settings/billing-history", params: { kind: "subscriptions" } })}
         />
         <SettingsRow icon="activity" title={t("activity.usageDetails")} onPress={() => router.push("/settings/activity")} />

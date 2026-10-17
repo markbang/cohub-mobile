@@ -102,7 +102,8 @@ export const darkPalette: Palette = {
   text: "#f7f8fa",
   textSecondary: "#d0d5dd",
   textMuted: "#a2aab6",
-  textFaint: "#747e8c",
+  // Lightened from #747e8c: faint 11–12px text must keep 4.5:1 on raised dark surfaces.
+  textFaint: "#8a939f",
   accent: "#f08349",
   accentPressed: "#d96835",
   accentSoft: "#36251e",
@@ -141,16 +142,19 @@ export const pureBlackOverrides: Partial<Palette> = {
 
 export type TextToken = "display" | "title" | "headline" | "body" | "chat" | "subhead" | "caption" | "micro" | "code";
 
-/** Size and line height only; weight is a separate class so emphasis never forks the ramp. Minimum 11 for legibility. */
-export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number }> = {
+/**
+ * Size, line height, and the default weight. A `font-*` class overrides the weight, so emphasis
+ * never forks the ramp. Small text defaults heavier to stay legible. Minimum 11.
+ */
+export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number; weight?: 500 | 600 }> = {
   display: { size: 28, lineHeight: 34 },
   title: { size: 20, lineHeight: 26 },
   headline: { size: 17, lineHeight: 22 },
   body: { size: 15, lineHeight: 22 },
   chat: { size: 15, lineHeight: 23 },
   subhead: { size: 13, lineHeight: 18 },
-  caption: { size: 12, lineHeight: 16 },
-  micro: { size: 11, lineHeight: 14 },
+  caption: { size: 12, lineHeight: 16, weight: 500 },
+  micro: { size: 11, lineHeight: 14, weight: 600 },
   code: { size: 12, lineHeight: 19 },
 };
 
@@ -160,5 +164,8 @@ export const RADIUS = { xs: 6, sm: 10, md: 14, lg: 20 } as const;
 /** Leading avatar or icon tile in content lists; row height, separator inset, and skeleton follow it. */
 export const LIST_AVATAR_SIZE = 46;
 
-/** Only floating chrome (tab bar, menus, toasts, banners) casts a shadow; content stays flat. */
+/**
+ * Only floating chrome (tab bar, menus, toasts, banners) casts a shadow; content stays flat.
+ * The color is fixed black on purpose: a shadow is darkness, not a themed hue, so Config themes do not tint it.
+ */
 export const SHADOW_FLOAT = "0 6px 20px rgba(0, 0, 0, 0.14)";

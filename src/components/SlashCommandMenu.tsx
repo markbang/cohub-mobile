@@ -38,7 +38,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
           </View>
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">/{label}</Text>
-            <Text numberOfLines={1} className="text-caption text-fg-muted mt-0">{item.argumentHint ?? item.description}</Text>
+            <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{item.argumentHint ?? item.description}</Text>
           </View>
         </Pressable>;
       })}

@@ -97,12 +97,12 @@ export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: Rel
   const label = title ? t("session.forkedFrom", { title }) : unavailable ? t("session.forkedFromUnavailable") : t("session.forkedFromChat");
   const color = unavailable ? theme.colors.textFaint : theme.colors.textMuted;
   return <View className="flex-row items-center gap-2 px-4 pt-2">
-    <View className="flex-1 h-0 bg-border" />
+    <View className="h-px flex-1 bg-border" />
     <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={({ pressed }) => ({ maxWidth: "78%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
       <AppIcon name="git-fork" size={13} color={color} />
       <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color }]}>{label}</Text>
       {unavailable ? null : <AppIcon name="chevron-right" size={13} color={theme.colors.textFaint} />}
     </Pressable>
-    <View className="flex-1 h-0 bg-border" />
+    <View className="h-px flex-1 bg-border" />
   </View>;
 }

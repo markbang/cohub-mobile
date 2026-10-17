@@ -4,9 +4,11 @@
  * Regenerate with `node --no-warnings --experimental-strip-types scripts/design-tokens.mjs`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { COLOR_CSS_NAMES, RADIUS, SHADOW_FLOAT, TEXT_RAMP, darkPalette, lightPalette } from "../src/design/tokens.ts";
 
-const TARGET = "global.css";
+// Resolved from this file, like the token import, so the script works from any directory.
+const TARGET = fileURLToPath(new URL("../global.css", import.meta.url));
 
 const colors = (palette) => Object.entries(COLOR_CSS_NAMES).map(([key, name]) => `--color-${name}: ${palette[key]};`);
 const indent = (lines, depth) => lines.map((line) => `${"  ".repeat(depth)}${line}`).join("\n");
@@ -19,7 +21,11 @@ const theme = [
   "--shadow-*: initial;",
   ...colors(lightPalette),
   ...Object.entries(RADIUS).map(([name, value]) => `--radius-${name}: ${value}px;`),
-  ...Object.entries(TEXT_RAMP).flatMap(([name, { size, lineHeight }]) => [`--text-${name}: ${size}px;`, `--text-${name}--line-height: ${lineHeight}px;`]),
+  ...Object.entries(TEXT_RAMP).flatMap(([name, { size, lineHeight, weight }]) => [
+    `--text-${name}: ${size}px;`,
+    `--text-${name}--line-height: ${lineHeight}px;`,
+    ...(weight ? [`--text-${name}--font-weight: ${weight};`] : []),
+  ]),
   `--shadow-float: ${SHADOW_FLOAT};`,
 ];
 

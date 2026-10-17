@@ -413,13 +413,13 @@ export default function SpaceScreen() {
     <View>{sessions.length > 0 ? sessions.map((session) => <SessionRow key={session.id} session={{ ...session, space: session.space ?? { id: space.id, name, slug: space.slug, publicProfile: space.publicProfile ?? null } }} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: session.id } })} onPressIn={() => prefetchSession(session.id)} />) : <ResourceEmpty text={sessionsLoading ? t("space.empty.chatsLoading") : sessionsFailed ? t("space.empty.loadFailed") : t("space.empty.chats")} />}</View>
 
     <SectionHeader title={t("space.section.works")} />
-    <View>{resources.apps.length > 0 ? resources.apps.map((app) => <ResourceRow key={app.id} icon="rocket" tone={app.status === "published" ? "accent" : "faint"} status={app.status === "published" ? t("space.published") : t("space.disabled")} title={app.meta?.title || app.meta?.name || app.slug} subtitle={t("space.workSubtitle", { target: app.targetType, version: app.latestVersion })} onPress={() => router.push({ pathname: "/work/[appId]", params: { appId: app.id } })} />) : <ResourceEmpty text={resourceLoading.apps ? t("space.empty.worksLoading") : resourceFailures.apps ? t("space.empty.loadFailed") : t("space.empty.works")} />}</View>
+    <View>{resources.apps.length > 0 ? resources.apps.map((app) => <ResourceRow key={app.id} icon={app.status === "published" ? "rocket" : "eye-off"} tone={app.status === "published" ? "accent" : "faint"} status={app.status === "published" ? t("space.published") : t("space.disabled")} title={app.meta?.title || app.meta?.name || app.slug} subtitle={t("space.workSubtitle", { target: app.targetType, version: app.latestVersion })} onPress={() => router.push({ pathname: "/work/[appId]", params: { appId: app.id } })} />) : <ResourceEmpty text={resourceLoading.apps ? t("space.empty.worksLoading") : resourceFailures.apps ? t("space.empty.loadFailed") : t("space.empty.works")} />}</View>
 
     <SectionHeader title={t("space.section.saves")} />
     <View>{resources.checkpoints.length > 0 ? resources.checkpoints.map((checkpoint) => <ResourceRow key={checkpoint.id} icon="bookmark" tone="muted" title={checkpoint.description || t("space.save", { hash: checkpoint.commitHash.slice(0, 8) })} meta={formatRelativeTime(checkpoint.createdAt)} subtitle={checkpoint.commitHash.slice(0, 8)} />) : <ResourceEmpty text={resourceLoading.checkpoints ? t("space.empty.savesLoading") : resourceFailures.checkpoints ? t("space.empty.loadFailed") : t("space.empty.saves")} />}</View>
 
     <SectionHeader title={t("space.section.tasks")} />
-    <View className="pb-6">{resources.tasks.length > 0 ? resources.tasks.map((task) => <ResourceRow key={task.id} icon={task.status === "running" || task.status === "pending" ? "sync" : task.status === "failed" ? "alert" : "check-circle"} tone={task.status === "failed" ? "danger" : task.status === "running" || task.status === "pending" ? "accent" : "success"} status={task.status} title={task.taskType.replaceAll("_", " ")} meta={formatRelativeTime(task.updatedAt)} subtitle={task.errorMessage || t("space.taskAttempt", { time: formatRelativeTime(task.updatedAt), count: task.attemptCount })} onPress={() => router.push({ pathname: "/task/[taskId]", params: { taskId: task.id } })} />) : <ResourceEmpty text={resourceLoading.tasks ? t("space.empty.tasksLoading") : resourceFailures.tasks ? t("space.empty.loadFailed") : t("space.empty.tasks")} />}</View>
+    <View className="pb-6">{resources.tasks.length > 0 ? resources.tasks.map((task) => <ResourceRow key={task.id} icon={task.status === "running" || task.status === "pending" ? "sync" : task.status === "failed" ? "alert" : "check-circle"} tone={task.status === "failed" ? "danger" : task.status === "running" || task.status === "pending" ? "accent" : "success"} status={task.status} title={sentenceCase(task.taskType.replaceAll("_", " "))} meta={formatRelativeTime(task.updatedAt)} subtitle={task.errorMessage || t("space.taskAttempt", { time: formatRelativeTime(task.updatedAt), count: task.attemptCount })} onPress={() => router.push({ pathname: "/task/[taskId]", params: { taskId: task.id } })} />) : <ResourceEmpty text={resourceLoading.tasks ? t("space.empty.tasksLoading") : resourceFailures.tasks ? t("space.empty.loadFailed") : t("space.empty.tasks")} />}</View>
     {taskCursor ? <View className="mb-5 items-center"><PrimaryButton variant="ghost" icon="chevrons-down" label={tasksLoadingMore ? t("space.tasks.loadingMore") : t("space.tasks.loadMore")} loading={tasksLoadingMore} onPress={() => void loadMoreTasks()} /></View> : null}
     </ScrollView>
       </View>
@@ -454,6 +454,11 @@ function ResourceRow({ icon, tone, status, title, meta, subtitle, onPress }: { i
 
 function ResourceEmpty({ text }: { text: string }) {
   return <Text className="text-body text-fg-muted px-4 py-3">{text}</Text>;
+}
+
+/** Task types arrive as snake_case identifiers; titles follow the sentence-case copy rule. */
+function sentenceCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function preferRecentSession(current: UserSessionListItem, incoming: UserSessionListItem) {

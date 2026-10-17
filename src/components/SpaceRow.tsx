@@ -39,9 +39,11 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
         subtitle={subtitle}
         trailing={sessionCount && countLabel && !subtitle ? <Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /> : null}
         accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
-        accessibilityHint={onTogglePin ? t("space.longPressHint") : undefined}
+        accessibilityHint={onTogglePin && !pinning ? t("space.longPressHint") : undefined}
         onPress={onPress}
-        onLongPress={onTogglePin ? (event) => { const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+        onLongPress={onTogglePin && !pinning ? (event) => { const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+        accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
+        onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin && !pinning) onTogglePin(); }}
       />
       {menuAt && onTogglePin ? <ContextMenu
         visible

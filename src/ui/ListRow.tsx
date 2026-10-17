@@ -1,6 +1,5 @@
-import * as Haptics from "expo-haptics";
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
@@ -11,7 +10,7 @@ export type ListRowStatus = "running" | "failed" | "stopped" | null;
  * on line 1, context on line 2, state carried by the leading glyph. The separator starts at the
  * text column so leading avatars read as one column.
  */
-export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, testID, separator = true, compact = false }: {
+export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, separator = true, compact = false }: {
   leading?: ReactNode;
   title: string;
   titlePrefix?: ReactNode;
@@ -25,6 +24,9 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   onLongPress?: (event: GestureResponderEvent) => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
+  /** Named actions for gestures a screen reader cannot perform, such as a long-press menu. */
+  accessibilityActions?: readonly AccessibilityActionInfo[];
+  onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   testID?: string;
   separator?: boolean;
   compact?: boolean;
@@ -58,12 +60,12 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       testID={testID}
       onPress={onPress}
-      onPressIn={() => {
-        onPressIn?.();
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      }}
+      // Rows answer with a background highlight, not a haptic: a touch that starts a scroll lands here too.
+      onPressIn={onPressIn}
       onLongPress={onLongPress}
       delayLongPress={350}
       className={`${shell} active:bg-surface-pressed`}

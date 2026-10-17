@@ -48,10 +48,12 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
         <AvatarStatus status={glyph} size={AVATAR_SIZE}><Avatar name={spaceName} uri={session.space?.publicProfile?.avatarUrl} size={AVATAR_SIZE} /></AvatarStatus>
       </View>
       : null;
-  // Rows without an avatar carry state as a leading title icon instead of the avatar ring.
-  const titlePrefix = glyph && (branch || !showSpace)
+  // Rows without an avatar carry state as a leading title icon instead of the avatar ring; a fork keeps its cue beside it.
+  const statusIcon = glyph && (branch || !showSpace)
     ? <AppIcon name={glyph === "running" ? "sync" : glyph === "failed" ? "alert" : "stop"} size={13} tone={glyph === "running" ? "accent" : glyph === "failed" ? "danger" : "muted"} />
-    : fork && !branch ? <AppIcon name="git-fork" size={13} tone="faint" /> : null;
+    : null;
+  const forkIcon = fork && !branch ? <AppIcon name="git-fork" size={13} tone="faint" /> : null;
+  const titlePrefix = statusIcon || forkIcon ? <>{statusIcon}{forkIcon}</> : null;
   const preview = shortPreview(session.latestMessageText, 84);
   const shownLabels = labels.slice(0, 2);
   return <ListRow
