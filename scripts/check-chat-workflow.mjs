@@ -616,7 +616,7 @@ for (const [tab, component, expectedRequests] of [
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
     EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip",
-    AnchoredActionMenu: "AnchoredActionMenu",
+    AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
   const control = () => {
@@ -921,10 +921,11 @@ for (const [tab, component, expectedRequests] of [
     useEdgeChrome: () => ({ headerHeight: 100 }), useApp: () => ({ connectionState: "open" }),
     useActivity: () => ({ credits: { data: null, error: null }, activity: { data: null, error: null }, refresh: async () => {} }),
     useBillingHistory: () => subscriptions,
-    EdgeHeader: "EdgeHeader", AccountAvatar: "AccountAvatar", RefreshControl: "RefreshControl", ConnectionBanner: "ConnectionBanner", PressableScale: "PressableScale",
+    EdgeHeader: "EdgeHeader", AccountAvatar: "AccountAvatar", RefreshControl: "RefreshControl", ConnectionBanner: "ConnectionBanner", PressableScale: "PressableScale", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow",
   });
   const render = () => chromeNodes(runner.render(renderActivity));
-  const empty = () => render().some((node) => node.props.children?.includes("activity.subscription.none"));
+  const subscriptionRow = () => render().find((node) => node.type === "SettingsRow" && node.props.title === "activity.subscription.title");
+  const empty = () => subscriptionRow().props.detail === "activity.subscription.none";
   assert.equal(empty(), false);
   subscriptions.loading = false; subscriptions.error = "offline";
   assert.equal(empty(), false, "an unsuccessful first read cannot become an empty subscription");
@@ -933,8 +934,8 @@ for (const [tab, component, expectedRequests] of [
   subscriptions.error = null; subscriptions.data = { kind: "subscriptions", list: { items: [] } };
   assert.equal(empty(), true, "only a resolved empty response displays no subscription");
   subscriptions.data.list.items = [{ status: "active", productName: "Current plan" }]; subscriptions.error = "refresh failed";
-  assert.ok(render().some((node) => node.props.children?.includes("Current plan")), "refresh failure retains the last known subscription");
-  render().find((node) => node.props.accessibilityLabel === "activity.subscription.title").props.onPress();
+  assert.equal(subscriptionRow().props.detail, "Current plan", "refresh failure retains the last known subscription");
+  subscriptionRow().props.onPress();
   assert.deepEqual(routes[0], { pathname: "/settings/billing-history", params: { kind: "subscriptions" } });
   const route = loadChromeComponent("../app/settings/billing-history.tsx", "BillingHistoryRoute", { ...chromeScope, useLocalSearchParams: () => routes[0].params, BillingHistoryScreen: "BillingHistoryScreen" });
   assert.equal(route().props.kind, "subscriptions");
@@ -986,39 +987,36 @@ for (const [tab, component, expectedRequests] of [
 }
 
 // Tap targets remain usable with large text, and empty-state actions have visible labels.
+const classes = (node) => new Set(String(node.props.className ?? "").split(/\s+/).filter(Boolean));
 {
   const chip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", formScope)({ label: "Long filter label", selected: false, onPress() {} });
-  assert.ok(chip.props.style.minHeight >= 48);
-  assert.equal(chip.props.style.height, undefined, "fixed height cannot clip enlarged text");
+  assert.ok(classes(chip).has("min-h-12") && classes(chip).has("min-w-12"), "chips keep a 48pt touch target");
+  assert.equal([...classes(chip)].some((name) => /^h-/.test(name)), false, "fixed height cannot clip enlarged text");
   let pressed = 0;
   const empty = loadChromeComponent("../src/ui.tsx", "EmptyState", formScope)({ icon: "search", title: "No results", action: { icon: "x", label: "Clear filters", onPress: () => { pressed++; } } });
-  const nodes = chromeNodes(empty);
-  assert.ok(nodes.some((node) => node.type === "Text" && node.props.children.includes("Clear filters")), "action text must be visible, not only an accessibility label");
-  nodes.find((node) => node.type === "Pressable").props.onPress(); assert.equal(pressed, 1);
+  const action = chromeNodes(empty).find((node) => node.type === "PrimaryButton");
+  assert.equal(action.props.label, "Clear filters", "action text must be visible, not only an accessibility label");
+  action.props.onPress(); assert.equal(pressed, 1);
 }
 
-// Both tabs share compact capsules inside full-sized touch targets in both themes.
+// Filters are compact capsules inside full-sized touch targets; theme colors come from tokens.
 {
-  for (const name of ["lightTheme", "darkTheme"]) {
-    const theme = loadChromeComponent("../src/theme.ts", name, themeTokenScope);
-    const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", { ...formScope, useAppTheme: () => theme });
-    for (const selected of [false, true]) {
-      let taps = 0;
-      const chip = renderChip({ label: "Completed", selected, onPress: () => { taps++; } });
-      assert.equal(chip.props.accessibilityState.selected, selected);
-      assert.ok(chip.props.style.minWidth >= 48);
-      assert.equal(chip.props.style.backgroundColor, undefined, "the touch target must not become the visible surface");
-      const surface = chip.props.children[0]({ pressed: false });
-      assert.equal(surface.props.style.minHeight, 32);
-      assert.equal(surface.props.style.height, undefined, "the label must still grow with larger text");
-      assert.equal(surface.props.style.borderRadius, theme.radius.pill, "filters must remain fully rounded, not rounded rectangles");
-      assert.equal(surface.props.style.overflow, "hidden", "clip the capsule surface to its rounded bounds");
-      assert.equal(surface.props.style.borderWidth, undefined);
-      assert.equal(surface.props.style.backgroundColor, selected ? theme.colors.accentSoft : "transparent");
-      assert.equal(chip.props.children[0]({ pressed: true }).props.style.backgroundColor, theme.colors.surfacePressed);
-      chip.props.onPress();
-      assert.equal(taps, 1);
-    }
+  const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", formScope);
+  for (const selected of [false, true]) {
+    let taps = 0;
+    const chip = renderChip({ label: "Completed", selected, onPress: () => { taps++; } });
+    assert.equal(chip.props.accessibilityState.selected, selected);
+    assert.equal([...classes(chip)].some((name) => name.startsWith("bg-")), false, "the touch target must not become the visible surface");
+    const surface = classes(chip.props.children[0]({ pressed: false }));
+    assert.ok(surface.has("min-h-8"));
+    assert.equal([...surface].some((name) => /^h-/.test(name)), false, "the label must still grow with larger text");
+    assert.ok(surface.has("rounded-full"), "filters must remain fully rounded, not rounded rectangles");
+    assert.ok(surface.has("overflow-hidden"), "clip the capsule surface to its rounded bounds");
+    assert.equal([...surface].some((name) => name.startsWith("border")), false);
+    assert.equal(surface.has("bg-accent-soft"), selected);
+    assert.ok(classes(chip.props.children[0]({ pressed: true })).has("bg-surface-pressed"));
+    chip.props.onPress();
+    assert.equal(taps, 1);
   }
 }
 
@@ -1117,10 +1115,10 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
-  const headerStyle = Object.assign({}, ...header.props.style);
-  assert.equal(headerStyle.backgroundColor, background);
+  const headerClasses = classes(header);
+  assert.ok(headerClasses.has("bg-background"), "an opaque header paints the screen background token");
   const transparentHeader = renderTopBar({ title: "Chats", transparent: true });
-  assert.equal(Object.assign({}, ...transparentHeader.props.style).backgroundColor, "transparent");
+  assert.equal([...classes(transparentHeader)].some((name) => name.startsWith("bg-")), false, "a transparent header paints nothing");
   const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", useAppTheme: () => ({ colors: { background } }) });
   for (const edge of ["top", "bottom"]) {
     const scrim = renderScrim({ edge });
@@ -1130,9 +1128,9 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
     assert.equal(scrim.props.start.y, edge === "top" ? 0 : 1);
     assert.equal(scrim.props.end.y, edge === "top" ? 1 : 0);
   }
-  assert.equal(headerStyle.minHeight, 56);
-  assert.equal(headerStyle.maxHeight, undefined, "large text must be able to increase header height");
-  assert.equal(headerStyle.borderBottomWidth, undefined);
+  assert.equal(header.props.style.minHeight, 56);
+  assert.equal(header.props.style.maxHeight, undefined, "large text must be able to increase header height");
+  assert.equal([...headerClasses].some((name) => /^(max-h-|h-|border)/.test(name)), false, "no fixed height or bottom border");
   const headerNodes = chromeNodes(header);
   assert.equal(headerNodes.find((node) => node.props?.accessibilityRole === "header").props.numberOfLines, 1);
   const backButton = headerNodes.find((node) => node.type === "IconButton");
@@ -1349,7 +1347,7 @@ for (const [path, labels, chips] of [
     useDeviceFolderBrowser: () => ({ listing: null, loading: false, failure: null }), DeviceFolderBrowser: "DeviceFolderBrowser", DeviceSpaceRow: "DeviceSpaceRow",
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
     selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
-    Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows",
+    Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
     EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
   });
@@ -1380,7 +1378,7 @@ const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionB
 assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
 {
   const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
-  assert.equal(nodes[0].props.style.position, "absolute", "the banner overlays content instead of resizing the header");
+  assert.ok(classes(nodes[0]).has("absolute"), "the banner overlays content instead of resizing the header");
   assert.ok(nodes.some((node) => node.type === "AppIcon" && node.props.name === "cloud-off"));
   assert.deepEqual(nodes.filter((node) => node.type === "Text").flatMap((node) => node.props.children), ["ui.banner.unavailable"], "actual connection failures remain visible");
 }

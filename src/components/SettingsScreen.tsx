@@ -394,7 +394,6 @@ function ProfileSection({
 								name={data.profile?.displayName || t("settings.profile.fallbackName")}
 								uri={data.profile?.avatarUrl}
 								size={82}
-								online
 							/>
 						</Pressable>
 						{uploadingAvatar ? (
@@ -1099,7 +1098,7 @@ function ChannelsSection({
 								<PrimaryButton
 									label={t("common.remove")}
 									icon="trash"
-									tone="danger"
+									variant="danger"
 									loading={removing}
 									onPress={() => void confirmRemove()}
 									style={{ minHeight: 46, paddingHorizontal: 16 }}
@@ -1343,7 +1342,7 @@ function ReferralsSection({
 								<IconButton name="refresh" label={t("settings.referrals.rotate")} disabled={rotating} onPress={() => setRotateOpen(true)} />
 							</View>
 							{error && !rotateOpen ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger }]}>{error}</Text> : null}
-							<AdaptiveSheet visible={rotateOpen} title={t("settings.referrals.rotate")} onClose={() => { if (!rotating) setRotateOpen(false); }} dismissible={!rotating} scrollable={false} footer={<PrimaryButton label={t("settings.referrals.rotate")} icon="refresh" tone="danger" loading={rotating} onPress={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} />}>
+							<AdaptiveSheet visible={rotateOpen} title={t("settings.referrals.rotate")} onClose={() => { if (!rotating) setRotateOpen(false); }} dismissible={!rotating} scrollable={false} footer={<PrimaryButton label={t("settings.referrals.rotate")} icon="refresh" variant="danger" loading={rotating} onPress={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} />}>
 								<Text style={[typography.body, { color: theme.colors.text }]}>{t("settings.referrals.rotateConfirm")}</Text>
 								{error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: theme.spacing.md }]}>{error}</Text> : null}
 							</AdaptiveSheet>

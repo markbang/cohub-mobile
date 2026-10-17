@@ -857,6 +857,8 @@ export const en = {
   "space.subtitle": "Space",
   "space.unpin": "Unpin Space",
   "space.pin": "Pin Space",
+  "space.pinned": "Pinned",
+  "space.longPressHint": "Long press to pin or unpin",
   "space.actions": "Space actions",
   "space.actions.pinDetail": "Keep this Space in your pinned view",
   "space.actions.unpinDetail": "Remove this Space from your pinned view",

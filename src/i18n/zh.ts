@@ -830,6 +830,8 @@ export const zh: Record<TranslationKey, string> = {
   "space.subtitle": "空间",
   "space.unpin": "取消置顶空间",
   "space.pin": "置顶空间",
+  "space.pinned": "已置顶",
+  "space.longPressHint": "长按可置顶或取消置顶",
   "space.actions": "空间操作",
   "space.actions.pinDetail": "将此空间保留在置顶视图中",
   "space.actions.unpinDetail": "将此空间从置顶视图中移除",

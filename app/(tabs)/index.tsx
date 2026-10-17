@@ -12,7 +12,7 @@ import { useToast } from "@/src/components/Toast";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type RemoteSpaceSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, Screen } from "@/src/ui";
 import { sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, sessionFilterCutoff } from "@/src/data/session-status";
@@ -160,7 +160,7 @@ export default function ChatsScreen() {
 
   const hasActiveFilter = Boolean(trimmedQuery) || filter !== "all" || sourceFilter !== "all";
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
-    ? <View style={{ flex: 1, minHeight: 180, alignItems: "center", justifyContent: "center" }}><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View>
+    ? <View className="min-h-45 flex-1 items-center justify-center"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View>
     : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); setFilter("all"); selectSource("all"); } } : undefined} />;
 
   return (
@@ -183,7 +183,7 @@ export default function ChatsScreen() {
         ref={listRef}
         data={listItems}
         extraData={rowExtraData}
-        estimatedItemSize={76}
+        estimatedItemSize={64}
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -203,33 +203,32 @@ export default function ChatsScreen() {
         progressViewOffset={headerHeight}
         scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
-        ListHeaderComponent={<View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: theme.spacing.xs }}>
+        ListHeaderComponent={<View className="px-3">
+          <View accessibilityRole="tablist" className="flex-row items-center">
             <FilterChip label={t("chats.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
-            <FilterChip label={t("chats.filter.running")} selected={filter === "running"} onPress={() => setFilter("running")} />
-            <FilterChip label={t("chats.filter.completed")} selected={filter === "completed"} onPress={() => setFilter("completed")} />
-            <View ref={sourceButtonRef} collapsable={false} style={{ marginLeft: "auto" }}>
+            <FilterChip label={t("chats.filter.running")} suffix={runningQuery.loaded && runningQuery.sessions.length > 0 ? String(runningQuery.sessions.length) : undefined} selected={filter === "running"} onPress={() => setFilter("running")} />
+            {/* The completion window rides on the chip, so selecting it adds no extra line. */}
+            <FilterChip label={t("chats.filter.completed")} suffix={filter === "completed" ? formatWindow(filterPreference.minutes) : undefined} suffixLabel={t("chats.filter.window", { minutes: filterPreference.minutes })} selected={filter === "completed"} onPress={() => setFilter("completed")} />
+            <View ref={sourceButtonRef} collapsable={false} className="ml-auto">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t("chats.source.filter")}
                 accessibilityState={{ expanded: sourceMenuOpen, selected: sourceFilter !== "all" }}
                 onPress={() => setSourceMenuOpen(true)}
-                style={{ minHeight: 48, width: 48, alignItems: "center", justifyContent: "center" }}
+                className="size-11 items-center justify-center"
               >
                 {({ pressed }) => (
-                  <View style={{ height: 32, width: 32, borderRadius: theme.radius.pill, overflow: "hidden", alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : sourceFilter !== "all" ? theme.colors.accentSoft : theme.colors.surfaceRaised }}>
-                    <AppIcon name="filter" size={16} color={sourceFilter !== "all" ? theme.colors.accent : theme.colors.textMuted} />
+                  <View className={`size-8 items-center justify-center rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
+                    <AppIcon name="filter" size={17} tone={sourceFilter !== "all" ? "accent" : "muted"} />
                   </View>
                 )}
               </Pressable>
             </View>
           </View>
-          {filter === "completed" ? <Text style={[typography.caption, { color: theme.colors.textMuted, paddingVertical: 6 }]}>{t("chats.filter.window", { minutes: filterPreference.minutes })}</Text> : null}
-          {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View style={{ alignItems: "flex-end", minHeight: 16 }}><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
-          {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text selectable style={[typography.micro, { color: theme.colors.danger, flex: 1 }]}>{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
+          {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}
         ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (filter === "running" ? !runningQuery.loaded : (filter === "completed" && (state.refreshing || !filterPreference.loaded || statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized))) ? <LoadingRows count={5} /> : searchEmpty}
-        ListFooterComponent={!dataError && (filter === "running" ? runningQuery.loading : (state.sessionsLoadingMore || (filter !== "all" && (statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceLoadingMore || (filter !== "all" && (statusesLoading || sourceFilteringPages)))))) ? <View style={{ paddingVertical: 18, alignItems: "center" }}><ActivityIndicator accessibilityLabel={t("chats.loadingStatuses")} size="small" color={theme.colors.accent} /></View> : null}
+        ListFooterComponent={!dataError && (filter === "running" ? runningQuery.loading : (state.sessionsLoadingMore || (filter !== "all" && (statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceLoadingMore || (filter !== "all" && (statusesLoading || sourceFilteringPages)))))) ? <View className="items-center py-4.5"><ActivityIndicator accessibilityLabel={t("chats.loadingStatuses")} size="small" color={theme.colors.accent} /></View> : null}
       />
       {sourceMenuOpen ? <AnchoredActionMenu
         anchorRef={sourceButtonRef}
@@ -244,4 +243,11 @@ export default function ChatsScreen() {
       /> : null}
     </Screen>
   );
+}
+
+/** The completion window as a chip suffix: 30m, 24h, 7d. */
+function formatWindow(minutes: number) {
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
+  return `${Math.round(minutes / 1440)}d`;
 }

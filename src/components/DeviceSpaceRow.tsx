@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import type { SpaceListSpace } from "@/src/data/space-list";
 import { openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus } from "@/src/platform/device-runtime";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
-import { AppIcon, Avatar, StatusPill, type IconName } from "@/src/ui";
-import { PressableScale } from "@/src/ui/PressableScale";
+import { useAppTheme } from "@/src/theme";
+import { AppIcon, Avatar, type IconName } from "@/src/ui";
+import { ListRow } from "@/src/ui/ListRow";
 import { displaySpaceName } from "@/src/utils";
 
 type DeviceSpaceRowProps = {
@@ -49,30 +49,23 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
     return outcome ? t(outcome === "declined" ? "deviceRuntime.display.declined" : "deviceRuntime.display.failed") : null;
   }, "deviceRuntime.display.failed");
 
+  const failed = instance.state === "error";
+  const stateLabel = t(deviceRuntimeStateKey(instance));
   return <View>
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={t("ui.openNamed", { name })}
+    <ListRow
+      separator={false}
+      leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={40} online={instance.state === "ready"} /></View>}
+      title={name}
+      titlePrefix={display && sharingHere ? <AppIcon name="monitor" size={13} tone="info" /> : null}
+      // A failure is the one state worth words; otherwise the line shows which folder is served.
+      subtitle={failed
+        ? <Text numberOfLines={1} className="text-subhead text-danger">{stateLabel}</Text>
+        : <View className="flex-row items-center gap-1"><AppIcon name="folder" size={12} tone="faint" /><Text numberOfLines={1} ellipsizeMode="middle" className="min-w-0 flex-1 text-subhead text-fg-muted">{instance.label}</Text></View>}
+      accessory={busy || instance.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+      accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
-      haptic
-      style={{ flexDirection: "row", alignItems: "center", gap: 13, minHeight: 72, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}
-      pressedStyle={{ backgroundColor: theme.colors.surfacePressed }}
-    >
-      <Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={50} online={instance.state === "ready"} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, flex: 1 }]}>{name}</Text>
-          {display && sharingHere ? <StatusPill label={t(deviceDisplayStateKey(display, instance.spaceId))} tone="info" /> : null}
-        </View>
-        <Text numberOfLines={1} style={[typography.caption, { color: instance.state === "error" ? theme.colors.danger : theme.colors.textMuted, marginTop: 3 }]}>{t(deviceRuntimeStateKey(instance))}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 }}>
-          <AppIcon name="folder" size={12} color={theme.colors.textFaint} />
-          <Text numberOfLines={1} ellipsizeMode="middle" style={[typography.micro, { color: theme.colors.textFaint, flex: 1 }]}>{instance.label}</Text>
-        </View>
-      </View>
-      {busy || instance.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />}
-    </PressableScale>
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingLeft: 79, paddingRight: 16, paddingBottom: 12 }}>
+    />
+    <View className="flex-row flex-wrap gap-2 border-border pb-3 pl-17 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}
@@ -83,18 +76,17 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
         </>
         : <RowAction label={t("deviceRuntime.display.share")} icon="monitor" disabled={busy || !running} onPress={() => void share()} />
         : null}
-      {hint ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, width: "100%" }]}>{hint}</Text> : null}
+      {hint ? <Text accessibilityRole="alert" className="w-full text-caption text-danger">{hint}</Text> : null}
     </View>
   </View>;
 }
 
 function RowAction({ label, icon, onPress, disabled }: { label: string; icon: IconName; onPress: () => void; disabled: boolean }) {
-  const theme = useAppTheme();
   // The compact capsule sits inside a 44pt touch target.
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} hitSlop={6} style={{ minHeight: 44, justifyContent: "center", opacity: disabled ? 0.45 : 1 }}>
-    {({ pressed }) => <View style={{ minHeight: 32, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, borderWidth: 1, borderRadius: theme.radius.pill, borderColor: theme.colors.borderStrong, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface }}>
-      <AppIcon name={icon} size={14} color={theme.colors.accent} />
-      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.text }]}>{label}</Text>
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} hitSlop={6} className="min-h-11 justify-center disabled:opacity-45">
+    {({ pressed }) => <View className={`min-h-8 flex-row items-center gap-1.5 rounded-full px-3 ${pressed ? "bg-surface-pressed" : "bg-surface-raised"}`}>
+      <AppIcon name={icon} size={14} tone="accent" />
+      <Text numberOfLines={1} className="text-caption font-semibold text-fg">{label}</Text>
     </View>}
   </Pressable>;
 }

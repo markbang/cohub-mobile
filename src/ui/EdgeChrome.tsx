@@ -32,20 +32,15 @@ export function EdgeScrim({ edge, style }: { edge: "top" | "bottom"; style?: Sty
 
 export function EdgeHeader({ children, onLayout }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void }) {
   const insets = useSafeAreaInsets();
-  return <View pointerEvents="box-none" onLayout={onLayout} style={[styles.header, { paddingTop: insets.top }]}>
+  return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
     <EdgeScrim edge="top" style={{ bottom: -edgeChrome.fade }} />
     {children}
   </View>;
 }
 
 export function EdgeFooter({ children, onLayout }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void }) {
-  return <View pointerEvents="box-none" onLayout={onLayout} style={styles.footer}>
+  return <View pointerEvents="box-none" onLayout={onLayout} className="absolute bottom-0 left-0 right-0 z-1">
     <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
     {children}
   </View>;
 }
-
-const styles = StyleSheet.create({
-  header: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 1 },
-  footer: { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1 },
-});

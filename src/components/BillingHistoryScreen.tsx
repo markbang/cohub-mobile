@@ -47,7 +47,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
               setPaymentError(null);
               void openWebLink(url).then(() => load()).catch((caught: unknown) => setPaymentError(caught instanceof Error ? caught.message : t("settings.billing.checkoutError"))).finally(() => setPaying(false));
             }} /> : null}
-            {item.actions.canCancelCheckout || item.actions.canCancelAutoRenew ? <PrimaryButton label={t(item.actions.canCancelCheckout ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} icon="x" tone="danger" disabled={busy} onPress={() => setCandidate({ subscription: item, kind: item.actions.canCancelCheckout ? "checkout" : "renewal" })} /> : null}
+            {item.actions.canCancelCheckout || item.actions.canCancelAutoRenew ? <PrimaryButton label={t(item.actions.canCancelCheckout ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} icon="x" variant="danger" disabled={busy} onPress={() => setCandidate({ subscription: item, kind: item.actions.canCancelCheckout ? "checkout" : "renewal" })} /> : null}
           </View>
         </View>)}
         {!data.list.items.length ? <EmptyState icon="database" title={t("settings.billing.noHistory")} /> : null}
@@ -58,7 +58,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
       <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{page}</Text>
       <IconButton name="arrow-right" label={t("settings.billing.next")} disabled={busy || data?.list.page !== page || !data?.list.pagination.hasMore || data.list.pagination.nextPage === null} onPress={() => { const next = data?.list.pagination.nextPage; if (next) setPage(next); }} />
     </View>
-    <AdaptiveSheet visible={candidate !== null} title={t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} subtitle={candidate?.subscription.productName} onClose={() => { if (!saving) setCandidate(null); }} dismissible={!saving} scrollable={false} footer={<PrimaryButton label={t("common.confirm")} icon="check" tone="danger" loading={saving} onPress={() => { if (candidate) void cancel(candidate).then((ok) => { if (ok) setCandidate(null); }); }} />}>
+    <AdaptiveSheet visible={candidate !== null} title={t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} subtitle={candidate?.subscription.productName} onClose={() => { if (!saving) setCandidate(null); }} dismissible={!saving} scrollable={false} footer={<PrimaryButton label={t("common.confirm")} icon="check" variant="danger" loading={saving} onPress={() => { if (candidate) void cancel(candidate).then((ok) => { if (ok) setCandidate(null); }); }} />}>
       <Text style={[typography.body, { color: theme.colors.text }]}>{t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckoutConfirm" : "settings.billing.cancelRenewalConfirm")}</Text>
       {error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: theme.spacing.md }]}>{error}</Text> : null}
     </AdaptiveSheet>

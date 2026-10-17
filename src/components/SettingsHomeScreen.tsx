@@ -14,7 +14,7 @@ import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
-import { useAppTheme, useThemePreference, typography } from "@/src/theme";
+import { useAppTheme, useThemePreference } from "@/src/theme";
 import { AppIcon, Avatar, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
 export function SettingsHomeScreen() {
@@ -68,23 +68,23 @@ export function SettingsHomeScreen() {
   return <Screen>
     <TopBar title={t("settings.title")} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }} keyboardShouldPersistTaps="handled">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("settings.section.profile")}
-        onPress={() => router.push("/settings/profile")}
-        style={({ pressed }) => ({ alignItems: "center", gap: theme.spacing.md, paddingVertical: theme.spacing.lg, marginBottom: theme.spacing.sm, opacity: pressed ? 0.7 : 1 })}
-      >
-        <View>
-          <Link.AppleZoomTarget><Avatar name={name} uri={avatar} size={84} /></Link.AppleZoomTarget>
-          <View style={{ position: "absolute", right: -5, bottom: -1, width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised, borderWidth: 2, borderColor: theme.colors.background }}>
-            <AppIcon name="square-pen" size={15} color={theme.colors.textSecondary} />
+      {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
+      <View className="mb-6 mt-2 px-4">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("settings.section.profile")}
+          onPress={() => router.push("/settings/profile")}
+          className="min-h-18 flex-row items-center gap-3 rounded-md bg-surface py-3 pl-3 pr-2 active:bg-surface-pressed"
+          style={{ borderCurve: "continuous" }}
+        >
+          <Link.AppleZoomTarget><Avatar name={name} uri={avatar} size={48} /></Link.AppleZoomTarget>
+          <View className="min-w-0 flex-1 gap-0.5">
+            <Text numberOfLines={1} className="text-headline font-semibold text-fg">{name}</Text>
+            {email ? <Text numberOfLines={1} className="text-subhead text-fg-muted">{email}</Text> : null}
           </View>
-        </View>
-        <View style={{ alignItems: "center", gap: theme.spacing.xs, paddingHorizontal: theme.spacing.xl }}>
-          <Text numberOfLines={1} style={[typography.title, { color: theme.colors.text }]}>{name}</Text>
-          {email ? <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted }]}>{email}</Text> : null}
-        </View>
-      </Pressable>
+          <AppIcon name="chevron-right" size={16} tone="faint" />
+        </Pressable>
+      </View>
       <View testID="settings-list">
         {settingsMenu.map((group) => <SettingsGroup key={group.labelKey} label={t(group.labelKey)}>
           {group.items.map((item, index) => <SettingsRow
@@ -103,11 +103,11 @@ export function SettingsHomeScreen() {
           accessibilityLabel={t("common.signOut")}
           disabled={signingOut}
           onPress={() => { setError(null); setSignOutOpen(true); }}
-          style={({ pressed }) => ({ minHeight: 52, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.dangerSoft : theme.colors.surface })}
-        ><Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
+          className="min-h-13 items-center justify-center bg-surface active:bg-danger-soft"
+        ><Text className="text-body font-semibold text-danger">{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
       </SettingsGroup>
-      <Pressable testID="settings.version" accessibilityRole="button" accessibilityLabel={t("profile.version")} onPress={unlockDebug} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
-        <Text style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center" }]}>Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
+      <Pressable testID="settings.version" accessibilityRole="button" accessibilityLabel={t("profile.version")} onPress={unlockDebug} className="min-h-11 items-center justify-center">
+        <Text className="text-center text-micro tabular-nums text-fg-faint">Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
       </Pressable>
     </ScrollView>
     <AdaptiveSheet
@@ -118,10 +118,10 @@ export function SettingsHomeScreen() {
       dismissible={!signingOut}
       scrollable={false}
       testID="sign-out-sheet"
-      footer={<PrimaryButton label={t("common.signOut")} icon="arrow-right" tone="danger" loading={signingOut} onPress={() => void confirmSignOut()} />}
+      footer={<PrimaryButton label={t("common.signOut")} icon="arrow-right" variant="danger" loading={signingOut} onPress={() => void confirmSignOut()} />}
     >
-      <Text style={[typography.body, { color: theme.colors.textSecondary }]}>{t("profile.signOut.body")}</Text>
-      {error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: theme.spacing.md }]}>{error}</Text> : null}
+      <Text className="text-body text-fg-secondary">{t("profile.signOut.body")}</Text>
+      {error ? <Text accessibilityRole="alert" className="mt-3 text-caption text-danger">{error}</Text> : null}
     </AdaptiveSheet>
   </Screen>;
 }

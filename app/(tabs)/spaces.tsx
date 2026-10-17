@@ -18,9 +18,9 @@ import { useApp } from "@/src/data/context";
 import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSyncScope } from "@/src/data/use-sync-scope";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, ExpandableSearchBar, Field, FIELD_INPUT_CLASS, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
@@ -191,7 +191,7 @@ export default function SpacesScreen() {
   };
 
   const searchEmpty = remoteSearch.query === trimmedQuery && remoteSearch.loading && trimmedQuery.length >= 2 && listItems.length === 0
-    ? <View style={{ flex: 1, minHeight: 180, alignItems: "center", justifyContent: "center" }}><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View>
+    ? <View className="min-h-45 flex-1 items-center justify-center"><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View>
     : filter === "device" && !trimmedQuery
       ? <EmptyState icon="smartphone" title={t("spaces.empty.device.title")} description={t("spaces.empty.device.body")} action={{ icon: "plus", label: t("spaces.action.create"), onPress: () => { setCreateError(null); setPlacement("device"); setCreateOpen(true); } }} />
       : <EmptyState icon={filter === "pinned" ? "pin" : trimmedQuery ? "search" : "layers"} title={filter === "pinned" ? t("spaces.empty.pinned.title") : trimmedQuery ? t("spaces.empty.matching.title") : t("spaces.empty.none.title")} action={filter === "pinned" || trimmedQuery ? { icon: "x", label: t("spaces.action.clearFilters"), onPress: () => { setFilter("recent"); setQuery(""); } } : undefined} />;
@@ -214,7 +214,7 @@ export default function SpacesScreen() {
       ref={listRef}
       data={listItems}
       extraData={rowExtraData}
-      estimatedItemSize={80}
+      estimatedItemSize={64}
       keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
       renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
       refreshing={pullRefreshing}
@@ -226,16 +226,16 @@ export default function SpacesScreen() {
       progressViewOffset={headerHeight}
       scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
       contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
-      ListHeaderComponent={<View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: theme.spacing.xs }}>
+      ListHeaderComponent={<View className="px-3">
+        <View className="flex-row items-center">
           <FilterChip label={t("spaces.filter.recent")} selected={filter === "recent"} onPress={() => setFilter("recent")} />
           <FilterChip label={t("spaces.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
           <FilterChip label={t("spaces.filter.pinned")} icon="pin" selected={filter === "pinned"} onPress={() => setFilter("pinned")} />
           {deviceRuntimeSupported ? <FilterChip label={t("deviceRuntime.thisDevice")} icon="smartphone" selected={filter === "device"} onPress={() => setFilter("device")} /> : null}
         </View>
-        {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View style={{ alignItems: "flex-end", minHeight: 16 }}><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View> : null}
-        {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text selectable style={[typography.micro, { color: theme.colors.danger, flex: 1 }]}>{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
-        {pinError ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text selectable style={[typography.micro, { color: theme.colors.danger, flex: 1 }]}>{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
+        {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View> : null}
+        {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
+        {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
       </View>}
       ListEmptyComponent={state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null) ? <LoadingRows count={4} /> : dataError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} /> : searchEmpty}
     />
@@ -250,39 +250,43 @@ export default function SpacesScreen() {
         : <PrimaryButton label={t("spaces.create.action")} icon="plus" loading={creating} disabled={!name.trim() || !placementReady} onPress={() => void submitCreate()} />}
     >
       {pickingFolder ? <DeviceFolderBrowser browser={folderBrowser} /> : <>
-      <Text style={[typography.caption, { color: theme.colors.textSecondary, marginBottom: 7 }]}>{t("spaces.create.name")}</Text>
-      <TextInput autoFocus={folder === null} value={name} onChangeText={setName} maxLength={80} placeholder={t("spaces.create.namePlaceholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: theme.colors.background }]} />
-      <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15, marginBottom: 7 }]}>{t("spaces.create.description")} <Text style={{ color: theme.colors.textSecondary }}>({t("common.optional")})</Text></Text>
-      <TextInput value={description} onChangeText={setDescription} maxLength={240} multiline placeholder={t("spaces.create.descriptionPlaceholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 74, paddingHorizontal: 12, paddingTop: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: theme.colors.background, textAlignVertical: "top" }]} />
+      <View className="gap-4">
+        <Field label={t("spaces.create.name")}>
+          <TextInput autoFocus={folder === null} value={name} onChangeText={setName} maxLength={80} placeholder={t("spaces.create.namePlaceholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} />
+        </Field>
+        <Field label={`${t("spaces.create.description")} (${t("common.optional")})`}>
+          <TextInput value={description} onChangeText={setDescription} maxLength={240} multiline placeholder={t("spaces.create.descriptionPlaceholder")} placeholderTextColor={theme.colors.textFaint} className={`min-h-19 ${FIELD_INPUT_CLASS}`} style={{ textAlignVertical: "top" }} />
+        </Field>
+      </View>
       {deviceRuntimeSupported ? <>
-        <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15 }]}>{t("spaces.create.location")}</Text>
-        <View accessibilityRole="tablist" style={{ flexDirection: "row", columnGap: theme.spacing.xs }}>
+        <Text className="mt-4 text-caption font-semibold text-fg-muted">{t("spaces.create.location")}</Text>
+        <View accessibilityRole="tablist" className="-ml-3 flex-row">
           <FilterChip label={t("spaces.create.location.cloud")} icon="cloud" selected={!onDevice} onPress={() => setPlacement("cloud")} />
           <FilterChip label={t("deviceRuntime.thisDevice")} icon="smartphone" selected={onDevice} onPress={() => setPlacement("device")} />
         </View>
         {onDevice ? <>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("spaces.create.location.deviceHint")}</Text>
-          <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 15, marginBottom: 7 }]}>{t("spaces.create.folder")}</Text>
+          <Text className="text-caption text-fg-muted">{t("spaces.create.location.deviceHint")}</Text>
+          <Text className="mt-4 text-caption font-semibold text-fg-muted">{t("spaces.create.folder")}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={folder ? `${t("deviceRuntime.changeFolder")}: ${folder.label}` : t("deviceRuntime.chooseFolder")}
             disabled={creating}
             onPress={() => setPickingFolder(true)}
-            style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: theme.spacing.sm, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.background })}
+            className="min-h-12 flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-2.5 active:bg-surface-pressed"
           >
-            <AppIcon name="folder" size={18} color={theme.colors.textMuted} />
-            <Text style={[typography.body, { flex: 1, minWidth: 0, color: folder ? theme.colors.text : theme.colors.textFaint }]}>{folder?.label ?? t("deviceRuntime.chooseFolder")}</Text>
-            {folder ? <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("deviceRuntime.changeFolder")}</Text> : <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />}
+            <AppIcon name="folder" size={18} tone="muted" />
+            <Text numberOfLines={1} className={`min-w-0 flex-1 text-body ${folder ? "text-fg" : "text-fg-faint"}`}>{folder?.label ?? t("deviceRuntime.chooseFolder")}</Text>
+            {folder ? <Text className="text-caption font-semibold text-accent">{t("deviceRuntime.changeFolder")}</Text> : <AppIcon name="chevron-right" size={16} tone="faint" />}
           </Pressable>
-          {folder?.spaceId ? <View style={{ marginTop: 8, gap: 4 }}>
-            <Text style={[typography.caption, { color: linkedRunning ? theme.colors.danger : theme.colors.textMuted }]}>{linkedRunning ? t("deviceRuntime.folderInUse") : t("spaces.create.folderLinked")}</Text>
-            <Pressable accessibilityRole="button" disabled={creating} onPress={() => void openLinkedSpace()} style={{ alignSelf: "flex-start", minHeight: 44, justifyContent: "center" }}>
-              <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("spaces.create.openLinked")}</Text>
+          {folder?.spaceId ? <View className="mt-2 gap-1">
+            <Text className={`text-caption ${linkedRunning ? "text-danger" : "text-fg-muted"}`}>{linkedRunning ? t("deviceRuntime.folderInUse") : t("spaces.create.folderLinked")}</Text>
+            <Pressable accessibilityRole="button" disabled={creating} onPress={() => void openLinkedSpace()} className="min-h-11 self-start justify-center active:opacity-60">
+              <Text className="text-caption font-semibold text-accent">{t("spaces.create.openLinked")}</Text>
             </Pressable>
           </View> : null}
         </> : null}
       </> : null}
-      {createError ? <Text style={[typography.caption, { color: theme.colors.danger, marginTop: 10 }]}>{createError}</Text> : null}
+      {createError ? <Text accessibilityRole="alert" className="mt-2.5 text-caption text-danger">{createError}</Text> : null}
       </>}
     </AdaptiveSheet>
   </Screen>;

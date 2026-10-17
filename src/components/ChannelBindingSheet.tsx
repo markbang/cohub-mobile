@@ -19,7 +19,7 @@ export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: 
     subtitle={channel.name}
     onClose={onClose}
     dismissible={!saving}
-    footer={channel.boundSpace ? <PrimaryButton label={t("settings.channels.unbind")} icon="x" tone="danger" loading={saving} onPress={() => void save(channel.boundSpace!.id)} /> : undefined}
+    footer={channel.boundSpace ? <PrimaryButton label={t("settings.channels.unbind")} icon="x" variant="danger" loading={saving} onPress={() => void save(channel.boundSpace!.id)} /> : undefined}
   >
     {channel.boundSpace ? <Text style={[typography.body, { color: theme.colors.text }]}>{t("settings.channels.unbindConfirm")}</Text> : loading ? <ActivityIndicator color={theme.colors.accent} /> : <View>
       {spaces.map((space) => <SettingsRow key={space.id} icon="layers" title={space.name || space.id} disabled={saving} onPress={() => void save(space.id)} />)}
