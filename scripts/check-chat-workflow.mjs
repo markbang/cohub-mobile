@@ -1024,6 +1024,16 @@ for (const [tab, component, expectedRequests] of [
   }
 }
 
+// The bubble clock and read receipt share one row; a wrapping row pushed the receipt outside a short bubble.
+{
+  const renderMeta = loadChromeComponent("../src/components/MessageContent.tsx", "BubbleMeta", { ...formScope, useAppTheme: () => ({ colors: { userBubbleMeta: "meta", textFaint: "faint" } }) });
+  for (const local of [false, true]) {
+    const row = renderMeta({ clock: "00:40", local, side: "user", t: (key) => key });
+    assert.equal(row.props.style?.flexWrap, undefined, "the meta row never wraps");
+    assert.ok(classes(row).has("flex-row") && classes(row).has("shrink-0") && !classes(row).has("flex-wrap"), "clock and receipt stay on one row the bubble must fit");
+  }
+}
+
 // Check the actual light/dark bubble tokens, including alpha-composited timestamps.
 {
   const rgb = (hex) => hex.slice(1).match(/../g).map((value) => parseInt(value, 16));
