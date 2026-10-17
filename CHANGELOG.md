@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.2.22](https://github.com/markbang/cohub-mobile/compare/v2.2.21...v2.2.22) (2026-10-17)
+
+
+### Features
+
+* **design:** add Uniwind with generated tokens and a runtime theme bridge ([df7f72d](https://github.com/markbang/cohub-mobile/commit/df7f72dc57e3252efff6c4e576511e5954fe3260))
+* **design:** give list rows back their breathing room ([a8cffea](https://github.com/markbang/cohub-mobile/commit/a8cffea7ccceea601589d5da36beb4154984925e))
+* **design:** label the floating tabs ([3bb905f](https://github.com/markbang/cohub-mobile/commit/3bb905f3bce0daeb3eaf13e26230f0ccc33fb3d2))
+* **design:** move shared primitives and the tab screens onto the design system ([d537d1b](https://github.com/markbang/cohub-mobile/commit/d537d1b0a9a175d43dac37607cc9105b0297d011))
+* **design:** move the Space stack, sheets, and settings screens onto tokens ([55962a7](https://github.com/markbang/cohub-mobile/commit/55962a7310912a1cc6356e579248e9d156a66a41))
+* **updates:** preview OTA staging from the debug menu ([712e44f](https://github.com/markbang/cohub-mobile/commit/712e44fd107344abc31b6bc59a4e5e4354ceb942))
+
+
+### Fixes
+
+* **design:** address review findings before release ([2d6d015](https://github.com/markbang/cohub-mobile/commit/2d6d015e05503a1ee2e9fe287efcdaa3d9c13067))
+* **design:** declare CSS imports without the generated expo-env types ([8ad2e51](https://github.com/markbang/cohub-mobile/commit/8ad2e512a2176228368eeb6d7b4e107d9be06b22))
+* **design:** keep the pin long-press attached and let the ramp own default weights ([04877ac](https://github.com/markbang/cohub-mobile/commit/04877ac469a3c19dafc1451465c03ba3383e2f8d))
+* **ota:** keep staging branch code away from the publishing key ([1f52e4a](https://github.com/markbang/cohub-mobile/commit/1f52e4a8b61fd8b13e3b06c9134aa9cc3ee6ce4b))
+
+
+### Documentation
+
+* **releasing:** match the channel button label and expo-updates recovery ([d04f636](https://github.com/markbang/cohub-mobile/commit/d04f6368678624162c37571503f50f2abe72a05e))
+* **releasing:** state which OTA jobs run the selected commit ([8171f4e](https://github.com/markbang/cohub-mobile/commit/8171f4ec1b9234f9eb637a612fa6b813faffa9a7))
+
 ## [2.2.21](https://github.com/markbang/cohub-mobile/compare/v2.2.20...v2.2.21) (2026-10-16)
 
 
