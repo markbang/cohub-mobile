@@ -109,7 +109,7 @@ function TextBlock({ value, muted = false, color, linkColor, streaming = false, 
   // Native Markdown has no onTextLayout. A hidden Text measuring the source wraps differently
   // than the native view, so tucking the clock from those metrics made minWidth/marginTop
   // oscillate and the bubble jitter after opening a Chat.
-  return <View style={{ minWidth: 0 }}>
+  return <View className="min-w-0">
     <EnrichedMarkdownText
       markdown={paced}
       markdownStyle={markdownStyle}
@@ -118,7 +118,7 @@ function TextBlock({ value, muted = false, color, linkColor, streaming = false, 
       streamingAnimation={streaming}
       onLinkPress={(event) => { openLink(event.url); }}
     />
-    {footer ? <View style={{ alignSelf: "flex-end", marginTop: 2 }}>{footer}</View> : null}
+    {footer ? <View className="self-end mt-0.5">{footer}</View> : null}
   </View>;
 }
 
@@ -199,8 +199,8 @@ function SystemNoteRow({ block }: { block: Extract<ContentBlock, { type: "system
   const title = block.note_type === "compacted" ? t("message.compaction.title") : t("chat.systemUpdate");
   const body = block.text?.trim();
   return <View style={{ borderLeftWidth: 2, borderLeftColor: theme.colors.border, paddingLeft: 9, gap: 3 }}>
-    <Text style={[typography.caption, { color: theme.colors.textSecondary, fontWeight: "600" }]}>{title}</Text>
-    {body ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted }]}>{body}</Text> : null}
+    <Text className="text-caption text-fg-secondary font-semibold">{title}</Text>
+    {body ? <Text selectable className="text-caption text-fg-muted">{body}</Text> : null}
   </View>;
 }
 
@@ -220,10 +220,10 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5 }}>
     <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, borderCurve: "continuous", backgroundColor: theme.colors.surface, overflow: "hidden" }}>
       <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} style={({ pressed }) => ({ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: pressed && hasSummary ? theme.colors.surfacePressed : "transparent" })}>
-        <AppIcon name="archive" size={15} color={theme.colors.textMuted} />
-        <Text style={[typography.caption, { color: theme.colors.textSecondary, fontWeight: "600" }]}>{t("message.compaction.title")}</Text>
-        {details.length > 0 ? <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textMuted, flex: 1, textAlign: "right" }]}>{details.join(" · ")}</Text> : <View style={{ flex: 1 }} />}
-        {hasSummary ? <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} color={theme.colors.textFaint} /> : null}
+        <AppIcon name="archive" size={15} tone="muted" />
+        <Text className="text-caption text-fg-secondary font-semibold">{t("message.compaction.title")}</Text>
+        {details.length > 0 ? <Text numberOfLines={1} className="text-micro font-semibold text-fg-muted flex-1 text-right">{details.join(" · ")}</Text> : <View className="flex-1" />}
+        {hasSummary ? <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}
       </Pressable>
       {expanded && hasSummary ? <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.border, maxHeight: 320 }}>
         <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}>
@@ -264,7 +264,7 @@ function ToolOutput({ block }: { block: Extract<ContentBlock, { type: "tool_resu
   const { t } = useTranslation();
   // Running tools keep appending to `content`; the body must be height-capped
   // (mirroring the web's tail view) or an expanded bubble grows forever.
-  return <View style={{ gap: 6 }}><Text style={[typography.micro, { color: block.is_error ? theme.colors.danger : theme.colors.textMuted }]}>{block.is_error ? t("message.tool.outputError") : t("message.tool.output")}</Text>{typeof block.content === "string" ? <CappedCodeText value={block.content} color={theme.colors.text} /> : <MessageContent content={block.content} />}</View>;
+  return <View className="gap-1.5"><Text className={`text-micro font-semibold ${block.is_error ? "text-danger" : "text-fg-muted"}`}>{block.is_error ? t("message.tool.outputError") : t("message.tool.output")}</Text>{typeof block.content === "string" ? <CappedCodeText value={block.content} color={theme.colors.text} /> : <MessageContent content={block.content} />}</View>;
 }
 
 function ToolCall({ block, result, active = false }: { block: Extract<ContentBlock, { type: "tool_use" }>; result?: Extract<ContentBlock, { type: "tool_result" }>; active?: boolean }) {
@@ -278,16 +278,16 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
   const caption = preview ? `${block.name}: "${preview}"` : block.name;
   const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
   return <View style={{ width: contentWidth }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={8} onPress={() => setExpanded(!expanded)} style={{ minHeight: 22, flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 2 }}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={8} onPress={() => setExpanded(!expanded)} className="min-h-6 flex-row items-center gap-1.5 py-0.5">
       <AppIcon name={toolIcon(block.name)} size={14} color={iconColor} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>
-        <Text style={{ color: theme.colors.text, fontWeight: "500" }}>{block.name}</Text>
-        {preview ? <Text style={{ color: theme.colors.textMuted }}>{`: "${preview}"`}</Text> : null}
+        <Text className="text-fg font-medium">{block.name}</Text>
+        {preview ? <Text className="text-fg-muted">{`: "${preview}"`}</Text> : null}
       </Text>
     </Pressable>
     {expanded ? <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 }} contentContainerStyle={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, paddingRight: 8, gap: 8 }}>
       <BubbleContentWidth.Provider value={contentWidth === undefined ? undefined : Math.max(0, contentWidth - 21)}>
-      <Text style={[typography.micro, { color: theme.colors.textMuted }]}>{t("message.tool.input")}</Text>
+      <Text className="text-micro font-semibold text-fg-muted">{t("message.tool.input")}</Text>
       <CappedCodeText value={JSON.stringify(block.input, null, 2)} color={theme.colors.text} />
       {edits.map((edit, index) => <View key={index}><Text style={[typography.code, { fontFamily: "SpaceMono", color: theme.colors.danger, backgroundColor: theme.colors.dangerSoft }]}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text style={[typography.code, { fontFamily: "SpaceMono", color: theme.colors.success }]}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
       {result ? <ToolOutput block={result} /> : null}
@@ -315,7 +315,7 @@ export function MessageContent({ content, active = false, color, linkColor, imag
   // Appending text invalidates native line measurements. Keep the live clock out of that
   // measurement cycle so each chunk cannot add and then remove a footer row.
   const textFooter = !active && (last?.type === "text" || last?.type === "thinking");
-  return <View style={{ gap: 3, minWidth: 0 }}>{blocks.map((block, index) => {
+  return <View className="gap-1 min-w-0">{blocks.map((block, index) => {
     // Tool results never render standalone. A paired one is shown inside its
     // ToolCall; a streaming message boundary can leave a partial result whose
     // tool_use was committed with the previous message, and dumping that raw
@@ -327,7 +327,7 @@ export function MessageContent({ content, active = false, color, linkColor, imag
       return imageUris.length > 0 ? <ImageGallery key="image-gallery" uris={imageUris} maxWidth={imageMaxWidth ?? contentWidth} /> : null;
     }
     return <Block key={`${block.type}-${index}`} block={block} color={color} linkColor={linkColor} streaming={active} footer={index === lastVisibleIndex && textFooter ? footer : undefined} />;
-  })}{footer && !textFooter ? <View style={{ alignSelf: "flex-end", marginTop: 2 }}>{footer}</View> : null}</View>;
+  })}{footer && !textFooter ? <View className="self-end mt-0.5">{footer}</View> : null}</View>;
 }
 
 function chatBubbleStyle(theme: AppTheme, side: "user" | "assistant", maxWidth: number): ViewStyle {
@@ -380,7 +380,7 @@ function TypingIndicator() {
   useEffect(() => {
     progress.value = withRepeat(withSequence(withTiming(1, { duration: 420 }), withTiming(0, { duration: 420 })), -1, true);
   }, [progress]);
-  return <View style={{ flexDirection: "row", alignItems: "center", gap: 4, minWidth: 42, minHeight: 20 }}>
+  return <View className="flex-row items-center gap-1 min-w-10 min-h-5">
     {[0, 1, 2].map((index) => <TypingDot key={index} progress={progress} index={index} color={theme.colors.textMuted} />)}
   </View>;
 }
@@ -425,7 +425,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return <CompactionNotice info={compaction} />;
   if (!hasRenderableMessage(message)) return null;
   const isSystem = message.role === "system";
-  if (isSystem) return <View style={{ alignItems: "center", paddingHorizontal: 24, paddingVertical: 8 }}><Text style={[typography.caption, { color: theme.colors.textFaint, textAlign: "center" }]}>{message.text || t("chat.systemUpdate")}</Text></View>;
+  if (isSystem) return <View className="items-center px-6 py-2"><Text className="text-caption text-fg-faint text-center">{message.text || t("chat.systemUpdate")}</Text></View>;
   const thinkingLevel = requestedThinkingLevel(message.meta);
   const inputTokenValue = (message.usage?.input ?? 0) + (message.usage?.cacheRead ?? 0);
   const cachedInputTokens = typeof message.usage?.cacheRead === "number" && Number.isFinite(message.usage.cacheRead) && message.usage.cacheRead > 0 ? formatTokenCount(message.usage.cacheRead) : null;
@@ -443,10 +443,10 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
       {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: isUser ? theme.colors.userBubbleText : theme.colors.danger }]}>{message.errorMessage}</BubbleText> : null}
     </ChatBubbleFrame></BubbleTraceMessage.Provider>
     {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. */}
-    {!isUser && (message.model || thinkingLevel || inputTokens || outputTokens) ? <Text selectable style={[typography.micro, { color: theme.colors.textFaint, marginTop: 4, marginLeft: 4, alignSelf: "stretch" }]}>{`${message.model || t("chat.model.agent")}${thinkingLevel ? ` · ${formatThinkingLevel(thinkingLevel)}` : ""}${inputTokens ? ` · ↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : ""}${outputTokens ? ` · ↓${outputTokens}` : ""}`}</Text> : null}
+    {!isUser && (message.model || thinkingLevel || inputTokens || outputTokens) ? <Text selectable className="text-micro font-semibold text-fg-faint mt-1 ml-1 self-stretch">{`${message.model || t("chat.model.agent")}${thinkingLevel ? ` · ${formatThinkingLevel(thinkingLevel)}` : ""}${inputTokens ? ` · ↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : ""}${outputTokens ? ` · ↓${outputTokens}` : ""}`}</Text> : null}
     {copyText && !isUser ? <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3, marginLeft: side === "assistant" ? 4 : 0, marginRight: side === "user" ? 4 : 0 }}>
-      {onCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy(copyText); setCopied(true); }} hitSlop={6} style={({ pressed }) => ({ width: 36, height: 36, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.55 : 1 })}><AppIcon name={copied ? "check" : "copy"} size={14} color={copied ? theme.colors.success : theme.colors.textFaint} /></Pressable> : null}
-      {!isUser && onFork && typeof message.meta?.turnId === "string" ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork(message)} hitSlop={6} style={({ pressed }) => ({ width: 36, height: 36, alignItems: "center", justifyContent: "center", opacity: forkDisabled ? 0.45 : pressed ? 0.55 : 1 })}>{forking ? <ActivityIndicator size="small" color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} color={theme.colors.textFaint} />}</Pressable> : null}
+      {onCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy(copyText); setCopied(true); }} hitSlop={6} className="w-9 h-9 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
+      {!isUser && onFork && typeof message.meta?.turnId === "string" ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork(message)} hitSlop={6} style={({ pressed }) => ({ width: 36, height: 36, alignItems: "center", justifyContent: "center", opacity: forkDisabled ? 0.45 : pressed ? 0.55 : 1 })}>{forking ? <ActivityIndicator size="small" color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
     </View> : null}
   </View></BubbleContext.Provider>;
 });
@@ -477,7 +477,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   const footer = live && !failed ? <BubbleMeta clock={formatMessageClock(new Date().toISOString())} side="assistant" live t={t} /> : undefined;
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5, alignItems: "flex-start" }}>
     <ChatBubbleFrame side="assistant" maxWidth={maxWidth}>
-      {!statusLabel && !hasContent && !runtimeLabel ? <View><TypingIndicator />{footer ? <View style={{ alignSelf: "flex-end", marginTop: 2 }}>{footer}</View> : null}</View> : null}
+      {!statusLabel && !hasContent && !runtimeLabel ? <View><TypingIndicator />{footer ? <View className="self-end mt-0.5">{footer}</View> : null}</View> : null}
       {statusLabel ? <Text style={[typography.caption, { color: theme.colors.danger, marginBottom: hasLivePreview || runtimeLabel ? 6 : 0 }]}>{statusLabel}</Text> : null}
       {runtimeLabel ? <RuntimeStatusLine label={runtimeLabel} footer={hasContent ? undefined : footer} color={theme.colors.textMuted} /> : null}
       {hasContent ? <MessageContent active={live} content={liveContent} footer={footer} /> : null}
@@ -488,7 +488,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
 function RuntimeStatusLine({ label, footer, color }: { label: string; footer?: ReactNode; color: string }) {
   return <View style={{ flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "100%" }}>
     <Text numberOfLines={1} ellipsizeMode="tail" style={[typography.caption, { color, flexShrink: 1 }]}>{label}</Text>
-    {footer ? <View style={{ flexShrink: 0 }}>{footer}</View> : null}
+    {footer ? <View className="shrink-0">{footer}</View> : null}
   </View>;
 }
 

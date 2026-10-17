@@ -112,10 +112,7 @@ export function TurnNavigatorSheet({
 				<View style={styles.state}>
 					<ActivityIndicator size="small" color={theme.colors.accent} />
 					<Text
-						style={[
-							typography.caption,
-							{ color: theme.colors.textMuted, marginTop: 10 },
-						]}
+						className="text-caption text-fg-muted mt-2"
 					>
 						{t("turn.navigator.loading")}
 					</Text>
@@ -125,17 +122,10 @@ export function TurnNavigatorSheet({
 					<AppIcon
 						name={query ? "search" : "messages"}
 						size={25}
-						color={theme.colors.textMuted}
+						tone="muted"
 					/>
 					<Text
-						style={[
-							typography.body,
-							{
-								color: theme.colors.textMuted,
-								textAlign: "center",
-								marginTop: 10,
-							},
-						]}
+						className="text-body text-fg-muted text-center mt-2"
 					>
 						{query
 							? t("turn.navigator.noMatch")
@@ -146,10 +136,7 @@ export function TurnNavigatorSheet({
 							accessibilityRole="button"
 							accessibilityLabel={t("turn.navigator.retry")}
 							onPress={onRetry}
-							style={({ pressed }) => ({
-								marginTop: 12,
-								opacity: pressed ? 0.6 : 1,
-							})}
+							className="mt-3 active:opacity-60"
 						>
 							<Text
 								className="text-body font-semibold text-accent"
@@ -222,10 +209,7 @@ export function TurnNavigatorSheet({
 									<View style={styles.meta}>
 										<Text
 											numberOfLines={1}
-											style={[
-												typography.micro,
-												{ color: theme.colors.textFaint, flex: 1 },
-											]}
+											className="text-micro font-semibold text-fg-faint flex-1"
 										>
 											{formatRelativeTime(turn.createdAt)}
 											{turn.provider ? ` · ${turn.provider}` : ""}
@@ -240,12 +224,12 @@ export function TurnNavigatorSheet({
 								{loadingSequence === turn.sequence ? (
 									<ActivityIndicator size="small" color={theme.colors.accent} />
 								) : selected ? (
-									<AppIcon name="check" size={17} color={theme.colors.accent} />
+									<AppIcon name="check" size={17} tone="accent" />
 								) : (
 									<AppIcon
 										name="chevron-right"
 										size={16}
-										color={theme.colors.textFaint}
+										tone="faint"
 									/>
 								)}
 							</Pressable>

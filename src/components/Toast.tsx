@@ -136,7 +136,7 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
   return (
     <GestureDetector gesture={pan}>
     <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} style={[styles.card, frame, animatedStyle]}>
-        <AppIcon name={danger ? "alert" : "check"} size={16} color={danger ? theme.colors.danger : theme.colors.success} />
+        <AppIcon name={danger ? "alert" : "check"} size={16} tone={danger ? "danger" : "success"} />
         <View className="min-w-0 flex-1 gap-px">
           <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>
           {toast.message ? <Text numberOfLines={2} className="text-caption text-fg-secondary">{toast.message}</Text> : null}

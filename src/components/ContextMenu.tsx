@@ -55,7 +55,7 @@ export function ContextMenu({
             }}
             style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
           >
-            <AppIcon name={action.icon} size={18} color={theme.colors.textSecondary} />
+            <AppIcon name={action.icon} size={18} tone="secondary" />
             <Text className="text-body font-semibold text-fg">{action.title}</Text>
           </Pressable>
         ))}

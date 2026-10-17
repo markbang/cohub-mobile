@@ -55,7 +55,7 @@ function ChannelForm({ provider }: { provider: ChannelProvider }) {
       </View>)}
       {provider === "feishu" ? <View className="flex-row border border-border rounded-sm overflow-hidden">
         {(["feishu", "lark"] as const).map((brand) => <Pressable key={brand} accessibilityRole="radio" accessibilityState={{ checked: draft.brand === brand, disabled: busy }} disabled={busy} onPress={() => setDraft((current) => ({ ...current, brand }))} style={({ pressed }) => ({ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", backgroundColor: draft.brand === brand ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface })}>
-          <Text style={[typography.bodyMedium, { color: draft.brand === brand ? theme.colors.accent : theme.colors.text }]}>{brand === "feishu" ? "Feishu" : "Lark"}</Text>
+          <Text className={`text-body font-semibold ${draft.brand === brand ? "text-accent" : "text-fg"}`}>{brand === "feishu" ? "Feishu" : "Lark"}</Text>
         </Pressable>)}
       </View> : null}
       {login ? <View className="gap-3 items-center">
@@ -67,7 +67,7 @@ function ChannelForm({ provider }: { provider: ChannelProvider }) {
         <TextInput accessibilityLabel={t("settings.channels.code")} value={code} onChangeText={setCode} keyboardType="number-pad" autoCorrect={false} style={inputStyle} editable={!busy} />
         <PrimaryButton label={t("settings.channels.verify")} icon="check" loading={busy} onPress={() => verify(code)} />
       </View> : <PrimaryButton label={provider === "wechat" ? t(login ? "common.retry" : "settings.channels.connectWeChat") : t("common.create")} icon={provider === "wechat" ? "refresh" : "plus"} loading={busy} onPress={() => { setQrError(false); void submit(); }} />}
-      {login ? <Pressable accessibilityRole="button" onPress={() => { setCode(""); setQrError(false); cancelLogin(); }} style={({ pressed }) => ({ minHeight: 44, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
+      {login ? <Pressable accessibilityRole="button" onPress={() => { setCode(""); setQrError(false); cancelLogin(); }} className="min-h-11 items-center justify-center active:opacity-60">
         <Text className="text-body font-semibold text-fg-secondary">{t("common.cancel")}</Text>
       </Pressable> : null}
       {error ? <Text accessibilityRole="alert" className="text-body text-danger">{error}</Text> : null}

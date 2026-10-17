@@ -14,7 +14,7 @@ import { SessionSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
 import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
-import { edgeChrome, useAppTheme, typography } from "@/src/theme";
+import { edgeChrome, useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { useApp } from "@/src/data/context";
@@ -675,8 +675,8 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
           : <SessionRow session={item.session} fork={item.fork} tree={item.tree} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
-        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} style={({ pressed }) => ({ minHeight: 40, marginHorizontal: 14, marginTop: 8, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
-        ListEmptyComponent={<View style={styles.emptyPanel}>{emptyLoading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} color={theme.colors.textMuted} />}<Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
+        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
+        ListEmptyComponent={<View style={styles.emptyPanel}>{emptyLoading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" />}<Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={() => setLabelsReloadToken((value) => value + 1)} onClose={closeLabelSheet} onChanged={() => { setLabelSessionIds(new Set()); setLabelsReloadToken((value) => value + 1); }} /> : null}
     </View>
@@ -685,7 +685,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
 
 function PanelFilterChip({ label, icon, selected, onPress }: { label: string; icon?: React.ComponentProps<typeof AppIcon>["name"]; selected: boolean; onPress: () => void }) {
   const theme = useAppTheme();
-  return <Pressable accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: selected ? theme.colors.accentBorder : theme.colors.border, backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface, flexDirection: "row", alignItems: "center", gap: 5 })}>{icon ? <AppIcon name={icon} size={13} color={selected ? theme.colors.accent : theme.colors.textMuted} /> : null}<Text style={[typography.caption, { color: selected ? theme.colors.accent : theme.colors.textMuted }]}>{label}</Text></Pressable>;
+  return <Pressable accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: selected ? theme.colors.accentBorder : theme.colors.border, backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface, flexDirection: "row", alignItems: "center", gap: 5 })}>{icon ? <AppIcon name={icon} size={13} tone={selected ? "accent" : "muted"} /> : null}<Text className={`text-caption ${selected ? "text-accent" : "text-fg-muted"}`}>{label}</Text></Pressable>;
 }
 
 function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpenFile, onOpenFilesPage }: { enabled?: boolean; spaceId: string; spaceName: string; client: CohubClient | null; onClose: () => void; onOpenFile: (path: string) => void; onOpenFilesPage: () => void }) {
@@ -749,12 +749,12 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
   return (
     <View style={styles.panelContent}>
       <TopBar title={path ? spacePathName(path) : t("files.title")} subtitle={path ? `${spaceName} / ${path}` : spaceName} actions={<><IconButton name="external-link" label={t("space.panel.openFullFiles")} onPress={onOpenFilesPage} /><IconButton name="x" label={t("ui.sheet.close", { title: t("files.title") })} onPress={onClose} /></>} />
-      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} style={({ pressed }) => [styles.parentBar, { borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}><AppIcon name="arrow-left" size={16} color={theme.colors.textMuted} /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
+      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} style={({ pressed }) => [styles.parentBar, { borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
         <View style={styles.emptyPanel}><ActivityIndicator size="small" color={theme.colors.accent} /><Text className="text-caption text-fg-muted mt-2">{t("files.loading")}</Text></View>
       ) : error && entries.length === 0 ? (
-        <View style={styles.emptyPanel}><AppIcon name="cloud-off" size={25} color={theme.colors.danger} /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
+        <View style={styles.emptyPanel}><AppIcon name="cloud-off" size={25} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
       ) : (
         <LegendList
           estimatedItemSize={68}
@@ -764,7 +764,7 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
           keyExtractor={(item) => item.path}
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24, flexGrow: entries.length === 0 ? 1 : undefined }}
           renderItem={({ item }) => <SpaceFileRow entry={item} compact onPress={() => openEntry(item)} />}
-          ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name="folder-open" size={26} color={theme.colors.textMuted} /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
+          ListEmptyComponent={<View style={styles.emptyPanel}><AppIcon name="folder-open" size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
         />
       )}
     </View>

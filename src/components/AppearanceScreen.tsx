@@ -17,7 +17,6 @@ import {
   useFontScalePreference,
   usePureBlackPreference,
   useThemePreference,
-  typography,
 } from "@/src/theme";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { AppIcon, TopBar, Screen, SectionHeader } from "@/src/ui";
@@ -97,8 +96,8 @@ export function AppearanceContent() {
                 { backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent" },
               ]}
             >
-              <AppIcon name={option.icon} size={15} color={selected ? theme.colors.accent : theme.colors.textMuted} />
-              <Text style={[typography.caption, { color: selected ? theme.colors.accent : theme.colors.textSecondary }]}>{label}</Text>
+              <AppIcon name={option.icon} size={15} tone={selected ? "accent" : "muted"} />
+              <Text className={`text-caption ${selected ? "text-accent" : "text-fg-secondary"}`}>{label}</Text>
             </Pressable>
           );
         })}
@@ -129,7 +128,7 @@ export function AppearanceContent() {
       <View style={[styles.group, { marginTop: 16, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={[styles.settingRow, { borderBottomColor: theme.colors.border }]}>
           <View style={[styles.settingIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
-            <AppIcon name="palette" size={17} color={theme.colors.textMuted} />
+            <AppIcon name="palette" size={17} tone="muted" />
           </View>
           <View style={styles.settingText}>
             <Text className="text-body font-semibold text-fg">{t("appearance.custom.title")}</Text>
@@ -156,7 +155,7 @@ export function AppearanceContent() {
             {customTheme.warnings.length ? <Text selectable className="text-caption text-fg-muted mt-1">{customTheme.warnings.join("\n")}</Text> : null}
           </View>
         ) : null}
-        <Pressable accessibilityRole="button" onPress={() => sync.invalidate("config-theme")} style={({ pressed }) => ({ padding: 16, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
+        <Pressable accessibilityRole="button" onPress={() => sync.invalidate("config-theme")} className="p-4 active:bg-surface-pressed">
           <Text className="text-body font-semibold text-accent">{t("appearance.custom.refresh")}</Text>
         </Pressable>
       </View>
@@ -164,7 +163,7 @@ export function AppearanceContent() {
       <View style={[styles.group, { marginTop: 16, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={[styles.settingRow, { borderBottomColor: theme.colors.border }]}>
           <View style={[styles.settingIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
-            <AppIcon name="moon" size={17} color={theme.colors.textMuted} />
+            <AppIcon name="moon" size={17} tone="muted" />
           </View>
           <View style={styles.settingText}>
             <Text className="text-body font-semibold text-fg">{t("appearance.pureBlack.title")}</Text>
@@ -201,7 +200,7 @@ export function AppearanceContent() {
                 { backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent" },
               ]}
             >
-              <Text style={[typography.caption, { color: selected ? theme.colors.accent : theme.colors.textSecondary }]}>{label}</Text>
+              <Text className={`text-caption ${selected ? "text-accent" : "text-fg-secondary"}`}>{label}</Text>
             </Pressable>
           );
         })}
@@ -209,7 +208,7 @@ export function AppearanceContent() {
       <View style={[styles.group, { marginTop: 12, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
           <View style={[styles.settingIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
-            <AppIcon name="type" size={17} color={theme.colors.textMuted} />
+            <AppIcon name="type" size={17} tone="muted" />
           </View>
           <View style={styles.settingText}>
             <Text className="text-chat text-fg">{t("appearance.textPreview.sample")}</Text>

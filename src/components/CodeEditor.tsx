@@ -122,7 +122,7 @@ export function CodeEditor({
   };
 
   return (
-    <View onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)} style={{ alignSelf: "stretch" }}>
+    <View onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)} className="self-stretch">
       <Text
         numberOfLines={1}
         onLayout={measureCharacter}
@@ -133,7 +133,7 @@ export function CodeEditor({
         {MEASURE_CHARACTERS}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View className="flex-row items-start">
           <Text
             selectable={false}
             accessible={false}

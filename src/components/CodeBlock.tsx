@@ -171,8 +171,8 @@ export function CodeBlock({
     >
       {label || streaming ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, paddingTop: 8, paddingBottom: 2 }}>
-          <AppIcon name="code" size={13} color={theme.colors.textFaint} />
-          <Text style={[typography.micro, { color: theme.colors.textFaint }]}>
+          <AppIcon name="code" size={13} tone="faint" />
+          <Text className="text-micro font-semibold text-fg-faint">
             {label ?? t("code.fallback")}{streaming ? ` · ${t("code.streaming")}` : ""}
           </Text>
         </View>
@@ -180,7 +180,7 @@ export function CodeBlock({
       {/* Keep code inside the message width; nested horizontal scrollers mis-measure
           inside the inverted chat list on Android. */}
       <View style={{ padding: 11 }}>
-        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View className="flex-row items-start">
           {gutter ? (
             <Text
               style={[

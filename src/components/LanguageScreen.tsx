@@ -74,10 +74,7 @@ export function LanguageContent() {
           {t("language.intro.title")}
         </Text>
         <Text
-          style={[
-            typography.body,
-            { color: theme.colors.textMuted, marginTop: 6, maxWidth: 520 },
-          ]}
+          className="text-body text-fg-muted mt-1.5 max-w-130"
         >
           {t("language.intro.body")}
         </Text>
@@ -145,16 +142,13 @@ export function LanguageContent() {
                 </Text>
                 <Text
                   numberOfLines={1}
-                  style={[
-                    typography.caption,
-                    { color: theme.colors.textMuted, marginTop: 2 },
-                  ]}
+                  className="text-caption text-fg-muted mt-0.5"
                 >
                   {t(option.detailKey)}
                 </Text>
               </View>
               {selected ? (
-                <AppIcon name="check" size={18} color={theme.colors.accent} />
+                <AppIcon name="check" size={18} tone="accent" />
               ) : null}
             </Pressable>
           );
@@ -164,7 +158,7 @@ export function LanguageContent() {
       <View style={[styles.group, { marginTop: 16, marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={[styles.row, { borderTopWidth: 0 }]}>
           <View style={[styles.code, { backgroundColor: theme.colors.surfaceRaised }]}>
-            <AppIcon name="globe" size={17} color={theme.colors.textMuted} />
+            <AppIcon name="globe" size={17} tone="muted" />
           </View>
           <View className="flex-1 min-w-0">
             <Text className="text-body font-semibold text-fg">
@@ -172,10 +166,7 @@ export function LanguageContent() {
             </Text>
             <Text
               numberOfLines={1}
-              style={[
-                typography.caption,
-                { color: theme.colors.textMuted, marginTop: 2 },
-              ]}
+              className="text-caption text-fg-muted mt-0.5"
             >
               {deviceLocaleLabel(getDeviceLocale(), t)}
             </Text>

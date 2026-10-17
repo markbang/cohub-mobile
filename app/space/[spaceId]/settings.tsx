@@ -194,7 +194,7 @@ export default function SpaceSettingsScreen() {
                       accessibilityRole="button"
                       onPress={() => void updateMemberRole(member.userId, member.role === "builder" ? "guest" : "builder")}
                       hitSlop={8}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                      className="active:opacity-60"
                     >
                       <Text className="text-caption text-accent">
                         {member.role === "builder" ? t("space.settings.makeGuest") : t("space.settings.makeBuilder")}
@@ -254,7 +254,7 @@ export default function SpaceSettingsScreen() {
                 },
               ]}
             >
-              <AppIcon name="plus" size={18} color={theme.colors.accentText} />
+              <AppIcon name="plus" size={18} tone="onAccent" />
             </Pressable>
           </View>
           {env.map((item) => (
@@ -302,7 +302,7 @@ export default function SpaceSettingsScreen() {
                 onPress={confirmRestart}
                 style={({ pressed }) => [styles.restartButton, { opacity: restarting || busy ? 0.45 : pressed ? 0.7 : 1 }]}
               >
-                {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} color={theme.colors.accent} />}
+                {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} tone="accent" />}
                 <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
               </Pressable>
             </View>
@@ -328,14 +328,14 @@ export default function SpaceSettingsScreen() {
               onPress={() => endpoint.url ? void openWebLink(endpoint.url).catch(() => Linking.openURL(endpoint.url!)) : undefined}
               style={({ pressed }) => [styles.portRow, { backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised }]}
             >
-              <AppIcon name="globe" size={18} color={theme.colors.accent} />
+              <AppIcon name="globe" size={18} tone="accent" />
               <View className="flex-1 min-w-0">
                 <Text className="text-body font-semibold text-fg">{t("space.settings.portLabel", { port: key })}</Text>
                 <Text numberOfLines={1} selectable className="text-caption text-fg-muted mt-1">
                   {endpoint.url ?? t("space.settings.portUnavailable")}
                 </Text>
               </View>
-              <AppIcon name="external-link" size={16} color={theme.colors.textMuted} />
+              <AppIcon name="external-link" size={16} tone="muted" />
             </Pressable>
           ))}
         </View>
@@ -450,7 +450,6 @@ function ResourceStatus({ state, onRetry }: { state: SpaceSettingsResourceState;
 }
 
 function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnvironmentItem; visible: boolean; onToggle: () => void; onCopy: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <View className="py-3 border-b gap-1.5 border-border">
@@ -467,7 +466,7 @@ function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnviro
           onPress={onToggle}
           hitSlop={8}
         >
-          <AppIcon name={visible ? "eye-off" : "eye"} size={17} color={theme.colors.textMuted} />
+          <AppIcon name={visible ? "eye-off" : "eye"} size={17} tone="muted" />
         </Pressable>
       </View>
     </View>
@@ -502,9 +501,9 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
       <Text className="text-headline font-semibold text-fg">{t("deviceRuntime.thisDevice")}</Text>
       <Text className="text-caption text-fg-muted mt-1.5">{t("deviceRuntime.hint")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
-        <AppIcon name="smartphone" size={18} color={instance?.state === "ready" ? theme.colors.success : theme.colors.textMuted} />
+        <AppIcon name="smartphone" size={18} tone={instance?.state === "ready" ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
-          <Text style={[typography.bodyMedium, { color: instance?.state === "error" ? theme.colors.danger : theme.colors.text }]}>{t(deviceRuntimeStateKey(instance))}</Text>
+          <Text className={`text-body font-semibold ${instance?.state === "error" ? "text-danger" : "text-fg"}`}>{t(deviceRuntimeStateKey(instance))}</Text>
           {instance ? <Text selectable className="text-caption text-fg-muted mt-1">{instance.label}</Text> : null}
         </View>
         {busy || instance?.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
@@ -563,7 +562,7 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
       <Text className="text-body font-semibold text-fg">{t("deviceRuntime.display.title")}</Text>
       <Text className="text-caption text-fg-muted mt-1.5">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
-        <AppIcon name="monitor" size={18} color={sharingHere ? theme.colors.success : theme.colors.textMuted} />
+        <AppIcon name="monitor" size={18} tone={sharingHere ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
           <Text className="text-body font-semibold text-fg">{t(deviceDisplayStateKey(status, spaceId))}</Text>
           {status.sharedWith && !sharingHere ? <Text className="text-caption text-fg-muted mt-1">{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
@@ -603,7 +602,7 @@ function ActionButton({ label, icon, onPress, disabled = false }: { label: strin
         },
       ]}
     >
-      {icon ? <AppIcon name={icon} size={15} color={theme.colors.accent} /> : null}
+      {icon ? <AppIcon name={icon} size={15} tone="accent" /> : null}
       <Text numberOfLines={1} className="text-caption text-fg shrink">{label}</Text>
     </Pressable>
   );

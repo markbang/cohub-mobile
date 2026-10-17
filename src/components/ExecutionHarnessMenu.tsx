@@ -50,12 +50,12 @@ export function HarnessPicker({
             onPress={() => { onSelect(harness); onClose(); }}
             style={({ pressed }) => ({ minHeight: 52, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: pressed || selected ? theme.colors.surfaceRaised : "transparent", opacity: enabled ? 1 : 0.48 })}
           >
-            <AppIcon name={harness === "cohub" ? "cloud" : "monitor"} size={18} color={theme.colors.textMuted} />
+            <AppIcon name={harness === "cohub" ? "cloud" : "monitor"} size={18} tone="muted" />
             <View className="flex-1 min-w-0">
               <Text className="text-body font-semibold text-fg">{t(`runtime.harness.${harness}`)}</Text>
               <Text numberOfLines={1} className="text-micro font-semibold text-fg-muted">{harness === "cohub" ? t("runtime.cloudExecution") : enabled ? t("runtime.localExecution") : localSpace && !status?.online ? t("runtime.offline") : t("runtime.notConnected")}</Text>
             </View>
-            {selected ? <AppIcon name="check" size={18} color={theme.colors.accent} /> : null}
+            {selected ? <AppIcon name="check" size={18} tone="accent" /> : null}
           </Pressable>;
         })}
         {!localSpace ? <Text className="text-micro font-semibold px-2 pt-1.5 pb-2 text-fg-faint">{t("runtime.localOnly")}</Text> : null}

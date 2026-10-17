@@ -76,7 +76,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           onPress={() => { onClose(); action.onPress(); }}
           style={({ pressed }) => [styles.action, { opacity: action.disabled ? 0.45 : 1, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
         >
-          <AppIcon name={action.icon} size={21} color={theme.colors.textSecondary} />
+          <AppIcon name={action.icon} size={21} tone="secondary" />
           <Text style={[typography.body, styles.label, { color: theme.colors.text }]}>{action.title}</Text>
         </Pressable>)}
       </ScrollView>

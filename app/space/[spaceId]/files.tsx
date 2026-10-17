@@ -194,7 +194,7 @@ export default function FilesScreen() {
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <AppIcon name="folder-open" size={26} color={theme.colors.textMuted} />
+              <AppIcon name="folder-open" size={26} tone="muted" />
               <Text className="text-body text-fg-muted mt-2">
                 {currentPath ? t("files.emptyFolder") : t("files.emptyWorkspace")}
               </Text>
@@ -203,7 +203,7 @@ export default function FilesScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t("files.backToFiles")}
                   onPress={() => dismissPath("")}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginTop: 14 })}
+                  className="active:opacity-60 mt-4"
                 >
                   <Text className="text-body font-semibold text-accent">{t("files.backToFiles")}</Text>
                 </Pressable>
@@ -230,7 +230,7 @@ function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPre
         { borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.background },
       ]}
     >
-      <AppIcon name="arrow-left" size={16} color={theme.colors.textMuted} />
+      <AppIcon name="arrow-left" size={16} tone="muted" />
       <Text numberOfLines={1} className="text-caption text-fg-secondary">
         {parentPath ? t("files.backTo", { name: spacePathName(parentPath) }) : t("files.backToFiles")}
       </Text>
@@ -239,11 +239,10 @@ function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPre
 }
 
 function FilesError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <View style={styles.errorState}>
-      <AppIcon name="cloud-off" size={26} color={theme.colors.danger} />
+      <AppIcon name="cloud-off" size={26} tone="danger" />
       <Text className="text-body text-danger text-center mt-2">
         {message}
       </Text>

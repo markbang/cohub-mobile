@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type 
 import type { SpaceMentionMenuState } from "@/src/data/use-composer-mentions";
 import type { SpaceMentionSuggestion } from "@/src/data/space-mentions";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { Avatar, IconButton } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
@@ -21,7 +21,7 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("mentions.title")}</Text>
-        <Text numberOfLines={1} style={[typography.micro, { color: menu.remoteFailed ? theme.colors.danger : theme.colors.textMuted }]}>{status}</Text>
+        <Text numberOfLines={1} className={`text-micro font-semibold ${menu.remoteFailed ? "text-danger" : "text-fg-muted"}`}>{status}</Text>
       </View>
       <IconButton name="x" label={t("mentions.dismiss")} size={40} onPress={onDismiss} />
     </View>

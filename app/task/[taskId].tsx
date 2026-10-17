@@ -85,17 +85,10 @@ export default function TaskScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={() => setShowJson(!showJson)}
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: 12,
-              borderRadius: 10,
-              backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface,
-            })}
+            className="flex-row items-center justify-between p-3 rounded-sm bg-surface active:bg-surface-pressed"
           >
             <Text className="text-body font-semibold text-fg">{t("task.showJson")}</Text>
-            <AppIcon name={showJson ? "chevron-up" : "chevron-down"} size={16} color={theme.colors.textMuted} />
+            <AppIcon name={showJson ? "chevron-up" : "chevron-down"} size={16} tone="muted" />
           </Pressable>
 
           {showJson && run && (
@@ -127,7 +120,7 @@ function InfoRow({ icon, label, value, valueColor }: { icon: React.ComponentProp
   const theme = useAppTheme();
   return (
     <View className="flex-row items-center gap-2">
-      <AppIcon name={icon} size={14} color={theme.colors.textMuted} />
+      <AppIcon name={icon} size={14} tone="muted" />
       <Text className="text-caption text-fg-muted min-w-18">{label}</Text>
       <Text selectable style={[typography.caption, { color: valueColor ?? theme.colors.text, flex: 1 }]}>{value}</Text>
     </View>

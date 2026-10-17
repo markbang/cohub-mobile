@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppIcon, BrandMark } from "@/src/ui";
 import type { CohubEnvironment } from "@/src/config";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 
 const ENVIRONMENT_OPTIONS: { value: CohubEnvironment; labelKey: TranslationKey }[] = [
   { value: "prod", labelKey: "auth.environment.prod" },
@@ -32,14 +32,14 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
 
       <View style={styles.center}>
         <View className="flex-row items-center gap-3 border rounded-md p-4 border-border bg-surface">
-          <View className="w-10 h-10 rounded-md items-center justify-center bg-accent-soft"><AppIcon name="sparkles" size={20} color={theme.colors.accent} /></View>
+          <View className="w-10 h-10 rounded-md items-center justify-center bg-accent-soft"><AppIcon name="sparkles" size={20} tone="accent" /></View>
           <View className="flex-1">
             <Text className="text-body font-semibold text-fg">{t("auth.feature.context.title")}</Text>
             <Text className="text-caption text-fg-muted mt-1">{t("auth.feature.context.body")}</Text>
           </View>
         </View>
         <View className="flex-row items-center gap-3 border rounded-md p-4 border-border bg-surface mt-2">
-          <View className="w-10 h-10 rounded-md items-center justify-center bg-info-soft"><AppIcon name="sync" size={20} color={theme.colors.info} /></View>
+          <View className="w-10 h-10 rounded-md items-center justify-center bg-info-soft"><AppIcon name="sync" size={20} tone="info" /></View>
           <View className="flex-1">
             <Text className="text-body font-semibold text-fg">{t("auth.feature.sync.title")}</Text>
             <Text className="text-caption text-fg-muted mt-1">{t("auth.feature.sync.body")}</Text>
@@ -69,13 +69,13 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
                     { backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent" },
                   ]}
                 >
-                  <Text style={[typography.caption, { color: selected ? theme.colors.accent : theme.colors.textSecondary }]}>{label}</Text>
+                  <Text className={`text-caption ${selected ? "text-accent" : "text-fg-secondary"}`}>{label}</Text>
                 </Pressable>
               );
             })}
           </View>
         </View>
-        {error ? <View className="flex-row items-center gap-2 border rounded-md p-3 mb-2 bg-danger-soft border-danger"><AppIcon name="alert" size={16} color={theme.colors.danger} /><Text className="text-caption text-danger flex-1">{error}</Text></View> : null}
+        {error ? <View className="flex-row items-center gap-2 border rounded-md p-3 mb-2 bg-danger-soft border-danger"><AppIcon name="alert" size={16} tone="danger" /><Text className="text-caption text-danger flex-1">{error}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("auth.continue")}
@@ -85,7 +85,7 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
           onPressOut={() => setPressed(false)}
           style={[styles.signIn, { backgroundColor: pressed ? theme.colors.accentPressed : theme.colors.accent, opacity: loading ? 0.65 : 1 }]}
         >
-          {loading ? <ActivityIndicator color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} color={theme.colors.accentText} />}
+          {loading ? <ActivityIndicator color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} tone="onAccent" />}
           <Text className="text-body font-semibold text-on-accent">{loading ? t("auth.opening") : t("auth.continue")}</Text>
         </Pressable>
         <Text className="text-micro font-semibold text-fg-faint text-center mt-3">{t("auth.secure")}</Text>
