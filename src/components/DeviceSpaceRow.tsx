@@ -6,7 +6,7 @@ import { openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stop
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppIcon, Avatar, type IconName } from "@/src/ui";
-import { ListRow } from "@/src/ui/ListRow";
+import { LIST_AVATAR_SIZE, ListRow } from "@/src/ui/ListRow";
 import { displaySpaceName } from "@/src/utils";
 
 type DeviceSpaceRowProps = {
@@ -54,7 +54,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
   return <View>
     <ListRow
       separator={false}
-      leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={40} online={instance.state === "ready"} /></View>}
+      leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} online={instance.state === "ready"} /></View>}
       title={name}
       titlePrefix={display && sharingHere ? <AppIcon name="monitor" size={13} tone="info" /> : null}
       // A failure is the one state worth words; otherwise the line shows which folder is served.
@@ -65,7 +65,8 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
     />
-    <View className="flex-row flex-wrap gap-2 border-border pb-3 pl-17 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth }}>
+    {/* Actions align with the row text column: row padding + avatar + its gap. */}
+    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth, paddingLeft: 16 + LIST_AVATAR_SIZE + 14 }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}

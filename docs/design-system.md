@@ -42,7 +42,7 @@ confusion; the accessibility label is mandatory from day one.
 - List rows have **at most two text lines**: line 1 = identity (title + time), line 2 = context
   (preview or description). Extra facts become glyphs on the avatar or inline icons, not a
   third line.
-- Row heights: **64 pt** for content lists (40 pt avatar), **52 pt** for settings rows, **56 pt**
+- Row heights: **72 pt** for content lists (46 pt avatar, 12 pt vertical padding, 4 pt between the lines), **52 pt** for settings rows, **56 pt**
   minimum for anything with a 44 pt control.
 - Separators are hairlines **inset to the text column** (iOS list style), never full width
   inside a list.
@@ -120,12 +120,12 @@ Shared primitives keep their current names and props so screens migrate without 
 | `AppIcon` | Adds `tone` (`fg`, `muted`, `faint`, `accent`, `success`, `warning`, `danger`) so callers stop passing hex. |
 | `IconButton` | `className` styling; sizes `sm` (32 visual, 44 target) and `md` (40/44). |
 | `PrimaryButton` | Adds `variant: "primary" | "secondary" | "ghost" | "danger"`. |
-| `ListRow` (new) | Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
+| `ListRow` (new) | 72 pt. Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
 | `AvatarStatus` (new) | Replaces `StatusPill` in lists: a Chat that is running = accent ring around the avatar, failed = `alert` badge, stopped = `stop` badge. A Space whose runtime is up keeps the small green dot on `Avatar` (`online`). `StatusPill` stays for detail headers only. |
 | `Meta` (new) | Icon + tabular value, e.g. chats count, step count, duration. |
 | `SectionHeader` | Sentence case `text-caption font-semibold text-fg-muted`, no uppercase eyebrow. |
 | `SettingsGroup`/`SettingsRow` | 52 pt rows, inset separators, `rounded-md` group. |
-| `EmptyState`, `DataError`, `LoadingRows` | Skeleton matches the 64 pt `ListRow`; errors use an icon retry button. |
+| `EmptyState`, `DataError`, `LoadingRows` | Skeleton matches the 72 pt `ListRow`; errors use an icon retry button. |
 | `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`. |
 | `FloatingTabBar` | Icon + label, 58 pt, content-width capsule, `shadow-float`. |
 
@@ -139,15 +139,15 @@ Floating bar with icon above a short label (messages, layers, activity); the sel
 - Header: account avatar · "Chats" · search · new chat (unchanged structure).
 - Filters: one compact segmented row: **All · Running (count) · Done**, plus the source filter
   icon. The "Done" window moves into the chip as a suffix (`Done · 24h`) instead of a caption line.
-- Row (`ListRow`, 64 pt): Space avatar 40 with `AvatarStatus`; line 1 = title (fork icon prefix
+- Row (`ListRow`, 72 pt): Space avatar 46 with `AvatarStatus`; line 1 = title (fork icon prefix
   when forked) + time; line 2 = `Space name · preview` in `text-subhead`. The separate
   "Forked from…" line and the "Running" pill are removed; labels collapse to at most two
   `rounded-xs` tags at the end of line 2.
-- Result: rows drop from 76–110 pt to 64 pt. About 30% more Chats per screen.
+- Result: rows settle at 72 pt instead of 76–110 pt. The gain comes from dropping lines, not from tighter spacing; density never trades away comfortable padding.
 
 ### Spaces
 - Filters unchanged (Recent · All · Pinned · This device); pinned Spaces carry a pin glyph before the name in every filter.
-- Row (64 pt): avatar 40 with the runtime dot when the Space is running; line 1 = name + last activity time; line 2 =
+- Row (72 pt): avatar 46 with the runtime dot when the Space is running; line 1 = name + last activity time; line 2 =
   description, or `💬 count` when there is none. "Active" pill, "Active 3m ago" line, chevron,
   and the always-visible pin button are removed. Pin/unpin is in the long-press menu.
 
@@ -158,7 +158,7 @@ Floating bar with icon above a short label (messages, layers, activity); the sel
 - Heatmap unchanged.
 
 ### Settings home
-- Profile as a 64 pt row (avatar 48, name, email, chevron) instead of a centered 84 pt hero.
+- Profile as a 72 pt row (avatar 48, name, email, chevron) instead of a centered 84 pt hero.
 - Groups unchanged in content; rows to 52 pt with inset separators.
 - Sign out remains a text button (destructive). The version line shows the OTA channel when
   it is not production.

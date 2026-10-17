@@ -157,5 +157,8 @@ export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number }> 
 /** One stated rule: tags 6, controls 10, cards and menus 14, sheets and the composer 20, capsules full. */
 export const RADIUS = { xs: 6, sm: 10, md: 14, lg: 20 } as const;
 
+/** Leading avatar or icon tile in content lists; row height, separator inset, and skeleton follow it. */
+export const LIST_AVATAR_SIZE = 46;
+
 /** Only floating chrome (tab bar, menus, toasts, banners) casts a shadow; content stays flat. */
 export const SHADOW_FLOAT = "0 6px 20px rgba(0, 0, 0, 0.14)";

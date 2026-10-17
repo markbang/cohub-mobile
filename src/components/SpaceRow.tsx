@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { ContextMenu } from "@/src/components/ContextMenu";
 import { type SpaceSessionCount } from "@/src/data/space-session-counts";
 import { Avatar, AppIcon } from "@/src/ui";
-import { ListRow, Meta } from "@/src/ui/ListRow";
+import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 import { useTranslation } from "@/src/i18n";
 
@@ -32,7 +32,7 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
   return (
     <>
       <ListRow
-        leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space.publicProfile?.avatarUrl} size={40} online={active} /></View>}
+        leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} online={active} /></View>}
         title={name}
         titlePrefix={pinned ? <AppIcon name="pin" size={12} tone="faint" /> : null}
         meta={formatRelativeTime(space.lastActivityAt)}

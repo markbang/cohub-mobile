@@ -1,7 +1,7 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
 import { View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
-import { AvatarStatus, ListRow, Tag } from "@/src/ui/ListRow";
+import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
 import { displayForkSessionTitle, formatRelativeTime, shortPreview } from "@/src/utils";
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
@@ -21,7 +21,7 @@ type SessionRowProps = {
   tree?: SessionTreePosition | null;
 };
 
-const AVATAR_SIZE = 40;
+const AVATAR_SIZE = LIST_AVATAR_SIZE;
 const BRANCH_COLUMN = 16;
 
 export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {

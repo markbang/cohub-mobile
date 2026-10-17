@@ -30,7 +30,7 @@ import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
-import type { ColorKey } from "@/src/design/tokens";
+import { LIST_AVATAR_SIZE, type ColorKey } from "@/src/design/tokens";
 import { motion } from "@/src/motion";
 import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
@@ -265,8 +265,8 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-2.5 text-body text-fg";
 
 export function LoadingRows({ count = 5 }: { count?: number }) {
-  return <View accessibilityLabel="Loading" className="px-4">{Array.from({ length: count }).map((_, index) => <View key={index} className="min-h-16 flex-row items-center gap-3 py-2.5">
-    <View className="size-10 bg-surface-raised" style={{ borderRadius: 12, borderCurve: "continuous" }} />
+  return <View accessibilityLabel="Loading" className="px-4">{Array.from({ length: count }).map((_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3.5 py-3">
+    <View className="bg-surface-raised" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderRadius: LIST_AVATAR_SIZE * 0.3, borderCurve: "continuous" }} />
     <View className="flex-1 gap-2">
       <View className="h-3 rounded-full bg-surface-raised" style={{ width: `${58 + (index % 3) * 10}%` }} />
       <View className="h-2.5 rounded-full bg-surface-raised" style={{ width: `${38 + (index % 2) * 15}%` }} />
