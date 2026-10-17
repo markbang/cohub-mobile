@@ -62,6 +62,8 @@ assert.deepEqual(ota.on.workflow_dispatch.inputs.channel.options, ["staging", "p
 assert.equal(ota.on.workflow_dispatch.inputs.channel.default, "production");
 assert.equal(ota.concurrency["cancel-in-progress"], false);
 assert.equal(ota.concurrency.group, "ota-publish-${{ github.event.inputs.channel || 'production' }}");
+const otaTarget = JSON.stringify(ota.jobs.prepare.steps.find((step) => step.id === "target"));
+assert.match(otaTarget, /production.*--is-ancestor/, "Production OTA must stay limited to main commits");
 assert.equal(ota.env.OTA_CLI_REPOSITORY, OTA_CLI_REPOSITORY);
 assert.equal(ota.env.OTA_CLI_REVISION, OTA_CLI_REVISION);
 assert.match(ota.jobs.prepare.if, /refs\/heads\/main/);

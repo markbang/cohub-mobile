@@ -9,6 +9,7 @@ import {
   isUpdateSnoozed,
   type AppRelease,
 } from "@/src/platform/app-updates";
+import { currentUpdateChannel, switchUpdateChannel, type UpdateChannel } from "@/src/platform/update-channel";
 import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import type { IconName } from "@/src/icons";
@@ -107,6 +108,21 @@ export default function DebugUpdatesScreen() {
     [withBusy],
   );
 
+  const changeChannel = useCallback(
+    (channel: UpdateChannel) =>
+      withBusy(`channel:${channel}`, async () => {
+        setOtaError(null);
+        setOta(null);
+        try {
+          const result = await switchUpdateChannel(channel);
+          if (result === "no-update") setOta(channel === "production" ? "已在 production 最新包" : `${channel} 没有适配当前原生包的更新，已保持 production`);
+        } catch (error) {
+          setOtaError(error instanceof Error ? error.message : "切换频道失败");
+        }
+      }),
+    [withBusy],
+  );
+
   const fetchAndReload = useCallback(
     () =>
       withBusy("fetch", async () => {
@@ -171,6 +187,14 @@ export default function DebugUpdatesScreen() {
         <SectionHeader title="expo-updates 操作" />
         <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
           <View style={{ padding: 14, gap: 10 }}>
+            {(["production", "staging"] as const).filter((channel) => channel !== currentUpdateChannel()).map((channel) => <PrimaryButton
+              key={channel}
+              label={`切换到 ${channel} 并重启`}
+              icon="layers"
+              loading={busy === `channel:${channel}`}
+              disabled={!updatesEnabled || busy !== null}
+              onPress={() => void changeChannel(channel)}
+            />)}
             <PrimaryButton
               label="检查 OTA 更新"
               icon="refresh"
