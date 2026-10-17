@@ -188,7 +188,7 @@ export function AdaptiveSheet({
           >
             {compact ? (
               <GestureDetector gesture={pan}>
-                <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center" style={{ userSelect: "none" }}>
+                <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
                   {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
                 </View>
               </GestureDetector>
