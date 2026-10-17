@@ -54,7 +54,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
     </View>
   </>;
   const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-14" : "min-h-18"}`;
-  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} testID={testID} className={shell}>{body}</View>;
+  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell}>{body}</View>;
   return (
     <Pressable
       accessibilityRole="button"

@@ -41,7 +41,8 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
         accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
         accessibilityHint={onTogglePin && !pinning ? t("space.longPressHint") : undefined}
         onPress={onPress}
-        onLongPress={onTogglePin && !pinning ? (event) => { const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+        // The handler stays attached while pinning: without one, Pressable would turn the hold into a press and navigate.
+        onLongPress={onTogglePin ? (event) => { if (pinning) return; const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
         accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
         onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin && !pinning) onTogglePin(); }}
       />

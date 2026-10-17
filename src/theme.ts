@@ -324,20 +324,25 @@ type TypographyStyle = {
   letterSpacing?: number;
 };
 
-const ramp = (token: keyof typeof TEXT_RAMP, fontWeight: TypographyStyle["fontWeight"]) => ({ fontSize: TEXT_RAMP[token].size, lineHeight: TEXT_RAMP[token].lineHeight, fontWeight });
+/** The ramp owns default weights (caption 500, micro 600); pass a weight only for deliberate emphasis. */
+const ramp = (token: keyof typeof TEXT_RAMP, fontWeight?: TypographyStyle["fontWeight"]) => ({
+  fontSize: TEXT_RAMP[token].size,
+  lineHeight: TEXT_RAMP[token].lineHeight,
+  fontWeight: fontWeight ?? (String(TEXT_RAMP[token].weight ?? 400) as TypographyStyle["fontWeight"]),
+});
 
 /** Legacy JS styles for screens not yet on className; same ramp as the `text-*` utilities. */
 const BASE_TYPOGRAPHY: Record<TypographyToken, TypographyStyle> = {
   display: ramp("display", "700"),
   title: ramp("title", "700"),
   heading: ramp("headline", "600"),
-  body: ramp("body", "400"),
+  body: ramp("body"),
   bodyMedium: ramp("body", "600"),
-  chatBody: ramp("chat", "400"),
-  caption: ramp("caption", "500"),
+  chatBody: ramp("chat"),
+  caption: ramp("caption"),
   eyebrow: ramp("caption", "600"),
-  micro: ramp("micro", "600"),
-  code: ramp("code", "400"),
+  micro: ramp("micro"),
+  code: ramp("code"),
 };
 
 /** Mutable tokens: components read them at render time, so a scale change re-renders with new metrics. */
