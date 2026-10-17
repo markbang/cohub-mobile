@@ -226,14 +226,16 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
   useEffect(() => () => chatScrollTrace.reset(), []);
   const navigationTheme = theme.mode === "dark" ? DarkTheme : DefaultTheme;
   return <ThemeProvider value={{ ...navigationTheme, colors: { ...navigationTheme.colors, background: theme.colors.background, card: theme.colors.background, text: theme.colors.text, border: theme.colors.border, primary: theme.colors.accent } }}>
+    {/* design-system: the root and navigator backgrounds are native props that only take JS colors. */}
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <NativeInteractionBridge />
       <ToastProvider>
-        <View style={{ flex: 1 }}>
+        <View className="flex-1">
           {/* Deeper screens use the platform transition: the iOS push (with its interactive back
               swipe) and Android's own forward animation. Overriding it replaces a platform behavior
               with an imitation. */}
+          {/* design-system: navigator contentStyle is a native prop */}
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="chat/[sessionId]" />
@@ -241,7 +243,8 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="space/[spaceId]/files" />
             <Stack.Screen name="space/[spaceId]/file" />
             <Stack.Screen name="work/[appId]" />
-            <Stack.Screen name="image-viewer" options={{ contentStyle: { backgroundColor: "#000000" } }} />
+            {/* design-system: the photo viewer is black in every theme so images read true. */}
+          <Stack.Screen name="image-viewer" options={{ contentStyle: { backgroundColor: "#000000" } }} />
             <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: "slide_from_bottom" }} />
             <Stack.Screen name="settings" options={{ title: t("route.settings") }} />
             <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
@@ -272,5 +275,5 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
 
 function LoadingScreen() {
   const theme = useAppTheme();
-  return <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.background }}><ActivityIndicator size="small" color={theme.colors.accent} /></View>;
+  return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="small" color={theme.colors.accent} /></View>;
 }

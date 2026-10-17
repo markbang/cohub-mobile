@@ -6,14 +6,12 @@ import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
 import { AppIcon, LoadingRows, Screen, StatusPill, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 export default function TaskScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const { client } = useApp();
   const [detail, setDetail] = useState<TaskRunDetailResponse | null>(null);
@@ -61,12 +59,12 @@ export default function TaskScreen() {
   
   return <Screen>
     <TopBar title={t("task.title")} onBack={() => router.back()} />
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+    <ScrollView contentContainerClassName="gap-4 p-4">
       {error ? <Text className="text-body text-danger">{error}</Text> : !detail ? <LoadingRows count={4} /> : (
         <>
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
-              <Text className="text-body font-semibold text-fg">{run?.taskType.replaceAll("_", " ")}</Text>
+              <Text className="text-headline font-semibold text-fg">{sentenceCase(run?.taskType.replaceAll("_", " ") ?? "")}</Text>
               <StatusPill 
                 label={run?.status ?? "unknown"} 
                 tone={run?.status === "failed" ? "danger" : run?.status === "running" || run?.status === "pending" ? "warning" : "success"} 
@@ -78,30 +76,23 @@ export default function TaskScreen() {
               <InfoRow icon="clock" label={t("task.updated")} value={formatRelativeTime(run?.updatedAt ?? "")} />
               <InfoRow icon="activity" label={t("task.attempts")} value={String(run?.attemptCount ?? 0)} />
               {run?.sessionId && <InfoRow icon="message-square" label={t("task.session")} value={run.sessionId.slice(0, 8)} />}
-              {run?.errorMessage && <InfoRow icon="alert" label={t("task.error")} value={run.errorMessage} valueColor={theme.colors.danger} />}
+              {run?.errorMessage && <InfoRow icon="alert" label={t("task.error")} value={run.errorMessage} danger />}
             </View>
           </View>
 
           <Pressable
             accessibilityRole="button"
             onPress={() => setShowJson(!showJson)}
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: 12,
-              borderRadius: 10,
-              backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface,
-            })}
+            className="flex-row items-center justify-between p-3 rounded-sm bg-surface active:bg-surface-pressed"
           >
             <Text className="text-body font-semibold text-fg">{t("task.showJson")}</Text>
-            <AppIcon name={showJson ? "chevron-up" : "chevron-down"} size={16} color={theme.colors.textMuted} />
+            <AppIcon name={showJson ? "chevron-up" : "chevron-down"} size={16} tone="muted" />
           </Pressable>
 
           {showJson && run && (
             <ScrollView horizontal style={{ maxHeight: 400 }}>
               <View className="p-3 rounded-sm bg-surface-raised">
-                <Text selectable style={[typography.caption, { color: theme.colors.text, fontSize: 11, lineHeight: 16, fontFamily: "monospace" }]}>
+                <Text selectable className="text-micro font-normal text-fg" style={{ lineHeight: 16, fontFamily: "SpaceMono" }}>
                   {jsonString}
                 </Text>
               </View>
@@ -123,16 +114,20 @@ export default function TaskScreen() {
     </ScrollView>
   </Screen>;
 }
-function InfoRow({ icon, label, value, valueColor }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string; valueColor?: string }) {
-  const theme = useAppTheme();
+function InfoRow({ icon, label, value, danger = false }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string; danger?: boolean }) {
   return (
     <View className="flex-row items-center gap-2">
-      <AppIcon name={icon} size={14} color={theme.colors.textMuted} />
+      <AppIcon name={icon} size={14} tone="muted" />
       <Text className="text-caption text-fg-muted min-w-18">{label}</Text>
-      <Text selectable style={[typography.caption, { color: valueColor ?? theme.colors.text, flex: 1 }]}>{value}</Text>
+      <Text selectable className={`flex-1 text-caption ${danger ? "text-danger" : "text-fg"}`}>{value}</Text>
     </View>
   );
 }
 
 function generationOutput(result: unknown): GenerationContentBlock[] { if (!result || typeof result !== "object" || !Array.isArray((result as { output?: unknown }).output)) return []; return (result as { output: GenerationContentBlock[] }).output; }
-function GenerationBlock({ block }: { block: GenerationContentBlock }) { const theme = useAppTheme(); if (block.type === "text") return <Text selectable style={[typography.body, { color: theme.colors.text, lineHeight: 24 }]}>{block.text}</Text>; const source = block.source as unknown as { url?: string; data?: string; mimeType?: string }; const uri = source.url ?? (source.data && source.mimeType ? `data:${source.mimeType};base64,${source.data}` : null); return uri ? <Image accessibilityLabel={`${block.type} output`} source={{ uri }} resizeMode="contain" style={{ width: "100%", height: 320, backgroundColor: theme.colors.surfaceRaised }} /> : <Text className="text-caption text-fg-muted">{block.type}</Text>; }
+function GenerationBlock({ block }: { block: GenerationContentBlock }) { if (block.type === "text") return <Text selectable className="text-chat text-fg">{block.text}</Text>; const source = block.source as unknown as { url?: string; data?: string; mimeType?: string }; const uri = source.url ?? (source.data && source.mimeType ? `data:${source.mimeType};base64,${source.data}` : null); return uri ? <Image accessibilityLabel={`${block.type} output`} source={{ uri }} resizeMode="contain" className="bg-surface-raised" style={{ width: "100%", height: 320 }} /> : <Text className="text-caption text-fg-muted">{block.type}</Text>; }
+
+/** Task types arrive as snake_case identifiers; titles follow the sentence-case copy rule. */
+function sentenceCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

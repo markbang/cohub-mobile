@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ReleaseNotes } from "@/src/components/ReleaseNotes";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton } from "@/src/ui";
 import { openWebLink } from "@/src/platform/browser";
 import {
@@ -19,7 +19,6 @@ import {
 } from "@/src/platform/app-updates";
 
 export function AppUpdateBanner() {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [release, setRelease] = useState<AppRelease | null>(null);
@@ -81,27 +80,23 @@ export function AppUpdateBanner() {
 
   return (
     <>
-      <View pointerEvents="box-none" style={[styles.bannerLayer, { top: insets.top + 8 }]}>
+      <View pointerEvents="box-none" className="absolute left-3 right-3 z-100 items-center" style={{ top: insets.top + 8 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("update.banner.accessibility", { version: release.version })}
           onPress={() => setDetailsOpen(true)}
          
-          style={({ pressed }) => ({
-            ...styles.banner,
-            backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface,
-            borderColor: theme.colors.accentBorder,
-            shadowColor: theme.colors.shadow,
-          })}
+          className="min-h-14 w-full max-w-130 flex-row items-center gap-2.5 rounded-md bg-surface px-3 shadow-float active:bg-surface-pressed"
+          style={{ borderCurve: "continuous" }}
         >
-          <View style={[styles.bannerIcon, { backgroundColor: theme.colors.accentSoft }]}>
-            <AppIcon name="download" size={17} color={theme.colors.accent} />
+          <View className="size-9 items-center justify-center rounded-sm bg-accent-soft">
+            <AppIcon name="download" size={18} tone="accent" />
           </View>
-          <View style={styles.bannerText}>
+          <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{t("update.available", { version: release.version })}</Text>
             <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{release.title ?? t("update.viewNotes")}</Text>
           </View>
-          <AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} />
+          <AppIcon name="chevron-right" size={17} tone="faint" />
         </Pressable>
       </View>
 
@@ -127,7 +122,6 @@ export function AppUpdateDetailsSheet({
   onClose: () => void;
   onLater?: () => void;
 }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const [opening, setOpening] = useState(false);
   const [progress, setProgress] = useState<ApkUpdateProgress | null>(null);
@@ -175,7 +169,7 @@ export function AppUpdateDetailsSheet({
       dismissible={!opening}
       scrollable
       footer={
-        <View style={styles.footer}>
+        <View className="flex-row justify-end items-center gap-2">
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={downloading ? t("update.cancel") : t("update.notNow")}
@@ -184,7 +178,7 @@ export function AppUpdateDetailsSheet({
               else (onLater ?? onClose)();
             }}
             disabled={opening && !downloading}
-            style={({ pressed }) => ({ ...styles.laterButton, opacity: pressed ? 0.6 : 1 })}
+            className="min-h-12 justify-center px-4 active:opacity-60"
           >
             <Text className="text-body font-semibold text-fg-secondary">{downloading ? t("update.cancel") : t("update.notNow")}</Text>
           </Pressable>
@@ -200,11 +194,11 @@ export function AppUpdateDetailsSheet({
       }
       testID="app-update-sheet"
     >
-      <View style={[styles.releaseSummary, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border }]}>
-        <View style={[styles.releaseSummaryIcon, { backgroundColor: theme.colors.accentSoft }]}>
-          <AppIcon name="download" size={20} color={theme.colors.accent} />
+      <View className="flex-row items-center gap-3 p-3 border rounded-md bg-surface-raised border-border">
+        <View className="w-10 h-10 rounded-md items-center justify-center bg-accent-soft">
+          <AppIcon name="download" size={20} tone="accent" />
         </View>
-        <View style={styles.releaseSummaryText}>
+        <View className="flex-1 min-w-0">
           <Text className="text-headline font-semibold text-fg">{release.title ?? `Cohub ${release.version}`}</Text>
           <Text className="text-caption text-fg-muted mt-1">
             {[release.version, releaseDate].filter(Boolean).join(" · ")}
@@ -213,8 +207,8 @@ export function AppUpdateDetailsSheet({
         </View>
       </View>
 
-      <View style={[styles.releaseNotice, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
-        <AppIcon name="info" size={17} color={theme.colors.accent} />
+      <View className="flex-row items-start gap-2 p-3 border rounded-md mt-3 bg-accent-soft border-accent-border">
+        <AppIcon name="info" size={17} tone="accent" />
         <Text className="text-body text-fg-secondary flex-1">
           {progress?.phase === "downloading" ? t("update.status.downloading", { percent: Math.round(progress.fraction * 100) })
             : progress?.phase === "verifying" ? t("update.status.verifying")
@@ -231,11 +225,11 @@ export function AppUpdateDetailsSheet({
           accessibilityLabel={t("update.installPermission")}
           disabled={opening}
           onPress={() => void runOperation(() => openAndroidInstallPermissionSettings())}
-          style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, opacity: pressed || opening ? 0.55 : 1 }]}
+          className="mt-4 min-h-12 flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 active:bg-surface-pressed disabled:opacity-55"
         >
-          <AppIcon name="shield" size={16} color={theme.colors.accent} />
+          <AppIcon name="shield" size={16} tone="accent" />
           <Text className="text-body font-semibold text-accent flex-1">{t("update.installPermission")}</Text>
-          <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
+          <AppIcon name="chevron-right" size={16} tone="faint" />
         </Pressable>
       ) : null}
 
@@ -248,11 +242,11 @@ export function AppUpdateDetailsSheet({
         accessibilityLabel={t("update.openOnGitHub")}
         onPress={() => void runOperation(() => openWebLink(release.url))}
         disabled={opening}
-        style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent", opacity: opening ? 0.55 : 1 }]}
+        className="mt-4 min-h-12 flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 active:bg-surface-pressed disabled:opacity-55"
       >
-        <AppIcon name="external-link" size={16} color={theme.colors.accent} />
+        <AppIcon name="external-link" size={16} tone="accent" />
         <Text className="text-body font-semibold text-accent flex-1">{t("update.openOnGitHub")}</Text>
-        <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
+        <AppIcon name="chevron-right" size={16} tone="faint" />
       </Pressable>
       {error ? <Text selectable className="text-caption text-danger mt-2">{error}</Text> : null}
     </AdaptiveSheet>
@@ -309,26 +303,14 @@ export function AppUpdateRow() {
         accessibilityState={{ busy: checking }}
         disabled={checking}
         onPress={() => void check()}
-       
-        style={({ pressed }) => ({
-          minHeight: 66,
-          paddingHorizontal: 13,
-          paddingVertical: 10,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 11,
-          backgroundColor: pressed ? theme.colors.surfacePressed : "transparent",
-          opacity: checking ? 0.65 : 1,
-        })}
+        className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2 active:bg-surface-pressed disabled:opacity-65"
       >
-        <View style={[styles.updateRowIcon, { backgroundColor: release ? theme.colors.accentSoft : theme.colors.surfaceRaised }]}>
-          {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={17} color={theme.colors.accent} />}
+        {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={20} tone={release ? "accent" : "muted"} />}
+        <View className="min-w-0 flex-1 gap-0.5">
+          <Text className="text-body text-fg">{title}</Text>
+          <Text numberOfLines={2} className={`text-caption ${release ? "text-accent" : "text-fg-muted"}`}>{detail}</Text>
         </View>
-        <View className="flex-1 min-w-0">
-          <Text className="text-body font-semibold text-fg">{title}</Text>
-          <Text numberOfLines={2} style={[typography.caption, { color: release ? theme.colors.accent : theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
-        </View>
-        {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={17} color={theme.colors.textFaint} /> : null}
+        {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={16} tone="faint" /> : null}
       </Pressable>
       {release ? <AppUpdateDetailsSheet key={`row-${release.version}`} release={release} visible={detailsOpen} onClose={() => setDetailsOpen(false)} /> : null}
     </>
@@ -351,95 +333,3 @@ function formatBytes(value: number) {
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
-
-const styles = {
-  bannerLayer: {
-    position: "absolute" as const,
-    left: 12,
-    right: 12,
-    zIndex: 100,
-    alignItems: "center" as const,
-  },
-  banner: {
-    width: "100%" as const,
-    maxWidth: 520,
-    minHeight: 58,
-    paddingHorizontal: 11,
-    borderWidth: 1,
-    borderRadius: 14,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 10,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    elevation: 7,
-  },
-  bannerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  bannerText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  updateRowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  releaseSummary: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 11,
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 13,
-  },
-  releaseSummaryIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  releaseSummaryText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  releaseNotice: {
-    flexDirection: "row" as const,
-    alignItems: "flex-start" as const,
-    gap: 9,
-    padding: 12,
-    borderWidth: 1,
-    borderRadius: 12,
-    marginTop: 12,
-  },
-  githubLink: {
-    minHeight: 48,
-    marginTop: 18,
-    paddingHorizontal: 11,
-    borderWidth: 1,
-    borderRadius: 11,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 9,
-  },
-  footer: {
-    flexDirection: "row" as const,
-    justifyContent: "flex-end" as const,
-    alignItems: "center" as const,
-    gap: 10,
-  },
-  laterButton: {
-    minHeight: 46,
-    paddingHorizontal: 15,
-    justifyContent: "center" as const,
-  },
-} satisfies Record<string, object>;

@@ -390,6 +390,8 @@ function chromeNodes(node) {
 const chromeScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
+  // Design-system primitives render as named placeholders, like the components above.
+  Field: "Field", FIELD_INPUT_CLASS: "", Segmented: "Segmented", ListRow: "ListRow", Meta: "Meta", Tag: "Tag", AvatarStatus: "AvatarStatus", LIST_AVATAR_SIZE: 46, FilterChip: "FilterChip",
   StyleSheet: { create: (styles) => styles },
   COMPOSER_TEXT_PADDING,
   colorWithOpacity,
@@ -1022,6 +1024,16 @@ for (const [tab, component, expectedRequests] of [
   }
 }
 
+// The bubble clock and read receipt share one row; a wrapping row pushed the receipt outside a short bubble.
+{
+  const renderMeta = loadChromeComponent("../src/components/MessageContent.tsx", "BubbleMeta", { ...formScope, useAppTheme: () => ({ colors: { userBubbleMeta: "meta", textFaint: "faint" } }) });
+  for (const local of [false, true]) {
+    const row = renderMeta({ clock: "00:40", local, side: "user", t: (key) => key });
+    assert.equal(row.props.style?.flexWrap, undefined, "the meta row never wraps");
+    assert.ok(classes(row).has("flex-row") && classes(row).has("shrink-0") && !classes(row).has("flex-wrap"), "clock and receipt stay on one row the bubble must fit");
+  }
+}
+
 // Check the actual light/dark bubble tokens, including alpha-composited timestamps.
 {
   const rgb = (hex) => hex.slice(1).match(/../g).map((value) => parseInt(value, 16));
@@ -1069,7 +1081,7 @@ for (const [tab, component, expectedRequests] of [
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
-    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", PanelFilterChip: "PanelFilterChip", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
+    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
   const render = () => { cursor = 0; const nodes = chromeNodes(renderPanel(props)); while (effects.length) effects.shift()(); return nodes; };
@@ -1080,7 +1092,7 @@ for (const [tab, component, expectedRequests] of [
   remoteLabels = [{ id: "web-label", name: "Created on web", source: "user", systemKey: null }];
   render();
   await jobs.get("space:space:labels").run();
-  const chip = render().find((node) => node.type === "PanelFilterChip" && node.props.label === "Created on web");
+  const chip = render().find((node) => node.type === "FilterChip" && node.props.label === "Created on web");
   assert.ok(chip, "new remote filters appear without closing the panel or pulling to refresh");
   assert.equal(labelsFetches, 2);
   chip.props.onPress();
@@ -1107,7 +1119,7 @@ for (const success of ["#238552", "#62c994"]) {
   const cells = chromeNodes(grid).filter((node) => node.type === "Pressable");
   assert.equal(cells.length, 91);
   assert.equal(cells.filter((cell) => cell.props.disabled).length, 2, "future days are blank and disabled");
-  assert.equal(cells[0].props.style({ pressed: false }).aspectRatio, 1);
+  assert.equal(cells[0].props.style.aspectRatio, 1, "heatmap cells stay square");
   cells[0].props.onPress();
   assert.equal(selected, activityDays[0].date);
   assert.equal(chromeNodes(renderHeatmap({ days: activityDays })).find((node) => node.type === "Pressable").props.accessibilityState.selected, true);

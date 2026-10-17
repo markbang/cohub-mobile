@@ -240,6 +240,7 @@ export default function FileScreen() {
       ) : showWebView && url ? (
         <WebView
           source={{ uri: url }}
+          // design-system: WebView does not take className.
           style={{ flex: 1, backgroundColor: theme.colors.background }}
           startInLoadingState
         />
@@ -261,7 +262,7 @@ export default function FileScreen() {
           <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
             {file.kind === "text" && file.size > MAX_EDITABLE_CODE_BYTES ? (
               <View className="flex-row items-center gap-2 mb-2">
-                <AppIcon name="alert" size={14} color={theme.colors.textMuted} />
+                <AppIcon name="alert" size={14} tone="muted" />
                 <Text className="text-caption text-fg-muted flex-1">
                   {t("file.tooLarge")}
                 </Text>
@@ -295,18 +296,17 @@ function SaveBanner({
   onReload: () => void;
   onOverwrite: () => void;
 }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <View className="bg-danger-soft border-b border-border px-4 py-2 gap-2">
       <View className="flex-row items-center gap-2">
-        <AppIcon name="alert" size={15} color={theme.colors.danger} />
+        <AppIcon name="alert" size={15} tone="danger" />
         <Text className="text-caption text-danger flex-1">{message}</Text>
       </View>
       {conflict ? (
         <View className="flex-row items-center gap-2 pl-6">
-          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} className="min-h-9 px-3" />
-          <Pressable accessibilityRole="button" accessibilityLabel={t("file.overwriteA11y")} disabled={saving} onPress={onOverwrite} style={({ pressed }) => ({ opacity: pressed || saving ? 0.6 : 1 })}>
+          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} />
+          <Pressable accessibilityRole="button" accessibilityLabel={t("file.overwriteA11y")} disabled={saving} onPress={onOverwrite} className="min-h-11 justify-center px-2 active:opacity-60 disabled:opacity-60">
             <Text className="text-body font-semibold text-danger">{t("file.overwrite")}</Text>
           </Pressable>
         </View>
@@ -316,13 +316,12 @@ function SaveBanner({
 }
 
 function FileError({ message, onRetry, onBack }: { message: string; onRetry: () => void; onBack: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const isDirectory = /not a file|directory|folder/i.test(message);
   return (
-    <View style={styles.errorState}>
-      <View style={[styles.errorIcon, { backgroundColor: theme.colors.dangerSoft }]}>
-        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} color={theme.colors.danger} />
+    <View className="flex-1 items-center justify-center p-6">
+      <View className="w-13 h-13 rounded-md items-center justify-center bg-danger-soft">
+        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} tone="danger" />
       </View>
       <Text className="text-headline font-semibold text-fg text-center mt-4">
         {isDirectory ? t("file.folder.title") : t("file.error.title")}
@@ -330,32 +329,11 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
       <Text selectable className="text-body text-fg-muted text-center mt-1.5 max-w-80">
         {isDirectory ? t("file.folder.body") : message}
       </Text>
-      <View style={styles.errorActions}>
+      <View className="flex-row items-center gap-2 mt-4">
         <PrimaryButton label={t("files.backToFiles")} icon="arrow-left" onPress={onBack} className="min-h-11 px-4" />
-        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
+        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} className="min-h-11 justify-center px-3 active:opacity-60"><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
       </View>
     </View>
   );
 }
 
-const styles = {
-  errorState: {
-    flex: 1,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    padding: 24,
-  },
-  errorIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  errorActions: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: 8,
-    marginTop: 18,
-  },
-} satisfies Record<string, object>;

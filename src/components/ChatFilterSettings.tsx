@@ -4,8 +4,8 @@ import { useToast } from "@/src/components/Toast";
 import { loadSessionFilterMinutes, saveSessionFilterMinutes, useSessionFilterPreference } from "@/src/data/session-filter-preference";
 import { MAX_SESSION_FILTER_MINUTES, parseSessionFilterMinutes } from "@/src/data/session-status";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
-import { IconButton, PrimaryButton } from "@/src/ui";
+import { useAppTheme } from "@/src/theme";
+import { FIELD_INPUT_CLASS, IconButton, PrimaryButton } from "@/src/ui";
 
 export function ChatFilterSettings() {
   const theme = useAppTheme();
@@ -21,7 +21,6 @@ export function ChatFilterSettings() {
 }
 
 function ChatFilterForm({ minutes }: { minutes: number }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const toast = useToast();
   const [input, setInput] = useState(String(minutes));
@@ -58,7 +57,7 @@ function ChatFilterForm({ minutes }: { minutes: number }) {
       editable={!saving}
       maxLength={4}
       selectTextOnFocus
-      style={[typography.body, { minHeight: 48, color: theme.colors.text, backgroundColor: theme.colors.surface, borderColor: error ? theme.colors.danger : theme.colors.border, borderWidth: 1, borderRadius: theme.radius.sm, paddingHorizontal: theme.spacing.md }]}
+      className={`${FIELD_INPUT_CLASS} ${error ? "border border-danger" : ""}`}
     />
     <Text className="text-caption text-fg-muted">{t("settings.chats.range", { max: MAX_SESSION_FILTER_MINUTES })}</Text>
     {error ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : null}

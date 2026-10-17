@@ -1,8 +1,7 @@
 import type { RefObject } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
 import { AppIcon, type IconName } from "@/src/ui";
 
 export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile }: {
@@ -12,7 +11,6 @@ export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile 
   onPhotos: () => void;
   onFile: () => void;
 }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const actions: { icon: IconName; label: string; onPress: () => void }[] = [
     { icon: "camera", label: t("chat.attachment.camera"), onPress: onCamera },
@@ -20,16 +18,11 @@ export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile 
     { icon: "paperclip", label: t("chat.attachment.file"), onPress: onFile },
   ];
   return <ComposerMenu anchorRef={anchorRef} title={t("chat.attachment.title")} onClose={onClose} preferredWidth={240} testID="chat-attachment-menu">
-    <ScrollView className="shrink" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} style={({ pressed }) => [styles.action, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
-        <AppIcon name={action.icon} size={22} color={theme.colors.textSecondary} />
+    <ScrollView className="shrink" contentContainerClassName="p-1.5" keyboardShouldPersistTaps="handled">
+      {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} className="min-h-13 flex-row items-center gap-3.5 rounded-sm px-3.5 py-3 active:bg-surface-pressed">
+        <AppIcon name={action.icon} size={22} tone="secondary" />
         <Text className="text-body text-fg flex-1">{action.label}</Text>
       </Pressable>)}
     </ScrollView>
   </ComposerMenu>;
 }
-
-const styles = StyleSheet.create({
-  content: { padding: 6 },
-  action: { minHeight: 52, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 14 },
-});

@@ -10,7 +10,7 @@ import {
   type AppRelease,
 } from "@/src/platform/app-updates";
 import { currentUpdateChannel, switchUpdateChannel, type UpdateChannel } from "@/src/platform/update-channel";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import type { IconName } from "@/src/icons";
 
@@ -147,7 +147,7 @@ export default function DebugUpdatesScreen() {
     <Screen>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <SectionHeader title="已安装原生包" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           <Row icon="info" label="应用版本" value={getInstalledAppVersion()} />
           <Row icon="fingerprint" label="Build" value={String(safe(() => Application.nativeBuildVersion, null) ?? "—")} />
           <Row icon="database" label="包名" value={safe(() => Application.applicationId, null) ?? "—"} />
@@ -155,7 +155,7 @@ export default function DebugUpdatesScreen() {
         </View>
 
         <SectionHeader title="expo-updates" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           <Row
             icon={updatesEnabled ? "check-circle" : "cloud-off"}
             label="OTA 是否启用"
@@ -179,14 +179,14 @@ export default function DebugUpdatesScreen() {
           <Row icon="refresh" label="checkAutomatically" value={safe(() => Updates.checkAutomatically, null) ?? "—"} />
         </View>
         {!updatesEnabled ? (
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginHorizontal: 16, marginTop: 10 }]}>
+          <Text className="text-caption text-fg-muted mx-4 mt-2">
             Expo Go / 开发构建里 OTA 恒为 disabled，只有带 EXPO_PUBLIC_UPDATES_URL 的正式构建才会启用。
           </Text>
         ) : null}
 
         <SectionHeader title="expo-updates 操作" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-          <View style={{ padding: 14, gap: 10 }}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
+          <View className="p-4 gap-2">
             {(["production", "staging"] as const).filter((channel) => channel !== currentUpdateChannel()).map((channel) => <PrimaryButton
               key={channel}
               label={`切换到 ${channel}`}
@@ -210,15 +210,15 @@ export default function DebugUpdatesScreen() {
               disabled={!updatesEnabled || busy !== null}
               onPress={() => void fetchAndReload()}
             />
-            {ota ? <Text selectable style={[typography.code, { color: theme.colors.textSecondary }]}>{ota}</Text> : null}
-            {otaError ? <Text selectable style={[typography.caption, { color: theme.colors.danger }]}>{otaError}</Text> : null}
+            {ota ? <Text selectable className="text-code text-fg-secondary">{ota}</Text> : null}
+            {otaError ? <Text selectable className="text-caption text-danger">{otaError}</Text> : null}
           </View>
         </View>
 
         <SectionHeader title="Yaota 原生发布 (APK)" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {busy === "release" && !releaseChecked ? (
-            <View style={{ padding: 20, alignItems: "center" }}>
+            <View className="p-5 items-center">
               <ActivityIndicator size="small" color={theme.colors.accent} />
             </View>
           ) : release ? (
@@ -234,7 +234,7 @@ export default function DebugUpdatesScreen() {
             <Row icon="check-circle" label="状态" value={releaseError ? "检查失败" : "已是最新原生版本"} tone={releaseError ? "danger" : "success"} />
           )}
           {releaseError ? <Row icon="alert" label="错误" value={releaseError} tone="danger" /> : null}
-          <View style={{ padding: 14 }}>
+          <View className="p-4">
             <PrimaryButton
               label="重新检查 Yaota APK"
               icon="refresh"
@@ -245,7 +245,7 @@ export default function DebugUpdatesScreen() {
           </View>
         </View>
 
-        <Text style={[typography.micro, { color: theme.colors.textFaint, marginHorizontal: 16, marginTop: 16 }]}>
+        <Text className="text-micro font-semibold text-fg-faint mx-4 mt-4">
           说明：OTA 只在“下次冷启动”生效；APK 更新只在存在更新版本的签名 APK 时才提示，纯 JS 更新不会触发 APK 下载。
         </Text>
       </ScrollView>
@@ -254,20 +254,15 @@ export default function DebugUpdatesScreen() {
 }
 
 function Row({ icon, label, value, testID, tone = "default" }: { icon: IconName; label: string; value: string; testID?: string; tone?: "default" | "success" | "danger" | "accent" | "muted" }) {
-  const theme = useAppTheme();
-  const color = tone === "success" ? theme.colors.success : tone === "danger" ? theme.colors.danger : tone === "accent" ? theme.colors.accent : tone === "muted" ? theme.colors.textMuted : theme.colors.text;
-  const iconColor = tone === "danger" ? theme.colors.danger : tone === "success" ? theme.colors.success : theme.colors.textMuted;
+  const valueClass = tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : tone === "accent" ? "text-accent" : tone === "muted" ? "text-fg-muted" : "text-fg";
   return (
-    <View style={{ minHeight: 60, paddingHorizontal: 13, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised }}>
-        <AppIcon name={icon} size={16} color={iconColor} />
+    <View className="min-h-15 px-3 py-2 flex-row items-center gap-3 border-b border-border">
+      <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
+        <AppIcon name={icon} size={16} tone={tone === "danger" ? "danger" : tone === "success" ? "success" : "muted"} />
       </View>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, width: 118 }]}>{label}</Text>
-      <Text testID={testID} selectable numberOfLines={3} style={[typography.caption, { color, flex: 1, textAlign: "right" }]}>{value}</Text>
+      <Text className="text-caption text-fg-muted w-30">{label}</Text>
+      <Text testID={testID} selectable numberOfLines={3} className={`flex-1 text-right text-caption ${valueClass}`}>{value}</Text>
     </View>
   );
 }
 
-const styles = {
-  group: { marginHorizontal: 16, borderWidth: 1, borderRadius: 14, overflow: "hidden" as const },
-} satisfies Record<string, object>;

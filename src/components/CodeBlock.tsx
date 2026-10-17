@@ -53,6 +53,7 @@ function toHighlighted(tokenizer: StreamingCodeTokenizer, theme: CodeHighlightTh
   const { foreground, background } = tokenizer.colors();
   return {
     lines: tokenizer.lines(),
+    // design-system: the highlighter theme supplies code colors; this is its own light-theme default.
     foreground: foreground ?? "#1f2328",
     background: background ?? "transparent",
     theme,
@@ -157,22 +158,11 @@ export function CodeBlock({
   };
 
   return (
-    <View
-      style={[
-        {
-          backgroundColor: theme.colors.surfaceRaised,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          overflow: "hidden",
-        },
-        style,
-      ]}
-    >
+    <View className="overflow-hidden rounded-md border border-border bg-surface-raised" style={[{ borderCurve: "continuous" }, style]}>
       {label || streaming ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, paddingTop: 8, paddingBottom: 2 }}>
-          <AppIcon name="code" size={13} color={theme.colors.textFaint} />
-          <Text style={[typography.micro, { color: theme.colors.textFaint }]}>
+          <AppIcon name="code" size={13} tone="faint" />
+          <Text className="text-micro font-semibold text-fg-faint">
             {label ?? t("code.fallback")}{streaming ? ` · ${t("code.streaming")}` : ""}
           </Text>
         </View>
@@ -180,12 +170,13 @@ export function CodeBlock({
       {/* Keep code inside the message width; nested horizontal scrollers mis-measure
           inside the inverted chat list on Android. */}
       <View style={{ padding: 11 }}>
-        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View className="flex-row items-start">
           {gutter ? (
             <Text
               style={[
                 codeTextStyle,
                 {
+                  // design-system: gutter and code share one measured monospace style.
                   color: theme.colors.textFaint,
                   textAlign: "right",
                   paddingRight: 12,

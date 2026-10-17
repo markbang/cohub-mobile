@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode, type
 import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
 import { getComposerMenuLayout, type ComposerMenuAnchor } from "@/src/ui/composer-menu-layout";
 
 export type ComposerMenuProps = {
@@ -16,7 +15,6 @@ export type ComposerMenuProps = {
 };
 
 export function ComposerMenu({ anchorRef, title, onClose, children, preferredWidth, fillHeight = false, testID }: ComposerMenuProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -52,12 +50,8 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
         onAccessibilityEscape={onClose}
         accessibilityLabel={title}
         role="dialog"
-        style={[styles.panel, layout, { height: fillHeight ? layout.maxHeight : undefined, backgroundColor: theme.colors.surface, borderColor: theme.colors.borderStrong, shadowColor: theme.colors.shadow }]}
+        className="absolute min-h-0 overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[layout, { height: fillHeight ? layout.maxHeight : undefined, borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
       >{children}</View> : null}
     </View>
   </Modal>;
 }
-
-const styles = StyleSheet.create({
-  panel: { position: "absolute", minHeight: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, borderCurve: "continuous", overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
-});

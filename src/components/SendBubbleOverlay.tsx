@@ -118,6 +118,7 @@ export function SendBubbleOverlay({ transition, message, queueItem, rootRef, tar
   return <View testID="chat-send-overlay" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.overlay}>
     <Animated.View style={[styles.surface, surfaceStyle]} />
     <Animated.View style={[styles.source, { width: source.width, height: source.height }, sourceStyle]}>
+      {/* design-system: the overlay replays the composer's measured text metrics while it animates. */}
       {hasAttachments ? <View style={{ gap: 7, transform: [{ translateY: -source.scrollY }] }}>{transition.attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} />)}</View> : <Text style={[typography.body, styles.sourceText, { color: theme.colors.text, transform: [{ translateY: -source.scrollY }] }]}>{transition.text}</Text>}
     </Animated.View>
     <Animated.View style={[styles.copy, copyStyle]}>

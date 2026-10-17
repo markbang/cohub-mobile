@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { useToast } from "@/src/components/Toast";
@@ -13,8 +13,8 @@ import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, 
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
-import { useAppTheme, typography } from "@/src/theme";
-import { AppIcon, Avatar, IconButton, PrimaryButton, Screen, TopBar, type IconName } from "@/src/ui";
+import { useAppTheme } from "@/src/theme";
+import { AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const;
@@ -166,16 +166,10 @@ export default function SpaceSettingsScreen() {
     }
   };
 
-  const inputStyle = [
-    typography.body,
-    styles.field,
-    { borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.surface },
-  ];
-
   return (
     <Screen>
       <TopBar title={t("space.settings")} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerClassName="gap-6 p-4" keyboardShouldPersistTaps="handled">
         <View>
           <Text className="text-headline font-semibold text-fg">{t("space.settings.collaborators")}</Text>
           <ResourceStatus state={resources.members} onRetry={() => void loadResource("members")} />
@@ -194,7 +188,7 @@ export default function SpaceSettingsScreen() {
                       accessibilityRole="button"
                       onPress={() => void updateMemberRole(member.userId, member.role === "builder" ? "guest" : "builder")}
                       hitSlop={8}
-                      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                      className="active:opacity-60"
                     >
                       <Text className="text-caption text-accent">
                         {member.role === "builder" ? t("space.settings.makeGuest") : t("space.settings.makeBuilder")}
@@ -230,7 +224,7 @@ export default function SpaceSettingsScreen() {
               autoCapitalize="characters"
               autoCorrect={false}
               accessibilityLabel="NAME"
-              style={inputStyle}
+              className={`flex-1 ${FIELD_INPUT_CLASS}`}
             />
             <TextInput
               value={value}
@@ -239,22 +233,16 @@ export default function SpaceSettingsScreen() {
               placeholderTextColor={theme.colors.textFaint}
               autoCorrect={false}
               accessibilityLabel="VALUE"
-              style={inputStyle}
+              className={`flex-1 ${FIELD_INPUT_CLASS}`}
             />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("space.settings.addEnvironment")}
               disabled={busy || resources.env.loading || !name.trim()}
               onPress={() => void addEnv()}
-              style={({ pressed }) => [
-                styles.envAdd,
-                {
-                  backgroundColor: pressed ? theme.colors.accentPressed : theme.colors.accent,
-                  opacity: busy || resources.env.loading || !name.trim() ? 0.45 : 1,
-                },
-              ]}
+              className="size-12 items-center justify-center rounded-sm bg-accent active:bg-accent-pressed disabled:opacity-45"
             >
-              <AppIcon name="plus" size={18} color={theme.colors.accentText} />
+              <AppIcon name="plus" size={18} tone="onAccent" />
             </Pressable>
           </View>
           {env.map((item) => (
@@ -300,9 +288,9 @@ export default function SpaceSettingsScreen() {
                 accessibilityLabel={t("space.settings.spec.restartNow")}
                 disabled={restarting || busy}
                 onPress={confirmRestart}
-                style={({ pressed }) => [styles.restartButton, { opacity: restarting || busy ? 0.45 : pressed ? 0.7 : 1 }]}
+                className="min-h-11 flex-row items-center gap-1.5 active:opacity-70 disabled:opacity-45"
               >
-                {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} color={theme.colors.accent} />}
+                {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} tone="accent" />}
                 <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
               </Pressable>
             </View>
@@ -326,16 +314,16 @@ export default function SpaceSettingsScreen() {
               key={key}
               accessibilityRole="button"
               onPress={() => endpoint.url ? void openWebLink(endpoint.url).catch(() => Linking.openURL(endpoint.url!)) : undefined}
-              style={({ pressed }) => [styles.portRow, { backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised }]}
+              className="mt-2 flex-row items-center gap-3 rounded-md bg-surface-raised p-4 active:bg-surface-pressed"
             >
-              <AppIcon name="globe" size={18} color={theme.colors.accent} />
+              <AppIcon name="globe" size={18} tone="accent" />
               <View className="flex-1 min-w-0">
                 <Text className="text-body font-semibold text-fg">{t("space.settings.portLabel", { port: key })}</Text>
                 <Text numberOfLines={1} selectable className="text-caption text-fg-muted mt-1">
                   {endpoint.url ?? t("space.settings.portUnavailable")}
                 </Text>
               </View>
-              <AppIcon name="external-link" size={16} color={theme.colors.textMuted} />
+              <AppIcon name="external-link" size={16} tone="muted" />
             </Pressable>
           ))}
         </View>
@@ -432,7 +420,7 @@ export default function SpaceSettingsScreen() {
             editable={!addingMod}
             returnKeyType="done"
             onSubmitEditing={() => void addMod()}
-            style={[typography.body, { minHeight: 48, borderWidth: 1, borderRadius: theme.radius.md, borderCurve: "continuous", padding: theme.spacing.md, borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.background }]}
+            className={FIELD_INPUT_CLASS}
           />
           {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
           <PrimaryButton label={t("space.settings.addMod")} icon="plus" loading={addingMod} disabled={!client || !modSpaceId.trim()} onPress={() => void addMod()} />
@@ -450,7 +438,6 @@ function ResourceStatus({ state, onRetry }: { state: SpaceSettingsResourceState;
 }
 
 function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnvironmentItem; visible: boolean; onToggle: () => void; onCopy: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   return (
     <View className="py-3 border-b gap-1.5 border-border">
@@ -467,7 +454,7 @@ function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnviro
           onPress={onToggle}
           hitSlop={8}
         >
-          <AppIcon name={visible ? "eye-off" : "eye"} size={17} color={theme.colors.textMuted} />
+          <AppIcon name={visible ? "eye-off" : "eye"} size={17} tone="muted" />
         </Pressable>
       </View>
     </View>
@@ -502,9 +489,9 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
       <Text className="text-headline font-semibold text-fg">{t("deviceRuntime.thisDevice")}</Text>
       <Text className="text-caption text-fg-muted mt-1.5">{t("deviceRuntime.hint")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
-        <AppIcon name="smartphone" size={18} color={instance?.state === "ready" ? theme.colors.success : theme.colors.textMuted} />
+        <AppIcon name="smartphone" size={18} tone={instance?.state === "ready" ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
-          <Text style={[typography.bodyMedium, { color: instance?.state === "error" ? theme.colors.danger : theme.colors.text }]}>{t(deviceRuntimeStateKey(instance))}</Text>
+          <Text className={`text-body font-semibold ${instance?.state === "error" ? "text-danger" : "text-fg"}`}>{t(deviceRuntimeStateKey(instance))}</Text>
           {instance ? <Text selectable className="text-caption text-fg-muted mt-1">{instance.label}</Text> : null}
         </View>
         {busy || instance?.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
@@ -563,7 +550,7 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
       <Text className="text-body font-semibold text-fg">{t("deviceRuntime.display.title")}</Text>
       <Text className="text-caption text-fg-muted mt-1.5">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
-        <AppIcon name="monitor" size={18} color={sharingHere ? theme.colors.success : theme.colors.textMuted} />
+        <AppIcon name="monitor" size={18} tone={sharingHere ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
           <Text className="text-body font-semibold text-fg">{t(deviceDisplayStateKey(status, spaceId))}</Text>
           {status.sharedWith && !sharingHere ? <Text className="text-caption text-fg-muted mt-1">{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
@@ -587,23 +574,15 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
 }
 
 function ActionButton({ label, icon, onPress, disabled = false }: { label: string; icon?: IconName; onPress: () => void; disabled?: boolean }) {
-  const theme = useAppTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionButton,
-        {
-          borderColor: theme.colors.borderStrong,
-          backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface,
-          opacity: disabled ? 0.45 : 1,
-        },
-      ]}
+      className="min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-sm bg-surface-raised px-2.5 active:bg-surface-pressed disabled:opacity-45"
     >
-      {icon ? <AppIcon name={icon} size={15} color={theme.colors.accent} /> : null}
+      {icon ? <AppIcon name={icon} size={15} tone="accent" /> : null}
       <Text numberOfLines={1} className="text-caption text-fg shrink">{label}</Text>
     </Pressable>
   );
@@ -626,54 +605,17 @@ function SegmentedControl<T extends string>({
   onChange: (value: T) => void;
   onLocked?: () => void;
 }) {
-  const theme = useAppTheme();
   const max = maxValue ? Math.max(0, values.indexOf(maxValue)) : values.length - 1;
   return (
-    <View
-      accessibilityRole="radiogroup"
-      className="mt-2 min-h-10 border rounded-md flex-row overflow-hidden border-border-strong bg-background" style={{ borderCurve: "continuous" }}
-    >
-      {values.map((item, index) => {
-        const selected = item === value;
-        const locked = index > max;
-        const label = labels[index] ?? item;
-        return (
-          <Pressable
-            key={item}
-            accessibilityRole="radio"
-            accessibilityLabel={label}
-            accessibilityState={{ selected, checked: selected, disabled: Boolean(disabled) }}
-            aria-checked={selected}
-            disabled={disabled}
-            onPress={() => {
-              if (locked) {
-                onLocked?.();
-                return;
-              }
-              if (item !== value) onChange(item);
-            }}
-            style={({ pressed }) => [
-              styles.segment,
-              index > 0 ? { borderLeftWidth: 1, borderLeftColor: theme.colors.borderStrong } : null,
-              {
-                backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent",
-                opacity: locked ? 0.45 : 1,
-              },
-            ]}
-          >
-            <Text
-              numberOfLines={1}
-              style={[
-                typography.caption,
-                { color: locked ? theme.colors.textFaint : selected ? theme.colors.accent : theme.colors.textSecondary },
-              ]}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Segmented
+      className="mt-2"
+      disabled={disabled}
+      onLocked={onLocked}
+      value={value}
+      onChange={onChange}
+      // Tiers above the plan's maximum stay visible but locked, so the upgrade path reads in place.
+      options={values.map((item, index) => ({ value: item, label: labels[index] ?? item, locked: index > max }))}
+    />
   );
 }
 
@@ -745,24 +687,3 @@ function sleepToPolicy(value: (typeof SLEEP_OPTIONS)[number]): SpaceSandboxAutoD
   if (value === "never") return { mode: "never" };
   return { mode: "idle", ttlSeconds: value === "0.5h" ? 1800 : 7200 };
 }
-
-const styles = StyleSheet.create({
-  content: { padding: 16, gap: 26 },
-  actionButton: {
-    flex: 1,
-    minHeight: 40,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  field: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
-  envAdd: { width: 46, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  segment: { flex: 1, minHeight: 40, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
-  restartButton: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: 5 },
-  portRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, marginTop: 8, borderRadius: 12 },
-});

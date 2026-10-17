@@ -50,6 +50,9 @@ jobs:
       - name: Check design tokens
         run: node --no-warnings --experimental-strip-types scripts/design-tokens.mjs --check
 
+      - name: Check design system usage
+        run: node scripts/check-design-system.mjs
+
       - name: Audit production dependencies
         run: node scripts/check-audit.mjs
 

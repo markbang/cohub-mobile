@@ -122,7 +122,7 @@ export function CodeEditor({
   };
 
   return (
-    <View onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)} style={{ alignSelf: "stretch" }}>
+    <View onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)} className="self-stretch">
       <Text
         numberOfLines={1}
         onLayout={measureCharacter}
@@ -133,10 +133,11 @@ export function CodeEditor({
         {MEASURE_CHARACTERS}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+        <View className="flex-row items-start">
           <Text
             selectable={false}
             accessible={false}
+            // design-system: the editor overlays text on a TextInput, so both share measured JS metrics.
             style={[metrics, { width: gutterWidth, textAlign: "right", paddingRight: 8, paddingTop: PADDING_VERTICAL, color: theme.colors.textFaint }]}
           >
             {gutter}
@@ -145,6 +146,7 @@ export function CodeEditor({
             <Text
               accessible={false}
               pointerEvents="none"
+              // design-system: measured overlay metrics, see the gutter above.
               style={[metrics, { position: "absolute", top: 0, left: 0, right: 0, height: editorHeight, paddingHorizontal: PADDING_HORIZONTAL, paddingVertical: PADDING_VERTICAL, color: theme.colors.text }]}
             >
               {renderLines(highlighted, value, theme.colors.text)}

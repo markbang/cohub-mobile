@@ -42,6 +42,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import {
 	AppIcon,
 	Avatar,
+	FIELD_INPUT_CLASS,
 	TopBar,
 	EmptyState,
 	IconButton,
@@ -78,7 +79,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 				actions={section === "channels" ? <IconButton name="plus" label={t("settings.channels.add")} onPress={() => router.push("/settings/new-channel")} /> : undefined}
 			/>
 			<ScrollView
-				style={{ flex: 1 }}
+				className="flex-1"
 				contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }}
 				keyboardShouldPersistTaps="handled"
 			>
@@ -113,17 +114,17 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 				onClose={() => setNotice(null)}
 				scrollable={false}
 				footer={
-					<View style={{ alignItems: "flex-end" }}>
+					<View className="items-end">
 						<PrimaryButton
 							label={t("common.done")}
 							onPress={() => setNotice(null)}
-							style={{ minHeight: 44, paddingHorizontal: 18 }}
+							className="min-h-11 px-4"
 						/>
 					</View>
 				}
 				testID="settings-notice-sheet"
 			>
-				<Text style={[typography.body, { color: theme.colors.textSecondary }]}>
+				<Text className="text-body text-fg-secondary">
 					{notice?.message ?? ""}
 				</Text>
 			</AdaptiveSheet>
@@ -132,16 +133,9 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 }
 
 function SettingsGroup({ children }: { children: ReactNode }) {
-	const theme = useAppTheme();
 	return (
 		<View
-			style={{
-				marginTop: theme.spacing.md,
-				borderTopWidth: 1,
-				borderBottomWidth: 1,
-				borderColor: theme.colors.border,
-				backgroundColor: theme.colors.surface,
-			}}
+			className="mt-3 border-t border-b border-border bg-surface"
 		>
 			{children}
 		</View>
@@ -168,16 +162,7 @@ function SettingsRow({
 	const theme = useAppTheme();
 	const content = (
 		<View
-			style={{
-				minHeight: 66,
-				paddingHorizontal: 13,
-				paddingVertical: 10,
-				flexDirection: "row",
-				alignItems: "center",
-				gap: 11,
-				borderBottomWidth: 1,
-				borderBottomColor: theme.colors.border,
-			}}
+			className="min-h-16 px-3 py-2 flex-row items-center gap-3 border-b border-border"
 		>
 			<View
 				style={{
@@ -194,10 +179,10 @@ function SettingsRow({
 				<AppIcon
 					name={icon}
 					size={17}
-					color={danger ? theme.colors.danger : theme.colors.textMuted}
+					tone={danger ? "danger" : "muted"}
 				/>
 			</View>
-			<View style={{ flex: 1, minWidth: 0 }}>
+			<View className="flex-1 min-w-0">
 				<Text
 					style={[
 						typography.bodyMedium,
@@ -209,10 +194,7 @@ function SettingsRow({
 				{detail ? (
 					<Text
 						numberOfLines={2}
-						style={[
-							typography.caption,
-							{ color: theme.colors.textMuted, marginTop: 2 },
-						]}
+						className="text-caption text-fg-muted mt-0.5"
 					>
 						{detail}
 					</Text>
@@ -227,10 +209,7 @@ function SettingsRow({
 			accessibilityLabel={title}
 			disabled={disabled}
 			onPress={onPress}
-			style={({ pressed }) => ({
-				backgroundColor: pressed ? theme.colors.surfacePressed : "transparent",
-				opacity: disabled ? 0.55 : 1,
-			})}
+			className="active:bg-surface-pressed disabled:opacity-55"
 		>
 			{content}
 		</Pressable>
@@ -378,17 +357,14 @@ function ProfileSection({
 			) : (
 				<>
 					<View
-						style={{ alignItems: "center", paddingTop: 18, paddingBottom: 8 }}
+						className="items-center pt-4 pb-2"
 					>
 						<Pressable
 							accessibilityRole="button"
 							accessibilityLabel={t("settings.profile.changeAvatar")}
 							onPress={() => void changeAvatar()}
 							disabled={uploadingAvatar}
-							style={({ pressed }) => ({
-								borderRadius: 28,
-								opacity: pressed || uploadingAvatar ? 0.65 : 1,
-							})}
+							className="rounded-lg active:opacity-65 disabled:opacity-65"
 						>
 							<Avatar
 								name={data.profile?.displayName || t("settings.profile.fallbackName")}
@@ -398,61 +374,36 @@ function ProfileSection({
 						</Pressable>
 						{uploadingAvatar ? (
 							<View
-								style={{
-									flexDirection: "row",
-									alignItems: "center",
-									gap: 6,
-									marginTop: 7,
-								}}
+								className="flex-row items-center gap-1.5 mt-2"
 							>
 								<ActivityIndicator size="small" color={theme.colors.accent} />
 								<Text
-									style={[
-										typography.caption,
-										{ color: theme.colors.textMuted },
-									]}
+									className="text-caption text-fg-muted"
 								>
 									{t("settings.profile.uploadingAvatar")}
 								</Text>
 							</View>
 						) : null}
-						<Text
-							style={[
-								typography.heading,
-								{
-									color: theme.colors.text,
-									marginTop: uploadingAvatar ? 8 : 11,
-								},
-							]}
-						>
+						<Text className={`text-headline font-semibold text-fg ${uploadingAvatar ? "mt-2" : "mt-3"}`}>
 							{data.profile?.displayName || t("settings.profile.fallbackName")}
 						</Text>
 						{data.email ? (
 							<Text
-								style={[
-									typography.caption,
-									{ color: theme.colors.textMuted, marginTop: 3 },
-								]}
+								className="text-caption text-fg-muted mt-1"
 							>
 								{data.email}
 							</Text>
 						) : null}
 						<Text
-							style={[
-								typography.micro,
-								{ color: theme.colors.textFaint, marginTop: 6 },
-							]}
+							className="text-micro font-semibold text-fg-faint mt-1.5"
 						>
 							{t("settings.profile.tapAvatar")}
 						</Text>
 					</View>
 					<SettingsGroup>
-						<View style={{ padding: 14 }}>
+						<View className="p-4">
 							<Text
-								style={[
-									typography.caption,
-									{ color: theme.colors.textSecondary, marginBottom: 6 },
-								]}
+								className="text-caption text-fg-secondary mb-1.5"
 							>
 								{t("settings.profile.displayName")}
 							</Text>
@@ -462,25 +413,10 @@ function ProfileSection({
 								maxLength={120}
 								placeholder={t("settings.profile.displayNamePlaceholder")}
 								placeholderTextColor={theme.colors.textFaint}
-								style={[
-									styles.input,
-									{
-										color: theme.colors.text,
-										borderColor: theme.colors.border,
-										backgroundColor: theme.colors.background,
-										fontSize: typography.body.fontSize,
-									},
-								]}
+								className={FIELD_INPUT_CLASS}
 							/>
 							<Text
-								style={[
-									typography.caption,
-									{
-										color: theme.colors.textSecondary,
-										marginTop: 14,
-										marginBottom: 6,
-									},
-								]}
+								className="text-caption text-fg-secondary mt-4 mb-1.5"
 							>
 								{t("settings.profile.username")}
 							</Text>
@@ -491,24 +427,16 @@ function ProfileSection({
 								autoCapitalize="none"
 								placeholder={t("settings.profile.usernamePlaceholder")}
 								placeholderTextColor={theme.colors.textFaint}
-								style={[
-									styles.input,
-									{
-										color: theme.colors.text,
-										borderColor: theme.colors.border,
-										backgroundColor: theme.colors.background,
-										fontSize: typography.body.fontSize,
-									},
-								]}
+								className={FIELD_INPUT_CLASS}
 							/>
-							{error ? <Text accessibilityRole="alert" selectable style={[typography.caption, { color: theme.colors.danger, marginTop: 12 }]}>{error}</Text> : null}
+							{error ? <Text accessibilityRole="alert" selectable className="text-caption text-danger mt-3">{error}</Text> : null}
 							<PrimaryButton
 								label={saving ? t("settings.profile.saving") : t("settings.profile.save")}
 								icon="check"
 								loading={saving}
 								disabled={!displayName.trim()}
 								onPress={() => void save()}
-								style={{ marginTop: 15 }}
+								className="mt-4"
 							/>
 						</View>
 					</SettingsGroup>
@@ -534,7 +462,6 @@ function ProfileSection({
 }
 
 function ActivitySection({ client }: { client: CohubClient | null }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const [days, setDays] = useState(30);
 	const [data, setData] = useState<UserActivityResponse | null>(null);
@@ -570,12 +497,7 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 	return (
 		<View>
 			<View
-				style={{
-					flexDirection: "row",
-					gap: 8,
-					paddingHorizontal: 16,
-					paddingTop: 8,
-				}}
+				className="flex-row gap-2 px-4 pt-2"
 			>
 				{[7, 30, 365].map((value) => (
 					<Pressable
@@ -583,37 +505,12 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 						accessibilityRole="button"
 						accessibilityState={{ selected: days === value }}
 						onPress={() => setDays(value)}
-						style={({ pressed }) => ({
-							minHeight: 34,
-							paddingHorizontal: 12,
-							borderRadius: 8,
-							justifyContent: "center",
-							borderWidth: 1,
-							borderColor:
-								days === value
-									? theme.colors.accentBorder
-									: theme.colors.border,
-							backgroundColor:
-								days === value
-									? theme.colors.accentSoft
-									: pressed
-										? theme.colors.surfacePressed
-										: theme.colors.surface,
-						})}
+						className={`min-h-12 justify-center`}
 					>
-						<Text
-							style={[
-								typography.caption,
-								{
-									color:
-										days === value
-											? theme.colors.accent
-											: theme.colors.textMuted,
-								},
-							]}
-						>
+						{({ pressed }) => <View className={`min-h-8 justify-center rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : days === value ? "bg-accent-soft" : ""}`}>
+						<Text className={`text-subhead font-semibold ${days === value ? "text-accent" : "text-fg-muted"}`}>
 							{value === 365 ? t("settings.activity.range.oneYear") : t("settings.activity.range.days", { days: value })}
-						</Text>
+						</Text></View>}
 					</Pressable>
 				))}
 			</View>
@@ -624,12 +521,7 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 			) : (
 				<>
 					<View
-						style={{
-							flexDirection: "row",
-							gap: 8,
-							paddingHorizontal: 16,
-							paddingTop: 16,
-						}}
+						className="flex-row gap-2 px-4 pt-4"
 					>
 						<Metric
 							label={t("settings.activity.metric.tokens")}
@@ -652,49 +544,29 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 						{(data?.rankings.llmModels ?? []).slice(0, 8).map((item, index) => (
 							<View
 								key={`${item.provider}/${item.model}`}
-								style={{
-									minHeight: 56,
-									paddingHorizontal: 13,
-									flexDirection: "row",
-									alignItems: "center",
-									gap: 10,
-									borderBottomWidth: 1,
-									borderBottomColor: theme.colors.border,
-								}}
+								className="min-h-14 px-3 flex-row items-center gap-2 border-b border-border"
 							>
 								<Text
-									style={[
-										typography.caption,
-										{ width: 22, color: theme.colors.textFaint },
-									]}
+									className="text-caption w-6 text-fg-faint"
 								>
 									{index + 1}
 								</Text>
-								<View style={{ flex: 1, minWidth: 0 }}>
+								<View className="flex-1 min-w-0">
 									<Text
 										numberOfLines={1}
-										style={[
-											typography.bodyMedium,
-											{ color: theme.colors.text },
-										]}
+										className="text-body font-semibold text-fg"
 									>
 										{item.model}
 									</Text>
 									<Text
 										numberOfLines={1}
-										style={[
-											typography.micro,
-											{ color: theme.colors.textMuted, marginTop: 2 },
-										]}
+										className="text-micro font-semibold text-fg-muted mt-0.5"
 									>
 										{item.provider}
 									</Text>
 								</View>
 								<Text
-									style={[
-										typography.caption,
-										{ color: theme.colors.textSecondary },
-									]}
+									className="text-caption text-fg-secondary"
 								>
 									{formatNumber(item.totalTokens)}
 								</Text>
@@ -702,10 +574,7 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 						))}
 						{(data?.rankings.llmModels ?? []).length === 0 ? (
 							<Text
-								style={[
-									typography.body,
-									{ color: theme.colors.textMuted, padding: 16 },
-								]}
+								className="text-body text-fg-muted p-4"
 							>
 								{t("settings.activity.noUsage")}
 							</Text>
@@ -730,7 +599,6 @@ function NotificationsSection({
 	}) => Promise<string | null>;
 	onNotice: (notice: { title: string; message: string }) => void;
 }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const [result, setResult] = useState<PushRegistrationResult | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -791,13 +659,13 @@ function NotificationsSection({
 						/>
 					}
 				/>
-				<View style={{ padding: 14 }}>
+				<View className="p-4">
 					<PrimaryButton
 						label={loading ? t("settings.notifications.checking") : t("settings.notifications.enable")}
 						icon="bell"
 						loading={loading}
 						onPress={() => void enable()}
-						style={{ minHeight: 46 }}
+						className="min-h-12"
 					/>
 					{result?.status === "unavailable" &&
 					result.reason === "permission-denied" ? (
@@ -805,23 +673,17 @@ function NotificationsSection({
 							accessibilityRole="button"
 							accessibilityLabel={t("settings.notifications.openSystem")}
 							onPress={() => void Linking.openSettings()}
-							style={({ pressed }) => ({
-								marginTop: 11,
-								opacity: pressed ? 0.6 : 1,
-							})}
+							className="mt-3 active:opacity-60"
 						>
 							<Text
-								style={[typography.bodyMedium, { color: theme.colors.accent }]}
+								className="text-body font-semibold text-accent"
 							>
 								{t("settings.notifications.openSystem")}
 							</Text>
 						</Pressable>
 					) : null}
 					<Text
-						style={[
-							typography.caption,
-							{ color: theme.colors.textMuted, marginTop: 10 },
-						]}
+						className="text-caption text-fg-muted mt-2"
 					>
 						{t("settings.notifications.androidNote")}
 					</Text>
@@ -851,7 +713,6 @@ function NotificationsSection({
 }
 
 function RulesSection() {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const router = useRouter();
 	const { data, configSpace, loading, creating, error, load, openConfig } = useUserRules();
@@ -863,22 +724,19 @@ function RulesSection() {
 				<InlineError message={error} onRetry={() => void load()} />
 			) : (
 				<SettingsGroup>
-					<View style={{ padding: 14 }}>
+					<View className="p-4">
 						<View
-							style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+							className="flex-row items-center gap-2"
 						>
-							<AppIcon name="file-text" size={17} color={theme.colors.accent} />
+							<AppIcon name="file-text" size={17} tone="accent" />
 							<Text
-								style={[typography.bodyMedium, { color: theme.colors.text }]}
+								className="text-body font-semibold text-fg"
 							>
 								/configs/user/AGENTS.md
 							</Text>
 						</View>
 						<Text
-							style={[
-								typography.caption,
-								{ color: theme.colors.textMuted, marginTop: 6 },
-							]}
+							className="text-caption text-fg-muted mt-1.5"
 						>
 							{data?.updatedAt
 								? t("settings.rules.updated", { time: formatRelativeTime(data.updatedAt) })
@@ -888,20 +746,11 @@ function RulesSection() {
 							horizontal={false}
 							style={{ maxHeight: 360, marginTop: 13 }}
 						>
-							<Text
-								selectable
-								style={[
-									typography.code,
-									{
-										color: theme.colors.textSecondary,
-										fontFamily: "SpaceMono",
-									},
-								]}
-							>
+							<Text selectable className="text-code text-fg-secondary" style={{ fontFamily: "SpaceMono" }}>
 								{data?.content?.trim() || t("settings.rules.none")}
 							</Text>
 						</ScrollView>
-						<PrimaryButton label={t(configSpace ? "settings.rules.openConfig" : "settings.rules.createConfig")} icon={configSpace ? "arrow-right" : "plus"} loading={creating} style={{ marginTop: theme.spacing.lg }} onPress={() => void openConfig().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })} />
+						<PrimaryButton label={t(configSpace ? "settings.rules.openConfig" : "settings.rules.createConfig")} icon={configSpace ? "arrow-right" : "plus"} loading={creating} className="mt-4" onPress={() => void openConfig().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })} />
 					</View>
 				</SettingsGroup>
 			)}
@@ -971,7 +820,7 @@ function ChannelsSection({
 	return (
 		<View>
 			{bindingChannel ? <ChannelBindingSheet key={bindingChannel.id} channel={bindingChannel} onClose={() => setBindingChannel(null)} onChanged={() => { setBindingChannel(null); void load(); }} /> : null}
-			<View style={{ paddingHorizontal: theme.spacing.lg, alignItems: "flex-end" }}>
+			<View className="px-4 items-end">
 				<IconButton name="refresh" label={t("common.refresh")} disabled={loading} onPress={() => void load()} />
 			</View>
 			{loading ? (
@@ -990,26 +839,10 @@ function ChannelsSection({
 						{channels.map((channel) => (
 							<View
 								key={channel.id}
-								style={{
-									minHeight: 78,
-									paddingHorizontal: 13,
-									paddingVertical: 11,
-									flexDirection: "row",
-									alignItems: "center",
-									gap: 10,
-									borderBottomWidth: 1,
-									borderBottomColor: theme.colors.border,
-								}}
+								className="min-h-20 px-3 py-3 flex-row items-center gap-2 border-b border-border"
 							>
 								<View
-									style={{
-										width: 35,
-										height: 35,
-										borderRadius: 10,
-										alignItems: "center",
-										justifyContent: "center",
-										backgroundColor: theme.colors.surfaceRaised,
-									}}
+									className="w-9 h-9 rounded-sm items-center justify-center bg-surface-raised"
 								>
 									<View
 										style={{
@@ -1023,28 +856,22 @@ function ChannelsSection({
 										}}
 									/>
 								</View>
-								<View style={{ flex: 1, minWidth: 0 }}>
+								<View className="flex-1 min-w-0">
 									<Text
 										numberOfLines={1}
-										style={[
-											typography.bodyMedium,
-											{ color: theme.colors.text },
-										]}
+										className="text-body font-semibold text-fg"
 									>
 										{channel.name}
 									</Text>
 									<Text
-										style={[
-											typography.caption,
-											{ color: theme.colors.textMuted, marginTop: 2 },
-										]}
+										className="text-caption text-fg-muted mt-0.5"
 									>
 										{channel.provider} · {t(`settings.channels.health.${channelHealthState(channel)}`)}
 									</Text>
-									{channel.boundSpace ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: channel.boundSpace!.id } })} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
-										<Text style={[typography.caption, { color: theme.colors.accent }]}>{t("settings.channels.boundTo", { name: channel.boundSpace.title || channel.boundSpace.id.slice(0, 8) })}</Text>
+									{channel.boundSpace ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: channel.boundSpace!.id } })} className="min-h-11 justify-center active:opacity-60">
+										<Text className="text-caption text-accent">{t("settings.channels.boundTo", { name: channel.boundSpace.title || channel.boundSpace.id.slice(0, 8) })}</Text>
 									</Pressable> : null}
-									{channel.health?.message || channel.health?.detail ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted }]}>{channel.health.message || channel.health.detail}</Text> : null}
+									{channel.health?.message || channel.health?.detail ? <Text selectable className="text-caption text-fg-muted">{channel.health.message || channel.health.detail}</Text> : null}
 								</View>
 								<IconButton name="settings" label={t(channel.boundSpace ? "settings.channels.unbind" : "settings.channels.bind")} onPress={() => setBindingChannel(channel)} />
 								{!channel.boundSpace ? (
@@ -1071,26 +898,15 @@ function ChannelsSection({
 						testID="settings-remove-channel-sheet"
 						footer={
 							<View
-								style={{
-									flexDirection: "row",
-									justifyContent: "flex-end",
-									gap: 10,
-								}}
+								className="flex-row justify-end gap-2"
 							>
 								<Pressable
 									disabled={removing}
 									onPress={() => setRemoveCandidate(null)}
-									style={{
-										minHeight: 46,
-										paddingHorizontal: 15,
-										justifyContent: "center",
-									}}
+									className="min-h-12 px-4 justify-center"
 								>
 									<Text
-										style={[
-											typography.bodyMedium,
-											{ color: theme.colors.textSecondary },
-										]}
+										className="text-body font-semibold text-fg-secondary"
 									>
 										{t("common.cancel")}
 									</Text>
@@ -1101,13 +917,13 @@ function ChannelsSection({
 									variant="danger"
 									loading={removing}
 									onPress={() => void confirmRemove()}
-									style={{ minHeight: 46, paddingHorizontal: 16 }}
+									className="min-h-12 px-4"
 								/>
 							</View>
 						}
 					>
 						<Text
-							style={[typography.body, { color: theme.colors.textSecondary }]}
+							className="text-body text-fg-secondary"
 						>
 							{t("settings.channels.removeSheet.body")}
 						</Text>
@@ -1198,9 +1014,9 @@ function BillingSection({
 			) : (
 				<>
 					<SettingsGroup>
-						<View style={{ padding: 15 }}>
+						<View className="p-4">
 							<Text
-								style={[typography.caption, { color: theme.colors.textMuted }]}
+								className="text-caption text-fg-muted"
 							>
 								{t("settings.billing.balance")}
 							</Text>
@@ -1232,10 +1048,7 @@ function BillingSection({
 								onPress={() => void openProduct(plan)}
 								trailing={
 									<Text
-										style={[
-											typography.caption,
-											{ color: theme.colors.textSecondary },
-										]}
+										className="text-caption text-fg-secondary"
 									>
 										{formatUsd(plan.pricing.amountUsd)}
 									</Text>
@@ -1244,10 +1057,7 @@ function BillingSection({
 						))}
 						{(catalog?.plans ?? []).length === 0 ? (
 							<Text
-								style={[
-									typography.body,
-									{ color: theme.colors.textMuted, padding: 16 },
-								]}
+								className="text-body text-fg-muted p-4"
 							>
 								{t("settings.billing.noPlans")}
 							</Text>
@@ -1267,10 +1077,7 @@ function BillingSection({
 										onPress={() => void openProduct(addon)}
 										trailing={
 											<Text
-												style={[
-													typography.caption,
-													{ color: theme.colors.textSecondary },
-												]}
+												className="text-caption text-fg-secondary"
 											>
 												{formatUsd(addon.pricing.amountUsd)}
 											</Text>
@@ -1293,7 +1100,6 @@ function ReferralsSection({
 	client: CohubClient | null;
 	onNotice: (notice: { title: string; message: string }) => void;
 }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const { data, loading, rotating, error, load, rotate } = useReferrals(client);
 	const [rotateOpen, setRotateOpen] = useState(false);
@@ -1321,40 +1127,32 @@ function ReferralsSection({
 			) : (
 				<>
 					<SettingsGroup>
-						<View style={{ padding: 15 }}>
+						<View className="p-4">
 							<Text
-								style={[typography.caption, { color: theme.colors.textMuted }]}
+								className="text-caption text-fg-muted"
 							>
 								{t("settings.referrals.link")}
 							</Text>
 							<Text
 								selectable
-								style={[
-									typography.bodyMedium,
-									{ color: theme.colors.text, marginTop: 7 },
-								]}
+								className="text-body font-semibold text-fg mt-2"
 							>
 								https://cohub.live/referrals/{data.code}
 							</Text>
-							<View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: theme.spacing.md }}>
+							<View className="flex-row justify-end mt-3">
 								<IconButton name="copy" label={t("settings.referrals.copy")} disabled={rotating} onPress={() => void Clipboard.setStringAsync(`https://cohub.live/referrals/${data.code}`).then(() => onNotice({ title: t("settings.referrals.copy"), message: t("settings.referrals.copied") })).catch((caught: unknown) => onNotice({ title: t("settings.referrals.copy"), message: caught instanceof Error ? caught.message : t("settings.referrals.error") }))} />
 								<IconButton name="share" label={t("settings.referrals.share")} disabled={rotating} onPress={() => void share()} />
 								<IconButton name="refresh" label={t("settings.referrals.rotate")} disabled={rotating} onPress={() => setRotateOpen(true)} />
 							</View>
-							{error && !rotateOpen ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger }]}>{error}</Text> : null}
+							{error && !rotateOpen ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : null}
 							<AdaptiveSheet visible={rotateOpen} title={t("settings.referrals.rotate")} onClose={() => { if (!rotating) setRotateOpen(false); }} dismissible={!rotating} scrollable={false} footer={<PrimaryButton label={t("settings.referrals.rotate")} icon="refresh" variant="danger" loading={rotating} onPress={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} />}>
-								<Text style={[typography.body, { color: theme.colors.text }]}>{t("settings.referrals.rotateConfirm")}</Text>
-								{error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: theme.spacing.md }]}>{error}</Text> : null}
+								<Text className="text-body text-fg">{t("settings.referrals.rotateConfirm")}</Text>
+								{error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}
 							</AdaptiveSheet>
 						</View>
 					</SettingsGroup>
 					<View
-						style={{
-							flexDirection: "row",
-							gap: 8,
-							paddingHorizontal: 16,
-							paddingTop: 14,
-						}}
+						className="flex-row gap-2 px-4 pt-4"
 					>
 						<Metric
 							label={t("settings.referrals.rewarded")}
@@ -1385,10 +1183,7 @@ function ReferralsSection({
 						))}
 						{data.items.length === 0 ? (
 							<Text
-								style={[
-									typography.body,
-									{ color: theme.colors.textMuted, padding: 16 },
-								]}
+								className="text-body text-fg-muted p-4"
 							>
 								{t("settings.referrals.none")}
 							</Text>
@@ -1409,31 +1204,19 @@ function Metric({
 	value: string;
 	icon: React.ComponentProps<typeof AppIcon>["name"];
 }) {
-	const theme = useAppTheme();
 	return (
 		<View
-			style={{
-				flex: 1,
-				minHeight: 78,
-				padding: 11,
-				borderWidth: 1,
-				borderColor: theme.colors.border,
-				borderRadius: 12,
-				backgroundColor: theme.colors.surface,
-			}}
+			className="flex-1 min-h-20 p-3 border border-border rounded-md bg-surface"
 		>
-			<AppIcon name={icon} size={16} color={theme.colors.accent} />
+			<AppIcon name={icon} size={16} tone="accent" />
 			<Text
 				numberOfLines={1}
-				style={[typography.heading, { color: theme.colors.text, marginTop: 8 }]}
+				className="text-headline font-semibold text-fg mt-2"
 			>
 				{value}
 			</Text>
 			<Text
-				style={[
-					typography.micro,
-					{ color: theme.colors.textMuted, marginTop: 2 },
-				]}
+				className="text-micro font-semibold text-fg-muted mt-0.5"
 			>
 				{label}
 			</Text>
@@ -1446,14 +1229,11 @@ function LoadingBlock() {
 	const { t } = useTranslation();
 	return (
 		<View
-			style={{ minHeight: 190, alignItems: "center", justifyContent: "center" }}
+			className="min-h-48 items-center justify-center"
 		>
 			<ActivityIndicator size="small" color={theme.colors.accent} />
 			<Text
-				style={[
-					typography.caption,
-					{ color: theme.colors.textMuted, marginTop: 10 },
-				]}
+				className="text-caption text-fg-muted mt-2"
 			>
 				{t("settings.loading")}
 			</Text>
@@ -1468,23 +1248,14 @@ function InlineError({
 	message: string;
 	onRetry: () => void;
 }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	return (
 		<View
-			style={{
-				marginHorizontal: 16,
-				marginTop: 13,
-				padding: 14,
-				borderWidth: 1,
-				borderColor: theme.colors.danger,
-				borderRadius: 12,
-				backgroundColor: theme.colors.dangerSoft,
-			}}
+			className="mx-4 mt-3 p-4 border border-danger rounded-md bg-danger-soft"
 		>
 			<Text
 				selectable
-				style={[typography.caption, { color: theme.colors.danger }]}
+				className="text-caption text-danger"
 			>
 				{message}
 			</Text>
@@ -1492,13 +1263,9 @@ function InlineError({
 				accessibilityRole="button"
 				accessibilityLabel={t("common.retry")}
 				onPress={onRetry}
-				style={({ pressed }) => ({
-					marginTop: 10,
-					alignSelf: "flex-start",
-					opacity: pressed ? 0.6 : 1,
-				})}
+				className="mt-2 self-start active:opacity-60"
 			>
-				<Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>
+				<Text className="text-body font-semibold text-danger">
 					{t("common.retry")}
 				</Text>
 			</Pressable>
@@ -1510,12 +1277,3 @@ function formatUsd(value: number) {
 	if (!Number.isFinite(value)) return "$0.00";
 	return `$${value.toFixed(2)}`;
 }
-
-const styles = {
-	input: {
-		minHeight: 48,
-		borderWidth: 1,
-		borderRadius: 10,
-		paddingHorizontal: 12,
-	},
-} satisfies Record<string, object>;

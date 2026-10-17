@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-nati
 import { useApp } from "@/src/data/context";
 import { cacheStats, hydrateHome, type CacheStats } from "@/src/data/local-db";
 import type { SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import { displaySessionTitle, formatRelativeTime } from "@/src/utils";
 
@@ -56,15 +56,15 @@ export default function DebugCacheScreen() {
     <Screen>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <SectionHeader title="当前用户" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           <Row icon="fingerprint" label="user_key" value={userUuid} />
           <Row icon="info" label="数据库" value="cohub-mobile.db" />
         </View>
 
         <SectionHeader title="行数" />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {loading && !stats ? (
-            <View style={{ padding: 20, alignItems: "center" }}>
+            <View className="p-5 items-center">
               <ActivityIndicator size="small" color={theme.colors.accent} />
             </View>
           ) : (
@@ -78,24 +78,24 @@ export default function DebugCacheScreen() {
           {error ? <Row icon="alert" label="错误" value={error} tone="danger" /> : null}
         </View>
 
-        <View style={{ flexDirection: "row", gap: 10, marginHorizontal: 16, marginTop: 14 }}>
-          <PrimaryButton label="刷新" icon="refresh" loading={loading} disabled={clearing} onPress={() => void load()} style={{ flex: 1 }} />
+        <View className="flex-row gap-2 mx-4 mt-4">
+          <PrimaryButton label="刷新" icon="refresh" loading={loading} disabled={clearing} onPress={() => void load()} className="flex-1" />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="清空本地缓存"
             disabled={clearing}
             onPress={() => void clear()}
-            style={({ pressed }) => ({ minHeight: 46, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.danger, alignItems: "center", justifyContent: "center", backgroundColor: pressed ? theme.colors.dangerSoft : "transparent", opacity: clearing ? 0.55 : 1, flex: 1 })}
+            className="min-h-12 flex-1 items-center justify-center rounded-sm border border-danger px-4 active:bg-danger-soft disabled:opacity-55"
           >
-            <Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{clearing ? "清空中…" : "清空缓存"}</Text>
+            <Text className="text-body font-semibold text-danger">{clearing ? "清空中…" : "清空缓存"}</Text>
           </Pressable>
         </View>
-        <Text style={[typography.caption, { color: theme.colors.textMuted, marginHorizontal: 16, marginTop: 10 }]}>
+        <Text className="text-caption text-fg-muted mx-4 mt-2">
           清空只删当前用户的本地副本；下次进入会重新从服务端填充。用来验证 cache-first 与登出清理。
         </Text>
 
         <SectionHeader title={`缓存空间 · ${spaces.length}`} />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {spaces.length === 0 ? <Empty text="没有缓存空间" /> : spaces.slice(0, LIST_LIMIT).map((space) => (
             <Row key={space.id} icon="layers" label={space.name?.trim() || space.title?.trim() || "—"} value={`${space.id.slice(0, 8)} · ${formatRelativeTime(space.updatedAt)}`} />
           ))}
@@ -103,7 +103,7 @@ export default function DebugCacheScreen() {
         </View>
 
         <SectionHeader title={`缓存会话 · ${sessions.length}`} />
-        <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {sessions.length === 0 ? <Empty text="没有缓存会话" /> : sessions.slice(0, LIST_LIMIT).map((session) => (
             <Row key={session.id} icon="messages" label={displaySessionTitle(session)} value={`${session.id.slice(0, 8)} · ${formatRelativeTime(session.lastMessageAt ?? session.updatedAt)}`} />
           ))}
@@ -115,37 +115,30 @@ export default function DebugCacheScreen() {
 }
 
 function Metric({ icon, label, value }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: number }) {
-  const theme = useAppTheme();
   return (
-    <View style={{ minHeight: 58, paddingHorizontal: 13, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised }}>
-        <AppIcon name={icon} size={16} color={theme.colors.accent} />
+    <View className="min-h-14 px-3 py-2 flex-row items-center gap-3 border-b border-border">
+      <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
+        <AppIcon name={icon} size={16} tone="accent" />
       </View>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, flex: 1 }]}>{label}</Text>
-      <Text style={[typography.heading, { color: theme.colors.text }]}>{value}</Text>
+      <Text className="text-caption text-fg-muted flex-1">{label}</Text>
+      <Text className="text-headline font-semibold text-fg">{value}</Text>
     </View>
   );
 }
 
 function Row({ icon, label, value, tone = "default" }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string; tone?: "default" | "danger" }) {
-  const theme = useAppTheme();
-  const color = tone === "danger" ? theme.colors.danger : theme.colors.textSecondary;
   return (
-    <View style={{ minHeight: 54, paddingHorizontal: 13, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surfaceRaised }}>
-        <AppIcon name={icon} size={15} color={tone === "danger" ? theme.colors.danger : theme.colors.textMuted} />
+    <View className="min-h-14 px-3 py-2 flex-row items-center gap-3 border-b border-border">
+      <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
+        <AppIcon name={icon} size={15} tone={tone === "danger" ? "danger" : "muted"} />
       </View>
-      <Text numberOfLines={1} style={[typography.bodyMedium, { color: tone === "danger" ? theme.colors.danger : theme.colors.text, flex: 1 }]}>{label}</Text>
-      <Text selectable numberOfLines={2} style={[typography.micro, { color, maxWidth: "48%", textAlign: "right" }]}>{value}</Text>
+      <Text numberOfLines={1} className={`text-body font-semibold flex-1 ${tone === "danger" ? "text-danger" : "text-fg"}`}>{label}</Text>
+      <Text selectable numberOfLines={2} className={`text-right text-micro ${tone === "danger" ? "text-danger" : "text-fg-secondary"}`} style={{ maxWidth: "48%" }}>{value}</Text>
     </View>
   );
 }
 
 function Empty({ text }: { text: string }) {
-  const theme = useAppTheme();
-  return <Text style={[typography.caption, { color: theme.colors.textMuted, padding: 14 }]}>{text}</Text>;
+  return <Text className="text-caption text-fg-muted p-4">{text}</Text>;
 }
 
-const styles = {
-  group: { marginHorizontal: 16, borderWidth: 1, borderRadius: 14, overflow: "hidden" as const },
-} satisfies Record<string, object>;

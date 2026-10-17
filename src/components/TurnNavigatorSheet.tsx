@@ -10,7 +10,7 @@ import {
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { turnIndexPreview } from "@/src/data/session-history";
 import { useTranslation, type Translate } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, SearchField, StatusPill } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
@@ -112,10 +112,7 @@ export function TurnNavigatorSheet({
 				<View style={styles.state}>
 					<ActivityIndicator size="small" color={theme.colors.accent} />
 					<Text
-						style={[
-							typography.caption,
-							{ color: theme.colors.textMuted, marginTop: 10 },
-						]}
+						className="text-caption text-fg-muted mt-2"
 					>
 						{t("turn.navigator.loading")}
 					</Text>
@@ -125,17 +122,10 @@ export function TurnNavigatorSheet({
 					<AppIcon
 						name={query ? "search" : "messages"}
 						size={25}
-						color={theme.colors.textMuted}
+						tone="muted"
 					/>
 					<Text
-						style={[
-							typography.body,
-							{
-								color: theme.colors.textMuted,
-								textAlign: "center",
-								marginTop: 10,
-							},
-						]}
+						className="text-body text-fg-muted text-center mt-2"
 					>
 						{query
 							? t("turn.navigator.noMatch")
@@ -146,10 +136,7 @@ export function TurnNavigatorSheet({
 							accessibilityRole="button"
 							accessibilityLabel={t("turn.navigator.retry")}
 							onPress={onRetry}
-							style={({ pressed }) => ({
-								marginTop: 12,
-								opacity: pressed ? 0.6 : 1,
-							})}
+							className="mt-3 active:opacity-60"
 						>
 							<Text
 								className="text-body font-semibold text-accent"
@@ -178,37 +165,10 @@ export function TurnNavigatorSheet({
 								accessibilityState={{ selected }}
 								disabled={loadingSequence !== null}
 								onPress={() => void onJump(turn.sequence)}
-								style={({ pressed }) => [
-									styles.row,
-									{
-										backgroundColor: pressed
-											? theme.colors.surfacePressed
-											: selected
-												? theme.colors.accentSoft
-												: "transparent",
-										borderColor: selected
-											? theme.colors.accentBorder
-											: "transparent",
-										opacity:
-											loadingSequence !== null &&
-											loadingSequence !== turn.sequence
-												? 0.55
-												: 1,
-									},
-								]}
+								className={`mb-1 min-h-18 flex-row items-center gap-2 rounded-sm px-2.5 py-2 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"} ${loadingSequence !== null && loadingSequence !== turn.sequence ? "opacity-55" : ""}`}
 							>
 								<View style={styles.sequence}>
-									<Text
-										style={[
-											typography.caption,
-											{
-												color: selected
-													? theme.colors.accent
-													: theme.colors.textFaint,
-												fontVariant: ["tabular-nums"],
-											},
-										]}
-									>
+									<Text className={`text-caption tabular-nums ${selected ? "text-accent" : "text-fg-faint"}`}>
 										#{turn.sequence}
 									</Text>
 								</View>
@@ -222,10 +182,7 @@ export function TurnNavigatorSheet({
 									<View style={styles.meta}>
 										<Text
 											numberOfLines={1}
-											style={[
-												typography.micro,
-												{ color: theme.colors.textFaint, flex: 1 },
-											]}
+											className="text-micro font-semibold text-fg-faint flex-1"
 										>
 											{formatRelativeTime(turn.createdAt)}
 											{turn.provider ? ` · ${turn.provider}` : ""}
@@ -240,12 +197,12 @@ export function TurnNavigatorSheet({
 								{loadingSequence === turn.sequence ? (
 									<ActivityIndicator size="small" color={theme.colors.accent} />
 								) : selected ? (
-									<AppIcon name="check" size={17} color={theme.colors.accent} />
+									<AppIcon name="check" size={17} tone="accent" />
 								) : (
 									<AppIcon
 										name="chevron-right"
 										size={16}
-										color={theme.colors.textFaint}
+										tone="faint"
 									/>
 								)}
 							</Pressable>
@@ -263,17 +220,6 @@ const styles = {
 		alignItems: "center" as const,
 		justifyContent: "center" as const,
 		paddingHorizontal: 24,
-	},
-	row: {
-		minHeight: 72,
-		borderWidth: 1,
-		borderRadius: 11,
-		paddingHorizontal: 10,
-		paddingVertical: 9,
-		marginBottom: 4,
-		flexDirection: "row" as const,
-		alignItems: "center" as const,
-		gap: 9,
 	},
 	sequence: {
 		width: 38,

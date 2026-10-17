@@ -2,7 +2,6 @@ import type { MessageRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
-import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, Screen, type IconName } from "@/src/ui";
 
 const NOW = new Date().toISOString();
@@ -107,7 +106,6 @@ function makeMessage(seq: number, text: string): MessageRecord {
 }
 
 export default function DebugBubblesScreen() {
-  const theme = useAppTheme();
   const [running, setRunning] = useState(false);
   const [mode, setMode] = useState<Mode>("roll");
   const [rateIndex, setRateIndex] = useState(3);
@@ -187,9 +185,9 @@ export default function DebugBubblesScreen() {
         removeClippedSubviews
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingVertical: 12, flexGrow: messages.length === 0 ? 1 : undefined }}
-        ListEmptyComponent={<View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}><Text style={[typography.caption, { color: theme.colors.textMuted, textAlign: "center" }]}>点“开始”，用高速 Markdown 气泡压测渲染。</Text></View>}
+        ListEmptyComponent={<View className="flex-1 items-center justify-center p-6"><Text className="text-caption text-fg-muted text-center">点“开始”，用高速 Markdown 气泡压测渲染。</Text></View>}
       />
-      <View style={[styles.controls, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+      <View className="flex-row items-center gap-2 px-3 py-2 border-t border-border bg-background">
         <ControlChip
           icon={running ? "stop" : "arrow-right"}
           label={running ? "暂停" : "开始"}
@@ -207,7 +205,7 @@ export default function DebugBubblesScreen() {
           onPress={() => setRateIndex((current) => (current + 1) % RATES.length)}
         />
         <ControlChip icon="trash" label="清空" onPress={clear} />
-        <Text testID="debug.bubbles.metrics" style={[typography.micro, { color: theme.colors.textMuted, flex: 1, textAlign: "right" }]}>
+        <Text testID="debug.bubbles.metrics" className="text-micro font-semibold text-fg-muted flex-1 text-right">
           列表 {messages.length} · FPS {fps}
         </Text>
       </View>
@@ -216,17 +214,11 @@ export default function DebugBubblesScreen() {
 }
 
 function ControlChip({ label, icon, onPress, tone = "default" }: { label: string; icon?: IconName; onPress: () => void; tone?: "default" | "accent" | "danger" }) {
-  const theme = useAppTheme();
-  const fg = tone === "accent" ? theme.colors.accent : tone === "danger" ? theme.colors.danger : theme.colors.textSecondary;
-  const border = tone === "accent" ? theme.colors.accentBorder : tone === "danger" ? theme.colors.danger : theme.colors.border;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, flexDirection: "row", alignItems: "center", gap: 5 })}>
-      {icon ? <AppIcon name={icon} size={13} color={fg} /> : null}
-      <Text style={[typography.caption, { color: fg }]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} className="min-h-9 flex-row items-center gap-1.5 rounded-full bg-surface px-3 active:bg-surface-pressed">
+      {icon ? <AppIcon name={icon} size={13} tone={tone === "accent" ? "accent" : tone === "danger" ? "danger" : "secondary"} /> : null}
+      <Text className={`text-caption ${tone === "accent" ? "text-accent" : tone === "danger" ? "text-danger" : "text-fg-secondary"}`}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = {
-  controls: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1 },
-} satisfies Record<string, object>;

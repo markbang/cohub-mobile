@@ -2,7 +2,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type 
 import type { SpaceMentionMenuState } from "@/src/data/use-composer-mentions";
 import type { SpaceMentionSuggestion } from "@/src/data/space-mentions";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { Avatar, IconButton } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
@@ -17,11 +17,11 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
       : menu.loading
         ? t("mentions.searching")
         : t("mentions.count", { count: menu.items.length });
-  return <View testID="space-mention-menu" accessibilityLabel={t("mentions.title")} style={[styles.panel, { backgroundColor: theme.colors.surface, borderColor: theme.colors.borderStrong, shadowColor: theme.colors.shadow }, style]}>
+  return <View testID="space-mention-menu" accessibilityLabel={t("mentions.title")} className="overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[{ borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }, style]}>
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("mentions.title")}</Text>
-        <Text numberOfLines={1} style={[typography.micro, { color: menu.remoteFailed ? theme.colors.danger : theme.colors.textMuted }]}>{status}</Text>
+        <Text numberOfLines={1} className={`text-micro font-semibold ${menu.remoteFailed ? "text-danger" : "text-fg-muted"}`}>{status}</Text>
       </View>
       <IconButton name="x" label={t("mentions.dismiss")} size={40} onPress={onDismiss} />
     </View>
@@ -33,8 +33,8 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
     </View> : <ScrollView style={styles.list} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       {menu.items.map((item) => {
         const name = item.name ?? displaySpaceName(null);
-        return <Pressable key={item.spaceId} accessibilityRole="button" accessibilityLabel={t("mentions.select", { name })} onPress={() => onSelect(item)} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
-          <Avatar name={name} uri={item.avatarUrl} size={34} />
+        return <Pressable key={item.spaceId} accessibilityRole="button" accessibilityLabel={t("mentions.select", { name })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-1.5 active:bg-surface-pressed">
+          <Avatar name={name} uri={item.avatarUrl} size={36} />
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{name}</Text>
             {item.description ? <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{item.description}</Text> : null}
@@ -46,7 +46,5 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
 }
 
 const styles = StyleSheet.create({
-  panel: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, borderCurve: "continuous", overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
   list: { maxHeight: 232, flexGrow: 0 },
-  row: { flexDirection: "row", alignItems: "center", gap: 11, minHeight: 52, paddingHorizontal: 12, paddingVertical: 6 },
 });

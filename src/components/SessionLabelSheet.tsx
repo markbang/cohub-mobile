@@ -12,9 +12,9 @@ import {
   toUserSessionLabels,
   type SessionLabel,
 } from "@/src/data/session-labels";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon } from "@/src/ui";
+import { AppIcon, FIELD_INPUT_CLASS } from "@/src/ui";
 
 type SessionLabelSheetProps = {
   client: CohubClient;
@@ -144,10 +144,10 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
                 placeholderTextColor={theme.colors.textFaint}
                 editable={!creating}
                 onSubmitEditing={() => void create()}
-                style={{ minHeight: 42, paddingHorizontal: 12, borderRadius: 11, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background, color: theme.colors.text, fontSize: typography.body.fontSize }}
+                className={FIELD_INPUT_CLASS}
               />
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} style={({ pressed }) => ({ minHeight: 42, paddingHorizontal: 14, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: !newLabelName.trim() || creating ? theme.colors.surfaceRaised : pressed ? theme.colors.accentPressed : theme.colors.accent, opacity: !newLabelName.trim() || creating ? 0.6 : 1 })}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} className={`min-h-12 items-center justify-center rounded-sm px-3.5 ${!newLabelName.trim() || creating ? "bg-surface-raised opacity-60" : "bg-accent active:bg-accent-pressed"}`}>
               {creating ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <Text className="text-body font-semibold text-on-accent">{t("common.create")}</Text>}
             </Pressable>
           </View>
@@ -168,10 +168,10 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
             accessibilityState={{ checked: assigned }}
             onPress={() => void toggle(item)}
             disabled={busy}
-            style={({ pressed }) => ({ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, borderRadius: 11, backgroundColor: pressed ? theme.colors.surfacePressed : assigned ? theme.colors.accentSoft : "transparent" })}
+            className={`min-h-12 flex-row items-center gap-2.5 rounded-sm px-2.5 ${assigned ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
           >
-            <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: assigned ? theme.colors.accent : theme.colors.borderStrong, backgroundColor: assigned ? theme.colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
-              {assigned ? <AppIcon name="check" size={15} color={theme.colors.accentText} /> : null}
+            <View className={`size-6 items-center justify-center rounded-xs border-2 ${assigned ? "border-accent bg-accent" : "border-border-strong"}`}>
+              {assigned ? <AppIcon name="check" size={15} tone="onAccent" /> : null}
             </View>
             <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
             {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}

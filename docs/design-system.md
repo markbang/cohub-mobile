@@ -53,7 +53,7 @@ confusion; the accessibility label is mandatory from day one.
 
 ### 2.3 UI language
 
-- **Sentence case** everywhere ("New chat", not "New Chat"). No trailing periods on labels.
+- **Sentence case** everywhere, except product nouns, which are names and stay capitalized: Chat, Space, File, Work, Save, Agent ("New Chat", "Recent Saves", but "Recent activity", "Web app"). No trailing periods on labels.
 - **Verb first** for actions; **noun** for places.
 - Errors are one sentence: what happened, then what to do ("Couldn't load files. Pull to retry.").
   No "Please", no exclamation marks, no blame.
@@ -66,10 +66,9 @@ confusion; the accessibility label is mandatory from day one.
 | A published app | Work | 作品 | app (in UI copy) |
 | A snapshot of a Space | Save | 存档 | version, checkpoint |
 | A background job | Task | 任务 | job, run |
-| Money balance | Credits | 额度 | balance, funds |
+| Money balance | Credits | 积分 | balance, funds, 额度 |
 
-The current zh copy uses 聊天 for the Chats tab and 新聊天 for the action. The copy pass (phase
-4) moves both to 对话 so tab, action, and screen titles agree.
+The zh copy uses 对话 for every Chat concept (the source of truth is the web app's `zh-CN.json`, which uses 对话). 聊天 is reserved for messaging channels. Credits are 积分, matching the web app; the mobile copy pass already follows both.
 
 ### 2.4 Visual system
 
@@ -183,19 +182,24 @@ Settings subpages, sheets, menus, toasts, auth, Works, tasks, and files adopt th
 primitives without layout changes beyond the density rules. Debug screens migrate last and are
 internal; they may keep Chinese-only copy.
 
-## 5. Migration plan
+## 5. Migration status and guard
 
-Each phase is one PR, published to **staging** first (debug menu → Updates → switch to staging),
-checked on a device, then merged to main for production OTA. No phase needs a native build.
+All five phases are complete: every screen, sheet, menu, the chat thread, and the debug screens
+use tokens through className. Each phase shipped to staging first (debug menu → Updates → switch
+to staging), was checked on a device, then merged for production OTA. None needed a native build.
 
-| Phase | Scope | Exit check |
-| --- | --- | --- |
-| 0 | Uniwind, generated tokens, theme bridge, this document | `npm run check`; existing screens unchanged except the shared type ramp and radii |
-| 1 | Primitives (`src/ui.tsx`, `src/ui/*`, rows, tab bar) + Chats, Spaces, Activity, Settings home | Staging on Android and iOS, light/dark/pure black/Config theme, all four font scales |
-| 2 | Space stack (home, files, file, settings, edit), Works, tasks, new chat | Same, plus long names and empty/error states |
-| 3 | Chat thread, Markdown, bubbles, composer, menus | Release-build scroll and streaming profile; send/stream/scroll E2E flows |
-| 4 | Settings subpages, sheets, toasts, auth, copy pass (glossary §2.3) | i18n parity check; no `typography.` or `theme.colors` outside native-prop use |
-| 5 | Debug screens; lint guard against hex literals and `StyleSheet` in app code | `npm run check` with the guard |
+CI keeps it that way (both run in the Quality job, outside `package.json` scripts because those
+are part of the OTA fingerprint):
+
+- `scripts/design-tokens.mjs --check`: `global.css` matches `src/design/tokens.ts`.
+- `scripts/check-design-system.mjs`: app code has no color literals, typography spreads, theme
+  colors in styles, or pressed-style functions. A line that genuinely needs a JS value (a native
+  prop, a measured text style, the Markdown renderer, a theme preview) says so with a
+  `design-system:` comment, or a block wraps it in `design-system-begin:` … `design-system-end`.
+
+What stays JS on purpose, with that comment: the Markdown renderer's style object, measured text
+in bubbles, the code editor, and the send overlay; navigator and WebView backgrounds; Link-slotted
+thumbnails; theme preview cards; the always-black photo viewer and scrims; the logo.
 
 Per-screen definition of done: light, dark, pure black, a Config theme, font scale small and
 extra large, long titles, empty, loading, error, offline banner, VoiceOver/TalkBack labels on

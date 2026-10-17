@@ -64,35 +64,35 @@ export default function ChatScrollDebugScreen() {
       <IconButton name="copy" label="Copy complete log" onPress={() => void exportLog(false)} />
       <IconButton name="share" label="Share complete log" onPress={() => void exportLog(true)} />
     </>} />
-    <View style={{ paddingHorizontal: 12, paddingVertical: 6, gap: 6, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-        <Text style={[typography.bodyMedium, { color: theme.colors.text, flexGrow: 1 }]}>Recording</Text>
+    <View className="px-3 py-1.5 gap-1.5 border-b border-border">
+      <View className="flex-row flex-wrap items-center gap-2">
+        <Text className="text-body font-semibold text-fg grow">Recording</Text>
         <Switch testID="debug.chat-scroll.record" accessibilityLabel="Record scroll diagnostics" value={recording} onValueChange={(enabled) => { if (!enabled) chatScrollTrace.pause(); else if (snapshot.startedAt) chatScrollTrace.resume(); else start(); refresh(); }} />
         <IconButton testID="debug.chat-scroll.start" name="refresh" label="Start new recording" onPress={start} />
         <IconButton testID="debug.chat-scroll.clear" name="trash" label="Clear log" onPress={() => { chatScrollTrace.reset(); refresh(); }} />
         <IconButton name="bookmark" label="Mark experiment" disabled={!recording} onPress={() => { chatScrollTrace.record("experiment.mark", "debug", { tab, inverted, fixture, fixtureFocusScroll: focusScroll }); refresh(); }} />
       </View>
-      <Text testID="debug.chat-scroll.summary" style={[typography.micro, { color: snapshot.dropped ? theme.colors.danger : theme.colors.textMuted }]}>{`${recording ? "Recording" : "Stopped"} | ${snapshot.entries.length}/4000 events | ${snapshot.dropped} overwritten`}</Text>
-      <View style={{ flexDirection: "row" }}>{(["Test", "Chats", "Logs"] as const).map((value) => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} onPress={() => { chatScrollTrace.record("debug.tab", "debug", { tab: value }); setTab(value); refresh(); }} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: tab === value ? theme.colors.accent : "transparent" }}><Text style={[typography.bodyMedium, { color: tab === value ? theme.colors.accent : theme.colors.textMuted }]}>{value}</Text></Pressable>)}</View>
+      <Text testID="debug.chat-scroll.summary" className={`text-micro font-semibold ${snapshot.dropped ? "text-danger" : "text-fg-muted"}`}>{`${recording ? "Recording" : "Stopped"} | ${snapshot.entries.length}/4000 events | ${snapshot.dropped} overwritten`}</Text>
+      <View className="flex-row">{(["Test", "Chats", "Logs"] as const).map((value) => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} onPress={() => { chatScrollTrace.record("debug.tab", "debug", { tab: value }); setTab(value); refresh(); }} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: tab === value ? theme.colors.accent : "transparent" }}><Text className={`text-body font-semibold ${tab === value ? "text-accent" : "text-fg-muted"}`}>{value}</Text></Pressable>)}</View>
     </View>
     {tab === "Test" ? <>
-      <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 6 }}>
-        <Text style={[typography.caption, { color: theme.colors.text, flex: 1 }]}>Inverted</Text>
+      <View className="flex-row items-center px-3 gap-1.5">
+        <Text className="text-caption text-fg flex-1">Inverted</Text>
         <Switch testID="debug.chat-scroll.inverted" accessibilityLabel="Inverted test list" value={inverted} onValueChange={(value) => { chatScrollTrace.record("fixture.mode", "debug", { inverted: value, fixture }); setInverted(value); }} />
-        {["Paragraph", "Markdown"].map((label, index) => <Pressable key={label} accessibilityRole="tab" accessibilityState={{ selected: fixture === index }} onPress={() => { chatScrollTrace.record("fixture.mode", "debug", { inverted, fixture: index }); setFixture(index); }} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 6 }}><Text style={[typography.caption, { color: fixture === index ? theme.colors.accent : theme.colors.textMuted }]}>{label}</Text></Pressable>)}
+        {["Paragraph", "Markdown"].map((label, index) => <Pressable key={label} accessibilityRole="tab" accessibilityState={{ selected: fixture === index }} onPress={() => { chatScrollTrace.record("fixture.mode", "debug", { inverted, fixture: index }); setFixture(index); }} className="min-h-11 justify-center px-1.5"><Text className={`text-caption ${fixture === index ? "text-accent" : "text-fg-muted"}`}>{label}</Text></Pressable>)}
       </View>
-      {Platform.OS === "android" ? <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, minHeight: 44, gap: 8 }}>
-        <Text style={[typography.caption, { color: theme.colors.text, flex: 1 }]}>Focus scroll</Text>
+      {Platform.OS === "android" ? <View className="flex-row items-center px-3 min-h-11 gap-2">
+        <Text className="text-caption text-fg flex-1">Focus scroll</Text>
         <Switch testID="debug.chat-scroll.focusScroll" accessibilityLabel="Focus scroll in test list" value={focusScroll} onValueChange={(value) => {
           chatScrollTrace.record("fixture.focusScrollChange", "debug", { previous: focusScroll, scrollsChildToFocus: value, inverted, fixture, remount: true });
           setFocusScroll(value);
         }} />
       </View> : null}
       <ScrollFixture key={`${inverted}:${fixture}:${focusScroll}`} inverted={inverted} scrollsChildToFocus={focusScroll} message={messages[fixture]!} />
-    </> : tab === "Chats" ? <FlatList data={state.sessions} keyExtractor={(item) => item.id} ListEmptyComponent={<Text style={[typography.body, { color: theme.colors.textMuted, padding: 16 }]}>No loaded chats</Text>} renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => { chatScrollTrace.record("experiment.openChat", "debug", { session: chatScrollTrace.alias("session", item.id) }); router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.id } }); }} style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}><Text numberOfLines={2} style={[typography.body, { color: theme.colors.text }]}>{item.title || "Chat"}</Text></Pressable>} /> : <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
-      {snapshot.entries.length === 0 ? <Text style={[typography.body, { color: theme.colors.textMuted }]}>No events</Text> : snapshot.entries.slice(-150).reverse().map((entry) => <View key={entry.sequence} style={{ borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingBottom: 8 }}>
-        <Text selectable style={[typography.caption, { color: entry.event.startsWith("command.") ? theme.colors.accent : theme.colors.text }]}>{`#${entry.sequence} +${entry.elapsedMs}ms ${entry.source} ${entry.event}`}</Text>
-        <Text selectable style={[typography.micro, { color: theme.colors.textMuted }]}>{JSON.stringify(entry.fields)}</Text>
+    </> : tab === "Chats" ? <FlatList data={state.sessions} keyExtractor={(item) => item.id} ListEmptyComponent={<Text className="text-body text-fg-muted p-4">No loaded chats</Text>} renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => { chatScrollTrace.record("experiment.openChat", "debug", { session: chatScrollTrace.alias("session", item.id) }); router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.id } }); }} className="p-4 border-b border-border"><Text numberOfLines={2} className="text-body text-fg">{item.title || "Chat"}</Text></Pressable>} /> : <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+      {snapshot.entries.length === 0 ? <Text className="text-body text-fg-muted">No events</Text> : snapshot.entries.slice(-150).reverse().map((entry) => <View key={entry.sequence} className="border-b border-border pb-2">
+        <Text selectable className={`text-caption ${entry.event.startsWith("command.") ? "text-accent" : "text-fg"}`}>{`#${entry.sequence} +${entry.elapsedMs}ms ${entry.source} ${entry.event}`}</Text>
+        <Text selectable className="text-micro font-semibold text-fg-muted">{JSON.stringify(entry.fields)}</Text>
       </View>)}
     </ScrollView>}
   </Screen>;
