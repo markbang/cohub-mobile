@@ -44,7 +44,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
 
   const layout = anchor ? getComposerMenuLayout({ anchor, windowWidth: viewport.width, windowHeight: viewport.height, topInset: insets.top, bottomInset: keyboardTop === null ? insets.bottom : 0, keyboardTop, preferredWidth }) : null;
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent hardwareAccelerated onShow={measureAnchor} onRequestClose={onClose}>
-    <View style={styles.overlay} onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
+    <View className="flex-1" onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
       <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
       {layout ? <View
         testID={testID}
@@ -59,6 +59,5 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1 },
   panel: { position: "absolute", minHeight: 0, borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, borderCurve: "continuous", overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
 });

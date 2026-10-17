@@ -152,7 +152,7 @@ export function TurnNavigatorSheet({
 							})}
 						>
 							<Text
-								style={[typography.bodyMedium, { color: theme.colors.accent }]}
+								className="text-body font-semibold text-accent"
 							>
 								{t("common.retry")}
 							</Text>
@@ -165,7 +165,7 @@ export function TurnNavigatorSheet({
 					extraData={rowExtraData}
 					data={filteredTurns}
 					keyExtractor={(turn) => `${turn.sequence}:${turn.id}`}
-					style={{ flex: 1, minHeight: 0, marginTop: 10 }}
+					style={{ flex: 1, minHeight: 0, marginTop: 8 }}
 					contentContainerStyle={{ paddingBottom: 12 }}
 					keyboardShouldPersistTaps="handled"
 					renderItem={({ item: turn }) => {
@@ -215,7 +215,7 @@ export function TurnNavigatorSheet({
 								<View style={styles.rowText}>
 									<Text
 										numberOfLines={3}
-										style={[typography.body, { color: theme.colors.text }]}
+										className="text-body text-fg"
 									>
 										{preview}
 									</Text>

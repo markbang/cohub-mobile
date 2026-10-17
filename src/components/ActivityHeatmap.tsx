@@ -1,7 +1,7 @@
 import { memo, useMemo } from "react";
 import { Text, View } from "react-native";
 import type { SpaceUsageHourlyStat } from "@neta-art/cohub";
-import { colorWithOpacity, useAppTheme, typography } from "@/src/theme";
+import { colorWithOpacity, useAppTheme } from "@/src/theme";
 import { localDateKey } from "@/src/data/activity";
 import { useTranslation } from "@/src/i18n";
 
@@ -83,21 +83,21 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({ hourly, days }: H
   const cellColor = (cell: (typeof grid)[number]) => getColor(maxValue > 0 ? cell.value / maxValue : 0, cell.isEmpty);
 
   return (
-    <View style={{ alignSelf: "stretch", gap: theme.spacing.sm }}>
-      <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+    <View className="self-stretch gap-2">
+      <Text className="text-caption text-fg-muted">
         {t("activity.heatmap.range", { days })}
       </Text>
 
       {/* A short range reads left-to-right; stretching one week-column would make a seven-screen-tall grid. */}
       {days <= DAYS_IN_WEEK ? <View testID="activity-heatmap-week" style={{ flexDirection: "row", gap: CELL_GAP }}>
-        {grid.filter((cell) => !cell.isEmpty).map((cell) => <View key={localDateKey(cell.date)} style={{ flex: 1, minWidth: 0, gap: theme.spacing.xs }}>
-          <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center" }]}>{weekdays[cell.date.getDay()]}</Text>
+        {grid.filter((cell) => !cell.isEmpty).map((cell) => <View key={localDateKey(cell.date)} className="flex-1 min-w-0 gap-1">
+          <Text numberOfLines={1} className="text-micro font-semibold text-fg-faint text-center">{weekdays[cell.date.getDay()]}</Text>
           <View accessible accessibilityLabel={`${localDateKey(cell.date)}: ${cell.value.toLocaleString()} tokens`} style={{ aspectRatio: 1, borderRadius: 3, backgroundColor: cellColor(cell) }} />
         </View>)}
-      </View> : <View style={{ flexDirection: "row", gap: theme.spacing.sm }}>
+      </View> : <View className="flex-row gap-2">
         <View style={{ gap: CELL_GAP }}>
-          {weekdays.map((label, index) => <View key={index} style={{ flex: 1, justifyContent: "center" }}>
-            <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textFaint }]}>{index % 2 === 1 ? label : ""}</Text>
+          {weekdays.map((label, index) => <View key={index} className="flex-1 justify-center">
+            <Text numberOfLines={1} className="text-micro font-semibold text-fg-faint">{index % 2 === 1 ? label : ""}</Text>
           </View>)}
         </View>
         <View testID="activity-heatmap-grid" style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: CELL_GAP }}>
@@ -113,9 +113,9 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({ hourly, days }: H
       </View>}
 
       {/* Legend */}
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: theme.spacing.xs }}>
-        <Text style={[typography.micro, { color: theme.colors.textFaint }]}>{t("activity.heatmap.less")}</Text>
-        <View style={{ flexDirection: "row", gap: 2 }}>
+      <View className="flex-row items-center justify-end gap-1">
+        <Text className="text-micro font-semibold text-fg-faint">{t("activity.heatmap.less")}</Text>
+        <View className="flex-row gap-0.5">
           {[0, 0.2, 0.4, 0.6, 0.8, 1].map((intensity) => (
             <View
               key={intensity}
@@ -128,7 +128,7 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({ hourly, days }: H
             />
           ))}
         </View>
-        <Text style={[typography.micro, { color: theme.colors.textFaint }]}>{t("activity.heatmap.more")}</Text>
+        <Text className="text-micro font-semibold text-fg-faint">{t("activity.heatmap.more")}</Text>
       </View>
     </View>
   );

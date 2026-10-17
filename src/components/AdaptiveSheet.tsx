@@ -17,7 +17,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-g
 import Reanimated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
 
@@ -166,7 +166,7 @@ export function AdaptiveSheet({
       hardwareAccelerated
       onRequestClose={requestClose}
     >
-      <GestureHandlerRootView style={styles.overlay} testID={testID}>
+      <GestureHandlerRootView className="flex-1" testID={testID}>
         <Reanimated.View style={[styles.backdrop, backdropStyle]}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} style={styles.fill} onPress={requestClose} />
         </Reanimated.View>
@@ -194,15 +194,15 @@ export function AdaptiveSheet({
             {compact ? (
               <GestureDetector gesture={pan}>
                 <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} style={styles.dragArea}>
-                  {dismissible ? <View style={[styles.dragHandle, { backgroundColor: theme.colors.borderStrong }]} /> : null}
+                  {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
                 </View>
               </GestureDetector>
             ) : null}
             <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-              <View style={styles.headerText}>
-                <Text accessibilityRole="header" style={[typography.heading, { color: theme.colors.text }]}>{title}</Text>
+              <View className="flex-1 min-w-0">
+                <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
                 {subtitle ? (
-                  <Text style={[typography.body, { color: theme.colors.textSecondary, marginTop: 3 }]}>
+                  <Text className="text-body text-fg-secondary mt-1">
                     {subtitle}
                   </Text>
                 ) : null}
@@ -248,9 +248,6 @@ export function AdaptiveSheet({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-  },
   fill: {
     position: "absolute",
     top: 0,
@@ -302,11 +299,6 @@ const styles = StyleSheet.create({
     userSelect: "none",
     zIndex: 2,
   },
-  dragHandle: {
-    width: 34,
-    height: 4,
-    borderRadius: 2,
-  },
   header: {
     minHeight: 58,
     paddingHorizontal: 16,
@@ -316,10 +308,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerText: {
-    flex: 1,
-    minWidth: 0,
   },
   scroller: {
     flex: 1,

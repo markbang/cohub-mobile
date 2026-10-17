@@ -62,18 +62,18 @@ export default function TaskScreen() {
   return <Screen>
     <TopBar title={t("task.title")} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-      {error ? <Text style={[typography.body, { color: theme.colors.danger }]}>{error}</Text> : !detail ? <LoadingRows count={4} /> : (
+      {error ? <Text className="text-body text-danger">{error}</Text> : !detail ? <LoadingRows count={4} /> : (
         <>
-          <View style={{ gap: 12 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{run?.taskType.replaceAll("_", " ")}</Text>
+          <View className="gap-3">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-body font-semibold text-fg">{run?.taskType.replaceAll("_", " ")}</Text>
               <StatusPill 
                 label={run?.status ?? "unknown"} 
                 tone={run?.status === "failed" ? "danger" : run?.status === "running" || run?.status === "pending" ? "warning" : "success"} 
               />
             </View>
             
-            <View style={{ gap: 8 }}>
+            <View className="gap-2">
               <InfoRow icon="clock" label={t("task.created")} value={formatRelativeTime(run?.createdAt ?? "")} />
               <InfoRow icon="clock" label={t("task.updated")} value={formatRelativeTime(run?.updatedAt ?? "")} />
               <InfoRow icon="activity" label={t("task.attempts")} value={String(run?.attemptCount ?? 0)} />
@@ -94,13 +94,13 @@ export default function TaskScreen() {
               backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface,
             })}
           >
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("task.showJson")}</Text>
+            <Text className="text-body font-semibold text-fg">{t("task.showJson")}</Text>
             <AppIcon name={showJson ? "chevron-up" : "chevron-down"} size={16} color={theme.colors.textMuted} />
           </Pressable>
 
           {showJson && run && (
             <ScrollView horizontal style={{ maxHeight: 400 }}>
-              <View style={{ padding: 12, borderRadius: 10, backgroundColor: theme.colors.surfaceRaised }}>
+              <View className="p-3 rounded-sm bg-surface-raised">
                 <Text selectable style={[typography.caption, { color: theme.colors.text, fontSize: 11, lineHeight: 16, fontFamily: "monospace" }]}>
                   {jsonString}
                 </Text>
@@ -109,14 +109,14 @@ export default function TaskScreen() {
           )}
 
           {output.length > 0 && (
-            <View style={{ gap: 12, marginTop: 8 }}>
-              <Text style={[typography.heading, { color: theme.colors.text }]}>{t("task.output")}</Text>
+            <View className="gap-3 mt-2">
+              <Text className="text-headline font-semibold text-fg">{t("task.output")}</Text>
               {output.map((block, index) => <GenerationBlock key={index} block={block} />)}
             </View>
           )}
 
           {output.length === 0 && !run?.errorMessage && run?.status === "completed" && (
-            <Text style={[typography.body, { color: theme.colors.textMuted }]}>{t("task.noOutput")}</Text>
+            <Text className="text-body text-fg-muted">{t("task.noOutput")}</Text>
           )}
         </>
       )}
@@ -126,13 +126,13 @@ export default function TaskScreen() {
 function InfoRow({ icon, label, value, valueColor }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string; valueColor?: string }) {
   const theme = useAppTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+    <View className="flex-row items-center gap-2">
       <AppIcon name={icon} size={14} color={theme.colors.textMuted} />
-      <Text style={[typography.caption, { color: theme.colors.textMuted, minWidth: 70 }]}>{label}</Text>
+      <Text className="text-caption text-fg-muted min-w-18">{label}</Text>
       <Text selectable style={[typography.caption, { color: valueColor ?? theme.colors.text, flex: 1 }]}>{value}</Text>
     </View>
   );
 }
 
 function generationOutput(result: unknown): GenerationContentBlock[] { if (!result || typeof result !== "object" || !Array.isArray((result as { output?: unknown }).output)) return []; return (result as { output: GenerationContentBlock[] }).output; }
-function GenerationBlock({ block }: { block: GenerationContentBlock }) { const theme = useAppTheme(); if (block.type === "text") return <Text selectable style={[typography.body, { color: theme.colors.text, lineHeight: 24 }]}>{block.text}</Text>; const source = block.source as unknown as { url?: string; data?: string; mimeType?: string }; const uri = source.url ?? (source.data && source.mimeType ? `data:${source.mimeType};base64,${source.data}` : null); return uri ? <Image accessibilityLabel={`${block.type} output`} source={{ uri }} resizeMode="contain" style={{ width: "100%", height: 320, backgroundColor: theme.colors.surfaceRaised }} /> : <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{block.type}</Text>; }
+function GenerationBlock({ block }: { block: GenerationContentBlock }) { const theme = useAppTheme(); if (block.type === "text") return <Text selectable style={[typography.body, { color: theme.colors.text, lineHeight: 24 }]}>{block.text}</Text>; const source = block.source as unknown as { url?: string; data?: string; mimeType?: string }; const uri = source.url ?? (source.data && source.mimeType ? `data:${source.mimeType};base64,${source.data}` : null); return uri ? <Image accessibilityLabel={`${block.type} output`} source={{ uri }} resizeMode="contain" style={{ width: "100%", height: 320, backgroundColor: theme.colors.surfaceRaised }} /> : <Text className="text-caption text-fg-muted">{block.type}</Text>; }

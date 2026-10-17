@@ -98,8 +98,8 @@ export function AppUpdateBanner() {
             <AppIcon name="download" size={17} color={theme.colors.accent} />
           </View>
           <View style={styles.bannerText}>
-            <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("update.available", { version: release.version })}</Text>
-            <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 1 }]}>{release.title ?? t("update.viewNotes")}</Text>
+            <Text numberOfLines={1} className="text-body font-semibold text-fg">{t("update.available", { version: release.version })}</Text>
+            <Text numberOfLines={1} className="text-caption text-fg-muted mt-0">{release.title ?? t("update.viewNotes")}</Text>
           </View>
           <AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} />
         </Pressable>
@@ -186,7 +186,7 @@ export function AppUpdateDetailsSheet({
             disabled={opening && !downloading}
             style={({ pressed }) => ({ ...styles.laterButton, opacity: pressed ? 0.6 : 1 })}
           >
-            <Text style={[typography.bodyMedium, { color: theme.colors.textSecondary }]}>{downloading ? t("update.cancel") : t("update.notNow")}</Text>
+            <Text className="text-body font-semibold text-fg-secondary">{downloading ? t("update.cancel") : t("update.notNow")}</Text>
           </Pressable>
           <PrimaryButton
             label={isAndroid ? t("update.install") : t("update.openRelease")}
@@ -194,7 +194,7 @@ export function AppUpdateDetailsSheet({
             loading={opening}
             disabled={isAndroid && !release.downloadUrl}
             onPress={() => void (isAndroid ? installUpdate() : runOperation(() => openWebLink(release.url)))}
-            style={{ flex: 1, minWidth: 0, minHeight: 46, paddingHorizontal: 14 }}
+            className="flex-1 min-w-0 min-h-12 px-4"
           />
         </View>
       }
@@ -205,17 +205,17 @@ export function AppUpdateDetailsSheet({
           <AppIcon name="download" size={20} color={theme.colors.accent} />
         </View>
         <View style={styles.releaseSummaryText}>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{release.title ?? `Cohub ${release.version}`}</Text>
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>
+          <Text className="text-headline font-semibold text-fg">{release.title ?? `Cohub ${release.version}`}</Text>
+          <Text className="text-caption text-fg-muted mt-1">
             {[release.version, releaseDate].filter(Boolean).join(" · ")}
           </Text>
-          {assetDetail ? <Text numberOfLines={2} style={[typography.caption, { color: theme.colors.accent, marginTop: 3 }]}>{assetDetail}</Text> : null}
+          {assetDetail ? <Text numberOfLines={2} className="text-caption text-accent mt-1">{assetDetail}</Text> : null}
         </View>
       </View>
 
       <View style={[styles.releaseNotice, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
         <AppIcon name="info" size={17} color={theme.colors.accent} />
-        <Text style={[typography.body, { color: theme.colors.textSecondary, flex: 1 }]}>
+        <Text className="text-body text-fg-secondary flex-1">
           {progress?.phase === "downloading" ? t("update.status.downloading", { percent: Math.round(progress.fraction * 100) })
             : progress?.phase === "verifying" ? t("update.status.verifying")
             : progress?.phase === "installing" ? t("update.status.installing")
@@ -234,12 +234,12 @@ export function AppUpdateDetailsSheet({
           style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, opacity: pressed || opening ? 0.55 : 1 }]}
         >
           <AppIcon name="shield" size={16} color={theme.colors.accent} />
-          <Text style={[typography.bodyMedium, { color: theme.colors.accent, flex: 1 }]}>{t("update.installPermission")}</Text>
+          <Text className="text-body font-semibold text-accent flex-1">{t("update.installPermission")}</Text>
           <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
         </Pressable>
       ) : null}
 
-      <View style={{ marginTop: 18 }}>
+      <View className="mt-4">
         <ReleaseNotes content={release.notes} />
       </View>
 
@@ -251,10 +251,10 @@ export function AppUpdateDetailsSheet({
         style={({ pressed }) => [styles.githubLink, { borderColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent", opacity: opening ? 0.55 : 1 }]}
       >
         <AppIcon name="external-link" size={16} color={theme.colors.accent} />
-        <Text style={[typography.bodyMedium, { color: theme.colors.accent, flex: 1 }]}>{t("update.openOnGitHub")}</Text>
+        <Text className="text-body font-semibold text-accent flex-1">{t("update.openOnGitHub")}</Text>
         <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
       </Pressable>
-      {error ? <Text selectable style={[typography.caption, { color: theme.colors.danger, marginTop: 10 }]}>{error}</Text> : null}
+      {error ? <Text selectable className="text-caption text-danger mt-2">{error}</Text> : null}
     </AdaptiveSheet>
   );
 }
@@ -324,8 +324,8 @@ export function AppUpdateRow() {
         <View style={[styles.updateRowIcon, { backgroundColor: release ? theme.colors.accentSoft : theme.colors.surfaceRaised }]}>
           {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={17} color={theme.colors.accent} />}
         </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text>
+        <View className="flex-1 min-w-0">
+          <Text className="text-body font-semibold text-fg">{title}</Text>
           <Text numberOfLines={2} style={[typography.caption, { color: release ? theme.colors.accent : theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
         </View>
         {!checking ? <AppIcon name={release ? "external-link" : "chevron-right"} size={17} color={theme.colors.textFaint} /> : null}

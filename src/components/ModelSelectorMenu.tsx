@@ -137,8 +137,8 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
         <Pressable testID={`model-option-${entry.provider}-${entry.id}`} accessibilityRole="radio" accessibilityLabel={`${t("model.use", { name: modelDisplayName(entry) })}, ${modelAvailabilityLabel(modelAvailabilityLevel(modelStatus?.[entry.id]))}`} accessibilityState={{ checked: selected }} onPress={() => selectEntry(entry, levels.length > 1 ? selectedLevel : undefined)} style={({ pressed }) => [styles.modelSelect, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
           <View style={styles.modelIcon}><ModelBrandMark entry={entry} /></View>
           <View style={styles.modelText}>
-            <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{modelDisplayName(entry)}</Text>
-            <View style={styles.modelSummary}><ModelStatusDot status={modelStatus?.[entry.id] ?? null} /><Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, flex: 1 }]}>{summary}</Text></View>
+            <Text numberOfLines={1} className="text-body font-semibold text-fg">{modelDisplayName(entry)}</Text>
+            <View style={styles.modelSummary}><ModelStatusDot status={modelStatus?.[entry.id] ?? null} /><Text numberOfLines={1} className="text-caption text-fg-muted flex-1">{summary}</Text></View>
           </View>
           <View style={styles.selectionMark}>{selected ? <AppIcon name="check" size={18} color={theme.colors.text} /> : null}</View>
         </Pressable>
@@ -147,12 +147,12 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
         </Pressable>
       </View>
       {optionsOpen ? <View testID={`model-details-${entry.provider}-${entry.id}`} style={[styles.modelDetails, { borderTopColor: theme.colors.border }]}>
-        <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{modelDisplayName(entry)}</Text>
-        <Text selectable style={[typography.caption, { color: theme.colors.textMuted }]}>{entry.provider} · {entry.id}</Text>
-        {context ? <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{context}</Text> : null}
-        {cost ? <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{cost}</Text> : null}
+        <Text className="text-body font-semibold text-fg">{modelDisplayName(entry)}</Text>
+        <Text selectable className="text-caption text-fg-muted">{entry.provider} · {entry.id}</Text>
+        {context ? <Text className="text-caption text-fg-muted">{context}</Text> : null}
+        {cost ? <Text className="text-caption text-fg-muted">{cost}</Text> : null}
         {levels.length > 1 ? <>
-          <Text style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 4 }]}>{t("model.thinking", { level: formatThinkingLevel(selectedLevel) })}</Text>
+          <Text className="text-caption text-fg-secondary mt-1">{t("model.thinking", { level: formatThinkingLevel(selectedLevel) })}</Text>
           <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>{levels.map((level) => { const active = level === selectedLevel; return <Pressable key={level} accessibilityRole="radio" accessibilityLabel={t("model.useThinking", { level: formatThinkingLevel(level) })} accessibilityState={{ checked: active }} onPress={() => selectEntry(entry, level)} style={({ pressed }) => ({ minHeight: 44, paddingHorizontal: 12, borderRadius: 8, justifyContent: "center", backgroundColor: pressed ? theme.colors.surfacePressed : active ? theme.colors.accentSoft : "transparent" })}><Text style={[typography.caption, { color: active ? theme.colors.accent : theme.colors.textMuted }]}>{formatThinkingLevelShort(level)}</Text></Pressable>; })}</ScrollView>
         </> : null}
       </View> : null}
@@ -162,7 +162,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
   return <ComposerMenu anchorRef={anchorRef} title={title ?? t("model.title")} onClose={onClose} preferredWidth={360} fillHeight testID="chat-model-selector-menu">
     <View style={[styles.searchRow, { borderBottomColor: theme.colors.border }]}>
       <AppIcon name="search" size={18} color={theme.colors.textMuted} />
-      <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { flex: 1, minWidth: 0, color: theme.colors.text, paddingVertical: 8 }]} returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
+      <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} className="text-body flex-1 min-w-0 text-fg py-2" returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
       {loading || modelStatusLoading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : null}
       {query ? <IconButton name="circle-x" label={t("ui.search.clear")} size={36} onPress={() => setQuery("")} /> : <IconButton name="x" label={t("ui.sheet.close", { title: t("model.title") })} size={36} onPress={onClose} />}
     </View>
@@ -179,14 +179,14 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
             ListHeaderComponent={<>
         <Pressable testID="model-option-automatic" accessibilityRole="radio" accessibilityLabel={automaticLabel ?? t("model.automaticA11y")} accessibilityState={{ checked: currentModel === null }} onPress={() => { onSelect(null); setOptionsOpenFor(null); }} style={({ pressed }) => [styles.automaticRow, { backgroundColor: pressed ? theme.colors.surfacePressed : currentModel === null ? theme.colors.surfaceRaised : "transparent" }]}>
           <View style={styles.modelIcon}><AppIcon name="sparkles" size={22} color={theme.colors.textSecondary} /></View>
-          <View style={styles.modelText}><Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted }]}>{automaticDetail ?? t("model.automaticDetail")}</Text></View>
+          <View style={styles.modelText}><Text className="text-body font-semibold text-fg">{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} className="text-caption text-fg-muted">{automaticDetail ?? t("model.automaticDetail")}</Text></View>
           <View style={styles.selectionMark}>{currentModel === null ? <AppIcon name="check" size={18} color={theme.colors.text} /> : null}</View>
         </Pressable>
-        {error ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 10 }}><Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
+        {error ? <View className="flex-row items-center gap-2 p-2"><Text className="text-caption text-danger flex-1">{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
       </>}
       ListEmptyComponent={error && !loading ? null : <View style={styles.centerState}>
         {loading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="search" size={22} color={theme.colors.textMuted} />}
-        <Text style={[typography.caption, { color: theme.colors.textMuted, textAlign: "center", marginTop: 8 }]}>{t(loading ? "model.loading" : "model.noMatch")}</Text>
+        <Text className="text-caption text-fg-muted text-center mt-2">{t(loading ? "model.loading" : "model.noMatch")}</Text>
       </View>}
     />
   </ComposerMenu>;

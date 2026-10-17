@@ -177,16 +177,16 @@ export default function SpaceSettingsScreen() {
       <TopBar title={t("space.settings")} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.collaborators")}</Text>
+          <Text className="text-headline font-semibold text-fg">{t("space.settings.collaborators")}</Text>
           <ResourceStatus state={resources.members} onRetry={() => void loadResource("members")} />
           {members.map((member) => {
             const displayName = memberDisplayName(member, t("settings.profile.fallbackName"));
             return (
-              <View key={member.userId} style={[styles.memberRow, { borderBottomColor: theme.colors.border }]}>
+              <View key={member.userId} className="flex-row items-center gap-2 py-2 border-b border-border">
                 <Avatar name={displayName} uri={member.profile?.avatarUrl} size={36} />
-                <View style={styles.memberCopy}>
-                  <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{displayName}</Text>
-                  <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{roleLabel(member.role, t)}</Text>
+                <View className="flex-1 min-w-0 gap-0.5">
+                  <Text numberOfLines={1} className="text-body font-semibold text-fg">{displayName}</Text>
+                  <Text className="text-caption text-fg-muted">{roleLabel(member.role, t)}</Text>
                 </View>
                 {member.role !== "host" ? (
                   <>
@@ -196,7 +196,7 @@ export default function SpaceSettingsScreen() {
                       hitSlop={8}
                       style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
                     >
-                      <Text style={[typography.caption, { color: theme.colors.accent }]}>
+                      <Text className="text-caption text-accent">
                         {member.role === "builder" ? t("space.settings.makeGuest") : t("space.settings.makeBuilder")}
                       </Text>
                     </Pressable>
@@ -207,21 +207,21 @@ export default function SpaceSettingsScreen() {
             );
           })}
           <ResourceStatus state={resources.invitations} onRetry={() => void loadResource("invitations")} />
-          <View style={styles.inviteRow}>
+          <View className="flex-row gap-2 mt-3">
             <ActionButton label={t("space.settings.inviteBuilder")} icon="plus" onPress={() => void createInvite("builder")} />
             <ActionButton label={t("space.settings.inviteGuest")} icon="plus" onPress={() => void createInvite("guest")} />
           </View>
           {invitations.filter((item) => item.status === "active").map((item) => (
-            <Text key={item.token} style={[typography.micro, { color: theme.colors.textMuted, marginTop: 8 }]}>
+            <Text key={item.token} className="text-micro font-semibold text-fg-muted mt-2">
               {t("space.settings.inviteActive", { role: roleLabel(item.role, t) })}
             </Text>
           ))}
         </View>
 
         <View>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.environment")}</Text>
+          <Text className="text-headline font-semibold text-fg">{t("space.settings.environment")}</Text>
           <ResourceStatus state={resources.env} onRetry={() => void loadResource("env")} />
-          <View style={styles.envRow}>
+          <View className="flex-row gap-2 mt-3 items-center">
             <TextInput
               value={name}
               onChangeText={setName}
@@ -276,10 +276,10 @@ export default function SpaceSettingsScreen() {
         {deviceRuntimeSupported && spaceId ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
 
         <View>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.sandbox")}</Text>
+          <Text className="text-headline font-semibold text-fg">{t("space.settings.sandbox")}</Text>
           <ResourceStatus state={resources.config} onRetry={() => void loadResource("config")} />
           {resources.config.loaded ? <>
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 10 }]}>{t("space.settings.spec")}</Text>
+          <Text className="text-caption text-fg-muted mt-2">{t("space.settings.spec")}</Text>
           <ResourceStatus state={resources.allowedSpec} onRetry={() => void loadResource("allowedSpec")} />
           <SegmentedControl
             values={SPEC_OPTIONS}
@@ -291,9 +291,9 @@ export default function SpaceSettingsScreen() {
             onLocked={() => toast({ title: t("space.settings.upgradeRequired"), message: t("space.settings.upgradeRequired.body"), tone: "danger" })}
           />
           {specNeedsRestart(config) ? (
-            <View style={styles.restartRow}>
-              <View style={[styles.restartBadge, { backgroundColor: theme.colors.warningSoft }]}>
-                <Text style={[typography.micro, { color: theme.colors.warning }]}>{t("space.settings.spec.restartToApply")}</Text>
+            <View className="flex-row items-center flex-wrap gap-2 mt-2">
+              <View className="px-2 py-1 rounded-full bg-warning-soft">
+                <Text className="text-micro font-semibold text-warning">{t("space.settings.spec.restartToApply")}</Text>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -303,11 +303,11 @@ export default function SpaceSettingsScreen() {
                 style={({ pressed }) => [styles.restartButton, { opacity: restarting || busy ? 0.45 : pressed ? 0.7 : 1 }]}
               >
                 {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} color={theme.colors.accent} />}
-                <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("space.settings.spec.restartNow")}</Text>
+                <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
               </Pressable>
             </View>
           ) : null}
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 20 }]}>{t("space.settings.sleep")}</Text>
+          <Text className="text-caption text-fg-muted mt-5">{t("space.settings.sleep")}</Text>
           <SegmentedControl
             values={SLEEP_OPTIONS}
             value={sleepFromConfig(config)}
@@ -319,7 +319,7 @@ export default function SpaceSettingsScreen() {
         </View>
 
         <View>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.ports")}</Text>
+          <Text className="text-headline font-semibold text-fg">{t("space.settings.ports")}</Text>
           <ResourceStatus state={resources.ports} onRetry={() => void loadResource("ports")} />
           {Object.entries(ports).map(([key, endpoint]) => (
             <Pressable
@@ -329,9 +329,9 @@ export default function SpaceSettingsScreen() {
               style={({ pressed }) => [styles.portRow, { backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised }]}
             >
               <AppIcon name="globe" size={18} color={theme.colors.accent} />
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("space.settings.portLabel", { port: key })}</Text>
-                <Text numberOfLines={1} selectable style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>
+              <View className="flex-1 min-w-0">
+                <Text className="text-body font-semibold text-fg">{t("space.settings.portLabel", { port: key })}</Text>
+                <Text numberOfLines={1} selectable className="text-caption text-fg-muted mt-1">
                   {endpoint.url ?? t("space.settings.portUnavailable")}
                 </Text>
               </View>
@@ -341,8 +341,8 @@ export default function SpaceSettingsScreen() {
         </View>
 
         <View>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.mods")}</Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-headline font-semibold text-fg">{t("space.settings.mods")}</Text>
             <IconButton
               name="plus"
               label={t("space.settings.addMod")}
@@ -353,14 +353,14 @@ export default function SpaceSettingsScreen() {
           </View>
           <ResourceStatus state={resources.mods} onRetry={() => void loadResource("mods")} />
           {mods.length === 0 ? (
-            resources.mods.loaded && !resources.mods.error && !resources.mods.loading ? <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>{t("space.settings.noMods")}</Text> : null
+            resources.mods.loaded && !resources.mods.error && !resources.mods.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noMods")}</Text> : null
           ) : (
             mods.map((mod) => (
-              <View key={mod.id} style={[styles.modRow, { borderBottomColor: theme.colors.border }]}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{mod.name || mod.mountSlug}</Text>
-                  <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{mod.mountPath}</Text>
-                  <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>Space: {mod.modSpaceId}</Text>
+              <View key={mod.id} className="py-3 border-b border-border">
+                <View className="flex-1 min-w-0">
+                  <Text numberOfLines={1} className="text-body font-semibold text-fg">{mod.name || mod.mountSlug}</Text>
+                  <Text className="text-caption text-fg-muted mt-0.5">{mod.mountPath}</Text>
+                  <Text className="text-caption text-fg-muted mt-0.5">Space: {mod.modSpaceId}</Text>
                 </View>
                 <Switch
                   value={mod.enabled}
@@ -387,10 +387,10 @@ export default function SpaceSettingsScreen() {
         </View>
 
         <View>
-          <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.settings.schedules")}</Text>
+          <Text className="text-headline font-semibold text-fg">{t("space.settings.schedules")}</Text>
           <ResourceStatus state={resources.schedules} onRetry={() => void loadResource("schedules")} />
           {schedules.length === 0 ? (
-            resources.schedules.loaded && !resources.schedules.error && !resources.schedules.loading ? <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>{t("space.settings.noSchedules")}</Text> : null
+            resources.schedules.loaded && !resources.schedules.error && !resources.schedules.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noSchedules")}</Text> : null
           ) : (
             schedules.map((schedule) => (
               <ScheduleRow
@@ -419,7 +419,7 @@ export default function SpaceSettingsScreen() {
         dismissible={!addingMod}
         testID="space-add-mod-sheet"
       >
-        <View style={{ gap: theme.spacing.md }}>
+        <View className="gap-3">
           <TextInput
             testID="space-add-mod-input"
             value={modSpaceId}
@@ -434,7 +434,7 @@ export default function SpaceSettingsScreen() {
             onSubmitEditing={() => void addMod()}
             style={[typography.body, { minHeight: 48, borderWidth: 1, borderRadius: theme.radius.md, borderCurve: "continuous", padding: theme.spacing.md, borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.background }]}
           />
-          {modError ? <Text selectable accessibilityLiveRegion="polite" style={[typography.caption, { color: theme.colors.danger }]}>{modError}</Text> : null}
+          {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
           <PrimaryButton label={t("space.settings.addMod")} icon="plus" loading={addingMod} disabled={!client || !modSpaceId.trim()} onPress={() => void addMod()} />
         </View>
       </AdaptiveSheet> : null}
@@ -443,22 +443,21 @@ export default function SpaceSettingsScreen() {
 }
 
 function ResourceStatus({ state, onRetry }: { state: SpaceSettingsResourceState; onRetry: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
-  if (state.loading) return <Text accessibilityLiveRegion="polite" style={[typography.caption, { color: theme.colors.textMuted, marginTop: 8 }]}>{t("space.settings.loading")}</Text>;
+  if (state.loading) return <Text accessibilityLiveRegion="polite" className="text-caption text-fg-muted mt-2">{t("space.settings.loading")}</Text>;
   if (!state.error) return null;
-  return <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text selectable accessibilityRole="alert" style={[typography.caption, { flex: 1, color: theme.colors.danger }]}>{state.error}</Text><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} /></View>;
+  return <View className="flex-row items-center gap-2"><Text selectable accessibilityRole="alert" className="text-caption flex-1 text-danger">{state.error}</Text><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} /></View>;
 }
 
 function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnvironmentItem; visible: boolean; onToggle: () => void; onCopy: () => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   return (
-    <View style={[styles.envItem, { borderBottomColor: theme.colors.border }]}>
-      <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{item.name}</Text>
-      <View style={styles.envValue}>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("space.settings.copyValue")} onPress={onCopy} style={{ flex: 1 }}>
-          <Text selectable={visible} numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted }]}>
+    <View className="py-3 border-b gap-1.5 border-border">
+      <Text className="text-body font-semibold text-fg">{item.name}</Text>
+      <View className="flex-row items-center gap-2">
+        <Pressable accessibilityRole="button" accessibilityLabel={t("space.settings.copyValue")} onPress={onCopy} className="flex-1">
+          <Text selectable={visible} numberOfLines={1} className="text-caption text-fg-muted">
             {visible ? item.value : "•".repeat(Math.min(24, Math.max(8, item.value.length)))}
           </Text>
         </Pressable>
@@ -500,18 +499,18 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
 
   return (
     <View>
-      <Text style={[typography.heading, { color: theme.colors.text }]}>{t("deviceRuntime.thisDevice")}</Text>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>{t("deviceRuntime.hint")}</Text>
-      <View style={[styles.portRow, { backgroundColor: theme.colors.surfaceRaised }]}>
+      <Text className="text-headline font-semibold text-fg">{t("deviceRuntime.thisDevice")}</Text>
+      <Text className="text-caption text-fg-muted mt-1.5">{t("deviceRuntime.hint")}</Text>
+      <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
         <AppIcon name="smartphone" size={18} color={instance?.state === "ready" ? theme.colors.success : theme.colors.textMuted} />
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <View className="flex-1 min-w-0">
           <Text style={[typography.bodyMedium, { color: instance?.state === "error" ? theme.colors.danger : theme.colors.text }]}>{t(deviceRuntimeStateKey(instance))}</Text>
-          {instance ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{instance.label}</Text> : null}
+          {instance ? <Text selectable className="text-caption text-fg-muted mt-1">{instance.label}</Text> : null}
         </View>
         {busy || instance?.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
       </View>
-      {hint ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: 8 }]}>{hint}</Text> : null}
-      <View style={styles.inviteRow}>
+      {hint ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{hint}</Text> : null}
+      <View className="flex-row gap-2 mt-3">
         {running ? (
           <ActionButton label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(spaceId))} />
         ) : instance ? (
@@ -560,19 +559,19 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
   };
 
   return (
-    <View style={{ marginTop: 20 }}>
-      <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("deviceRuntime.display.title")}</Text>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
-      <View style={[styles.portRow, { backgroundColor: theme.colors.surfaceRaised }]}>
+    <View className="mt-5">
+      <Text className="text-body font-semibold text-fg">{t("deviceRuntime.display.title")}</Text>
+      <Text className="text-caption text-fg-muted mt-1.5">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
+      <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
         <AppIcon name="monitor" size={18} color={sharingHere ? theme.colors.success : theme.colors.textMuted} />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t(deviceDisplayStateKey(status, spaceId))}</Text>
-          {status.sharedWith && !sharingHere ? <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
+        <View className="flex-1 min-w-0">
+          <Text className="text-body font-semibold text-fg">{t(deviceDisplayStateKey(status, spaceId))}</Text>
+          {status.sharedWith && !sharingHere ? <Text className="text-caption text-fg-muted mt-1">{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
         </View>
         {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
       </View>
-      {hint ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: 8 }]}>{hint}</Text> : null}
-      <View style={styles.inviteRow}>
+      {hint ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{hint}</Text> : null}
+      <View className="flex-row gap-2 mt-3">
         {sharingHere ? (
           <>
             <ActionButton label={t("deviceRuntime.display.stop")} icon="x" disabled={busy} onPress={() => void update(stopDeviceDisplay)} />
@@ -582,7 +581,7 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
           <ActionButton label={t("deviceRuntime.display.share")} icon="monitor" disabled={busy || !serving} onPress={() => void update(() => shareDeviceDisplay(spaceId))} />
         )}
       </View>
-      {sharingHere && !status.control ? <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 8 }]}>{t("deviceRuntime.display.controlHint")}</Text> : null}
+      {sharingHere && !status.control ? <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.display.controlHint")}</Text> : null}
     </View>
   );
 }
@@ -605,7 +604,7 @@ function ActionButton({ label, icon, onPress, disabled = false }: { label: strin
       ]}
     >
       {icon ? <AppIcon name={icon} size={15} color={theme.colors.accent} /> : null}
-      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.text, flexShrink: 1 }]}>{label}</Text>
+      <Text numberOfLines={1} className="text-caption text-fg shrink">{label}</Text>
     </Pressable>
   );
 }
@@ -632,7 +631,7 @@ function SegmentedControl<T extends string>({
   return (
     <View
       accessibilityRole="radiogroup"
-      style={[styles.segmented, { borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.background }]}
+      className="mt-2 min-h-10 border rounded-md flex-row overflow-hidden border-border-strong bg-background" style={{ borderCurve: "continuous" }}
     >
       {values.map((item, index) => {
         const selected = item === value;
@@ -693,12 +692,12 @@ function ScheduleRow({ schedule, onToggle }: { schedule: CronJobRecord; onToggle
   };
 
   return (
-    <View style={[styles.scheduleRow, { borderBottomColor: theme.colors.border }]}>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{schedule.title || t("space.settings.schedule.unnamed")}</Text>
-        <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{schedule.cronExpression}</Text>
+    <View className="flex-row items-center gap-2 py-3 border-b border-border">
+      <View className="flex-1 min-w-0">
+        <Text numberOfLines={1} className="text-body font-semibold text-fg">{schedule.title || t("space.settings.schedule.unnamed")}</Text>
+        <Text className="text-caption text-fg-muted mt-0.5">{schedule.cronExpression}</Text>
         {schedule.updatedAt && (
-          <Text style={[typography.micro, { color: theme.colors.textFaint, marginTop: 4 }]}>
+          <Text className="text-micro font-semibold text-fg-faint mt-1">
             {t("space.settings.schedule.lastRun")}: {formatRelativeTime(schedule.updatedAt)}
           </Text>
         )}
@@ -749,9 +748,6 @@ function sleepToPolicy(value: (typeof SLEEP_OPTIONS)[number]): SpaceSandboxAutoD
 
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 26 },
-  memberRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: 1 },
-  memberCopy: { flex: 1, minWidth: 0, gap: 2 },
-  inviteRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   actionButton: {
     flex: 1,
     minHeight: 40,
@@ -764,17 +760,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-  envRow: { flexDirection: "row", gap: 8, marginTop: 12, alignItems: "center" },
   field: { flex: 1, minHeight: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
   envAdd: { width: 46, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  envItem: { paddingVertical: 12, borderBottomWidth: 1, gap: 6 },
-  envValue: { flexDirection: "row", alignItems: "center", gap: 8 },
-  segmented: { marginTop: 10, minHeight: 40, borderWidth: 1, borderRadius: 12, borderCurve: "continuous", flexDirection: "row", overflow: "hidden" },
   segment: { flex: 1, minHeight: 40, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
-  restartRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 10 },
-  restartBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
   restartButton: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: 5 },
   portRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 14, marginTop: 8, borderRadius: 12 },
-  modRow: { paddingVertical: 12, borderBottomWidth: 1 },
-  scheduleRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderBottomWidth: 1 },
 });

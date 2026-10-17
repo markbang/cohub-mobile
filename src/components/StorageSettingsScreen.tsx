@@ -7,7 +7,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { CACHE_RETENTION_OPTIONS, setCacheRetention, useCacheRetention, type CacheRetention } from "@/src/data/cache-retention";
 import { useApp } from "@/src/data/context";
 import { useTranslation, type Translate } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, TopBar, PrimaryButton, Screen } from "@/src/ui";
 
 export function StorageSettingsScreen() {
@@ -65,7 +65,7 @@ export function StorageSettingsScreen() {
       testID={sheet === "clear-cache" ? "clear-cache-sheet" : "cache-retention-sheet"}
       footer={sheet === "clear-cache" ? <PrimaryButton label={t("profile.clearCache.action")} icon="trash" variant="danger" loading={busy} onPress={() => void confirmClearCache()} /> : undefined}
     >
-      {sheet === "clear-cache" ? <Text style={[typography.body, { color: theme.colors.textSecondary }]}>{t("profile.clearCache.body")}</Text> : <View>
+      {sheet === "clear-cache" ? <Text className="text-body text-fg-secondary">{t("profile.clearCache.body")}</Text> : <View>
         {CACHE_RETENTION_OPTIONS.map((option) => <Pressable
           key={option}
           accessibilityRole="radio"
@@ -74,11 +74,11 @@ export function StorageSettingsScreen() {
           onPress={() => void selectRetention(option)}
           style={({ pressed }) => ({ minHeight: 52, flexDirection: "row", alignItems: "center", gap: theme.spacing.md, padding: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}
         >
-          <Text style={[typography.body, { flex: 1, color: theme.colors.text }]}>{retentionLabel(option, t)}</Text>
+          <Text className="text-body flex-1 text-fg">{retentionLabel(option, t)}</Text>
           {retention === option ? <AppIcon name="check" size={18} color={theme.colors.accent} /> : null}
         </Pressable>)}
       </View>}
-      {error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, marginTop: theme.spacing.md }]}>{error}</Text> : null}
+      {error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}
     </AdaptiveSheet>
   </Screen>;
 }

@@ -27,7 +27,7 @@ export function AboutScreen() {
     <Screen>
       <TopBar title={t("about.title")} onBack={() => router.back()} />
       <ScrollView
-        style={{ flex: 1 }}
+        className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         showsVerticalScrollIndicator={false}
       >
@@ -89,11 +89,11 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
     <View testID="about-content">
       <View style={styles.hero}>
         <Image source={require("../../assets/images/icon.png")} resizeMode="contain" style={styles.logo} />
-        <Text style={[typography.title, { color: theme.colors.text, marginTop: 14 }]}>{t("about.appName")}</Text>
-        <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 5, textAlign: "center" }]}>{t("about.tagline")}</Text>
+        <Text className="text-title font-bold text-fg mt-4">{t("about.appName")}</Text>
+        <Text className="text-body text-fg-muted mt-1 text-center">{t("about.tagline")}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel={t("about.versionLabel", { version })} onPress={unlockDebug} hitSlop={8}>
           <View style={[styles.versionPill, { backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
-            <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("about.version", { version })}</Text>
+            <Text className="text-caption text-accent">{t("about.version", { version })}</Text>
           </View>
         </Pressable>
       </View>
@@ -109,7 +109,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
       <View style={[styles.group, { marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
         <View style={styles.row}>
           <View style={[styles.rowIcon, { backgroundColor: theme.colors.accentSoft }]}><AppIcon name="activity" size={17} color={theme.colors.accent} /></View>
-          <View style={styles.rowText}><Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("about.diagnostics.title")}</Text><Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{t("about.diagnostics.detail")}</Text></View>
+          <View style={styles.rowText}><Text className="text-body font-semibold text-fg">{t("about.diagnostics.title")}</Text><Text className="text-caption text-fg-muted mt-0.5">{t("about.diagnostics.detail")}</Text></View>
           <Switch accessibilityLabel={t("about.diagnostics.title")} value={diagnostics.enabled} onValueChange={(value) => void diagnostics.setEnabled(value)} />
         </View>
         {diagnostics.enabled ? <><View style={[styles.separator, { backgroundColor: theme.colors.border }]} /><AboutRow icon="download" title={t("about.export.save.title")} detail={exportingLog ? t("common.loading") : t("about.export.save.detail")} onPress={() => void saveDiagnosticLog()} /><View style={[styles.separator, { backgroundColor: theme.colors.border }]} /><AboutRow icon="messages" title={t("about.feedback.title")} detail={t("about.feedback.detail")} onPress={() => { setFeedbackError(null); setFeedbackId(null); setFeedbackText(""); setFeedbackOpen(true); }} /></> : null}
@@ -129,7 +129,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
         <AboutRow icon="shield" title={t("about.row.license")} detail={t("about.row.licenseDetail")} onPress={() => void openExternal(LICENSE_URL, t("about.row.license"))} />
       </View>
 
-      <Text style={[typography.caption, { color: theme.colors.textFaint, textAlign: "center", marginHorizontal: 24, marginTop: 24 }]}>{t("about.builtWith")}</Text>
+      <Text className="text-caption text-fg-faint text-center mx-6 mt-6">{t("about.builtWith")}</Text>
 
       {!onNotice ? (
         <AdaptiveSheet
@@ -139,16 +139,16 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
           scrollable={false}
           testID="about-link-error-sheet"
         >
-          <Text style={[typography.body, { color: theme.colors.textSecondary }]}>{notice?.message}</Text>
+          <Text className="text-body text-fg-secondary">{notice?.message}</Text>
         </AdaptiveSheet>
       ) : null}
 
       <AdaptiveSheet visible={feedbackOpen} title={t("about.feedback.title")} onClose={() => { if (!feedbackSubmitting) setFeedbackOpen(false); }} scrollable={false}>
-        {feedbackId ? <Text style={[typography.body, { color: theme.colors.success }]}>{t("about.feedback.success", { id: feedbackId })}</Text> : <>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("about.feedback.description")}</Text>
+        {feedbackId ? <Text className="text-body text-success">{t("about.feedback.success", { id: feedbackId })}</Text> : <>
+          <Text className="text-caption text-fg-muted">{t("about.feedback.description")}</Text>
           <TextInput value={feedbackText} onChangeText={setFeedbackText} multiline maxLength={4000} placeholder={t("about.feedback.placeholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { color: theme.colors.text, minHeight: 120, marginTop: 12, padding: 12, borderWidth: 1, borderColor: theme.colors.border, borderRadius: 12, textAlignVertical: "top" }]} />
-          {feedbackError ? <Text style={[typography.caption, { color: theme.colors.danger, marginTop: 8 }]}>{feedbackError}</Text> : null}
-          <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={() => { setFeedbackSubmitting(true); setFeedbackError(null); void diagnostics.submitFeedback({ description: feedbackText, includeSession: true, includeConversation: false }).then((receipt) => setFeedbackId(receipt.id)).catch((error) => setFeedbackError(error instanceof Error ? error.message : t("about.feedback.error"))).finally(() => setFeedbackSubmitting(false)); }} style={{ marginTop: 14 }} />
+          {feedbackError ? <Text className="text-caption text-danger mt-2">{feedbackError}</Text> : null}
+          <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={() => { setFeedbackSubmitting(true); setFeedbackError(null); void diagnostics.submitFeedback({ description: feedbackText, includeSession: true, includeConversation: false }).then((receipt) => setFeedbackId(receipt.id)).catch((error) => setFeedbackError(error instanceof Error ? error.message : t("about.feedback.error"))).finally(() => setFeedbackSubmitting(false)); }} className="mt-4" />
         </>}
       </AdaptiveSheet>
     </View>
@@ -165,8 +165,8 @@ function AboutRow({ icon, title, detail, onPress }: { icon: IconName; title: str
         <AppIcon name={icon} size={17} color={theme.colors.textMuted} />
       </View>
       <View style={styles.rowText}>
-        <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text>
-        <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
+        <Text className="text-body font-semibold text-fg">{title}</Text>
+        <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{detail}</Text>
       </View>
       {onPress ? <AppIcon name="external-link" size={16} color={theme.colors.textFaint} /> : null}
     </View>

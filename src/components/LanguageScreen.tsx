@@ -52,7 +52,7 @@ export function LanguageScreen() {
         onBack={() => router.back()}
       />
       <ScrollView
-        style={{ flex: 1 }}
+        className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -70,7 +70,7 @@ export function LanguageContent() {
   return (
     <View testID="language-content">
       <View style={styles.intro}>
-        <Text style={[typography.title, { color: theme.colors.text }]}>
+        <Text className="text-title font-bold text-fg">
           {t("language.intro.title")}
         </Text>
         <Text
@@ -132,7 +132,7 @@ export function LanguageContent() {
                   {option.code}
                 </Text>
               </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
+              <View className="flex-1 min-w-0">
                 <Text
                   style={[
                     typography.bodyMedium,
@@ -166,8 +166,8 @@ export function LanguageContent() {
           <View style={[styles.code, { backgroundColor: theme.colors.surfaceRaised }]}>
             <AppIcon name="globe" size={17} color={theme.colors.textMuted} />
           </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+          <View className="flex-1 min-w-0">
+            <Text className="text-body font-semibold text-fg">
               {t("language.device.title")}
             </Text>
             <Text

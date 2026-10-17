@@ -40,8 +40,8 @@ function ChannelForm({ provider }: { provider: ChannelProvider }) {
   return <Screen keyboard>
     <TopBar title={providerNames[provider]} onBack={() => router.back()} />
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg, paddingBottom: insets.bottom + theme.spacing.xl }}>
-      {fields.map((field) => <View key={field} style={{ gap: theme.spacing.sm }}>
-        <Text style={[typography.caption, { color: theme.colors.textSecondary }]}>{t(`settings.channels.field.${field}`)}</Text>
+      {fields.map((field) => <View key={field} className="gap-2">
+        <Text className="text-caption text-fg-secondary">{t(`settings.channels.field.${field}`)}</Text>
         <TextInput
           accessibilityLabel={t(`settings.channels.field.${field}`)}
           value={draft[field]}
@@ -53,24 +53,24 @@ function ChannelForm({ provider }: { provider: ChannelProvider }) {
           style={inputStyle}
         />
       </View>)}
-      {provider === "feishu" ? <View style={{ flexDirection: "row", borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.sm, overflow: "hidden" }}>
+      {provider === "feishu" ? <View className="flex-row border border-border rounded-sm overflow-hidden">
         {(["feishu", "lark"] as const).map((brand) => <Pressable key={brand} accessibilityRole="radio" accessibilityState={{ checked: draft.brand === brand, disabled: busy }} disabled={busy} onPress={() => setDraft((current) => ({ ...current, brand }))} style={({ pressed }) => ({ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", backgroundColor: draft.brand === brand ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface })}>
           <Text style={[typography.bodyMedium, { color: draft.brand === brand ? theme.colors.accent : theme.colors.text }]}>{brand === "feishu" ? "Feishu" : "Lark"}</Text>
         </Pressable>)}
       </View> : null}
-      {login ? <View style={{ gap: theme.spacing.md, alignItems: "center" }}>
+      {login ? <View className="gap-3 items-center">
         {!login.expired ? <Image key={login.sessionKey} source={{ uri: login.qrDataUrl }} accessibilityLabel={t("settings.channels.qr")} resizeMode="contain" onError={() => setQrError(true)} onLoad={() => setQrError(false)} style={{ width: "100%", maxWidth: 280, aspectRatio: 1, backgroundColor: "#ffffff" }} /> : null}
-        <Text accessibilityLiveRegion="polite" style={[typography.body, { color: theme.colors.textSecondary, textAlign: "center" }]}>{login.expired ? t("settings.channels.expired") : login.message}</Text>
-        {qrError ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger }]}>{t("settings.channels.qrError")}</Text> : null}
+        <Text accessibilityLiveRegion="polite" className="text-body text-fg-secondary text-center">{login.expired ? t("settings.channels.expired") : login.message}</Text>
+        {qrError ? <Text accessibilityRole="alert" className="text-caption text-danger">{t("settings.channels.qrError")}</Text> : null}
       </View> : null}
-      {login?.needsCode ? <View style={{ gap: theme.spacing.md }}>
+      {login?.needsCode ? <View className="gap-3">
         <TextInput accessibilityLabel={t("settings.channels.code")} value={code} onChangeText={setCode} keyboardType="number-pad" autoCorrect={false} style={inputStyle} editable={!busy} />
         <PrimaryButton label={t("settings.channels.verify")} icon="check" loading={busy} onPress={() => verify(code)} />
       </View> : <PrimaryButton label={provider === "wechat" ? t(login ? "common.retry" : "settings.channels.connectWeChat") : t("common.create")} icon={provider === "wechat" ? "refresh" : "plus"} loading={busy} onPress={() => { setQrError(false); void submit(); }} />}
       {login ? <Pressable accessibilityRole="button" onPress={() => { setCode(""); setQrError(false); cancelLogin(); }} style={({ pressed }) => ({ minHeight: 44, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.6 : 1 })}>
-        <Text style={[typography.bodyMedium, { color: theme.colors.textSecondary }]}>{t("common.cancel")}</Text>
+        <Text className="text-body font-semibold text-fg-secondary">{t("common.cancel")}</Text>
       </Pressable> : null}
-      {error ? <Text accessibilityRole="alert" style={[typography.body, { color: theme.colors.danger }]}>{error}</Text> : null}
+      {error ? <Text accessibilityRole="alert" className="text-body text-danger">{error}</Text> : null}
     </ScrollView>
   </Screen>;
 }

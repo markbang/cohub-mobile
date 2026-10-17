@@ -378,6 +378,8 @@ function loadChromeComponent(path, name, scope) {
   const code = ts.transpileModule(`${statements.join("\n")}\nreturn ${name};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   return new Function(...Object.keys(scope), code)(...Object.values(scope));
 }
+// className utilities as a set, for asserting the styling contract without a native renderer.
+const classes = (node) => new Set(String(node.props.className ?? "").split(/\s+/).filter(Boolean));
 // theme.ts builds its themes from the token module; evaluated in isolation, they need it in scope.
 const themeTokenScope = { lightPalette, darkPalette, pureBlackOverrides, spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 }, radius: { sm: RADIUS.sm, md: RADIUS.md, lg: RADIUS.lg, pill: 999 } };
 function chromeNodes(node) {
@@ -522,7 +524,7 @@ const formScope = {
   }
   findContributors(source);
   assert.ok(expression);
-  const scope = { ...chromeScope, Avatar: "Avatar", activityContributorName, t: (key) => key, theme: { colors: {}, spacing: { sm: 8 } } };
+  const scope = { ...chromeScope, Avatar: "Avatar", Meta: "Meta", formatNumber: String, activityContributorName, t: (key) => key, theme: { colors: {}, spacing: { sm: 8 } } };
   const render = new Function(...Object.keys(scope), "activity", ts.transpileModule(`return (${expression});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText);
   const uuid = "7a316e62-207b-480d-9cb0-7b62564129dc";
   for (const [profile, expected] of [
@@ -552,12 +554,13 @@ try {
     for (const days of [7, 30, 91]) {
       const tree = renderHeatmap({ hourly: [], days });
       const nodes = chromeNodes(tree);
-      assert.equal(tree.props.style.alignSelf, "stretch");
+      assert.ok(classes(tree).has("self-stretch"));
       const grid = nodes.find((node) => node.props.testID === (days === 7 ? "activity-heatmap-week" : "activity-heatmap-grid"));
       assert.ok(grid);
       if (days > 7) assert.equal(grid.props.style.flex, 1, "the grid fills the width remaining beside weekday labels");
       const columns = grid.props.children.flat().filter(Boolean);
-      assert.ok(columns.every((node) => node.props.style.flex === 1 && node.props.style.width === undefined), "columns divide all available width instead of staying 11px wide");
+      const flexFill = (node) => node.props.style ? node.props.style.flex === 1 && node.props.style.width === undefined : classes(node).has("flex-1") && ![...classes(node)].some((name) => /^w-/.test(name));
+      assert.ok(columns.every(flexFill), "columns divide all available width instead of staying 11px wide");
       const cells = chromeNodes(grid).filter((node) => node.props.style?.aspectRatio === 1);
       assert.ok(cells.every((node) => node.props.style.width === undefined && node.props.style.height === undefined));
       assert.equal(cells.filter((node) => node.props.accessible).length, days, "only requested dates are active; calendar padding remains blank");
@@ -987,7 +990,6 @@ for (const [tab, component, expectedRequests] of [
 }
 
 // Tap targets remain usable with large text, and empty-state actions have visible labels.
-const classes = (node) => new Set(String(node.props.className ?? "").split(/\s+/).filter(Boolean));
 {
   const chip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", formScope)({ label: "Long filter label", selected: false, onPress() {} });
   assert.ok(classes(chip).has("min-h-12") && classes(chip).has("min-w-12"), "chips keep a 48pt touch target");

@@ -45,7 +45,7 @@ export function AppearanceScreen() {
     <Screen>
       <TopBar title={t("appearance.title")} onBack={() => router.back()} />
       <ScrollView
-        style={{ flex: 1 }}
+        className="flex-1"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -73,8 +73,8 @@ export function AppearanceContent() {
   return (
     <View testID="appearance-content">
       <View style={styles.intro}>
-        <Text style={[typography.title, { color: theme.colors.text }]}>{t("appearance.intro.title")}</Text>
-        <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 6, maxWidth: 520 }]}>{t("appearance.intro.body")}</Text>
+        <Text className="text-title font-bold text-fg">{t("appearance.intro.title")}</Text>
+        <Text className="text-body text-fg-muted mt-1.5 max-w-130">{t("appearance.intro.body")}</Text>
       </View>
 
       <SectionHeader title={t("appearance.section.theme")} />
@@ -132,8 +132,8 @@ export function AppearanceContent() {
             <AppIcon name="palette" size={17} color={theme.colors.textMuted} />
           </View>
           <View style={styles.settingText}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("appearance.custom.title")}</Text>
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{t(customStatus)}</Text>
+            <Text className="text-body font-semibold text-fg">{t("appearance.custom.title")}</Text>
+            <Text className="text-caption text-fg-muted mt-0.5">{t(customStatus)}</Text>
           </View>
           <Switch
             accessibilityLabel={t("appearance.custom.title")}
@@ -149,15 +149,15 @@ export function AppearanceContent() {
           />
         </View>
         {customTheme.error || customTheme.warnings.length ? (
-          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
-            <Text accessibilityRole="alert" selectable style={[typography.caption, { color: theme.colors.danger }]}>
+          <View className="px-4 pb-3">
+            <Text accessibilityRole="alert" selectable className="text-caption text-danger">
               {customTheme.error ?? t("appearance.custom.partial")}
             </Text>
-            {customTheme.warnings.length ? <Text selectable style={[typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>{customTheme.warnings.join("\n")}</Text> : null}
+            {customTheme.warnings.length ? <Text selectable className="text-caption text-fg-muted mt-1">{customTheme.warnings.join("\n")}</Text> : null}
           </View>
         ) : null}
         <Pressable accessibilityRole="button" onPress={() => sync.invalidate("config-theme")} style={({ pressed }) => ({ padding: 16, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>{t("appearance.custom.refresh")}</Text>
+          <Text className="text-body font-semibold text-accent">{t("appearance.custom.refresh")}</Text>
         </Pressable>
       </View>
 
@@ -167,8 +167,8 @@ export function AppearanceContent() {
             <AppIcon name="moon" size={17} color={theme.colors.textMuted} />
           </View>
           <View style={styles.settingText}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("appearance.pureBlack.title")}</Text>
-            <Text numberOfLines={2} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{t("appearance.pureBlack.body")}</Text>
+            <Text className="text-body font-semibold text-fg">{t("appearance.pureBlack.title")}</Text>
+            <Text numberOfLines={2} className="text-caption text-fg-muted mt-0.5">{t("appearance.pureBlack.body")}</Text>
           </View>
           <Switch
             accessibilityLabel={t("appearance.pureBlack.title")}
@@ -212,19 +212,19 @@ export function AppearanceContent() {
             <AppIcon name="type" size={17} color={theme.colors.textMuted} />
           </View>
           <View style={styles.settingText}>
-            <Text style={[typography.chatBody, { color: theme.colors.text }]}>{t("appearance.textPreview.sample")}</Text>
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{t("appearance.textPreview.body")}</Text>
+            <Text className="text-chat text-fg">{t("appearance.textPreview.sample")}</Text>
+            <Text className="text-caption text-fg-muted mt-0.5">{t("appearance.textPreview.body")}</Text>
           </View>
         </View>
       </View>
 
       <SectionHeader title={t("appearance.section.palette")} />
       <View style={[styles.currentPalette, { marginHorizontal: 16, borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.accent }} />
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{preferenceLabel(preference, t)} · {appliedModeLabel(theme.mode, pureBlack, t)}</Text>
+        <View className="flex-row items-center gap-2">
+          <View className="w-2 h-2 rounded-xs bg-accent" />
+          <Text className="text-body font-semibold text-fg">{preferenceLabel(preference, t)} · {appliedModeLabel(theme.mode, pureBlack, t)}</Text>
         </View>
-        <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 5 }]}>{t("appearance.palette.applied")}</Text>
+        <Text className="text-caption text-fg-muted mt-1">{t("appearance.palette.applied")}</Text>
       </View>
     </View>
   );
@@ -268,7 +268,7 @@ function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: 
             <View style={{ width: "54%", height: 5, borderRadius: 3, backgroundColor: colors.text, opacity: 0.85 }} />
             <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: selected ? colors.accent : colors.surfaceRaised }} />
           </View>
-          <View style={{ flex: 1, padding: 8 }}>
+          <View className="flex-1 p-2">
             <View style={{ width: "72%", height: 5, borderRadius: 3, backgroundColor: colors.textMuted, opacity: 0.8 }} />
             <View style={{ width: "48%", height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: 6 }} />
             <View style={{ width: "58%", height: 34, borderRadius: 7, backgroundColor: colors.surfaceRaised, marginTop: 13 }} />
@@ -279,7 +279,7 @@ function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: 
           </View>
         </View>
       </Pressable>
-      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textSecondary, textAlign: "center", marginTop: 8 }]}>{label}</Text>
+      <Text numberOfLines={1} className="text-caption text-fg-secondary text-center mt-2">{label}</Text>
     </View>
   );
 }

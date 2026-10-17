@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
-import { PrimaryButton, Screen, TopBar } from "@/src/ui";
+import { useAppTheme } from "@/src/theme";
+import { PrimaryButton, Screen, TopBar , FIELD_INPUT_CLASS } from "@/src/ui";
 
 export default function EditSpaceScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
@@ -55,22 +55,13 @@ export default function EditSpaceScreen() {
     }
   };
 
-  const inputStyle = [
-    typography.body,
-    styles.input,
-    {
-      borderColor: theme.colors.border,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surface,
-    },
-  ];
 
   return (
     <Screen>
       <TopBar title={t("space.edit.title")} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 8 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+      <ScrollView contentContainerClassName="gap-6 p-4" keyboardShouldPersistTaps="handled">
+        <View className="gap-2">
+          <Text className="text-caption font-semibold text-fg-muted">
             {t("space.edit.name")}
           </Text>
           <TextInput
@@ -80,12 +71,12 @@ export default function EditSpaceScreen() {
             placeholderTextColor={theme.colors.textFaint}
             autoCapitalize="words"
             autoCorrect={false}
-            style={inputStyle}
+            className={FIELD_INPUT_CLASS}
           />
         </View>
 
-        <View style={{ gap: 8 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+        <View className="gap-2">
+          <Text className="text-caption font-semibold text-fg-muted">
             {t("space.edit.description")}
           </Text>
           <TextInput
@@ -96,7 +87,7 @@ export default function EditSpaceScreen() {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
-            style={[inputStyle, { minHeight: 120 }]}
+            className={`min-h-30 ${FIELD_INPUT_CLASS}`}
           />
         </View>
 
@@ -105,23 +96,9 @@ export default function EditSpaceScreen() {
           onPress={handleSave}
           loading={saving}
           disabled={saving}
-          style={{ marginTop: 16 }}
+          className="mt-4"
         />
       </ScrollView>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: {
-    padding: 16,
-    gap: 24,
-  },
-  input: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-});

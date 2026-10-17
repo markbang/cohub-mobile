@@ -10,7 +10,7 @@ import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, TopBar, IconButton, LoadingRows, Screen } from "@/src/ui";
 import {
   displaySpaceName,
@@ -173,7 +173,7 @@ export default function FilesScreen() {
           onPress={goToParent}
         />
       ) : null}
-      {error && entries.length > 0 ? <Text selectable style={[typography.caption, { color: theme.colors.danger, padding: 16 }]}>{error}</Text> : null}
+      {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
         <LoadingRows count={6} />
       ) : error && entries.length === 0 ? (
@@ -195,7 +195,7 @@ export default function FilesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <AppIcon name="folder-open" size={26} color={theme.colors.textMuted} />
-              <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 10 }]}>
+              <Text className="text-body text-fg-muted mt-2">
                 {currentPath ? t("files.emptyFolder") : t("files.emptyWorkspace")}
               </Text>
               {currentPath ? (
@@ -205,7 +205,7 @@ export default function FilesScreen() {
                   onPress={() => dismissPath("")}
                   style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1, marginTop: 14 })}
                 >
-                  <Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>{t("files.backToFiles")}</Text>
+                  <Text className="text-body font-semibold text-accent">{t("files.backToFiles")}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -231,7 +231,7 @@ function DirectoryParentBar({ parentPath, onPress }: { parentPath: string; onPre
       ]}
     >
       <AppIcon name="arrow-left" size={16} color={theme.colors.textMuted} />
-      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textSecondary }]}>
+      <Text numberOfLines={1} className="text-caption text-fg-secondary">
         {parentPath ? t("files.backTo", { name: spacePathName(parentPath) }) : t("files.backToFiles")}
       </Text>
     </Pressable>
@@ -244,10 +244,10 @@ function FilesError({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <View style={styles.errorState}>
       <AppIcon name="cloud-off" size={26} color={theme.colors.danger} />
-      <Text style={[typography.body, { color: theme.colors.danger, textAlign: "center", marginTop: 10 }]}>
+      <Text className="text-body text-danger text-center mt-2">
         {message}
       </Text>
-      <View style={{ marginTop: 16 }}><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} tone="accent" /></View>
+      <View className="mt-4"><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} tone="accent" /></View>
     </View>
   );
 }

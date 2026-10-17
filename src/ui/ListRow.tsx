@@ -18,7 +18,8 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   subtitle?: ReactNode;
   trailing?: ReactNode;
   accessory?: ReactNode;
-  onPress: () => void;
+  /** Omit for an informational row; it then renders without press feedback. */
+  onPress?: () => void;
   onPressIn?: () => void;
   onLongPress?: (event: GestureResponderEvent) => void;
   accessibilityLabel: string;
@@ -27,6 +28,30 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   separator?: boolean;
   compact?: boolean;
 }) {
+  const body = <>
+    {leading ? <View className="justify-center pr-3">{leading}</View> : null}
+    <View
+      className="min-w-0 flex-1 flex-row items-center gap-2 border-border py-2.5 pr-4"
+      style={separator ? styles.separator : null}
+    >
+      <View className="min-w-0 flex-1 justify-center gap-0.5">
+        <View className="flex-row items-center gap-1.5">
+          {titlePrefix}
+          <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
+          {meta ? <Text className="text-caption tabular-nums text-fg-faint">{meta}</Text> : null}
+        </View>
+        {subtitle || trailing ? <View className="flex-row items-center gap-1.5">
+          {typeof subtitle === "string"
+            ? <Text numberOfLines={1} className="min-w-0 flex-1 text-subhead text-fg-muted">{subtitle}</Text>
+            : <View className="min-w-0 flex-1">{subtitle}</View>}
+          {trailing}
+        </View> : null}
+      </View>
+      {accessory}
+    </View>
+  </>;
+  const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-13" : "min-h-16"}`;
+  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} testID={testID} className={shell}>{body}</View>;
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,28 +65,9 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       }}
       onLongPress={onLongPress}
       delayLongPress={350}
-      className={`flex-row items-stretch pl-4 active:bg-surface-pressed ${compact ? "min-h-13" : "min-h-16"}`}
+      className={`${shell} active:bg-surface-pressed`}
     >
-      {leading ? <View className="justify-center pr-3">{leading}</View> : null}
-      <View
-        className="min-w-0 flex-1 flex-row items-center gap-2 border-border py-2.5 pr-4"
-        style={separator ? styles.separator : null}
-      >
-        <View className="min-w-0 flex-1 justify-center gap-0.5">
-          <View className="flex-row items-center gap-1.5">
-            {titlePrefix}
-            <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
-            {meta ? <Text className="text-caption tabular-nums text-fg-faint">{meta}</Text> : null}
-          </View>
-          {subtitle || trailing ? <View className="flex-row items-center gap-1.5">
-            {typeof subtitle === "string"
-              ? <Text numberOfLines={1} className="min-w-0 flex-1 text-subhead text-fg-muted">{subtitle}</Text>
-              : <View className="min-w-0 flex-1">{subtitle}</View>}
-            {trailing}
-          </View> : null}
-        </View>
-        {accessory}
-      </View>
+      {body}
     </Pressable>
   );
 }

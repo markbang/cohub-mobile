@@ -14,7 +14,7 @@ import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, TopBar, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
 
 type Params = { spaceId?: string | string[]; path?: string | string[] };
@@ -206,7 +206,7 @@ export default function FileScreen() {
             <>
               <IconButton name="x" label={t("file.cancelEditing")} size={40} onPress={handleBack} disabled={saving} />
               {saving ? (
-                <View style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+                <View className="w-10 h-10 items-center justify-center">
                   <ActivityIndicator size="small" color={theme.colors.accent} />
                 </View>
               ) : (
@@ -260,9 +260,9 @@ export default function FileScreen() {
         ) : (
           <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
             {file.kind === "text" && file.size > MAX_EDITABLE_CODE_BYTES ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <View className="flex-row items-center gap-2 mb-2">
                 <AppIcon name="alert" size={14} color={theme.colors.textMuted} />
-                <Text style={[typography.caption, { color: theme.colors.textMuted, flex: 1 }]}>
+                <Text className="text-caption text-fg-muted flex-1">
                   {t("file.tooLarge")}
                 </Text>
               </View>
@@ -298,16 +298,16 @@ function SaveBanner({
   const theme = useAppTheme();
   const { t } = useTranslation();
   return (
-    <View style={{ backgroundColor: theme.colors.dangerSoft, borderBottomWidth: 1, borderBottomColor: theme.colors.border, paddingHorizontal: 14, paddingVertical: 10, gap: 8 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+    <View className="bg-danger-soft border-b border-border px-4 py-2 gap-2">
+      <View className="flex-row items-center gap-2">
         <AppIcon name="alert" size={15} color={theme.colors.danger} />
-        <Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{message}</Text>
+        <Text className="text-caption text-danger flex-1">{message}</Text>
       </View>
       {conflict ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 23 }}>
-          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} style={{ minHeight: 36, paddingHorizontal: 12 }} />
+        <View className="flex-row items-center gap-2 pl-6">
+          <PrimaryButton label={t("file.reload")} icon="refresh" onPress={onReload} disabled={saving} className="min-h-9 px-3" />
           <Pressable accessibilityRole="button" accessibilityLabel={t("file.overwriteA11y")} disabled={saving} onPress={onOverwrite} style={({ pressed }) => ({ opacity: pressed || saving ? 0.6 : 1 })}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.danger }]}>{t("file.overwrite")}</Text>
+            <Text className="text-body font-semibold text-danger">{t("file.overwrite")}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -324,15 +324,15 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
       <View style={[styles.errorIcon, { backgroundColor: theme.colors.dangerSoft }]}>
         <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} color={theme.colors.danger} />
       </View>
-      <Text style={[typography.heading, { color: theme.colors.text, textAlign: "center", marginTop: 14 }]}>
+      <Text className="text-headline font-semibold text-fg text-center mt-4">
         {isDirectory ? t("file.folder.title") : t("file.error.title")}
       </Text>
-      <Text selectable style={[typography.body, { color: theme.colors.textMuted, textAlign: "center", marginTop: 6, maxWidth: 320 }]}>
+      <Text selectable className="text-body text-fg-muted text-center mt-1.5 max-w-80">
         {isDirectory ? t("file.folder.body") : message}
       </Text>
       <View style={styles.errorActions}>
-        <PrimaryButton label={t("files.backToFiles")} icon="arrow-left" onPress={onBack} style={{ minHeight: 44, paddingHorizontal: 14 }} />
-        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}><Text style={[typography.bodyMedium, { color: theme.colors.accent }]}>{t("common.retry")}</Text></Pressable> : null}
+        <PrimaryButton label={t("files.backToFiles")} icon="arrow-left" onPress={onBack} className="min-h-11 px-4" />
+        {!isDirectory ? <Pressable accessibilityRole="button" accessibilityLabel={t("common.retry")} onPress={onRetry} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingHorizontal: 12, opacity: pressed ? 0.6 : 1 })}><Text className="text-body font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
       </View>
     </View>
   );
