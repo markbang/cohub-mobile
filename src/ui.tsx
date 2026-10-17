@@ -249,6 +249,38 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
   );
 }
 
+export type SegmentOption<T extends string> = { value: T; label: string; icon?: IconName; locked?: boolean };
+
+/** Mutually exclusive choices: a filled track with the selected segment raised above it. */
+export function Segmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: { options: readonly SegmentOption<T>[]; value: T; onChange: (value: T) => void; disabled?: boolean; onLocked?: () => void; className?: string }) {
+  return (
+    <View accessibilityRole="radiogroup" className={`min-h-11 flex-row rounded-sm bg-surface-raised p-0.5 ${className}`} style={CONTINUOUS}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected, checked: selected, disabled: disabled || Boolean(option.locked) }}
+            aria-checked={selected}
+            disabled={disabled}
+            onPress={() => {
+              if (option.locked) { onLocked?.(); return; }
+              if (!selected) onChange(option.value);
+            }}
+            className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 rounded-sm px-2 ${selected ? "bg-surface" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            style={CONTINUOUS}
+          >
+            {option.icon ? <AppIcon name={option.icon} size={15} tone={selected ? "accent" : "muted"} /> : null}
+            <Text numberOfLines={1} className={`shrink text-caption ${selected ? "font-semibold text-fg" : "text-fg-secondary"}`}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 /** A labelled input: caption label, filled field, optional hint or inline error. */
 export function Field({ label, hint, error, children }: { label?: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
@@ -330,7 +362,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   return (
     <View style={[styles.composerWrap, { paddingBottom: (Platform.OS === "android" && keyboardVisible ? 0 : insets.bottom) + 10 }]}>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" style={[styles.composer, { backgroundColor: theme.colors.surface, borderColor: focused ? theme.colors.borderStrong : theme.colors.border }]}>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" className="gap-2 overflow-hidden rounded-lg bg-surface p-2" style={[{ borderWidth: 1, borderCurve: "continuous", borderColor: focused ? theme.colors.borderStrong : theme.colors.border }]}>
         <View className="flex-row items-start">
           <TextInput
             ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
@@ -364,7 +396,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             maxLength={12000}
             placeholder={placeholder ?? t("ui.composer.placeholder")}
             placeholderTextColor={theme.colors.textFaint}
-            style={[typography.body, styles.composerText, { color: theme.colors.text, height: layout.height }]}
+            className="min-w-0 flex-1 text-body text-fg"
+            style={[styles.composerText, { height: layout.height }]}
             onSelectionChange={onSelectionChange ? (event) => onSelectionChange(event.nativeEvent.selection) : undefined}
             onFocus={() => { setFocused(true); onFocusChange?.(true); }}
             onBlur={() => { setFocused(false); onFocusChange?.(false); }}
@@ -377,26 +410,26 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               accessibilityLabel={t(layout.expanded ? "ui.composer.collapse" : "ui.composer.expand")}
               accessibilityState={{ expanded: layout.expanded }}
               onPress={() => setExpanded(!layout.expanded)}
-              style={({ pressed }) => [styles.composerExpandButton, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
+              className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"
             ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={17} tone="muted" /></Pressable> : null}
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-1.5">
-          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onAttach(); }} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: pressed || attachmentMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
-          {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: harnessLabel ?? "Cohub" })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onHarnessPress?.(); }} style={({ pressed }) => [styles.composerHarness, { backgroundColor: pressed || harnessMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.5 : 1 }]}>
+          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
+          {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: harnessLabel ?? "Cohub" })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <AppIcon name={harnessLabel === "Cohub" ? "cloud" : "monitor"} size={16} tone="secondary" />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{harnessLabel}</Text>
             <AppIcon name="chevron-down" size={13} tone="muted" />
           </Pressable> : null}
-          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onModelPress(); }} style={({ pressed }) => [styles.composerModel, { backgroundColor: pressed || modelMenuOpen ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.5 : 1 }]}>
+          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-1.5 overflow-hidden rounded-full px-2.5 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
-            {modelStatus === "unknown" ? null : <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: modelStatus === "available" ? theme.colors.success : modelStatus === "degraded" ? theme.colors.warning : theme.colors.danger }} />}
+            {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={onVoice} style={({ pressed }) => [styles.composerCircleButton, { backgroundColor: voiceActive ? (pressed ? theme.colors.accentBorder : theme.colors.accentSoft) : pressed ? theme.colors.surfacePressed : theme.colors.surfaceRaised, opacity: blocked ? 0.45 : 1 }]}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { if (canStop) onStop?.(); else onSend(); }} style={({ pressed }) => [styles.sendButton, { backgroundColor: canStop ? (pressed ? theme.colors.textSecondary : theme.colors.text) : canSend ? (pressed ? theme.colors.accentPressed : theme.colors.accent) : theme.colors.surfaceRaised }]}>
+          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={onVoice} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
             {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
           </Pressable>
         </View>
@@ -406,9 +439,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
 }
 
 export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string; uri?: string; mimeType?: string; onRemove?: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
-  return <View style={[styles.attachmentChip, { minHeight: 44, backgroundColor: theme.colors.accentSoft, borderColor: theme.colors.accentBorder }]}>
+  return <View className="max-w-full flex-row items-center gap-1.5 rounded-sm bg-accent-soft px-2 py-1.5" style={{ minHeight: 44, borderCurve: "continuous" }}>
     {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
     <Text numberOfLines={1} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
     <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={15} tone="muted" /></Pressable>
@@ -488,12 +520,5 @@ function IOSKeyboardPaddingView({ children }: { children: ReactNode }) {
 
 const styles = StyleSheet.create({
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
-  composer: { paddingHorizontal: 8, paddingVertical: 8, gap: 8, borderRadius: 18, borderCurve: "continuous", borderWidth: 1, overflow: "hidden" },
-  composerText: { flex: 1, minWidth: 0, paddingHorizontal: 5, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
-  composerExpandButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  composerHarness: { height: 40, maxWidth: 104, flexShrink: 1, minWidth: 0, paddingHorizontal: 8, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 5, overflow: "hidden" },
-  composerModel: { height: 44, maxWidth: "58%", flexShrink: 1, minWidth: 0, paddingHorizontal: 10, borderRadius: 22, flexDirection: "row", alignItems: "center", gap: 6, overflow: "hidden" },
-  composerCircleButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  sendButton: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  attachmentChip: { flexDirection: "row", alignItems: "center", gap: 7, borderWidth: 1, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 7, maxWidth: "100%" },
+  composerText: { paddingHorizontal: 5, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
 });
