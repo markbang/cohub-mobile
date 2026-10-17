@@ -73,7 +73,7 @@ export function DeviceFolderBrowser({ browser }: { browser: DeviceFolderBrowserS
     {failure ? <View className="gap-3 py-3">
       <Text accessibilityRole="alert" className="text-body text-fg-secondary">{failure}</Text>
       <PrimaryButton label={t("common.retry")} icon="refresh" disabled={loading} onPress={() => void load(listing?.path)} />
-    </View> : listing ? <View style={{ opacity: loading ? 0.6 : 1, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+    </View> : listing ? <View className={`border-t border-border ${loading ? "opacity-60" : ""}`}>
       {listing.parent ? <SettingsRow icon="arrow-up" title={t("deviceRuntime.parentFolder")} disabled={loading} onPress={() => void load(listing.parent ?? undefined)} /> : null}
       {listing.folders.map((folder) => <SettingsRow key={folder.path} icon="folder" title={folder.name} disabled={loading} onPress={() => void load(folder.path)} />)}
       {listing.folders.length === 0 ? <Text className="text-body text-fg-faint py-3">{t("deviceRuntime.noSubfolders")}</Text> : null}

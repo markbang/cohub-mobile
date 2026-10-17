@@ -2,7 +2,6 @@ import type { MessageRecord } from "@neta-art/cohub";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { FlatList, ScrollView, Text, View } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
-import { typography, useAppTheme } from "@/src/theme";
 import { Screen } from "@/src/ui";
 
 const NOW = new Date().toISOString();
@@ -68,27 +67,26 @@ const MESSAGE = {
 } as MessageRecord;
 
 export default function DebugMarkdownScreen() {
-  const theme = useAppTheme();
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ paddingVertical: 12 }} keyboardShouldPersistTaps="handled">
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+        <View className="px-4 pb-2">
+          <Text className="text-caption text-fg-muted">
             检查表格对齐、代码高亮、长单词换行和列表缩进。
           </Text>
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>
+          <Text className="text-caption text-fg-muted mt-1.5">
             长按选择排查：第一段是裸的原生 Markdown 组件，下面才是消息气泡。
           </Text>
         </View>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+        <View className="px-4 pb-4 border-b border-border">
           <EnrichedMarkdownText markdown={RAW_MARKDOWN} selectable flavor="github" />
         </View>
-        <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+        <View className="px-4 pt-4">
+          <Text className="text-caption text-fg-muted">
             下面这个高度固定的反转列表复刻了 chat 的容器结构（inverted FlatList），用来区分「列表」和「翻页器」谁是罪魁。
           </Text>
         </View>
-        <View style={{ height: 240, marginTop: 8 }}>
+        <View className="h-60 mt-2">
           <FlatList
             inverted
             data={[MESSAGE]}
@@ -97,12 +95,12 @@ export default function DebugMarkdownScreen() {
             contentContainerStyle={{ paddingVertical: 8 }}
           />
         </View>
-        <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-          <Text style={[typography.caption, { color: theme.colors.textMuted }]}>
+        <View className="px-4 pt-4">
+          <Text className="text-caption text-fg-muted">
             非反转列表（同高度同内容）：这个能选、上面反转列表不能选，就说明是 inverted 的 scaleY(-1) 变换导致的。
           </Text>
         </View>
-        <View style={{ height: 240, marginTop: 8 }}>
+        <View className="h-60 mt-2">
           <FlatList
             data={[MESSAGE]}
             keyExtractor={(item) => item.id}

@@ -5,7 +5,6 @@ import { MessageBubble } from "@/src/components/MessageContent";
 import { compactionFromMessage } from "@/src/data/compaction";
 import { useApp } from "@/src/data/context";
 import { mergeDisplayMessages, messagesFromTurns } from "@/src/data/session-history";
-import { typography, useAppTheme } from "@/src/theme";
 import { hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { Screen, SectionHeader } from "@/src/ui";
 
@@ -59,7 +58,6 @@ const CONTROL_MESSAGE: MessageRecord = {
  * "usage missing on the message" from "footer failed to render it".
  */
 export default function DebugMessagesScreen() {
-  const theme = useAppTheme();
   const { state } = useApp();
   const loaded = useMemo(
     () => state.sessions.filter((session) => state.sessionViews[session.id]),
@@ -86,62 +84,62 @@ export default function DebugMessagesScreen() {
     <Screen>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
         <SectionHeader title="已加载的对话" />
-        <View style={{ paddingHorizontal: 16, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View className="px-4 flex-row flex-wrap gap-2">
           {loaded.slice(0, 6).map((session) => (
             <Pressable
               key={session.id}
               accessibilityRole="tab"
               accessibilityState={{ selected: session.id === sessionId }}
               onPress={() => setSelectedId(session.id)}
-              style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 13, borderRadius: 999, justifyContent: "center", borderWidth: 1, borderColor: session.id === sessionId ? theme.colors.accentBorder : theme.colors.border, backgroundColor: session.id === sessionId ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface })}
+              className={`min-h-9 justify-center rounded-full px-3 ${session.id === sessionId ? "bg-accent-soft" : "bg-surface active:bg-surface-pressed"}`}
             >
-              <Text numberOfLines={1} style={[typography.caption, { color: session.id === sessionId ? theme.colors.accent : theme.colors.textMuted, maxWidth: 220 }]}>{session.title?.trim() || session.id.slice(0, 8)}</Text>
+              <Text numberOfLines={1} className={`text-caption max-w-55 ${session.id === sessionId ? "text-accent" : "text-fg-muted"}`}>{session.title?.trim() || session.id.slice(0, 8)}</Text>
             </Pressable>
           ))}
           {loaded.length === 0 ? (
-            <Text style={[typography.caption, { color: theme.colors.textMuted }]}>没有已加载的对话：先打开一个对话，再回到这里。</Text>
+            <Text className="text-caption text-fg-muted">没有已加载的对话：先打开一个对话，再回到这里。</Text>
           ) : null}
         </View>
 
         {view ? <>
           <SectionHeader title="状态" />
-          <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+          <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
             <Row label="historyLoaded" value={String(view.historyLoaded)} />
             <Row label="turns / messages" value={`${view.turns.length} / ${view.messages.length}`} />
             <Row label="stream" value={view.stream ? `${view.stream.status}${view.stream.turnId ? ` · ${view.stream.turnId.slice(0, 8)}` : ""}` : "—"} />
           </View>
 
           <SectionHeader title="对照组（合成消息）" />
-          <Text selectable style={[typography.caption, { color: theme.colors.textMuted, marginHorizontal: 16, marginBottom: 4 }]}>
+          <Text selectable className="text-caption text-fg-muted mx-4 mb-1">
             固定 usage.output=1160；气泡 footer 应显示 ↓1.2K。
           </Text>
-          <View style={{ marginHorizontal: 16, borderWidth: 1, borderStyle: "dashed", borderColor: theme.colors.border }}>
+          <View className="mx-4 border border-border" style={{ borderStyle: "dashed" }}>
             <MessageBubble message={CONTROL_MESSAGE} />
           </View>
 
           <SectionHeader title="最近的 assistant 消息（usage + 真实渲染）" />
           {assistantMessages.length === 0 ? (
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginHorizontal: 16 }]}>没有 assistant 消息。</Text>
+            <Text className="text-caption text-fg-muted mx-4">没有 assistant 消息。</Text>
           ) : assistantMessages.map((message) => {
             const usage = message.usage;
             const inputValue = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
             const cached = typeof usage?.cacheRead === "number" && usage.cacheRead > 0 ? formatTokenCount(usage.cacheRead) : null;
             const input = inputValue > 0 ? formatTokenCount(inputValue) : null;
             const output = typeof usage?.output === "number" && usage.output > 0 ? formatTokenCount(usage.output) : null;
-            return <View key={message.id} style={{ marginTop: 12 }}>
-              <Text selectable style={[typography.micro, { color: theme.colors.textFaint, marginHorizontal: 16 }]}>{`#${message.sequence} · ${String(message.meta?.messageKind ?? "?")} · ${message.model ?? "—"}`}</Text>
-              <Text selectable style={[typography.code, { color: theme.colors.textSecondary, marginHorizontal: 16, marginTop: 4 }]}>{usage ? JSON.stringify(usage) : "usage: null"}</Text>
-              <Text selectable style={[typography.code, { color: theme.colors.textMuted, marginHorizontal: 16, marginTop: 3 }]}>
+            return <View key={message.id} className="mt-3">
+              <Text selectable className="text-micro font-semibold text-fg-faint mx-4">{`#${message.sequence} · ${String(message.meta?.messageKind ?? "?")} · ${message.model ?? "—"}`}</Text>
+              <Text selectable className="text-code text-fg-secondary mx-4 mt-1">{usage ? JSON.stringify(usage) : "usage: null"}</Text>
+              <Text selectable className="text-code text-fg-muted mx-4 mt-1">
                 {`live=${message.meta?._mobileLive === true ? "y" : "n"} text=${message.text == null ? "null" : `${message.text.length}c`} content=${contentSummary(message.content)} notice=${compactionFromMessage(message) ? "y" : "n"} render=${hasRenderableMessage(message) ? "y" : "n"}`}
               </Text>
-              <Text selectable style={[typography.code, { color: theme.colors.textFaint, marginHorizontal: 16, marginTop: 3 }]}>
+              <Text selectable className="text-code text-fg-faint mx-4 mt-1">
                 {`keys: ${Object.keys(message).join(",")}${message.meta ? ` · meta: ${Object.keys(message.meta).join(",")}` : ""}`}
               </Text>
-              <Text selectable style={[typography.caption, { color: output ? theme.colors.success : theme.colors.danger, marginHorizontal: 16, marginTop: 3 }]}>
+              <Text selectable className={`text-caption mx-4 mt-1 ${output ? "text-success" : "text-danger"}`}>
                 {`tokens → input ${input ?? "—"} / cached ${cached ?? "—"} / output ${output ? `↓${output}` : "MISSING"}`}
               </Text>
-              <Text selectable style={[typography.micro, { color: theme.colors.textFaint, marginHorizontal: 16, marginTop: 6 }]}>气泡 ↓（虚线框内）</Text>
-              <View style={{ marginHorizontal: 16, marginTop: 2, borderWidth: 1, borderStyle: "dashed", borderColor: theme.colors.border }}>
+              <Text selectable className="text-micro font-semibold text-fg-faint mx-4 mt-1.5">气泡 ↓（虚线框内）</Text>
+              <View className="mx-4 mt-0.5 border border-border" style={{ borderStyle: "dashed" }}>
                 <MessageBubble message={message} />
               </View>
             </View>;
@@ -153,15 +151,11 @@ export default function DebugMessagesScreen() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
-  const theme = useAppTheme();
   return (
-    <View style={{ minHeight: 50, paddingHorizontal: 13, paddingVertical: 9, flexDirection: "row", alignItems: "center", gap: 11, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-      <Text style={[typography.caption, { color: theme.colors.textMuted, width: 128 }]}>{label}</Text>
-      <Text selectable style={[typography.caption, { color: theme.colors.text, flex: 1, textAlign: "right" }]}>{value}</Text>
+    <View className="min-h-12 px-3 py-2 flex-row items-center gap-3 border-b border-border">
+      <Text className="text-caption text-fg-muted w-32">{label}</Text>
+      <Text selectable className="text-caption text-fg flex-1 text-right">{value}</Text>
     </View>
   );
 }
 
-const styles = {
-  group: { marginHorizontal: 16, borderWidth: 1, borderRadius: 14, overflow: "hidden" as const },
-} satisfies Record<string, object>;

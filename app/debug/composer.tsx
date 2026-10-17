@@ -9,7 +9,7 @@ import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { useApp } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
 import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { ComposerInput, Screen, SectionHeader } from "@/src/ui";
 
 function buildMatrix() {
@@ -53,47 +53,47 @@ export default function DebugComposerScreen() {
     <Screen keyboard>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <SectionHeader title="交互预览" />
-        <View style={{ paddingHorizontal: 16, paddingBottom: 6, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View className="px-4 pb-1.5 flex-row flex-wrap gap-2">
           <Toggle label="附件" on={attach} onPress={() => setAttach((v) => !v)} />
           <Toggle label="disabled" on={disabled} onPress={() => setDisabled((v) => !v)} />
           <Toggle label="sending" on={sending} onPress={() => setSending((v) => !v)} />
           <Toggle label="running" on={running} onPress={() => setRunning((v) => !v)} />
           <Toggle label="onStop" on={hasStop} onPress={() => setHasStop((v) => !v)} />
         </View>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text testID="debug.composer.state" selectable style={[typography.code, { color: theme.colors.textSecondary }]}>
+        <View className="px-4 pb-2">
+          <Text testID="debug.composer.state" selectable className="text-code text-fg-secondary">
             {`blocked=${live.blocked}  hasDraft=${live.hasDraft}  canSend=${live.canSend}  canStop=${live.canStop}`}
           </Text>
         </View>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        <View className="px-4 pb-2 flex-row flex-wrap gap-2">
           <Toggle label="单行" on={text === "Hello"} onPress={() => setText("Hello")} />
           <Toggle label="多行" on={text === "First line\nSecond line\nThird line"} onPress={() => setText("First line\nSecond line\nThird line")} />
           <Toggle label="自动折行" on={text.startsWith("A long draft")} onPress={() => setText("A long draft that wraps across the input width. ".repeat(60))} />
           <Toggle label="清空" on={!text} onPress={() => setText("")} />
         </View>
         <SectionHeader title="状态矩阵（64 种组合）" />
-        <Text style={[typography.caption, { color: theme.colors.textMuted, marginHorizontal: 16, marginBottom: 8 }]}>
+        <Text className="text-caption text-fg-muted mx-4 mb-2">
           列：文本 / A 附件 / D disabled / S sending / R running / H onStop → 结果：B blocked / S canSend / T canStop
         </Text>
-        <View style={[styles.table, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-          <View style={[styles.headerRow, { borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surfaceRaised }]}>
+        <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
+          <View className="flex-row items-center border-b py-1.5 border-border bg-surface-raised">
             {["文本", "A", "D", "S", "R", "H", "B", "S", "T"].map((cell) => (
-              <Text key={cell} style={[typography.micro, styles.cell, { color: theme.colors.textMuted }]}>{cell}</Text>
+              <Text key={cell} className="flex-1 text-center text-micro text-fg-muted">{cell}</Text>
             ))}
           </View>
           {matrix.map((row, index) => {
             const result = getComposerActionState(row);
             return (
-              <View key={index} style={[styles.row, { borderBottomColor: theme.colors.border, backgroundColor: index % 2 === 0 ? "transparent" : theme.colors.surfaceRaised }]}>
-                <Text style={[typography.micro, styles.cell, { color: row.text ? theme.colors.text : theme.colors.textFaint, fontFamily: "SpaceMono" }]}>{row.text || "·"}</Text>
-                <Flag on={row.hasAttachment} theme={theme} />
-                <Flag on={row.disabled} theme={theme} />
-                <Flag on={row.sending} theme={theme} />
-                <Flag on={row.running} theme={theme} />
-                <Flag on={row.hasStopHandler} theme={theme} />
-                <Result on={result.blocked} color={theme.colors.danger} theme={theme} />
-                <Result on={result.canSend} color={theme.colors.success} theme={theme} />
-                <Result on={result.canStop} color={theme.colors.warning} theme={theme} />
+              <View key={index} className={`flex-row items-center border-b border-border py-1.5 ${index % 2 === 0 ? "" : "bg-surface-raised"}`}>
+                <Text className={`flex-1 text-center text-micro ${row.text ? "text-fg" : "text-fg-faint"}`} style={MONO}>{row.text || "·"}</Text>
+                <Flag on={row.hasAttachment} />
+                <Flag on={row.disabled} />
+                <Flag on={row.sending} />
+                <Flag on={row.running} />
+                <Flag on={row.hasStopHandler} />
+                <Result on={result.blocked} color={theme.colors.danger} />
+                <Result on={result.canSend} color={theme.colors.success} />
+                <Result on={result.canStop} color={theme.colors.warning} />
               </View>
             );
           })}
@@ -125,25 +125,20 @@ export default function DebugComposerScreen() {
 }
 
 function Toggle({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  const theme = useAppTheme();
   return (
-    <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label} onPress={onPress} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: on ? theme.colors.accentBorder : theme.colors.border, backgroundColor: on ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : theme.colors.surface, justifyContent: "center" })}>
-      <Text style={[typography.caption, { color: on ? theme.colors.accent : theme.colors.textMuted }]}>{label}</Text>
+    <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel={label} onPress={onPress} className={`min-h-8 justify-center rounded-full px-3 ${on ? "bg-accent-soft" : "bg-surface active:bg-surface-pressed"}`}>
+      <Text className={`text-caption ${on ? "text-accent" : "text-fg-muted"}`}>{label}</Text>
     </Pressable>
   );
 }
 
-function Flag({ on, theme }: { on: boolean; theme: ReturnType<typeof useAppTheme> }) {
-  return <Text style={[typography.micro, styles.cell, { color: on ? theme.colors.text : theme.colors.textFaint, fontFamily: "SpaceMono" }]}>{on ? "1" : "0"}</Text>;
+function Flag({ on }: { on: boolean }) {
+  return <Text className={`flex-1 text-center text-micro ${on ? "text-fg" : "text-fg-faint"}`} style={MONO}>{on ? "1" : "0"}</Text>;
 }
 
-function Result({ on, color, theme }: { on: boolean; color: string; theme: ReturnType<typeof useAppTheme> }) {
-  return <Text style={[typography.micro, styles.cell, { color: on ? color : theme.colors.textFaint, fontFamily: "SpaceMono", fontWeight: on ? "700" : "400" }]}>{on ? "1" : "0"}</Text>;
+function Result({ on, color }: { on: boolean; color: string }) {
+  // design-system: the result color is passed in per column by the caller.
+  return <Text className={`flex-1 text-center text-micro ${on ? "font-bold" : "font-normal text-fg-faint"}`} style={[MONO, on ? { color } : null]}>{on ? "1" : "0"}</Text>;
 }
 
-const styles = {
-  table: { marginHorizontal: 16, borderWidth: 1, borderRadius: 12, overflow: "hidden" as const },
-  headerRow: { flexDirection: "row" as const, alignItems: "center" as const, borderBottomWidth: 1, paddingVertical: 6 },
-  row: { flexDirection: "row" as const, alignItems: "center" as const, borderBottomWidth: 1, paddingVertical: 5 },
-  cell: { flex: 1, textAlign: "center" as const },
-} satisfies Record<string, object>;
+const MONO = { fontFamily: "SpaceMono" } as const;

@@ -1109,7 +1109,7 @@ for (const success of ["#238552", "#62c994"]) {
   const cells = chromeNodes(grid).filter((node) => node.type === "Pressable");
   assert.equal(cells.length, 91);
   assert.equal(cells.filter((cell) => cell.props.disabled).length, 2, "future days are blank and disabled");
-  assert.equal(cells[0].props.style({ pressed: false }).aspectRatio, 1);
+  assert.equal(cells[0].props.style.aspectRatio, 1, "heatmap cells stay square");
   cells[0].props.onPress();
   assert.equal(selected, activityDays[0].date);
   assert.equal(chromeNodes(renderHeatmap({ days: activityDays })).find((node) => node.type === "Pressable").props.accessibilityState.selected, true);

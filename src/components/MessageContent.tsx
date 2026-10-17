@@ -60,6 +60,7 @@ function useOpenMessageLink(spaceId: string | null) {
   };
 }
 
+// design-system-begin: react-native-enriched-markdown is a native renderer that takes JS style objects, so it reads tokens through the theme.
 function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false): MarkdownStyle {
   const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color };
   const heading = (size: number): MarkdownStyle["h1"] => ({ ...body, fontSize: scaleFontSize(size), fontWeight: "700", marginTop: 3 });
@@ -97,6 +98,7 @@ function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme
     inlineMath: { color: theme.colors.text },
   };
 }
+// design-system-end
 
 function TextBlock({ value, muted = false, color, linkColor, streaming = false, footer }: { value: string; muted?: boolean; color?: string; linkColor?: string; streaming?: boolean; footer?: ReactNode }) {
   const theme = useAppTheme();
@@ -134,11 +136,13 @@ function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; in
   const [pressed, setPressed] = useState(false);
   // Link.Trigger slots its child, and slotting spreads the child's style prop: a function
   // style would be flattened to {}. Track pressed state and pass a plain object instead.
+  // design-system: className would not survive the slot either, so this stays a plain style.
   const style = {
     width: size,
     height: size,
     borderRadius: 12,
     overflow: "hidden" as const,
+    // design-system: see above, the slot keeps only plain styles.
     backgroundColor: theme.colors.surfaceRaised,
     opacity: pressed ? 0.78 : 1,
   };
@@ -194,11 +198,10 @@ function Block({ block, color, linkColor, streaming = false, footer }: { block: 
 }
 
 function SystemNoteRow({ block }: { block: Extract<ContentBlock, { type: "system_note" }> }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const title = block.note_type === "compacted" ? t("message.compaction.title") : t("chat.systemUpdate");
   const body = block.text?.trim();
-  return <View style={{ borderLeftWidth: 2, borderLeftColor: theme.colors.border, paddingLeft: 9, gap: 3 }}>
+  return <View className="border-l-2 border-border" style={{ paddingLeft: 9, gap: 3 }}>
     <Text className="text-caption text-fg-secondary font-semibold">{title}</Text>
     {body ? <Text selectable className="text-caption text-fg-muted">{body}</Text> : null}
   </View>;
@@ -218,14 +221,14 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
   if (stats.tokensBefore !== null && stats.tokensAfter !== null) details.push(t("message.compaction.context", { before: formatTokenCount(stats.tokensBefore), after: formatTokenCount(stats.tokensAfter) }));
   const hasSummary = info.summary.length > 0;
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5 }}>
-    <View style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, borderCurve: "continuous", backgroundColor: theme.colors.surface, overflow: "hidden" }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} style={({ pressed }) => ({ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: pressed && hasSummary ? theme.colors.surfacePressed : "transparent" })}>
+    <View className="overflow-hidden rounded-lg border border-border bg-surface" style={{ borderCurve: "continuous" }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} className="min-h-11 flex-row items-center gap-2 px-3 py-2.5 active:bg-surface-pressed">
         <AppIcon name="archive" size={15} tone="muted" />
         <Text className="text-caption text-fg-secondary font-semibold">{t("message.compaction.title")}</Text>
         {details.length > 0 ? <Text numberOfLines={1} className="text-micro font-semibold text-fg-muted flex-1 text-right">{details.join(" · ")}</Text> : <View className="flex-1" />}
         {hasSummary ? <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}
       </Pressable>
-      {expanded && hasSummary ? <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.border, maxHeight: 320 }}>
+      {expanded && hasSummary ? <View className="border-t border-border" style={{ maxHeight: 320 }}>
         <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}>
           <EnrichedMarkdownText markdown={info.summary} markdownStyle={enrichedMarkdownStyle(theme, theme.colors.textSecondary)} selectable flavor="github" />
         </ScrollView>
@@ -256,6 +259,7 @@ const TOOL_DETAILS_MAX_HEIGHT = 420;
 function CappedCodeText({ value, color }: { value: string; color: string }) {
   const { t } = useTranslation();
   const text = value || t("message.tool.emptyOutput");
+  // design-system: tool output color is chosen per result (error, success, neutral) from theme values.
   return <Text selectable style={[typography.code, { fontFamily: "SpaceMono", color }]}>{text}</Text>;
 }
 
@@ -285,11 +289,11 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
         {preview ? <Text className="text-fg-muted">{`: "${preview}"`}</Text> : null}
       </Text>
     </Pressable>
-    {expanded ? <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 }} contentContainerStyle={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, paddingRight: 8, gap: 8 }}>
+    {expanded ? <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 }} contentContainerClassName="gap-2 border-l border-border pl-3 pr-2">
       <BubbleContentWidth.Provider value={contentWidth === undefined ? undefined : Math.max(0, contentWidth - 21)}>
       <Text className="text-micro font-semibold text-fg-muted">{t("message.tool.input")}</Text>
       <CappedCodeText value={JSON.stringify(block.input, null, 2)} color={theme.colors.text} />
-      {edits.map((edit, index) => <View key={index}><Text style={[typography.code, { fontFamily: "SpaceMono", color: theme.colors.danger, backgroundColor: theme.colors.dangerSoft }]}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text style={[typography.code, { fontFamily: "SpaceMono", color: theme.colors.success }]}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
+      {edits.map((edit, index) => <View key={index}><Text className="bg-danger-soft text-code text-danger" style={{ fontFamily: "SpaceMono" }}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text className="text-code text-success" style={{ fontFamily: "SpaceMono" }}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
       {result ? <ToolOutput block={result} /> : null}
       </BubbleContentWidth.Provider>
     </ScrollView> : null}
@@ -390,7 +394,8 @@ function BubbleMeta({ clock, local = false, side, live = false, t }: { clock?: s
   const color = side === "user" ? theme.colors.userBubbleMeta : theme.colors.textFaint;
   if (!clock && !local && !live) return null;
   return <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 3, maxWidth: "100%" }}>
-    {live ? <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: theme.colors.accent, marginRight: 2 }} /> : null}
+    {live ? <View className="rounded-full bg-accent" style={{ width: 5, height: 5, marginRight: 2 }} /> : null}
+    {/* design-system: the bubble meta color depends on the bubble it sits in; its width feeds the inline-meta layout. */}
     {clock ? <Text style={[typography.micro, { color, fontVariant: ["tabular-nums"] }]}>{clock}</Text> : null}
     {side === "user" && local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View> : null}
     {side === "user" && !local ? <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} /> : null}
@@ -440,13 +445,14 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={tracing ? (event) => chatScrollTrace.record("bubble.layout", "bubble", { ...traceIdentity(), ...event.nativeEvent.layout }) : undefined} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: 5, alignItems: isUser ? "flex-end" : "flex-start" }}>
     <BubbleTraceMessage.Provider value={message}><ChatBubbleFrame side={side} maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
       {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={isUser ? theme.colors.userBubbleLink : undefined} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={message.errorMessage ? undefined : footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={isUser ? theme.colors.userBubbleLink : undefined} footer={message.errorMessage ? undefined : footer} /> : !message.errorMessage ? footer : null}
+      {/* design-system: BubbleText measures its lines from this style, so it must stay a JS style. */}
       {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: isUser ? theme.colors.userBubbleText : theme.colors.danger }]}>{message.errorMessage}</BubbleText> : null}
     </ChatBubbleFrame></BubbleTraceMessage.Provider>
     {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. */}
     {!isUser && (message.model || thinkingLevel || inputTokens || outputTokens) ? <Text selectable className="text-micro font-semibold text-fg-faint mt-1 ml-1 self-stretch">{`${message.model || t("chat.model.agent")}${thinkingLevel ? ` · ${formatThinkingLevel(thinkingLevel)}` : ""}${inputTokens ? ` · ↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : ""}${outputTokens ? ` · ↓${outputTokens}` : ""}`}</Text> : null}
     {copyText && !isUser ? <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3, marginLeft: side === "assistant" ? 4 : 0, marginRight: side === "user" ? 4 : 0 }}>
       {onCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy(copyText); setCopied(true); }} hitSlop={6} className="w-9 h-9 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
-      {!isUser && onFork && typeof message.meta?.turnId === "string" ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork(message)} hitSlop={6} style={({ pressed }) => ({ width: 36, height: 36, alignItems: "center", justifyContent: "center", opacity: forkDisabled ? 0.45 : pressed ? 0.55 : 1 })}>{forking ? <ActivityIndicator size="small" color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
+      {!isUser && onFork && typeof message.meta?.turnId === "string" ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork(message)} hitSlop={6} className="size-9 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <ActivityIndicator size="small" color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
     </View> : null}
   </View></BubbleContext.Provider>;
 });
@@ -478,7 +484,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5, alignItems: "flex-start" }}>
     <ChatBubbleFrame side="assistant" maxWidth={maxWidth}>
       {!statusLabel && !hasContent && !runtimeLabel ? <View><TypingIndicator />{footer ? <View className="self-end mt-0.5">{footer}</View> : null}</View> : null}
-      {statusLabel ? <Text style={[typography.caption, { color: theme.colors.danger, marginBottom: hasLivePreview || runtimeLabel ? 6 : 0 }]}>{statusLabel}</Text> : null}
+      {statusLabel ? <Text className="text-caption text-danger" style={{ marginBottom: hasLivePreview || runtimeLabel ? 6 : 0 }}>{statusLabel}</Text> : null}
       {runtimeLabel ? <RuntimeStatusLine label={runtimeLabel} footer={hasContent ? undefined : footer} color={theme.colors.textMuted} /> : null}
       {hasContent ? <MessageContent active={live} content={liveContent} footer={footer} /> : null}
     </ChatBubbleFrame>
@@ -487,6 +493,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
 
 function RuntimeStatusLine({ label, footer, color }: { label: string; footer?: ReactNode; color: string }) {
   return <View style={{ flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "100%" }}>
+    {/* design-system: the runtime label color follows the turn state passed in from the stream. */}
     <Text numberOfLines={1} ellipsizeMode="tail" style={[typography.caption, { color, flexShrink: 1 }]}>{label}</Text>
     {footer ? <View className="shrink-0">{footer}</View> : null}
   </View>;

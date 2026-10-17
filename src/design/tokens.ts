@@ -161,6 +161,22 @@ export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number; we
 /** One stated rule: tags 6, controls 10, cards and menus 14, sheets and the composer 20, capsules full. */
 export const RADIUS = { xs: 6, sm: 10, md: 14, lg: 20 } as const;
 
+/**
+ * File-type hues: a recognizable legend across themes (code, config, sheets, images, audio,
+ * video, archives, data), shown only as icon tint on a 12% wash, never as an accent.
+ */
+export const FILE_TYPE_COLORS = {
+  code: "#6366f1",
+  config: "#f59e0b",
+  sheet: "#16a34a",
+  image: "#ec4899",
+  audio: "#a855f7",
+  video: "#ef4444",
+  archive: "#0891b2",
+  data: "#0284c7",
+  other: "#8b8b8b",
+} as const;
+
 /** Leading avatar or icon tile in content lists; row height, separator inset, and skeleton follow it. */
 export const LIST_AVATAR_SIZE = 46;
 

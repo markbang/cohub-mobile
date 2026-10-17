@@ -124,6 +124,7 @@ function tokenize(highlighter: HighlighterCore, code: string, language: CodeLang
   const result = highlighter.codeToTokens(code, { lang: language, theme });
   return {
     lines: result.tokens,
+    // design-system: the highlighter theme supplies code colors; this is its own light-theme default.
     foreground: result.fg ?? "#1f2328",
     background: result.bg ?? "transparent",
     theme,

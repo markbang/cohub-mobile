@@ -2,7 +2,7 @@ import { Text, View, type ColorValue } from "react-native";
 import type { ReactNode } from "react";
 import { CodeBlock } from "@/src/components/CodeBlock";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { openWebLink } from "@/src/platform/browser";
 
 type ReleaseNotesProps = {
@@ -126,25 +126,24 @@ function ReleaseBlockView({ block }: { block: ReleaseBlock }) {
     return <CodeBlock code={block.content || " "} language={block.language} />;
   }
   if (block.kind === "heading") {
-    const headingStyle = block.level === 1 ? typography.heading : block.level === 2 ? typography.bodyMedium : typography.bodyMedium;
-    return <Text style={[headingStyle, { color: theme.colors.text, marginTop: block.level === 1 ? 3 : 1 }]}>{renderInline(block.content, theme.colors.accent)}</Text>;
+    return <Text className={block.level === 1 ? "mt-1 text-headline font-semibold text-fg" : "mt-px text-body font-semibold text-fg"}>{renderInline(block.content, theme.colors.accent)}</Text>;
   }
   if (block.kind === "bullet" || block.kind === "ordered") {
     return (
       <View className="flex-row items-start gap-2">
-        <Text style={[typography.bodyMedium, { color: theme.colors.accent, width: block.kind === "ordered" ? 24 : 13, textAlign: block.kind === "ordered" ? "right" : "center" }]}>{block.marker}</Text>
+        <Text className={`text-body font-semibold text-accent ${block.kind === "ordered" ? "w-6 text-right" : "w-3.5 text-center"}`}>{block.marker}</Text>
         <Text selectable className="text-body text-fg flex-1">{renderInline(block.content, theme.colors.accent)}</Text>
       </View>
     );
   }
   if (block.kind === "quote") {
     return (
-      <View style={{ borderLeftWidth: 3, borderLeftColor: theme.colors.accentBorder, paddingLeft: 11 }}>
+      <View className="border-l-3 border-accent-border pl-3">
         <Text selectable className="text-body text-fg-secondary">{renderInline(block.content, theme.colors.accent)}</Text>
       </View>
     );
   }
-  return <Text selectable style={[typography.body, { color: theme.colors.text, lineHeight: 23 }]}>{renderInline(block.content, theme.colors.accent)}</Text>;
+  return <Text selectable className="text-chat text-fg">{renderInline(block.content, theme.colors.accent)}</Text>;
 }
 
 function renderInline(value: string, linkColor: ColorValue): ReactNode[] {
@@ -169,7 +168,7 @@ function renderInline(value: string, linkColor: ColorValue): ReactNode[] {
         </Text>,
       );
     } else if (match[4]) {
-      nodes.push(<Text key={`code-${key}`} style={[typography.code, { fontFamily: "SpaceMono" }]}>{match[4]}</Text>);
+      nodes.push(<Text key={`code-${key}`} className="text-code" style={{ fontFamily: "SpaceMono" }}>{match[4]}</Text>);
     } else if (match[5] || match[6]) {
       nodes.push(<Text key={`bold-${key}`} className="font-bold">{match[5] ?? match[6]}</Text>);
     } else if (match[7]) {

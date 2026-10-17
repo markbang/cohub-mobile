@@ -47,14 +47,13 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
       <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
       <Text className="text-caption text-fg-muted flex-1">{summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}{turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}</Text>
     </Pressable>
-    {expanded ? <View style={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, gap: 8 }}>
+    {expanded ? <View className="gap-2 border-l border-border pl-3">
       {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <ActivityIndicator color={theme.colors.accent} /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
     </View> : null}
   </View>;
 }
 
 export function StreamingTurnProcess({ messages }: { messages: StreamView["intermediateMessages"] }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   // Collapsed rows still run on every dispatch; derive once per snapshot instead.
@@ -74,7 +73,7 @@ export function StreamingTurnProcess({ messages }: { messages: StreamView["inter
       <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
       <Text className="text-caption text-fg-muted flex-1">{t("turn.steps", { steps: messages.length, tools: toolCount })}</Text>
     </Pressable>
-    {expanded ? <View style={{ borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12, gap: 8 }}>
+    {expanded ? <View className="gap-2 border-l border-border pl-3">
       {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
     </View> : null}
   </View>;

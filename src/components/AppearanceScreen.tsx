@@ -204,6 +204,7 @@ function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: 
         aria-checked={selected}
         onPress={onPress}
        
+        // design-system: the preview draws a theme other than the active one, so it reads that palette in JS.
         style={({ pressed }) => ({
           width,
           aspectRatio: 0.62,

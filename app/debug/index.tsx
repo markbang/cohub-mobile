@@ -3,7 +3,7 @@ import * as Updates from "expo-updates";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useApp } from "@/src/data/context";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
-import { useAppTheme, useFontScalePreference, typography } from "@/src/theme";
+import { useAppTheme, useFontScalePreference } from "@/src/theme";
 import { AppIcon, Screen, SectionHeader, type IconName } from "@/src/ui";
 
 function updateInfo() {
@@ -29,7 +29,7 @@ export default function DebugMenuScreen() {
     <Screen scroll>
 
       <SectionHeader title="渲染验收" />
-      <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
         <DebugRow icon="messages" title="Bubble Layout" detail="Text / Rich / States / Boundary / Stream" onPress={() => router.push("/debug/bubble-layout")} />
         <DebugRow icon="activity" title="Scroll Diagnostics" detail="Android / Chat" onPress={() => router.push("/debug/chat-scroll")} />
         <DebugRow icon="activity" title="流式渲染验收" detail="文本 + 工具调用实时流式，含重渲染计数" onPress={() => router.push("/debug/streaming")} />
@@ -40,7 +40,7 @@ export default function DebugMenuScreen() {
       </View>
 
       <SectionHeader title="运行时 / 数据" />
-      <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
         <DebugRow icon="download" title="更新与 OTA" detail="expo-updates 状态、Yaota APK 检查、冷启动" onPress={() => router.push("/debug/updates")} />
         <DebugRow icon="messages" title="消息与 usage" detail="最近 assistant 消息的 usage 原始数据 + 真实气泡 footer" onPress={() => router.push("/debug/messages")} />
         <DebugRow icon="database" title="缓存检查器" detail="SQLite 行数、user_key、清空当前用户缓存" onPress={() => router.push("/debug/cache")} />
@@ -52,7 +52,7 @@ export default function DebugMenuScreen() {
       </View>
 
       <SectionHeader title="环境信息" />
-      <View style={[styles.group, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+      <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
         <DebugRow icon="info" title="版本" detail={`${version} · runtime ${updates.runtime} · update ${updates.update}`} />
         <DebugRow icon="monitor" title="平台" detail={`${Platform.OS} ${String(Platform.Version)}`} />
         <DebugRow icon="fingerprint" title="安装 ID" detail={installationId ?? "—"} />
@@ -60,7 +60,7 @@ export default function DebugMenuScreen() {
         <DebugRow icon="palette" title="外观" detail={`${theme.mode} · 字号 ${fontScale}`} />
       </View>
 
-      <Text selectable style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center", marginTop: 22, marginBottom: 8 }]}>
+      <Text selectable className="text-micro font-semibold text-fg-faint text-center mt-6 mb-2">
         在 Profile 或 About 连续点击版本号 5 次进入此页
       </Text>
     </Screen>
@@ -68,29 +68,22 @@ export default function DebugMenuScreen() {
 }
 
 function DebugRow({ icon, title, detail, onPress }: { icon: IconName; title: string; detail: string; onPress?: () => void }) {
-  const theme = useAppTheme();
   const content = (
-    <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
-      <View style={[styles.rowIcon, { backgroundColor: theme.colors.surfaceRaised }]}>
-        <AppIcon name={icon} size={16} color={theme.colors.textMuted} />
+    <View className="min-h-16 flex-row items-center gap-3 px-3 border-b border-border">
+      <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
+        <AppIcon name={icon} size={16} tone="muted" />
       </View>
-      <View style={styles.rowText}>
-        <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{title}</Text>
-        <Text numberOfLines={2} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{detail}</Text>
+      <View className="flex-1 min-w-0">
+        <Text className="text-body font-semibold text-fg">{title}</Text>
+        <Text numberOfLines={2} className="text-caption text-fg-muted mt-0.5">{detail}</Text>
       </View>
-      {onPress ? <AppIcon name="chevron-right" size={17} color={theme.colors.textFaint} /> : null}
+      {onPress ? <AppIcon name="chevron-right" size={17} tone="faint" /> : null}
     </View>
   );
   return onPress ? (
-    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => ({ backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} className="active:bg-surface-pressed">
       {content}
     </Pressable>
   ) : content;
 }
 
-const styles = {
-  group: { marginHorizontal: 16, borderWidth: 1, borderRadius: 14, overflow: "hidden" as const },
-  row: { minHeight: 62, flexDirection: "row" as const, alignItems: "center" as const, gap: 11, paddingHorizontal: 13, borderBottomWidth: 1 },
-  rowIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center" as const, justifyContent: "center" as const },
-  rowText: { flex: 1, minWidth: 0 },
-} satisfies Record<string, object>;

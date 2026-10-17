@@ -42,6 +42,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import {
 	AppIcon,
 	Avatar,
+	FIELD_INPUT_CLASS,
 	TopBar,
 	EmptyState,
 	IconButton,
@@ -208,10 +209,7 @@ function SettingsRow({
 			accessibilityLabel={title}
 			disabled={disabled}
 			onPress={onPress}
-			style={({ pressed }) => ({
-				backgroundColor: pressed ? theme.colors.surfacePressed : "transparent",
-				opacity: disabled ? 0.55 : 1,
-			})}
+			className="active:bg-surface-pressed disabled:opacity-55"
 		>
 			{content}
 		</Pressable>
@@ -366,10 +364,7 @@ function ProfileSection({
 							accessibilityLabel={t("settings.profile.changeAvatar")}
 							onPress={() => void changeAvatar()}
 							disabled={uploadingAvatar}
-							style={({ pressed }) => ({
-								borderRadius: 28,
-								opacity: pressed || uploadingAvatar ? 0.65 : 1,
-							})}
+							className="rounded-lg active:opacity-65 disabled:opacity-65"
 						>
 							<Avatar
 								name={data.profile?.displayName || t("settings.profile.fallbackName")}
@@ -389,15 +384,7 @@ function ProfileSection({
 								</Text>
 							</View>
 						) : null}
-						<Text
-							style={[
-								typography.heading,
-								{
-									color: theme.colors.text,
-									marginTop: uploadingAvatar ? 8 : 11,
-								},
-							]}
-						>
+						<Text className={`text-headline font-semibold text-fg ${uploadingAvatar ? "mt-2" : "mt-3"}`}>
 							{data.profile?.displayName || t("settings.profile.fallbackName")}
 						</Text>
 						{data.email ? (
@@ -426,15 +413,7 @@ function ProfileSection({
 								maxLength={120}
 								placeholder={t("settings.profile.displayNamePlaceholder")}
 								placeholderTextColor={theme.colors.textFaint}
-								style={[
-									styles.input,
-									{
-										color: theme.colors.text,
-										borderColor: theme.colors.border,
-										backgroundColor: theme.colors.background,
-										fontSize: typography.body.fontSize,
-									},
-								]}
+								className={FIELD_INPUT_CLASS}
 							/>
 							<Text
 								className="text-caption text-fg-secondary mt-4 mb-1.5"
@@ -448,15 +427,7 @@ function ProfileSection({
 								autoCapitalize="none"
 								placeholder={t("settings.profile.usernamePlaceholder")}
 								placeholderTextColor={theme.colors.textFaint}
-								style={[
-									styles.input,
-									{
-										color: theme.colors.text,
-										borderColor: theme.colors.border,
-										backgroundColor: theme.colors.background,
-										fontSize: typography.body.fontSize,
-									},
-								]}
+								className={FIELD_INPUT_CLASS}
 							/>
 							{error ? <Text accessibilityRole="alert" selectable className="text-caption text-danger mt-3">{error}</Text> : null}
 							<PrimaryButton
@@ -491,7 +462,6 @@ function ProfileSection({
 }
 
 function ActivitySection({ client }: { client: CohubClient | null }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const [days, setDays] = useState(30);
 	const [data, setData] = useState<UserActivityResponse | null>(null);
@@ -535,37 +505,12 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 						accessibilityRole="button"
 						accessibilityState={{ selected: days === value }}
 						onPress={() => setDays(value)}
-						style={({ pressed }) => ({
-							minHeight: 34,
-							paddingHorizontal: 12,
-							borderRadius: 8,
-							justifyContent: "center",
-							borderWidth: 1,
-							borderColor:
-								days === value
-									? theme.colors.accentBorder
-									: theme.colors.border,
-							backgroundColor:
-								days === value
-									? theme.colors.accentSoft
-									: pressed
-										? theme.colors.surfacePressed
-										: theme.colors.surface,
-						})}
+						className={`min-h-12 justify-center`}
 					>
-						<Text
-							style={[
-								typography.caption,
-								{
-									color:
-										days === value
-											? theme.colors.accent
-											: theme.colors.textMuted,
-								},
-							]}
-						>
+						{({ pressed }) => <View className={`min-h-8 justify-center rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : days === value ? "bg-accent-soft" : ""}`}>
+						<Text className={`text-subhead font-semibold ${days === value ? "text-accent" : "text-fg-muted"}`}>
 							{value === 365 ? t("settings.activity.range.oneYear") : t("settings.activity.range.days", { days: value })}
-						</Text>
+						</Text></View>}
 					</Pressable>
 				))}
 			</View>
@@ -768,7 +713,6 @@ function NotificationsSection({
 }
 
 function RulesSection() {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const router = useRouter();
 	const { data, configSpace, loading, creating, error, load, openConfig } = useUserRules();
@@ -802,16 +746,7 @@ function RulesSection() {
 							horizontal={false}
 							style={{ maxHeight: 360, marginTop: 13 }}
 						>
-							<Text
-								selectable
-								style={[
-									typography.code,
-									{
-										color: theme.colors.textSecondary,
-										fontFamily: "SpaceMono",
-									},
-								]}
-							>
+							<Text selectable className="text-code text-fg-secondary" style={{ fontFamily: "SpaceMono" }}>
 								{data?.content?.trim() || t("settings.rules.none")}
 							</Text>
 						</ScrollView>
@@ -1342,12 +1277,3 @@ function formatUsd(value: number) {
 	if (!Number.isFinite(value)) return "$0.00";
 	return `$${value.toFixed(2)}`;
 }
-
-const styles = {
-	input: {
-		minHeight: 48,
-		borderWidth: 1,
-		borderRadius: 10,
-		paddingHorizontal: 12,
-	},
-} satisfies Record<string, object>;
