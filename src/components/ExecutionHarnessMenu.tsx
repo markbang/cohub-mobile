@@ -3,7 +3,6 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import type { RefObject } from "react";
 import type { RuntimeHarness, SpaceRuntimeStatus } from "@/src/data/runtime";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
-import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, IconButton } from "@/src/ui";
 
@@ -26,7 +25,6 @@ export function HarnessPicker({
   onRefresh: () => void;
   onSelect: (harness: RuntimeHarness) => void;
 }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const localSpace = status?.kind === "local";
   const available = useMemo(() => new Set(status?.capabilities?.harnesses ?? []), [status]);
@@ -48,7 +46,7 @@ export function HarnessPicker({
             accessibilityState={{ checked: selected, disabled: !enabled }}
             disabled={!enabled}
             onPress={() => { onSelect(harness); onClose(); }}
-            style={({ pressed }) => ({ minHeight: 52, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: pressed || selected ? theme.colors.surfaceRaised : "transparent", opacity: enabled ? 1 : 0.48 })}
+            className={`min-h-13 flex-row items-center gap-2.5 rounded-sm px-2.5 py-2 disabled:opacity-50 ${selected ? "bg-surface-raised" : "active:bg-surface-raised"}`}
           >
             <AppIcon name={harness === "cohub" ? "cloud" : "monitor"} size={18} tone="muted" />
             <View className="flex-1 min-w-0">

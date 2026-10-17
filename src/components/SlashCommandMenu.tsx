@@ -16,7 +16,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
       : menu.loading
         ? t("slash.loading")
         : t("slash.hint");
-  return <View testID="slash-command-menu" accessibilityLabel={t("slash.title")} style={[styles.panel, { backgroundColor: theme.colors.surface, borderColor: theme.colors.borderStrong, shadowColor: theme.colors.shadow }, style]}>
+  return <View testID="slash-command-menu" accessibilityLabel={t("slash.title")} className="overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[{ borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }, style]}>
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("slash.title")}</Text>
@@ -32,8 +32,8 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
     </View> : <ScrollView style={styles.list} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       {menu.items.map((item) => {
         const label = slashCommandLabel(item);
-        return <Pressable key={`${item.kind}:${item.name}`} accessibilityRole="button" accessibilityLabel={t("slash.select", { name: label })} onPress={() => onSelect(item)} style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>
-          <View style={[styles.badge, { backgroundColor: theme.colors.surfacePressed, borderColor: theme.colors.border }]}>
+        return <Pressable key={`${item.kind}:${item.name}`} accessibilityRole="button" accessibilityLabel={t("slash.select", { name: label })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-1.5 active:bg-surface-pressed">
+          <View className="size-9 items-center justify-center rounded-sm bg-surface-raised">
             <Text className="text-body font-semibold text-fg-muted">/</Text>
           </View>
           <View className="flex-1 min-w-0">
@@ -47,8 +47,5 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
 }
 
 const styles = StyleSheet.create({
-  panel: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, borderCurve: "continuous", overflow: "hidden", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
   list: { maxHeight: 232, flexGrow: 0 },
-  row: { flexDirection: "row", alignItems: "center", gap: 11, minHeight: 52, paddingHorizontal: 12, paddingVertical: 6 },
-  badge: { width: 34, height: 34, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
 });

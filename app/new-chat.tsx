@@ -6,7 +6,7 @@ import { useApp } from "@/src/data/context";
 import { normalizeSearchQuery } from "@/src/data/session-search";
 import { selectSpaceList } from "@/src/data/space-list";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
+import { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingRows, Screen, SearchField, TopBar } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
@@ -16,7 +16,6 @@ export default function NewChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<Params>();
   const initialSpaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
-  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { state, refreshHome, spaceList } = useApp();
@@ -60,9 +59,9 @@ export default function NewChatScreen() {
           accessibilityRole="button"
           accessibilityLabel={displaySpaceName(space)}
           onPress={() => openSpaceDraft(space.id)}
-          style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 11, minHeight: 66, paddingHorizontal: 12, backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent", borderBottomWidth: 1, borderBottomColor: theme.colors.border })}
+          className={`min-h-18 flex-row items-center gap-3.5 border-b border-border px-4 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
         >
-          <Avatar name={displaySpaceName(space)} uri={space.publicProfile?.avatarUrl} size={38} />
+          <Avatar name={displaySpaceName(space)} uri={space.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} />
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{displaySpaceName(space)}</Text>
             {space.description ? <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{space.description}</Text> : null}

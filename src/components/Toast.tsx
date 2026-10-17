@@ -7,7 +7,6 @@ import { scheduleOnRN } from "react-native-worklets";
 import { dismissToast, pushToast, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
-import { useAppTheme } from "@/src/theme";
 import { AppIcon } from "@/src/ui";
 
 type ShowToast = (toast: { title: string; message?: string; tone?: ToastTone }) => void;
@@ -64,7 +63,6 @@ function ToastLayer({ toasts, onDismiss }: { toasts: ToastEntry[]; onDismiss: (k
 const enterSpring = { duration: 400, dampingRatio: 1, reduceMotion: ReduceMotion.System } as const;
 
 function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: number; onDismiss: (key: string) => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const isFront = depth === 0;
@@ -131,11 +129,10 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
 
   const danger = toast.tone === "danger";
   const label = toast.message ? `${toast.title}. ${toast.message}` : toast.title;
-  const frame = { zIndex: 10 - depth, backgroundColor: theme.colors.surfaceRaised, borderColor: danger ? theme.colors.danger : theme.colors.borderStrong, shadowColor: theme.colors.shadow };
 
   return (
     <GestureDetector gesture={pan}>
-    <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} style={[styles.card, frame, animatedStyle]}>
+    <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} className={`absolute bottom-0 left-0 right-0 flex-row items-center gap-2.5 rounded-md bg-surface-raised px-3.5 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
         <AppIcon name={danger ? "alert" : "check"} size={16} tone={danger ? "danger" : "success"} />
         <View className="min-w-0 flex-1 gap-px">
           <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>
@@ -148,5 +145,4 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
 
 const styles = StyleSheet.create({
   layer: { position: "absolute", left: 12, right: 12, zIndex: 90 },
-  card: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderCurve: "continuous", borderWidth: 1, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 6 },
 });

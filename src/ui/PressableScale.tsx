@@ -15,6 +15,8 @@ type PressableScaleProps = {
   testID?: string;
   hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
   style?: StyleProp<ViewStyle>;
+  /** Layout and token classes for the inner content view; `style` still merges after it. */
+  className?: string;
   /** Extra style applied only while pressed (e.g. background tint). */
   pressedStyle?: StyleProp<ViewStyle>;
   /** Set false to skip the scale animation (icon buttons etc). */
@@ -40,6 +42,7 @@ export function PressableScale({
   testID,
   hitSlop,
   style,
+  className,
   pressedStyle,
   scale = true,
   haptic = false,
@@ -84,7 +87,7 @@ export function PressableScale({
         }}
       >
         {({ pressed }) => (
-          <View style={[style, fill, pressed ? pressedStyle : null, pressed && !scale ? { opacity: 0.72 } : null]}>
+          <View className={className} style={[style, fill, pressed ? pressedStyle : null, pressed && !scale ? { opacity: 0.72 } : null]}>
             {children}
           </View>
         )}

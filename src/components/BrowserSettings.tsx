@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { loadBrowserPreference, saveBrowserPreference, useBrowserPreference, type BrowserPreference } from "@/src/data/browser-preference";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, IconButton, SectionHeader } from "@/src/ui";
 
 export function BrowserSettings() {
@@ -37,10 +37,10 @@ export function BrowserSettings() {
           accessibilityState={{ checked: selected, selected, disabled: saving }}
           disabled={saving}
           onPress={() => void select(option)}
-          style={({ pressed }) => ({ minHeight: 56, paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, flexDirection: "row", alignItems: "center", gap: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, opacity: saving ? 0.6 : 1 })}
+          className="min-h-13 flex-row items-center gap-3 border-b border-border bg-surface px-4 py-3 active:bg-surface-pressed disabled:opacity-60"
         >
           <AppIcon name={option === "system" ? "external-link" : "globe"} size={20} tone="muted" />
-          <Text style={[typography.body, { flex: 1, color: selected ? theme.colors.accent : theme.colors.text }]}>{title}</Text>
+          <Text className={`flex-1 text-body ${selected ? "font-semibold text-fg" : "text-fg"}`}>{title}</Text>
           <View className="w-6 h-6 items-center justify-center">
             {selected ? <AppIcon name="check" size={18} tone="accent" /> : null}
           </View>

@@ -14,7 +14,7 @@ import { Text, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
 import { AppIcon, type IconName } from "@/src/ui";
 import { PressableScale } from "@/src/ui/PressableScale";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatRelativeTime } from "@/src/utils";
 
@@ -75,23 +75,16 @@ export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: S
       onPress={onPress}
       onLongPress={handleLongPress}
       haptic
-      style={{
-        minHeight: compact ? 60 : 63,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: compact ? 10 : 11,
-        paddingHorizontal: compact ? 14 : 16,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.border,
-      }}
+      className="flex-row items-center border-b border-border"
+      style={{ minHeight: 64, gap: compact ? 10 : 14, paddingHorizontal: compact ? 12 : 16 }}
       pressedStyle={{ backgroundColor: theme.colors.surfacePressed }}
     >
-      <View style={{ width: compact ? 33 : 34, height: compact ? 33 : 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: fileType ? `${fileType.color}1f` : isDirectory ? theme.colors.accentSoft : theme.colors.surface }}>
+      <View className={`items-center justify-center rounded-sm ${fileType ? "" : isDirectory ? "bg-accent-soft" : "bg-surface"}`} style={{ width: 36, height: 36, backgroundColor: fileType ? `${fileType.color}1f` : undefined }}>
         {fileType ? <fileType.icon size={17} color={fileType.color} /> : <AppIcon name={icon} size={17} color={iconColor} />}
       </View>
       <View className="flex-1 min-w-0">
         <Text numberOfLines={1} className="text-body font-semibold text-fg">{entry.name}</Text>
-        <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textMuted, marginTop: compact ? 2 : 3 }]}>{detail}</Text>
+        <Text numberOfLines={1} className="mt-0.5 text-caption text-fg-muted">{detail}</Text>
       </View>
       {!compact ? <Text className="text-micro font-semibold text-fg-faint">{entry.mtimeMs ? formatRelativeTime(new Date(entry.mtimeMs).toISOString()) : ""}</Text> : null}
       <AppIcon name="chevron-right" size={compact ? 15 : 16} tone="faint" />
