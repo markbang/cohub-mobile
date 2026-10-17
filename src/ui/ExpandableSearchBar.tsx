@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Keyboard, TextInput } from "react-native";
 import { IconButton, TopBar } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 
 type ExpandableSearchBarProps = {
   title: string;
@@ -56,7 +56,7 @@ export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, 
         onChangeText={onQueryChange}
         placeholder={placeholder ?? t("ui.search.placeholder")}
         placeholderTextColor={theme.colors.textFaint}
-        style={[typography.body, { color: theme.colors.text, minHeight: 44, paddingVertical: 8, paddingHorizontal: 0 }]}
+        className="min-h-11 px-0 py-2 text-body text-fg"
         returnKeyType="search"
         autoCapitalize="none"
         autoCorrect={false}

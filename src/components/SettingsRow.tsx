@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
-import { typography, useAppTheme } from "@/src/theme";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 
+/** A grouped settings row: 52 pt, separator inset past the icon, chevron only when it drills in. */
 export function SettingsRow({ icon, title, value, detail, children, onPress, disabled = false, danger = false, last = false }: {
   icon: IconName;
   title: string;
@@ -14,33 +14,30 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   danger?: boolean;
   last?: boolean;
 }) {
-  const theme = useAppTheme();
-  const content = <>
-    <AppIcon name={icon} size={20} color={danger ? theme.colors.danger : theme.colors.textMuted} />
-    <View style={{ flex: 1, minWidth: 0, gap: theme.spacing.xs }}>
-      <Text style={[typography.body, { color: danger ? theme.colors.danger : theme.colors.text }]}>{title}</Text>
-      {value ? <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{value}</Text> : null}
-    </View>
-    {detail ? <Text numberOfLines={1} style={[typography.body, { flexShrink: 1, maxWidth: "45%", textAlign: "right", color: theme.colors.textMuted }]}>{detail}</Text> : null}
-    {children}
-    {onPress ? <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} /> : null}
-  </>;
-  const style = {
-    minHeight: 56,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: theme.spacing.md,
-    borderBottomWidth: last ? 0 : 1,
-    borderBottomColor: theme.colors.border,
-  };
-  return onPress ? <Pressable
-    accessibilityRole="button"
-    accessibilityLabel={title}
-    accessibilityState={{ disabled }}
-    disabled={disabled}
-    onPress={onPress}
-    style={({ pressed }) => [style, { backgroundColor: pressed ? theme.colors.surfacePressed : theme.colors.surface, opacity: disabled ? 0.55 : 1 }]}
-  >{content}</Pressable> : <View style={[style, { backgroundColor: theme.colors.surface }]}>{content}</View>;
+  return (
+    <PressableOrView onPress={onPress} disabled={disabled} title={title}>
+      <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
+        <AppIcon name={icon} size={20} tone={danger ? "danger" : "muted"} />
+        <View className="min-w-0 flex-1 gap-0.5">
+          <Text className={`text-body ${danger ? "text-danger" : "text-fg"}`}>{title}</Text>
+          {value ? <Text className="text-caption text-fg-muted">{value}</Text> : null}
+        </View>
+        {detail ? <Text numberOfLines={1} className="max-w-45 shrink text-right text-subhead text-fg-muted">{detail}</Text> : null}
+        {children}
+        {onPress ? <AppIcon name="chevron-right" size={16} tone="faint" /> : null}
+      </View>
+      {last ? null : <View className="absolute bottom-0 bg-border" style={{ left: SEPARATOR_INSET, right: 0, height: StyleSheet.hairlineWidth }} />}
+    </PressableOrView>
+  );
 }
+
+function PressableOrView({ onPress, disabled, title, children }: { onPress?: () => void; disabled: boolean; title: string; children: ReactNode }) {
+  const className = "flex-row items-center bg-surface px-4";
+  return onPress
+    ? <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} className={`${className} active:bg-surface-pressed disabled:opacity-55`}>{children}</Pressable>
+    : <View className={className}>{children}</View>;
+}
+
+const ROW_HEIGHT = 52;
+/** 16 row padding + 20 icon + 12 gap. */
+const SEPARATOR_INSET = 48;

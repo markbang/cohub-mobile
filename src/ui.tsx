@@ -30,17 +30,28 @@ import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
+import type { ColorKey } from "@/src/design/tokens";
 import { motion } from "@/src/motion";
 import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
+
+const CONTINUOUS = { borderCurve: "continuous" } as const;
 export type { IconName } from "@/src/icons";
 
-export function AppIcon({ name, size = 20, color, strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; strokeWidth?: number; fill?: string; style?: object }) {
+export type IconTone = "fg" | "secondary" | "muted" | "faint" | "accent" | "onAccent" | "success" | "warning" | "danger" | "info";
+
+const ICON_TONES: Record<IconTone, ColorKey> = {
+  fg: "text", secondary: "textSecondary", muted: "textMuted", faint: "textFaint", accent: "accent", onAccent: "accentText",
+  success: "success", warning: "warning", danger: "danger", info: "info",
+};
+
+/** Lucide needs a JS color, so icons take a token `tone`; `color` is for computed values only. */
+export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; style?: object }) {
   const theme = useAppTheme();
   const Icon = icons[name];
-  return <Icon size={size} color={color ?? theme.colors.textSecondary} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
+  return <Icon size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
 }
 
 export function CohubLogo({ size = 36 }: { size?: number }) {
@@ -58,29 +69,29 @@ export function BrandMark({ size = 36 }: { size?: number }) {
   return <CohubLogo size={size} />;
 }
 
-export function Avatar({ name, uri, size = 42, online = false }: { name: string; uri?: string | null; size?: number; online?: boolean }) {
-  const theme = useAppTheme();
+/** Avatars are continuous squircles at 30% of their size, so the shape scales with them. `online` marks a live Space runtime. */
+export function Avatar({ name, uri, size = 40, online = false }: { name: string; uri?: string | null; size?: number; online?: boolean }) {
+  const shape = { width: size, height: size, borderRadius: size * 0.3, borderCurve: "continuous" as const };
   return (
     <View style={{ width: size, height: size }}>
-      {uri ? (
-        <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 3.2, backgroundColor: theme.colors.surfaceRaised }} />
-      ) : (
-        <View style={{ width: size, height: size, borderRadius: size / 3.2, backgroundColor: theme.colors.accentSoft, borderWidth: 1, borderColor: theme.colors.accentBorder, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: theme.colors.accent, fontSize: Math.max(12, size * 0.32), fontWeight: "700" }}>{initials(name)}</Text>
-        </View>
-      )}
-      {online ? <View style={{ position: "absolute", right: -1, bottom: -1, width: 12, height: 12, borderRadius: 6, backgroundColor: theme.colors.success, borderWidth: 2, borderColor: theme.colors.background }} /> : null}
+      {uri
+        ? <Image source={{ uri }} className="bg-surface-raised" style={shape} />
+        : <View className="items-center justify-center bg-accent-soft" style={shape}>
+          <Text className="font-semibold text-accent" style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}>{initials(name)}</Text>
+        </View>}
+      {online ? <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-success" /> : null}
     </View>
   );
 }
 
 export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
-  const theme = useAppTheme();
-  const color = tone === "accent" ? theme.colors.accent : tone === "danger" ? theme.colors.danger : theme.colors.textSecondary;
+  // The visual circle can be smaller than 44, but the touch target never is.
+  const target = Math.max(44, size);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
       testID={testID}
       hitSlop={6}
       disabled={disabled}
@@ -88,10 +99,10 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       onPressOut={onPressOut}
       onTouchCancel={onTouchCancel}
       onPress={onPress}
-     
-      style={({ pressed }) => [styles.iconButton, { width: Math.max(44, size), height: Math.max(44, size), borderRadius: Math.max(44, size) / 2, backgroundColor: pressed ? (tone === "accent" ? theme.colors.accentSoft : theme.colors.surfacePressed) : "transparent", opacity: disabled ? 0.45 : 1 }]}
+      className={`items-center justify-center rounded-full disabled:opacity-45 ${tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
+      style={{ width: target, height: target }}
     >
-      <AppIcon name={name} size={size * 0.48} color={color} />
+      <AppIcon name={name} size={Math.round(Math.min(size, 44) * 0.5)} tone={tone === "accent" ? "accent" : tone === "danger" ? "danger" : "secondary"} />
     </Pressable>
   );
 }
@@ -102,7 +113,7 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
   const body = scroll ? (
     <ScrollView
       ref={scrollRef}
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      className="flex-1 bg-background"
       contentContainerStyle={[{ paddingBottom: insets.bottom + 28 }, contentStyle]}
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} colors={[theme.colors.accent]} /> : undefined}
       keyboardShouldPersistTaps="handled"
@@ -110,11 +121,10 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
       {children}
     </ScrollView>
   ) : (
-    <View style={[{ flex: 1, backgroundColor: theme.colors.background }, contentStyle]}>{children}</View>
+    <View className="flex-1 bg-background" style={contentStyle}>{children}</View>
   );
-  const keyboardStyle = { flex: 1, backgroundColor: theme.colors.background };
-  const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView style={keyboardStyle}>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView style={keyboardStyle} behavior="height">{body}</KeyboardAvoidingView>;
-  return <View style={{ flex: 1, paddingTop: edgeToEdge ? 0 : insets.top, backgroundColor: theme.colors.background }}>{wrapped}</View>;
+  const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView className="flex-1 bg-background" behavior="height">{body}</KeyboardAvoidingView>;
+  return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
 }
 
 type TopBarProps = {
@@ -132,14 +142,13 @@ type TopBarProps = {
 };
 
 export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel }: TopBarProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const titleContent = children ?? <>
-    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} style={[typography.heading, { color: theme.colors.text }]}>{title}</Text>
-    {subtitle ? <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textSecondary, marginTop: 1 }]}>{subtitle}</Text> : null}
+    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
+    {subtitle ? <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
   return (
-    <View testID="app-top-bar" style={[styles.topBar, { backgroundColor: transparent ? "transparent" : theme.colors.background }]}>
+    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1.5 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
         name="arrow-left"
         label={backLabel ?? t("ui.detail.back")}
@@ -147,74 +156,83 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
         onPressOut={() => recordDebugEvent("navigation.back.press_out")}
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
-      /> : leading ? <View style={styles.topBarLeading}>{leading}</View> : null}
-      <View ref={titleRef} collapsable={false} style={styles.topBarTitle}>
-        {onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} style={({ pressed }) => [styles.topBarTitlePressable, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}>{titleContent}</Pressable> : titleContent}
+      /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+      <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1">
+        {onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View style={styles.topBarActions}>{actions}</View> : null}
+      {actions ? <View className="shrink-0 flex-row items-center">{actions}</View> : null}
     </View>
   );
 }
 
 /** Inset grouped list in the iOS Settings style: a floating card of rows under a section label. */
 export function SettingsGroup({ label, children }: { label?: string; children: ReactNode }) {
-  const theme = useAppTheme();
   return (
-    <View style={styles.settingsGroup}>
-      {label ? <Text accessibilityRole="header" style={[typography.caption, styles.settingsGroupLabel, { color: theme.colors.textMuted }]}>{label}</Text> : null}
-      <View style={[styles.settingsGroupCard, { backgroundColor: theme.colors.surface }]}>{children}</View>
+    <View className="mb-6 px-4">
+      {label ? <Text accessibilityRole="header" className="px-4 pb-2 text-caption font-semibold text-fg-muted">{label}</Text> : null}
+      <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>{children}</View>
     </View>
   );
 }
 
 export function SectionHeader({ title, action }: { title: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
-  const theme = useAppTheme();
   return (
-    <View style={styles.sectionHeader}>
-      <Text accessibilityRole="header" style={[typography.eyebrow, { flex: 1, color: theme.colors.textMuted, letterSpacing: 0, textTransform: "uppercase" }]}>{title}</Text>
+    <View className={`flex-row items-center justify-between pl-4 pt-6 ${action ? "pr-1" : "min-h-12 pb-2 pr-4"}`}>
+      <Text accessibilityRole="header" className="flex-1 text-caption font-semibold text-fg-muted">{title}</Text>
       {action ? <IconButton name={action.icon} label={action.label} onPress={action.onPress} tone="accent" /> : null}
     </View>
   );
 }
 
+/** Full class names, so Tailwind's scanner sees every variant. */
+const STATUS_PILL_CLASSES = {
+  neutral: { bg: "bg-surface-raised", fg: "text-fg-muted", dot: "bg-fg-muted" },
+  success: { bg: "bg-success-soft", fg: "text-success", dot: "bg-success" },
+  warning: { bg: "bg-warning-soft", fg: "text-warning", dot: "bg-warning" },
+  danger: { bg: "bg-danger-soft", fg: "text-danger", dot: "bg-danger" },
+  info: { bg: "bg-info-soft", fg: "text-info", dot: "bg-info" },
+} as const;
+
+/** For detail headers only; lists carry state with `AvatarStatus`. */
 export function StatusPill({ label, tone = "neutral", dot = true }: { label: string; tone?: "neutral" | "success" | "warning" | "danger" | "info"; dot?: boolean }) {
-  const theme = useAppTheme();
-  const values = {
-    neutral: { fg: theme.colors.textMuted, bg: theme.colors.surfaceRaised },
-    success: { fg: theme.colors.success, bg: theme.colors.successSoft },
-    warning: { fg: theme.colors.warning, bg: theme.colors.warningSoft },
-    danger: { fg: theme.colors.danger, bg: theme.colors.dangerSoft },
-    info: { fg: theme.colors.info, bg: theme.colors.infoSoft },
-  }[tone];
+  const classes = STATUS_PILL_CLASSES[tone];
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: values.bg }}>
-      {dot ? <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: values.fg }} /> : null}
-      <Text style={[typography.micro, { color: values.fg }]}>{label}</Text>
+    <View className={`flex-row items-center gap-1.5 rounded-full px-2 py-1 ${classes.bg}`}>
+      {dot ? <View className={`size-1.5 rounded-full ${classes.dot}`} /> : null}
+      <Text className={`text-micro font-semibold ${classes.fg}`}>{label}</Text>
     </View>
   );
 }
 
 export function EmptyState({ icon, title, description, action }: { icon: IconName; title: string; description?: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
-  const theme = useAppTheme();
   return (
-    <View style={styles.emptyState}>
-      <AppIcon name={icon} size={28} color={theme.colors.textMuted} />
-      <Text style={[typography.heading, { color: theme.colors.text, marginTop: 14, textAlign: "center" }]}>{title}</Text>
-      {description ? <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 6, textAlign: "center", maxWidth: 300 }]}>{description}</Text> : null}
-      {action ? <Pressable accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} style={({ pressed }) => ({ marginTop: 12, minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: theme.radius.md, backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}><AppIcon name={action.icon} size={18} color={theme.colors.accent} /><Text style={[typography.bodyMedium, { color: theme.colors.accent, flexShrink: 1, textAlign: "center" }]}>{action.label}</Text></Pressable> : null}
+    <View className="min-h-64 flex-1 items-center justify-center px-6">
+      <View className="size-14 items-center justify-center rounded-full bg-surface-raised">
+        <AppIcon name={icon} size={24} tone="muted" />
+      </View>
+      <Text className="mt-4 text-center text-headline font-semibold text-fg">{title}</Text>
+      {description ? <Text className="mt-1.5 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}
+      {action ? <PrimaryButton label={action.label} icon={action.icon} variant="ghost" onPress={action.onPress} className="mt-3" /> : null}
     </View>
   );
 }
 
-export function PrimaryButton({ label, onPress, icon, loading = false, disabled = false, tone = "accent", style }: { label: string; onPress: () => void; icon?: IconName; loading?: boolean; disabled?: boolean; tone?: "accent" | "danger"; style?: ViewStyle }) {
+const BUTTON_VARIANTS = {
+  primary: { box: "bg-accent active:bg-accent-pressed", text: "text-on-accent", tone: "onAccent" },
+  secondary: { box: "bg-surface-raised active:bg-surface-pressed", text: "text-fg", tone: "fg" },
+  ghost: { box: "active:bg-surface-pressed", text: "text-accent", tone: "accent" },
+  danger: { box: "bg-danger active:opacity-85", text: "text-on-danger", tone: "fg" },
+} as const satisfies Record<string, { box: string; text: string; tone: IconTone }>;
+
+export function PrimaryButton({ label, onPress, icon, loading = false, disabled = false, variant = "primary", className = "", style }: { label: string; onPress: () => void; icon?: IconName; loading?: boolean; disabled?: boolean; variant?: keyof typeof BUTTON_VARIANTS; className?: string; style?: ViewStyle }) {
   const theme = useAppTheme();
-  const color = tone === "danger" ? theme.colors.danger : theme.colors.accent;
-  const pressedColor = tone === "danger" ? theme.colors.danger : theme.colors.accentPressed;
-  const foreground = tone === "danger" ? theme.colors.dangerText : theme.colors.accentText;
+  const classes = BUTTON_VARIANTS[variant];
+  // The danger fill is a token pair; its foreground is not one of the icon tones.
+  const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [styles.primaryButton, { backgroundColor: pressed ? pressedColor : color, opacity: disabled || loading ? 0.55 : 1 }, style]}>
-      {loading ? <ActivityIndicator color={foreground} size="small" /> : icon ? <AppIcon name={icon} size={17} color={foreground} /> : null}
-      <Text style={[typography.bodyMedium, { color: foreground }]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={onPress} className={`min-h-12 flex-row items-center justify-center gap-2 rounded-sm px-4.5 disabled:opacity-55 ${classes.box} ${className}`} style={[CONTINUOUS, style]}>
+      {loading ? <ActivityIndicator color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} size="small" /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
+      <Text className={`shrink text-body font-semibold ${classes.text}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -223,17 +241,37 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
   const theme = useAppTheme();
   const { t } = useTranslation();
   return (
-    <View style={[styles.searchField, { backgroundColor: theme.colors.surfaceRaised }]}>
-      <AppIcon name="search" size={18} color={theme.colors.textMuted} />
-      <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} style={[typography.body, { flex: 1, color: theme.colors.text, paddingVertical: 0 }]} returnKeyType="search" />
-      {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={8} style={({ pressed }) => ({ opacity: pressed ? 0.55 : 1 })}><AppIcon name="circle-x" size={17} color={theme.colors.textFaint} /></Pressable> : null}
+    <View className="min-h-11 flex-row items-center gap-2.5 rounded-sm bg-surface-raised px-3.5" style={CONTINUOUS}>
+      <AppIcon name="search" size={18} tone="muted" />
+      <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
+      {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={8} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
     </View>
   );
 }
 
+/** Skeleton in the exact shape of `ListRow`, so content replaces it without a jump. */
+/** A labelled input: caption label, filled field, optional hint or inline error. */
+export function Field({ label, hint, error, children }: { label?: string; hint?: string; error?: string | null; children: ReactNode }) {
+  return (
+    <View className="gap-1.5">
+      {label ? <Text className="text-caption font-semibold text-fg-muted">{label}</Text> : null}
+      {children}
+      {error ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : hint ? <Text className="text-caption text-fg-faint">{hint}</Text> : null}
+    </View>
+  );
+}
+
+/** Shared classes for a `TextInput` inside `Field`, so every form field matches. */
+export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-2.5 text-body text-fg";
+
 export function LoadingRows({ count = 5 }: { count?: number }) {
-  const theme = useAppTheme();
-  return <View style={{ paddingHorizontal: 16, gap: 4 }}>{Array.from({ length: count }).map((_, index) => <View key={index} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 }}><View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: theme.colors.surfaceRaised }} /><View style={{ flex: 1, gap: 9 }}><View style={{ width: `${58 + (index % 3) * 10}%`, height: 12, borderRadius: 6, backgroundColor: theme.colors.surfaceRaised }} /><View style={{ width: `${38 + (index % 2) * 15}%`, height: 10, borderRadius: 5, backgroundColor: theme.colors.surfaceRaised }} /></View></View>)}</View>;
+  return <View accessibilityLabel="Loading" className="px-4">{Array.from({ length: count }).map((_, index) => <View key={index} className="min-h-16 flex-row items-center gap-3 py-2.5">
+    <View className="size-10 bg-surface-raised" style={{ borderRadius: 12, borderCurve: "continuous" }} />
+    <View className="flex-1 gap-2">
+      <View className="h-3 rounded-full bg-surface-raised" style={{ width: `${58 + (index % 3) * 10}%` }} />
+      <View className="h-2.5 rounded-full bg-surface-raised" style={{ width: `${38 + (index % 2) * 15}%` }} />
+    </View>
+  </View>)}</View>;
 }
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
@@ -378,21 +416,26 @@ export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string
 }
 
 export function ConnectionBanner({ visible }: { visible: boolean }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   if (!visible) return null;
-  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" style={styles.connectionBannerLayer}>
-    <View accessible accessibilityRole="alert" style={[styles.connectionBanner, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
-      <AppIcon name="cloud-off" size={14} color={theme.colors.danger} />
-      <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.text }]}>{t("ui.banner.unavailable")}</Text>
+  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
+    <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-raised px-3 py-1.5 shadow-float">
+      <AppIcon name="cloud-off" size={14} tone="danger" />
+      <Text numberOfLines={1} className="text-caption text-fg">{t("ui.banner.unavailable")}</Text>
     </View>
   </Animated.View>;
 }
 
 export function DataError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
-  return <View style={[styles.dataError, { backgroundColor: theme.colors.dangerSoft, borderColor: theme.colors.danger }]}><View style={[styles.dataErrorIcon, { backgroundColor: theme.colors.background }]}><AppIcon name="cloud-off" size={17} color={theme.colors.danger} /></View><View style={{ flex: 1, minWidth: 0 }}><Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("ui.dataError.title")}</Text><Text selectable style={[typography.caption, { color: theme.colors.danger, marginTop: 3 }]}>{message}</Text></View><IconButton name="refresh" label={t("ui.dataError.retry")} onPress={onRetry} tone="danger" /></View>;
+  return <View className="mx-4 mt-3 flex-row items-center gap-3 rounded-md bg-danger-soft py-2 pl-3 pr-1" style={CONTINUOUS}>
+    <AppIcon name="cloud-off" size={18} tone="danger" />
+    <View className="min-w-0 flex-1">
+      <Text className="text-subhead font-semibold text-fg">{t("ui.dataError.title")}</Text>
+      <Text selectable numberOfLines={3} className="text-caption text-danger">{message}</Text>
+    </View>
+    <IconButton name="refresh" label={t("ui.dataError.retry")} onPress={onRetry} tone="danger" />
+  </View>;
 }
 
 export function getStatusTone(status: ActivityItem["status"]): "success" | "warning" | "danger" | "neutral" {
@@ -411,7 +454,7 @@ export function useBackButton() {
  * Like RN's view, it listens to show/hide only: split and floating keyboards report a frame
  * change before their hide.
  */
-function IOSKeyboardPaddingView({ style, children }: { style: ViewStyle; children: ReactNode }) {
+function IOSKeyboardPaddingView({ children }: { children: ReactNode }) {
   const { height: windowHeight } = useWindowDimensions();
   const [bottom, setBottom] = useState(0);
   const bottomRef = useRef(0);
@@ -440,27 +483,10 @@ function IOSKeyboardPaddingView({ style, children }: { style: ViewStyle; childre
     return () => { willShow.remove(); didShow.remove(); willHide.remove(); };
   }, [windowHeight]);
 
-  return <View style={[style, { paddingBottom: bottom }]}>{children}</View>;
+  return <View className="flex-1 bg-background" style={{ paddingBottom: bottom }}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
-  iconButton: { alignItems: "center", justifyContent: "center" },
-  topBar: { minHeight: edgeChrome.headerMinHeight, flexShrink: 0, paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 },
-  topBarLeading: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  topBarTitle: { flex: 1, minWidth: 0, justifyContent: "center", paddingHorizontal: 4 },
-  topBarTitlePressable: { flex: 1, minWidth: 0, justifyContent: "center", borderRadius: 10, borderCurve: "continuous" },
-  topBarActions: { flexShrink: 0, flexDirection: "row", alignItems: "center" },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingTop: 22, paddingBottom: 10 },
-  emptyState: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, minHeight: 260 },
-  dataError: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 16, marginTop: 12, padding: 12, borderWidth: 1, borderRadius: 14 },
-  connectionBannerLayer: { position: "absolute", top: "100%", left: 16, right: 16, marginTop: 8, alignItems: "center" },
-  connectionBanner: { flexDirection: "row", alignItems: "center", gap: 7, maxWidth: "100%", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
-  dataErrorIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  primaryButton: { minHeight: 46, paddingHorizontal: 18, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  settingsGroup: { paddingHorizontal: 16, marginBottom: 26 },
-  settingsGroupLabel: { paddingHorizontal: 16, paddingBottom: 8 },
-  settingsGroupCard: { borderRadius: 18, borderCurve: "continuous", overflow: "hidden" },
-  searchField: { minHeight: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
   composer: { paddingHorizontal: 8, paddingVertical: 8, gap: 8, borderRadius: 18, borderCurve: "continuous", borderWidth: 1, overflow: "hidden" },
   composerInputRow: { flexDirection: "row", alignItems: "flex-start" },

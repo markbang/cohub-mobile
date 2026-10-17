@@ -1,14 +1,15 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Keyboard, Platform, Pressable, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { edgeChrome, typography, useAppTheme } from "@/src/theme";
+import { edgeChrome, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 
-const BAR_HEIGHT = 60;
-const BAR_HORIZONTAL_MARGIN = 18;
+const BAR_HEIGHT = 52;
+/** Icon-only tabs: each item is a fixed slot, so the bar hugs its content instead of the screen width. */
+const ITEM_WIDTH = 68;
 const BAR_BOTTOM_MARGIN = 8;
 const INDICATOR_DURATION = 250;
 const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
@@ -84,20 +85,14 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
         left: 0,
         right: 0,
         bottom: 0,
-        paddingHorizontal: BAR_HORIZONTAL_MARGIN,
         paddingBottom: barBottomOffset(insets.bottom),
       }, barStyle]}
     >
       <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
-      <View
-        style={[
-          styles.bar,
-          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, shadowColor: theme.colors.shadow },
-        ]}
-      >
-        <View style={styles.barInner} onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}>
+      <View className="self-center rounded-full bg-surface p-1 shadow-float" style={{ height: BAR_HEIGHT, width: ITEM_WIDTH * routes.length + 8 }}>
+        <View className="flex-1 flex-row" onLayout={(event) => setBarWidth(event.nativeEvent.layout.width)}>
           {itemWidth > 0 ? (
-            <Animated.View pointerEvents="none" style={[styles.indicator, { backgroundColor: theme.colors.accentSoft }, indicatorStyle]} />
+            <Animated.View pointerEvents="none" className="absolute bottom-0 left-0 top-0 rounded-full bg-accent-soft" style={indicatorStyle} />
           ) : null}
           {routes.map((route, index) => {
             const { options } = descriptors[route.key];
@@ -119,10 +114,9 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
                 testID={options.tabBarButtonTestID}
                 onPress={onPress}
                 onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
-                style={({ pressed }) => [styles.item, pressed ? { opacity: 0.65 } : null]}
+                className="flex-1 items-center justify-center active:opacity-65"
               >
-                {options.tabBarIcon?.({ focused, color, size: 19 })}
-                <Text numberOfLines={1} style={[typography.caption, { color, fontWeight: focused ? "600" : "500" }]}>{label}</Text>
+                {options.tabBarIcon?.({ focused, color, size: 22 })}
               </Pressable>
             );
           })}
@@ -131,37 +125,3 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  bar: {
-    width: "100%",
-    maxWidth: 460,
-    alignSelf: "center",
-    height: BAR_HEIGHT,
-    borderRadius: BAR_HEIGHT / 2,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 5,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  barInner: {
-    flex: 1,
-    flexDirection: "row",
-  },
-  indicator: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    borderRadius: (BAR_HEIGHT - 10) / 2,
-  },
-  item: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-});

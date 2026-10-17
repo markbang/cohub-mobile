@@ -6,7 +6,7 @@ import { useTranslation } from "@/src/i18n";
 import { Avatar } from "@/src/ui";
 
 /** On iOS 18+ Settings zooms out of the account avatar. */
-export function AccountAvatar({ size = 38, online = false }: { size?: number; online?: boolean }) {
+export function AccountAvatar({ size = 36 }: { size?: number }) {
   const { name, avatar } = useCurrentUser();
   const { t } = useTranslation();
   const [pressed, setPressed] = useState(false);
@@ -23,7 +23,7 @@ export function AccountAvatar({ size = 38, online = false }: { size?: number; on
           onPressOut={() => setPressed(false)}
           style={{ opacity: pressed ? 0.72 : 1 }}
         >
-          <Avatar name={name} uri={avatar} size={size} online={online} />
+          <Avatar name={name} uri={avatar} size={size} />
         </Pressable>
       </Link.Trigger>
     </Link>

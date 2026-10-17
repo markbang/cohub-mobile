@@ -1,10 +1,10 @@
 import type { SpaceListSpace } from "@/src/data/space-list";
-import { Text, View } from "react-native";
-import { PinnedRow } from "@/src/components/PinnedRow";
+import { useState } from "react";
+import { View } from "react-native";
+import { ContextMenu } from "@/src/components/ContextMenu";
 import { type SpaceSessionCount } from "@/src/data/space-session-counts";
-import { Avatar, AppIcon, StatusPill } from "@/src/ui";
-import { PressableScale } from "@/src/ui/PressableScale";
-import { useAppTheme, typography } from "@/src/theme";
+import { Avatar, AppIcon } from "@/src/ui";
+import { ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 import { useTranslation } from "@/src/i18n";
 
@@ -17,8 +17,8 @@ type SpaceRowProps = {
 };
 
 export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogglePin }: SpaceRowProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const name = displaySpaceName(space);
   const active = space.status === "running" || space.status === "bootstrapping";
   const pinned = space.isPinned === true;
@@ -27,30 +27,29 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
       ? t("space.chatCount.more", { count: sessionCount.count })
       : t(sessionCount.count === 1 ? "space.chatCount.one" : "space.chatCount.other", { count: sessionCount.count })
     : null;
-  const subtitle = space.description?.trim() || countLabel;
-  const content = <>
-    <Avatar name={name} uri={space.publicProfile?.avatarUrl} size={50} online={active} />
-    <View style={{ flex: 1, minWidth: 0 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, flex: 1 }]}>{name}</Text>{active ? <StatusPill label={t("ui.active")} tone="success" /> : null}</View>
-      {subtitle ? <Text numberOfLines={2} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{subtitle}</Text> : null}
-      <Text style={[typography.micro, { color: theme.colors.textFaint, marginTop: 3 }]}>{space.lastActivityAt ? t("ui.activeAgo", { time: formatRelativeTime(space.lastActivityAt) }) : t("space.readyForWork")}</Text>
-    </View>
-    <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} />
-  </>;
-  const rowStyle = { flexDirection: "row" as const, alignItems: "center" as const, gap: 13, minHeight: 80, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "transparent" };
-  const rowPressedStyle = { backgroundColor: theme.colors.surfacePressed };
-  if (!onTogglePin) return <PressableScale accessibilityRole="button" accessibilityLabel={t("ui.openNamed", { name })} onPress={onPress} haptic style={rowStyle} pressedStyle={rowPressedStyle}>{content}</PressableScale>;
-  return <PinnedRow
-    openLabel={t("ui.openNamed", { name })}
-    pinLabel={t("space.pin")}
-    unpinLabel={t("space.unpin")}
-    pinned={pinned}
-    pinning={pinning}
-    onPress={onPress}
-    onTogglePin={() => onTogglePin()}
-    rowStyle={rowStyle}
-    rowPressedStyle={rowPressedStyle}
-  >
-    {content}
-  </PinnedRow>;
+  // The second line carries either the description or the chat count; never both.
+  const subtitle = space.description?.trim() || null;
+  return (
+    <>
+      <ListRow
+        leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space.publicProfile?.avatarUrl} size={40} online={active} /></View>}
+        title={name}
+        titlePrefix={pinned ? <AppIcon name="pin" size={12} tone="faint" /> : null}
+        meta={formatRelativeTime(space.lastActivityAt)}
+        subtitle={subtitle}
+        trailing={sessionCount && countLabel && !subtitle ? <Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /> : null}
+        accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
+        accessibilityHint={onTogglePin ? t("space.longPressHint") : undefined}
+        onPress={onPress}
+        onLongPress={onTogglePin ? (event) => { const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+      />
+      {menuAt && onTogglePin ? <ContextMenu
+        visible
+        x={menuAt.x}
+        y={menuAt.y}
+        onClose={() => setMenuAt(null)}
+        actions={[{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), onPress: () => { if (!pinning) onTogglePin(); } }]}
+      /> : null}
+    </>
+  );
 }

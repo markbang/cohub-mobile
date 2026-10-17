@@ -93,7 +93,7 @@ export default function DebugIdentityScreen() {
         <View style={{ paddingHorizontal: 16, paddingTop: 12, gap: 10 }}>
           <PrimaryButton label="读取 claims" icon="user" loading={busy === "claims"} disabled={busy !== null} onPress={() => void loadClaims()} />
           <PrimaryButton label="读取 token" icon="shield" loading={busy === "token"} disabled={busy !== null} onPress={() => void loadToken(false)} />
-          <PrimaryButton label="强制刷新 token" icon="refresh" tone="danger" loading={busy === "refresh"} disabled={busy !== null} onPress={() => void loadToken(true)} />
+          <PrimaryButton label="强制刷新 token" icon="refresh" variant="danger" loading={busy === "refresh"} disabled={busy !== null} onPress={() => void loadToken(true)} />
         </View>
         {error ? <Text selectable style={[typography.caption, { color: theme.colors.danger, marginHorizontal: 16, marginTop: 12 }]}>{error}</Text> : null}
 

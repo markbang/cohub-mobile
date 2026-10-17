@@ -63,7 +63,7 @@ export function StorageSettingsScreen() {
       dismissible={!busy}
       scrollable={false}
       testID={sheet === "clear-cache" ? "clear-cache-sheet" : "cache-retention-sheet"}
-      footer={sheet === "clear-cache" ? <PrimaryButton label={t("profile.clearCache.action")} icon="trash" tone="danger" loading={busy} onPress={() => void confirmClearCache()} /> : undefined}
+      footer={sheet === "clear-cache" ? <PrimaryButton label={t("profile.clearCache.action")} icon="trash" variant="danger" loading={busy} onPress={() => void confirmClearCache()} /> : undefined}
     >
       {sheet === "clear-cache" ? <Text style={[typography.body, { color: theme.colors.textSecondary }]}>{t("profile.clearCache.body")}</Text> : <View>
         {CACHE_RETENTION_OPTIONS.map((option) => <Pressable

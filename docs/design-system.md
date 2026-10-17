@@ -120,8 +120,8 @@ Shared primitives keep their current names and props so screens migrate without 
 | `AppIcon` | Adds `tone` (`fg`, `muted`, `faint`, `accent`, `success`, `warning`, `danger`) so callers stop passing hex. |
 | `IconButton` | `className` styling; sizes `sm` (32 visual, 44 target) and `md` (40/44). |
 | `PrimaryButton` | Adds `variant: "primary" | "secondary" | "ghost" | "danger"`. |
-| `ListRow` (new) | Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. |
-| `StatusGlyph` (new) | Replaces `StatusPill` in lists: running = accent ring on the avatar, failed = danger badge, stopped = muted square badge. `StatusPill` stays for detail headers only. |
+| `ListRow` (new) | Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
+| `AvatarStatus` (new) | Replaces `StatusPill` in lists: a Chat that is running = accent ring around the avatar, failed = `alert` badge, stopped = `stop` badge. A Space whose runtime is up keeps the small green dot on `Avatar` (`online`). `StatusPill` stays for detail headers only. |
 | `Meta` (new) | Icon + tabular value, e.g. chats count, step count, duration. |
 | `SectionHeader` | Sentence case `text-caption font-semibold text-fg-muted`, no uppercase eyebrow. |
 | `SettingsGroup`/`SettingsRow` | 52 pt rows, inset separators, `rounded-md` group. |
@@ -139,15 +139,15 @@ Icon-only floating bar (messages, layers, activity), selected tab = accent icon 
 - Header: account avatar · "Chats" · search · new chat (unchanged structure).
 - Filters: one compact segmented row: **All · Running (count) · Done**, plus the source filter
   icon. The "Done" window moves into the chip as a suffix (`Done · 24h`) instead of a caption line.
-- Row (`ListRow`, 64 pt): Space avatar 40 with `StatusGlyph`; line 1 = title (fork icon prefix
+- Row (`ListRow`, 64 pt): Space avatar 40 with `AvatarStatus`; line 1 = title (fork icon prefix
   when forked) + time; line 2 = `Space name · preview` in `text-subhead`. The separate
   "Forked from…" line and the "Running" pill are removed; labels collapse to at most two
   `rounded-xs` tags at the end of line 2.
 - Result: rows drop from 76–110 pt to 64 pt. About 30% more Chats per screen.
 
 ### Spaces
-- Pinned group first with a pin glyph in its section header, then the rest.
-- Row (64 pt): avatar 40 with an active dot; line 1 = name + last activity time; line 2 =
+- Filters unchanged (Recent · All · Pinned · This device); pinned Spaces carry a pin glyph before the name in every filter.
+- Row (64 pt): avatar 40 with the runtime dot when the Space is running; line 1 = name + last activity time; line 2 =
   description, or `💬 count` when there is none. "Active" pill, "Active 3m ago" line, chevron,
   and the always-visible pin button are removed. Pin/unpin is in the long-press menu.
 
@@ -166,7 +166,7 @@ Icon-only floating bar (messages, layers, activity), selected tab = accent icon 
 ### Space home
 - Header: avatar 56, name `text-title`, description `text-subhead` (3 lines max).
 - Stats as one row of `Meta` items (chats, works, saves, tasks) instead of labelled tiles.
-- Sections use `ListRow`; task and Work status pills become `StatusGlyph`; "Load more" becomes
+- Sections use `ListRow`; task and Work status pills become leading status icons; "Load more" becomes
   a centered icon button with a count.
 
 ### Chat thread
@@ -218,7 +218,8 @@ Icons that may stand alone. Anything not listed keeps a text label.
 | Spaces | `layers` |
 | Activity | `activity` |
 | Files | `folder-open` |
-| Running | accent ring (glyph) |
+| Chat running | accent ring on the avatar |
+| Space runtime up | green dot on the avatar |
 | Failed | `alert` badge |
 | Stopped | `stop` badge |
 | Forked | `git-fork` |

@@ -205,7 +205,7 @@ export default function DebugUpdatesScreen() {
             <PrimaryButton
               label="下载并重启"
               icon="download"
-              tone="danger"
+              variant="danger"
               loading={busy === "fetch"}
               disabled={!updatesEnabled || busy !== null}
               onPress={() => void fetchAndReload()}
