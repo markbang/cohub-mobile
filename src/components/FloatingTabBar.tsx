@@ -1,15 +1,15 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import * as Haptics from "expo-haptics";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, Pressable, View } from "react-native";
+import { Keyboard, Platform, Pressable, Text, View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { edgeChrome, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 
-const BAR_HEIGHT = 52;
-/** Icon-only tabs: each item is a fixed slot, so the bar hugs its content instead of the screen width. */
-const ITEM_WIDTH = 68;
+const BAR_HEIGHT = 58;
+/** Equal fixed slots keep the indicator math simple and let the bar hug its content instead of the screen width. */
+const ITEM_WIDTH = 80;
 const BAR_BOTTOM_MARGIN = 8;
 const INDICATOR_DURATION = 250;
 const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
@@ -114,9 +114,11 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
                 testID={options.tabBarButtonTestID}
                 onPress={onPress}
                 onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
-                className="flex-1 items-center justify-center active:opacity-65"
+                className="flex-1 items-center justify-center gap-0.5 px-1 active:opacity-65"
               >
-                {options.tabBarIcon?.({ focused, color, size: 22 })}
+                {options.tabBarIcon?.({ focused, color, size: 20 })}
+                {/* Labels are the one place icons never stand alone: tabs name destinations. */}
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} className={`text-micro ${focused ? "font-semibold text-accent" : "font-medium text-fg-muted"}`}>{label}</Text>
               </Pressable>
             );
           })}
