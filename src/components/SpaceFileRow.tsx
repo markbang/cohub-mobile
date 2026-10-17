@@ -89,11 +89,11 @@ export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: S
       <View style={{ width: compact ? 33 : 34, height: compact ? 33 : 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: fileType ? `${fileType.color}1f` : isDirectory ? theme.colors.accentSoft : theme.colors.surface }}>
         {fileType ? <fileType.icon size={17} color={fileType.color} /> : <AppIcon name={icon} size={17} color={iconColor} />}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{entry.name}</Text>
+      <View className="flex-1 min-w-0">
+        <Text numberOfLines={1} className="text-body font-semibold text-fg">{entry.name}</Text>
         <Text numberOfLines={1} style={[typography.micro, { color: theme.colors.textMuted, marginTop: compact ? 2 : 3 }]}>{detail}</Text>
       </View>
-      {!compact ? <Text style={[typography.micro, { color: theme.colors.textFaint }]}>{entry.mtimeMs ? formatRelativeTime(new Date(entry.mtimeMs).toISOString()) : ""}</Text> : null}
+      {!compact ? <Text className="text-micro font-semibold text-fg-faint">{entry.mtimeMs ? formatRelativeTime(new Date(entry.mtimeMs).toISOString()) : ""}</Text> : null}
       <AppIcon name="chevron-right" size={compact ? 15 : 16} color={theme.colors.textFaint} />
     </PressableScale>
   );

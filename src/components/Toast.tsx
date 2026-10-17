@@ -7,7 +7,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { dismissToast, pushToast, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon } from "@/src/ui";
 
 type ShowToast = (toast: { title: string; message?: string; tone?: ToastTone }) => void;
@@ -137,9 +137,9 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
     <GestureDetector gesture={pan}>
     <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} style={[styles.card, frame, animatedStyle]}>
         <AppIcon name={danger ? "alert" : "check"} size={16} color={danger ? theme.colors.danger : theme.colors.success} />
-        <View style={styles.text}>
-          <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{toast.title}</Text>
-          {toast.message ? <Text numberOfLines={2} style={[typography.caption, { color: theme.colors.textSecondary }]}>{toast.message}</Text> : null}
+        <View className="flex-1 min-w-0 gap-0">
+          <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>
+          {toast.message ? <Text numberOfLines={2} className="text-caption text-fg-secondary">{toast.message}</Text> : null}
         </View>
       </Reanimated.View>
     </GestureDetector>
@@ -149,5 +149,4 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
 const styles = StyleSheet.create({
   layer: { position: "absolute", left: 12, right: 12, zIndex: 90 },
   card: { position: "absolute", left: 0, right: 0, bottom: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 16, borderCurve: "continuous", borderWidth: 1, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 6 },
-  text: { flex: 1, minWidth: 0, gap: 1 },
 });

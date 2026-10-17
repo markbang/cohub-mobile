@@ -134,9 +134,9 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
       testID="session-label-sheet"
       footer={
         <View>
-          <Text style={[typography.caption, { color: theme.colors.textMuted, marginBottom: 8 }]}>{t("labels.createSection")}</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ flex: 1 }}>
+          <Text className="text-caption text-fg-muted mb-2">{t("labels.createSection")}</Text>
+          <View className="flex-row items-center gap-2">
+            <View className="flex-1">
               <TextInput
                 value={newLabelName}
                 onChangeText={setNewLabelName}
@@ -148,15 +148,15 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
               />
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} style={({ pressed }) => ({ minHeight: 42, paddingHorizontal: 14, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: !newLabelName.trim() || creating ? theme.colors.surfaceRaised : pressed ? theme.colors.accentPressed : theme.colors.accent, opacity: !newLabelName.trim() || creating ? 0.6 : 1 })}>
-              {creating ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <Text style={[typography.bodyMedium, { color: theme.colors.accentText }]}>{t("common.create")}</Text>}
+              {creating ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <Text className="text-body font-semibold text-on-accent">{t("common.create")}</Text>}
             </Pressable>
           </View>
         </View>
       }
     >
-      {labelsError ? <Pressable accessibilityRole="button" accessibilityLabel={t("labels.retry")} onPress={reload} style={{ paddingVertical: 8 }}><Text style={[typography.caption, { color: theme.colors.accent }]}>{t("labels.loadFailed")}</Text></Pressable> : null}
-      {loading && selectable.length === 0 ? <View style={{ paddingVertical: 24, alignItems: "center" }}><ActivityIndicator size="small" color={theme.colors.accent} /></View> : selectable.length === 0 ? (
-        <Text style={[typography.caption, { color: theme.colors.textMuted, paddingVertical: 14 }]}>{t("labels.none")}</Text>
+      {labelsError ? <Pressable accessibilityRole="button" accessibilityLabel={t("labels.retry")} onPress={reload} className="py-2"><Text className="text-caption text-accent">{t("labels.loadFailed")}</Text></Pressable> : null}
+      {loading && selectable.length === 0 ? <View className="py-6 items-center"><ActivityIndicator size="small" color={theme.colors.accent} /></View> : selectable.length === 0 ? (
+        <Text className="text-caption text-fg-muted py-4">{t("labels.none")}</Text>
       ) : selectable.map((item) => {
         const assigned = assignedIds.has(item.id);
         const busy = busyLabelIds.has(item.id);
@@ -173,12 +173,12 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
             <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: assigned ? theme.colors.accent : theme.colors.borderStrong, backgroundColor: assigned ? theme.colors.accent : "transparent", alignItems: "center", justifyContent: "center" }}>
               {assigned ? <AppIcon name="check" size={15} color={theme.colors.accentText} /> : null}
             </View>
-            <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, flex: 1 }]}>{item.name}</Text>
+            <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
             {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
           </Pressable>
         );
       })}
-      {error ? <Text selectable style={[typography.micro, { color: theme.colors.danger, marginTop: 8 }]}>{error}</Text> : null}
+      {error ? <Text selectable className="text-micro font-semibold text-danger mt-2">{error}</Text> : null}
     </AdaptiveSheet>
   );
 }

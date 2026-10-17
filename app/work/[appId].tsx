@@ -6,7 +6,7 @@ import { WebView } from "react-native-webview";
 import { useApp } from "@/src/data/context";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { DataError, TopBar, IconButton, LoadingRows, Screen } from "@/src/ui";
 
 type Params = { appId?: string | string[] };
@@ -57,7 +57,7 @@ export default function WorkScreen() {
       )} 
     />
     {error ? <DataError message={error} onRetry={() => void load()} /> : null}
-    {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl ? <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}><Text style={[typography.body, { color: theme.colors.textMuted, textAlign: "center" }]}>{t("work.noContent")}</Text></View> : <WebView
+    {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <WebView
       source={{ uri: contentUrl }}
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       originWhitelist={["https://*"]}

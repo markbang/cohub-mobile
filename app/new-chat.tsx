@@ -6,7 +6,7 @@ import { useApp } from "@/src/data/context";
 import { normalizeSearchQuery } from "@/src/data/session-search";
 import { selectSpaceList } from "@/src/data/space-list";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingRows, Screen, SearchField, TopBar } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
@@ -43,7 +43,7 @@ export default function NewChatScreen() {
 
   return <Screen keyboard>
     <TopBar title={t("route.newChat")} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("route.newChat") })} onPress={() => router.back()} />} />
-    {state.spaces.length > 0 ? <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+    {state.spaces.length > 0 ? <View className="px-4 pb-2">
       <SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} />
     </View> : null}
     {error ? <DataError message={error} onRetry={() => void refreshHome()} /> : null}
@@ -63,9 +63,9 @@ export default function NewChatScreen() {
           style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 11, minHeight: 66, paddingHorizontal: 12, backgroundColor: selected ? theme.colors.accentSoft : pressed ? theme.colors.surfacePressed : "transparent", borderBottomWidth: 1, borderBottomColor: theme.colors.border })}
         >
           <Avatar name={displaySpaceName(space)} uri={space.publicProfile?.avatarUrl} size={38} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text }]}>{displaySpaceName(space)}</Text>
-            {space.description ? <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{space.description}</Text> : null}
+          <View className="flex-1 min-w-0">
+            <Text numberOfLines={1} className="text-body font-semibold text-fg">{displaySpaceName(space)}</Text>
+            {space.description ? <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{space.description}</Text> : null}
           </View>
           <AppIcon name="arrow-right" size={18} color={selected ? theme.colors.accent : theme.colors.textFaint} />
         </Pressable>;

@@ -1,6 +1,6 @@
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppTheme, typography } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { AppIcon, type IconName } from "@/src/ui";
 
 const MIN_MENU_WIDTH = 180;
@@ -41,7 +41,7 @@ export function ContextMenu({
   );
 
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-    <View style={styles.overlay} testID={testID}>
+    <View className="flex-1" testID={testID}>
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
       <View accessibilityRole="menu" style={[styles.menu, { top, left, width: menuWidth, backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border, shadowColor: theme.colors.shadow }]}>
         {actions.map((action) => (
@@ -56,7 +56,7 @@ export function ContextMenu({
             style={({ pressed }) => [styles.row, { backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" }]}
           >
             <AppIcon name={action.icon} size={18} color={theme.colors.textSecondary} />
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{action.title}</Text>
+            <Text className="text-body font-semibold text-fg">{action.title}</Text>
           </Pressable>
         ))}
       </View>
@@ -65,9 +65,6 @@ export function ContextMenu({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-  },
   menu: {
     position: "absolute",
     borderWidth: StyleSheet.hairlineWidth,

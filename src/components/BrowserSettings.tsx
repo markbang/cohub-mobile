@@ -25,7 +25,7 @@ export function BrowserSettings() {
   };
   return <View testID="browser-settings">
     <SectionHeader title={t("settings.browser.section")} />
-    {!current.loaded && !current.error ? <ActivityIndicator color={theme.colors.accent} style={{ padding: theme.spacing.xl }} /> : <View accessibilityRole="radiogroup">
+    {!current.loaded && !current.error ? <ActivityIndicator color={theme.colors.accent} className="p-6" /> : <View accessibilityRole="radiogroup">
       {(["system", "in-app"] as const).map((option) => {
         const selected = current.loaded && current.preference === option;
         const title = t(option === "system" ? "settings.browser.system" : "settings.browser.inApp");
@@ -41,14 +41,14 @@ export function BrowserSettings() {
         >
           <AppIcon name={option === "system" ? "external-link" : "globe"} size={20} color={theme.colors.textMuted} />
           <Text style={[typography.body, { flex: 1, color: selected ? theme.colors.accent : theme.colors.text }]}>{title}</Text>
-          <View style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
+          <View className="w-6 h-6 items-center justify-center">
             {selected ? <AppIcon name="check" size={18} color={theme.colors.accent} /> : null}
           </View>
         </Pressable>;
       })}
     </View>}
-    {current.error || saveError ? <View style={{ padding: theme.spacing.lg, gap: theme.spacing.sm, flexDirection: "row", alignItems: "center" }}>
-      <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{t(saveError ? "settings.browser.saveFailed" : "settings.browser.loadFailed")}</Text>
+    {current.error || saveError ? <View className="p-4 gap-2 flex-row items-center">
+      <Text accessibilityRole="alert" className="text-caption text-danger flex-1">{t(saveError ? "settings.browser.saveFailed" : "settings.browser.loadFailed")}</Text>
       {current.error ? <IconButton name="refresh" label={t("common.retry")} disabled={saving} onPress={() => void loadBrowserPreference().catch(() => undefined)} /> : null}
     </View> : null}
   </View>;

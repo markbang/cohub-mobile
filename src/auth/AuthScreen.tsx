@@ -24,33 +24,33 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
   const [pressed, setPressed] = useState(false);
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top + 30, paddingBottom: insets.bottom + 24 }]}>
-      <View style={styles.header}>
+      <View className="items-center">
         <BrandMark size={54} />
-        <Text style={[typography.display, { color: theme.colors.text, marginTop: 20 }]}>Cohub</Text>
-        <Text style={[typography.body, { color: theme.colors.textMuted, marginTop: 9, textAlign: "center", maxWidth: 290 }]}>{t("auth.tagline")}</Text>
+        <Text className="text-display font-bold text-fg mt-5">Cohub</Text>
+        <Text className="text-body text-fg-muted mt-2 text-center max-w-72">{t("auth.tagline")}</Text>
       </View>
 
       <View style={styles.center}>
-        <View style={[styles.signalRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
-          <View style={[styles.signalIcon, { backgroundColor: theme.colors.accentSoft }]}><AppIcon name="sparkles" size={20} color={theme.colors.accent} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("auth.feature.context.title")}</Text>
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{t("auth.feature.context.body")}</Text>
+        <View className="flex-row items-center gap-3 border rounded-md p-4 border-border bg-surface">
+          <View className="w-10 h-10 rounded-md items-center justify-center bg-accent-soft"><AppIcon name="sparkles" size={20} color={theme.colors.accent} /></View>
+          <View className="flex-1">
+            <Text className="text-body font-semibold text-fg">{t("auth.feature.context.title")}</Text>
+            <Text className="text-caption text-fg-muted mt-1">{t("auth.feature.context.body")}</Text>
           </View>
         </View>
-        <View style={[styles.signalRow, { borderColor: theme.colors.border, backgroundColor: theme.colors.surface, marginTop: 10 }]}>
-          <View style={[styles.signalIcon, { backgroundColor: theme.colors.infoSoft }]}><AppIcon name="sync" size={20} color={theme.colors.info} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>{t("auth.feature.sync.title")}</Text>
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 3 }]}>{t("auth.feature.sync.body")}</Text>
+        <View className="flex-row items-center gap-3 border rounded-md p-4 border-border bg-surface mt-2">
+          <View className="w-10 h-10 rounded-md items-center justify-center bg-info-soft"><AppIcon name="sync" size={20} color={theme.colors.info} /></View>
+          <View className="flex-1">
+            <Text className="text-body font-semibold text-fg">{t("auth.feature.sync.title")}</Text>
+            <Text className="text-caption text-fg-muted mt-1">{t("auth.feature.sync.body")}</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.footer}>
-        <View style={styles.environment}>
-          <Text style={[typography.micro, { color: theme.colors.textFaint, marginBottom: 7 }]}>{t("auth.environment")}</Text>
-          <View style={[styles.segmented, { borderColor: theme.colors.borderStrong }]}>
+        <View className="mb-3">
+          <Text className="text-micro font-semibold text-fg-faint mb-2">{t("auth.environment")}</Text>
+          <View className="min-h-11 border rounded-lg flex-row overflow-hidden border-border-strong">
             {ENVIRONMENT_OPTIONS.map((option, index) => {
               const selected = environment === option.value;
               const label = t(option.labelKey);
@@ -75,7 +75,7 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
             })}
           </View>
         </View>
-        {error ? <View style={[styles.error, { backgroundColor: theme.colors.dangerSoft, borderColor: theme.colors.danger }]}><AppIcon name="alert" size={16} color={theme.colors.danger} /><Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{error}</Text></View> : null}
+        {error ? <View className="flex-row items-center gap-2 border rounded-md p-3 mb-2 bg-danger-soft border-danger"><AppIcon name="alert" size={16} color={theme.colors.danger} /><Text className="text-caption text-danger flex-1">{error}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("auth.continue")}
@@ -86,9 +86,9 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
           style={[styles.signIn, { backgroundColor: pressed ? theme.colors.accentPressed : theme.colors.accent, opacity: loading ? 0.65 : 1 }]}
         >
           {loading ? <ActivityIndicator color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} color={theme.colors.accentText} />}
-          <Text style={[typography.bodyMedium, { color: theme.colors.accentText }]}>{loading ? t("auth.opening") : t("auth.continue")}</Text>
+          <Text className="text-body font-semibold text-on-accent">{loading ? t("auth.opening") : t("auth.continue")}</Text>
         </Pressable>
-        <Text style={[typography.micro, { color: theme.colors.textFaint, textAlign: "center", marginTop: 12 }]}>{t("auth.secure")}</Text>
+        <Text className="text-micro font-semibold text-fg-faint text-center mt-3">{t("auth.secure")}</Text>
       </View>
     </View>
   );
@@ -96,14 +96,8 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
 
 const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: 22, justifyContent: "space-between" },
-  header: { alignItems: "center" },
   center: { width: "100%", maxWidth: 420, alignSelf: "center" },
-  signalRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 16, padding: 14 },
-  signalIcon: { width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   footer: { width: "100%", maxWidth: 420, alignSelf: "center" },
-  error: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 11, marginBottom: 10 },
-  environment: { marginBottom: 12 },
-  segmented: { minHeight: 44, borderWidth: 1, borderRadius: 22, flexDirection: "row", overflow: "hidden" },
   segment: { flex: 1, minHeight: 42, alignItems: "center", justifyContent: "center" },
   signIn: { minHeight: 52, borderRadius: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
 });

@@ -37,7 +37,7 @@ function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessio
   const title = relatedTitle(view);
   const unavailable = view.status === "unavailable";
   const label = title ? t("turn.related.from", { title }) : unavailable ? t("turn.related.fromUnavailable") : t("turn.related.fromChat");
-  return <View style={{ alignItems: "flex-end", paddingHorizontal: 16, marginTop: 4 }}>
+  return <View className="items-end px-4 mt-1">
     <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={({ pressed }) => ({ maxWidth: "86%", minHeight: 32, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
       <Dot />
       <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textMuted }]}>{label}</Text>
@@ -53,19 +53,19 @@ export function SentToList({ turn, spaceId, client, lookupSession, onOpen }: Rel
   const sessions = sentSessions(turn, spaceId);
   if (sessions.length === 0) return null;
   const first = sessions[0];
-  if (sessions.length === 1 && first) return <View style={{ marginHorizontal: 18 }}><SentSessionRow session={first} single client={client} lookupSession={lookupSession} onOpen={onOpen} /></View>;
+  if (sessions.length === 1 && first) return <View className="mx-4"><SentSessionRow session={first} single client={client} lookupSession={lookupSession} onOpen={onOpen} /></View>;
   // Never fold a single leftover row behind a button.
   const collapsed = !expanded && sessions.length > VISIBLE_SENT_SESSIONS + 1;
   const visible = collapsed ? sessions.slice(0, VISIBLE_SENT_SESSIONS) : sessions;
-  return <View style={{ marginHorizontal: 18 }}>
-    <View style={{ minHeight: 32, flexDirection: "row", alignItems: "center", gap: 8 }}>
+  return <View className="mx-4">
+    <View className="min-h-8 flex-row items-center gap-2">
       <Dot />
-      <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("turn.related.sentCount", { count: sessions.length })}</Text>
+      <Text className="text-caption text-fg-muted">{t("turn.related.sentCount", { count: sessions.length })}</Text>
     </View>
     <View style={{ marginLeft: 2, borderLeftWidth: 1, borderLeftColor: theme.colors.border, paddingLeft: 12 }}>
       {visible.map((session) => <SentSessionRow key={`${session.spaceId}:${session.sessionId}`} session={session} client={client} lookupSession={lookupSession} onOpen={onOpen} />)}
       {collapsed ? <Pressable accessibilityRole="button" onPress={() => setExpanded(true)} style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", opacity: pressed ? 0.55 : 1 })}>
-        <Text style={[typography.caption, { color: theme.colors.accent }]}>{t("turn.related.showMore", { count: sessions.length - VISIBLE_SENT_SESSIONS })}</Text>
+        <Text className="text-caption text-accent">{t("turn.related.showMore", { count: sessions.length - VISIBLE_SENT_SESSIONS })}</Text>
       </Pressable> : null}
     </View>
   </View>;
@@ -83,7 +83,7 @@ function SentSessionRow({ session, single = false, client, lookupSession, onOpen
     {single ? <Dot /> : null}
     <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color: unavailable ? theme.colors.textFaint : theme.colors.textSecondary }]}>{label}</Text>
     {session.count > 1 ? <Text style={[typography.caption, { color: theme.colors.textFaint, fontVariant: ["tabular-nums"] }]}>×{session.count}</Text> : null}
-    <View style={{ flex: 1 }} />
+    <View className="flex-1" />
     {unavailable ? null : <AppIcon name="chevron-right" size={14} color={theme.colors.textFaint} />}
   </Pressable>;
 }
@@ -96,13 +96,13 @@ export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: Rel
   const unavailable = view.status === "unavailable";
   const label = title ? t("session.forkedFrom", { title }) : unavailable ? t("session.forkedFromUnavailable") : t("session.forkedFromChat");
   const color = unavailable ? theme.colors.textFaint : theme.colors.textMuted;
-  return <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 10 }}>
-    <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+  return <View className="flex-row items-center gap-2 px-4 pt-2">
+    <View className="flex-1 h-0 bg-border" />
     <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={({ pressed }) => ({ maxWidth: "78%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6, opacity: pressed ? 0.55 : 1 })}>
       <AppIcon name="git-fork" size={13} color={color} />
       <Text numberOfLines={1} style={[typography.caption, { flexShrink: 1, color }]}>{label}</Text>
       {unavailable ? null : <AppIcon name="chevron-right" size={13} color={theme.colors.textFaint} />}
     </Pressable>
-    <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.border }} />
+    <View className="flex-1 h-0 bg-border" />
   </View>;
 }

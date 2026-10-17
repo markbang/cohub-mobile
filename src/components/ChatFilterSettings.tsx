@@ -11,9 +11,9 @@ export function ChatFilterSettings() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const preference = useSessionFilterPreference();
-  return <View style={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-    {preference.error ? <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm }}>
-      <Text style={[typography.caption, { color: theme.colors.danger, flex: 1 }]}>{preference.error}</Text>
+  return <View className="p-4 gap-3">
+    {preference.error ? <View className="flex-row items-center gap-2">
+      <Text className="text-caption text-danger flex-1">{preference.error}</Text>
       <IconButton name="refresh" label={t("common.retry")} onPress={() => void loadSessionFilterMinutes().catch(() => undefined)} />
     </View> : null}
     {!preference.loaded && !preference.error ? <ActivityIndicator color={theme.colors.accent} /> : <ChatFilterForm key={preference.minutes} minutes={preference.minutes} />}
@@ -46,9 +46,9 @@ function ChatFilterForm({ minutes }: { minutes: number }) {
       setSaving(false);
     }
   };
-  return <View style={{ gap: theme.spacing.md }}>
-    <Text style={[typography.heading, { color: theme.colors.text }]}>{t("settings.chats.window")}</Text>
-    <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("chats.filter.running")} / {t("chats.filter.completed")}</Text>
+  return <View className="gap-3">
+    <Text className="text-headline font-semibold text-fg">{t("settings.chats.window")}</Text>
+    <Text className="text-caption text-fg-muted">{t("chats.filter.running")} / {t("chats.filter.completed")}</Text>
     <TextInput
       testID="chat-filter-minutes"
       accessibilityLabel={t("settings.chats.window")}
@@ -60,8 +60,8 @@ function ChatFilterForm({ minutes }: { minutes: number }) {
       selectTextOnFocus
       style={[typography.body, { minHeight: 48, color: theme.colors.text, backgroundColor: theme.colors.surface, borderColor: error ? theme.colors.danger : theme.colors.border, borderWidth: 1, borderRadius: theme.radius.sm, paddingHorizontal: theme.spacing.md }]}
     />
-    <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("settings.chats.range", { max: MAX_SESSION_FILTER_MINUTES })}</Text>
-    {error ? <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.danger }]}>{error}</Text> : null}
-    <PrimaryButton label={t("common.save")} icon="check" loading={saving} disabled={saving} onPress={() => void save()} style={{ alignSelf: "flex-start" }} />
+    <Text className="text-caption text-fg-muted">{t("settings.chats.range", { max: MAX_SESSION_FILTER_MINUTES })}</Text>
+    {error ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : null}
+    <PrimaryButton label={t("common.save")} icon="check" loading={saving} disabled={saving} onPress={() => void save()} className="self-start" />
   </View>;
 }

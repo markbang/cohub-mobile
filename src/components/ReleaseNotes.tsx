@@ -19,16 +19,15 @@ type ReleaseBlock =
   | { kind: "rule" };
 
 export function ReleaseNotes({ content }: ReleaseNotesProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   if (!content?.trim()) {
     return (
-      <Text style={[typography.body, { color: theme.colors.textMuted }]}>{t("releaseNotes.empty")}</Text>
+      <Text className="text-body text-fg-muted">{t("releaseNotes.empty")}</Text>
     );
   }
 
   return (
-    <View style={{ gap: 12 }}>
+    <View className="gap-3">
       {parseReleaseBlocks(content).map((block, index) => (
         <ReleaseBlockView key={`${block.kind}-${index}`} block={block} />
       ))}
@@ -121,7 +120,7 @@ function parseReleaseBlocks(value: string): ReleaseBlock[] {
 function ReleaseBlockView({ block }: { block: ReleaseBlock }) {
   const theme = useAppTheme();
   if (block.kind === "rule") {
-    return <View style={{ height: 1, backgroundColor: theme.colors.border }} />;
+    return <View className="h-0 bg-border" />;
   }
   if (block.kind === "code") {
     return <CodeBlock code={block.content || " "} language={block.language} />;
@@ -132,16 +131,16 @@ function ReleaseBlockView({ block }: { block: ReleaseBlock }) {
   }
   if (block.kind === "bullet" || block.kind === "ordered") {
     return (
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 9 }}>
+      <View className="flex-row items-start gap-2">
         <Text style={[typography.bodyMedium, { color: theme.colors.accent, width: block.kind === "ordered" ? 24 : 13, textAlign: block.kind === "ordered" ? "right" : "center" }]}>{block.marker}</Text>
-        <Text selectable style={[typography.body, { color: theme.colors.text, flex: 1 }]}>{renderInline(block.content, theme.colors.accent)}</Text>
+        <Text selectable className="text-body text-fg flex-1">{renderInline(block.content, theme.colors.accent)}</Text>
       </View>
     );
   }
   if (block.kind === "quote") {
     return (
       <View style={{ borderLeftWidth: 3, borderLeftColor: theme.colors.accentBorder, paddingLeft: 11 }}>
-        <Text selectable style={[typography.body, { color: theme.colors.textSecondary }]}>{renderInline(block.content, theme.colors.accent)}</Text>
+        <Text selectable className="text-body text-fg-secondary">{renderInline(block.content, theme.colors.accent)}</Text>
       </View>
     );
   }
@@ -172,7 +171,7 @@ function renderInline(value: string, linkColor: ColorValue): ReactNode[] {
     } else if (match[4]) {
       nodes.push(<Text key={`code-${key}`} style={[typography.code, { fontFamily: "SpaceMono" }]}>{match[4]}</Text>);
     } else if (match[5] || match[6]) {
-      nodes.push(<Text key={`bold-${key}`} style={{ fontWeight: "700" }}>{match[5] ?? match[6]}</Text>);
+      nodes.push(<Text key={`bold-${key}`} className="font-bold">{match[5] ?? match[6]}</Text>);
     } else if (match[7]) {
       nodes.push(<Text key={`strike-${key}`} style={{ textDecorationLine: "line-through" }}>{match[7]}</Text>);
     } else if (match[8]) {

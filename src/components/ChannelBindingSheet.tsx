@@ -5,7 +5,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { useApp } from "@/src/data/context";
 import { useChannelBinding } from "@/src/data/use-channel-binding";
 import { useTranslation } from "@/src/i18n";
-import { typography, useAppTheme } from "@/src/theme";
+import { useAppTheme } from "@/src/theme";
 import { EmptyState, PrimaryButton } from "@/src/ui";
 
 export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: Channel; onClose: () => void; onChanged: () => void }) {
@@ -21,12 +21,12 @@ export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: 
     dismissible={!saving}
     footer={channel.boundSpace ? <PrimaryButton label={t("settings.channels.unbind")} icon="x" variant="danger" loading={saving} onPress={() => void save(channel.boundSpace!.id)} /> : undefined}
   >
-    {channel.boundSpace ? <Text style={[typography.body, { color: theme.colors.text }]}>{t("settings.channels.unbindConfirm")}</Text> : loading ? <ActivityIndicator color={theme.colors.accent} /> : <View>
+    {channel.boundSpace ? <Text className="text-body text-fg">{t("settings.channels.unbindConfirm")}</Text> : loading ? <ActivityIndicator color={theme.colors.accent} /> : <View>
       {spaces.map((space) => <SettingsRow key={space.id} icon="layers" title={space.name || space.id} disabled={saving} onPress={() => void save(space.id)} />)}
       {!spaces.length && !error ? <EmptyState icon="layers" title={t("settings.channels.noSpaces")} /> : null}
     </View>}
-    {error ? <View style={{ gap: theme.spacing.md }}>
-      <Text accessibilityRole="alert" style={[typography.body, { color: theme.colors.danger }]}>{error}</Text>
+    {error ? <View className="gap-3">
+      <Text accessibilityRole="alert" className="text-body text-danger">{error}</Text>
       {!channel.boundSpace ? <PrimaryButton label={t("common.retry")} icon="refresh" disabled={saving} onPress={() => void load()} /> : null}
     </View> : null}
   </AdaptiveSheet>;

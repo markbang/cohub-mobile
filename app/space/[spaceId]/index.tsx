@@ -14,9 +14,10 @@ import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
-import { AppIcon, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, StatusPill } from "@/src/ui";
-import { displaySpaceName, formatRelativeTime, sortByRecent } from "@/src/utils";
+import { useAppTheme } from "@/src/theme";
+import { AppIcon, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
+import { ListRow, Meta } from "@/src/ui/ListRow";
+import { displaySpaceName, formatNumber, formatRelativeTime, sortByRecent } from "@/src/utils";
 
 type Params = { spaceId?: string | string[] };
 
@@ -294,10 +295,10 @@ export default function SpaceScreen() {
     const opening = Boolean(spaceId) && (state.booting || !client || spaceLoading);
     return <Screen>
       <TopBar title={t("space.title")} onBack={() => router.back()} />
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <View className="flex-1 items-center justify-center p-6">
         {opening
-          ? <Text style={[typography.body, { color: theme.colors.textMuted }]}>{t("space.opening")}</Text>
-          : <><Text style={[typography.body, { color: theme.colors.textMuted, textAlign: "center" }]}>{t("space.unavailable")}</Text>{spaceError ? <Text selectable style={[typography.caption, { color: theme.colors.danger, textAlign: "center", marginTop: 8 }]}>{spaceError}</Text> : null}{spaceId ? <PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void loadSpace({ force: true })} style={{ marginTop: 16 }} /> : null}</>}
+          ? <Text className="text-body text-fg-muted">{t("space.opening")}</Text>
+          : <><Text className="text-body text-fg-muted text-center">{t("space.unavailable")}</Text>{spaceError ? <Text selectable className="text-caption text-danger text-center mt-2">{spaceError}</Text> : null}{spaceId ? <PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void loadSpace({ force: true })} className="mt-4" /> : null}</>}
       </View>
     </Screen>;
   }
@@ -329,7 +330,7 @@ export default function SpaceScreen() {
   const detailsFailed = resourceFailures.checkpoints || resourceFailures.apps || resourceFailures.tasks || resourceFailures.activity || sessionsFailed;
   const activity = resources.activity;
   return <Screen>
-    <View style={{ flex: 1 }} accessibilityElementsHidden={spaceActionsOpen} importantForAccessibility={spaceActionsOpen ? "no-hide-descendants" : "auto"}>
+    <View className="flex-1" accessibilityElementsHidden={spaceActionsOpen} importantForAccessibility={spaceActionsOpen ? "no-hide-descendants" : "auto"}>
     <SpacePanels
       key={space.id}
       spaceId={space.id}
@@ -343,43 +344,46 @@ export default function SpaceScreen() {
       onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })}
       onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}
     >
-      <View style={{ flex: 1 }}>
+      <View className="flex-1">
     <TopBar
       title={name}
       onBack={() => router.back()}
       actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} /><View ref={spaceActionsRef} collapsable={false}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View></>}
     />
-    {state.realtimeError ? <Text selectable style={[typography.caption, { color: theme.colors.danger, marginHorizontal: 16, marginTop: 10 }]}>{state.realtimeError}</Text> : null}
-    {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} style={{ marginHorizontal: 16, marginTop: 10, padding: 10, borderRadius: 10, backgroundColor: theme.colors.dangerSoft }}><Text style={[typography.caption, { color: theme.colors.danger }]}>{pinError}</Text></Pressable> : null}
+    {state.realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{state.realtimeError}</Text> : null}
+    {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}
     <ScrollView
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
+      className="flex-1 bg-background"
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       refreshControl={<RefreshControl refreshing={state.refreshing || pageRefreshing} onRefresh={() => void refreshPage()} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}
     >
-    <View style={{ alignItems: "center", paddingHorizontal: 20, paddingTop: 25, paddingBottom: 22 }}>
-      <Avatar name={name} uri={space.publicProfile?.avatarUrl} size={70} online={space.status === "running"} />
-      {space.description ? <Text style={[typography.body, { color: theme.colors.textMuted, textAlign: "center", marginTop: 12, maxWidth: 320 }]}>{space.description}</Text> : null}
-    </View>
-    <View style={{ flexDirection: "row", paddingHorizontal: 16, gap: 10 }}>
-      <SpaceMetric icon="messages" label={t("space.metric.chats")} value={`${sessions.length}${spaceSessionsHasMore ? "+" : ""}`} />
-      <SpaceMetric icon="rocket" label={t("space.metric.works")} value={String(resources.apps.length)} />
-      <SpaceMetric icon="activity" label={t("space.metric.running")} value={String(activeTasks)} />
+    {/* The bar already names the Space; the header adds what the name cannot: who, what, how busy. */}
+    <View className="flex-row items-start gap-4 px-4 pb-2 pt-3">
+      <Avatar name={name} uri={space.publicProfile?.avatarUrl} size={56} online={space.status === "running"} />
+      <View className="min-w-0 flex-1 gap-2">
+        {space.description ? <Text numberOfLines={3} className="text-subhead text-fg-secondary">{space.description}</Text> : null}
+        <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
+          <Meta icon="messages" value={`${sessions.length}${spaceSessionsHasMore ? "+" : ""}`} label={`${t("space.metric.chats")}: ${sessions.length}`} />
+          <Meta icon="rocket" value={String(resources.apps.length)} label={`${t("space.metric.works")}: ${resources.apps.length}`} />
+          <Meta icon="sync" value={String(activeTasks)} label={`${t("space.metric.running")}: ${activeTasks}`} tone={activeTasks > 0 ? "accent" : "muted"} />
+        </View>
+      </View>
     </View>
     
     {activity && (
-      <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 16 }}>
-        <Text style={[typography.heading, { color: theme.colors.text }]}>{t("space.activity.title")}</Text>
+      <View className="px-4 pt-4 gap-4">
+        <Text className="text-headline font-semibold text-fg">{t("space.activity.title")}</Text>
         
         <ActivityHeatmap hourly={activity.hourly} days={activity.days} />
         
         {activity.rankings.apps.length > 0 && (
           <View>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text, marginBottom: 8 }]}>{t("space.activity.topApps")}</Text>
-            <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+            <Text className="text-body font-semibold text-fg mb-2">{t("space.activity.topApps")}</Text>
+            <View className="flex-row gap-2 flex-wrap">
               {activity.rankings.apps.slice(0, 3).map((app) => (
-                <View key={app.appId} style={{ flex: 1, minWidth: 100, padding: 10, borderRadius: 10, backgroundColor: theme.colors.surface }}>
-                  <Text numberOfLines={1} style={[typography.caption, { color: theme.colors.text }]}>{app.title || "App"}</Text>
-                  <Text style={[typography.micro, { color: theme.colors.textMuted, marginTop: 2 }]}>{app.viewCount} views</Text>
+                <View key={app.appId} className="min-w-25 flex-1 gap-1 rounded-md bg-surface p-3" style={{ borderCurve: "continuous" }}>
+                  <Text numberOfLines={1} className="text-subhead font-semibold text-fg">{app.title || "App"}</Text>
+                  <Meta icon="eye" value={formatNumber(app.viewCount)} label={`${app.viewCount}`} />
                 </View>
               ))}
             </View>
@@ -388,14 +392,14 @@ export default function SpaceScreen() {
         
         {activity.contributors.items.length > 0 && (
           <View>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text, marginBottom: 8 }]}>{t("space.activity.contributors")}</Text>
-            <View style={{ gap: theme.spacing.sm }}>
+            <Text className="text-body font-semibold text-fg mb-2">{t("space.activity.contributors")}</Text>
+            <View className="gap-2">
               {activity.contributors.items.slice(0, 5).map((contributor) => {
                 const contributorName = activityContributorName(contributor, t("space.activity.unknownContributor"));
-                return <View key={contributor.userUuid} style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm }}>
+                return <View key={contributor.userUuid} className="flex-row items-center gap-2">
                   <Avatar name={contributorName} uri={contributor.profile?.avatarUrl} size={32} />
-                  <Text numberOfLines={1} style={[typography.body, { flex: 1, minWidth: 0, color: theme.colors.text }]}>{contributorName}</Text>
-                  <Text style={[typography.caption, { color: theme.colors.textMuted }]}>{t("activity.metric.requests")} · {contributor.requests.toLocaleString()}</Text>
+                  <Text numberOfLines={1} className="text-body flex-1 min-w-0 text-fg">{contributorName}</Text>
+                  <Meta icon="zap" value={formatNumber(contributor.requests)} label={`${t("activity.metric.requests")}: ${contributor.requests.toLocaleString()}`} />
                 </View>;
               })}
             </View>
@@ -403,20 +407,20 @@ export default function SpaceScreen() {
         )}
       </View>
     )}
-    {detailsFailed ? <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, marginTop: 12 }}><Text selectable style={[typography.micro, { color: theme.colors.danger, flex: 1 }]}>{t("space.resourcesFailed")}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("space.resourcesRetry")} disabled={loadingResources || sessionsLoading} onPress={() => void reloadDetails()} hitSlop={8} style={({ pressed }) => ({ opacity: loadingResources || sessionsLoading ? 0.5 : pressed ? 0.6 : 1 })}><Text style={[typography.micro, { color: theme.colors.accent }]}>{t("common.retry")}</Text></Pressable></View> : null}
+    {detailsFailed ? <View className="mt-3 flex-row items-center gap-2 pl-4 pr-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable className="flex-1 text-caption text-danger">{t("space.resourcesFailed")}</Text><IconButton name="refresh" label={t("space.resourcesRetry")} tone="accent" disabled={loadingResources || sessionsLoading} onPress={() => void reloadDetails()} /></View> : null}
 
     <SectionHeader title={t("space.section.chats")} action={{ icon: "plus", label: t("space.newChat"), onPress: () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } }) }} />
     <View>{sessions.length > 0 ? sessions.map((session) => <SessionRow key={session.id} session={{ ...session, space: session.space ?? { id: space.id, name, slug: space.slug, publicProfile: space.publicProfile ?? null } }} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: session.id } })} onPressIn={() => prefetchSession(session.id)} />) : <ResourceEmpty text={sessionsLoading ? t("space.empty.chatsLoading") : sessionsFailed ? t("space.empty.loadFailed") : t("space.empty.chats")} />}</View>
 
     <SectionHeader title={t("space.section.works")} />
-    <View>{resources.apps.length > 0 ? resources.apps.map((app) => <ResourceRow key={app.id} icon="rocket" title={app.meta?.title || app.meta?.name || app.slug} subtitle={t("space.workSubtitle", { target: app.targetType, version: app.latestVersion })} trailing={<StatusPill label={app.status === "published" ? t("space.published") : t("space.disabled")} tone={app.status === "published" ? "success" : "neutral"} />} onPress={() => router.push({ pathname: "/work/[appId]", params: { appId: app.id } })} />) : <ResourceEmpty text={resourceLoading.apps ? t("space.empty.worksLoading") : resourceFailures.apps ? t("space.empty.loadFailed") : t("space.empty.works")} />}</View>
+    <View>{resources.apps.length > 0 ? resources.apps.map((app) => <ResourceRow key={app.id} icon="rocket" tone={app.status === "published" ? "accent" : "faint"} status={app.status === "published" ? t("space.published") : t("space.disabled")} title={app.meta?.title || app.meta?.name || app.slug} subtitle={t("space.workSubtitle", { target: app.targetType, version: app.latestVersion })} onPress={() => router.push({ pathname: "/work/[appId]", params: { appId: app.id } })} />) : <ResourceEmpty text={resourceLoading.apps ? t("space.empty.worksLoading") : resourceFailures.apps ? t("space.empty.loadFailed") : t("space.empty.works")} />}</View>
 
     <SectionHeader title={t("space.section.saves")} />
-    <View>{resources.checkpoints.length > 0 ? resources.checkpoints.map((checkpoint) => <ResourceRow key={checkpoint.id} icon="bookmark" title={checkpoint.description || t("space.save", { hash: checkpoint.commitHash.slice(0, 8) })} subtitle={`${formatRelativeTime(checkpoint.createdAt)} · ${checkpoint.commitHash.slice(0, 8)}`} />) : <ResourceEmpty text={resourceLoading.checkpoints ? t("space.empty.savesLoading") : resourceFailures.checkpoints ? t("space.empty.loadFailed") : t("space.empty.saves")} />}</View>
+    <View>{resources.checkpoints.length > 0 ? resources.checkpoints.map((checkpoint) => <ResourceRow key={checkpoint.id} icon="bookmark" tone="muted" title={checkpoint.description || t("space.save", { hash: checkpoint.commitHash.slice(0, 8) })} meta={formatRelativeTime(checkpoint.createdAt)} subtitle={checkpoint.commitHash.slice(0, 8)} />) : <ResourceEmpty text={resourceLoading.checkpoints ? t("space.empty.savesLoading") : resourceFailures.checkpoints ? t("space.empty.loadFailed") : t("space.empty.saves")} />}</View>
 
     <SectionHeader title={t("space.section.tasks")} />
-    <View style={{ paddingBottom: 24 }}>{resources.tasks.length > 0 ? resources.tasks.map((task) => <ResourceRow key={task.id} icon={task.status === "running" ? "sync" : task.status === "failed" ? "alert" : "check-circle"} title={task.taskType.replaceAll("_", " ")} subtitle={task.errorMessage || t("space.taskAttempt", { time: formatRelativeTime(task.updatedAt), count: task.attemptCount })} trailing={<StatusPill label={task.status} tone={task.status === "failed" ? "danger" : task.status === "running" || task.status === "pending" ? "warning" : "success"} />} onPress={() => router.push({ pathname: "/task/[taskId]", params: { taskId: task.id } })} />) : <ResourceEmpty text={resourceLoading.tasks ? t("space.empty.tasksLoading") : resourceFailures.tasks ? t("space.empty.loadFailed") : t("space.empty.tasks")} />}</View>
-    {taskCursor ? <Pressable accessibilityRole="button" disabled={tasksLoadingMore} onPress={() => void loadMoreTasks()} style={({ pressed }) => ({ alignItems: "center", paddingVertical: 14, marginHorizontal: 16, marginBottom: 20, opacity: tasksLoadingMore ? 0.5 : pressed ? 0.6 : 1 })}><Text style={[typography.caption, { color: theme.colors.accent }]}>{tasksLoadingMore ? t("space.tasks.loadingMore") : t("space.tasks.loadMore")}</Text></Pressable> : null}
+    <View className="pb-6">{resources.tasks.length > 0 ? resources.tasks.map((task) => <ResourceRow key={task.id} icon={task.status === "running" || task.status === "pending" ? "sync" : task.status === "failed" ? "alert" : "check-circle"} tone={task.status === "failed" ? "danger" : task.status === "running" || task.status === "pending" ? "accent" : "success"} status={task.status} title={task.taskType.replaceAll("_", " ")} meta={formatRelativeTime(task.updatedAt)} subtitle={task.errorMessage || t("space.taskAttempt", { time: formatRelativeTime(task.updatedAt), count: task.attemptCount })} onPress={() => router.push({ pathname: "/task/[taskId]", params: { taskId: task.id } })} />) : <ResourceEmpty text={resourceLoading.tasks ? t("space.empty.tasksLoading") : resourceFailures.tasks ? t("space.empty.loadFailed") : t("space.empty.tasks")} />}</View>
+    {taskCursor ? <View className="mb-5 items-center"><PrimaryButton variant="ghost" icon="chevrons-down" label={tasksLoadingMore ? t("space.tasks.loadingMore") : t("space.tasks.loadMore")} loading={tasksLoadingMore} onPress={() => void loadMoreTasks()} /></View> : null}
     </ScrollView>
       </View>
     </SpacePanels>
@@ -437,20 +441,19 @@ export default function SpaceScreen() {
   </Screen>;
 }
 
-function SpaceMetric({ icon, label, value }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string }) {
-  const theme = useAppTheme();
-  return <View style={{ flex: 1, minWidth: 0, minHeight: 75, padding: 8 }}><AppIcon name={icon} size={16} color={theme.colors.accent} /><Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, marginTop: 8 }]}>{value}</Text><Text style={[typography.micro, { color: theme.colors.textMuted, marginTop: 2 }]}>{label}</Text></View>;
-}
-
-function ResourceRow({ icon, title, subtitle, trailing, onPress }: { icon: React.ComponentProps<typeof AppIcon>["name"]; title: string; subtitle: string; trailing?: React.ReactNode; onPress?: () => void }) {
-  const theme = useAppTheme();
-  const content = <View style={{ minHeight: 62, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 16 }}><View style={{ width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.surface }}><AppIcon name={icon} size={17} color={theme.colors.textMuted} /></View><View style={{ flex: 1, minWidth: 0 }}><Text numberOfLines={1} style={[typography.bodyMedium, { color: theme.colors.text, textTransform: "capitalize" }]}>{title}</Text><Text numberOfLines={1} style={[typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>{subtitle}</Text></View>{trailing}{onPress ? <AppIcon name="chevron-right" size={16} color={theme.colors.textFaint} /> : null}</View>;
-  return onPress ? <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ backgroundColor: pressed ? theme.colors.surfacePressed : "transparent" })}>{content}</Pressable> : content;
+function ResourceRow({ icon, tone, status, title, meta, subtitle, onPress }: { icon: IconName; tone: IconTone; status?: string; title: string; meta?: string; subtitle: string; onPress?: () => void }) {
+  return <ListRow
+    leading={<View className="flex-1 justify-center"><View className="size-10 items-center justify-center rounded-sm bg-surface" style={{ borderCurve: "continuous" }}><AppIcon name={icon} size={18} tone={tone} /></View></View>}
+    title={title}
+    meta={meta}
+    subtitle={subtitle}
+    accessibilityLabel={[title, status, subtitle].filter(Boolean).join(", ")}
+    onPress={onPress}
+  />;
 }
 
 function ResourceEmpty({ text }: { text: string }) {
-  const theme = useAppTheme();
-  return <Text style={[typography.body, { color: theme.colors.textMuted, paddingHorizontal: 16, paddingVertical: 12 }]}>{text}</Text>;
+  return <Text className="text-body text-fg-muted px-4 py-3">{text}</Text>;
 }
 
 function preferRecentSession(current: UserSessionListItem, incoming: UserSessionListItem) {

@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme, typography } from "@/src/theme";
-import { LoadingRows, PrimaryButton, Screen, TopBar } from "@/src/ui";
+import { useAppTheme } from "@/src/theme";
+import { LoadingRows, PrimaryButton, Screen, TopBar , FIELD_INPUT_CLASS } from "@/src/ui";
 import type { AppDetailResponse } from "@neta-art/cohub";
 
 export default function EditAppScreen() {
@@ -73,15 +73,6 @@ export default function EditAppScreen() {
     }
   };
 
-  const inputStyle = [
-    typography.body,
-    styles.input,
-    {
-      borderColor: theme.colors.border,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surface,
-    },
-  ];
 
   if (loading) {
     return (
@@ -96,8 +87,8 @@ export default function EditAppScreen() {
     return (
       <Screen>
         <TopBar title={t("app.edit.title")} onBack={() => router.back()} />
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <Text style={[typography.body, { color: theme.colors.danger, textAlign: "center" }]}>
+        <View className="flex-1 items-center justify-center p-6">
+          <Text className="text-body text-danger text-center">
             {error || t("work.error")}
           </Text>
         </View>
@@ -108,9 +99,9 @@ export default function EditAppScreen() {
   return (
     <Screen>
       <TopBar title={t("app.edit.title")} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 8 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+      <ScrollView contentContainerClassName="gap-6 p-4" keyboardShouldPersistTaps="handled">
+        <View className="gap-2">
+          <Text className="text-caption font-semibold text-fg-muted">
             {t("app.edit.title.label")}
           </Text>
           <TextInput
@@ -120,12 +111,12 @@ export default function EditAppScreen() {
             placeholderTextColor={theme.colors.textFaint}
             autoCapitalize="words"
             autoCorrect={false}
-            style={inputStyle}
+            className={FIELD_INPUT_CLASS}
           />
         </View>
 
-        <View style={{ gap: 8 }}>
-          <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+        <View className="gap-2">
+          <Text className="text-caption font-semibold text-fg-muted">
             {t("app.edit.description")}
           </Text>
           <TextInput
@@ -136,16 +127,16 @@ export default function EditAppScreen() {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
-            style={[inputStyle, { minHeight: 120 }]}
+            className={`min-h-30 ${FIELD_INPUT_CLASS}`}
           />
         </View>
 
-        <View style={[styles.row, { borderBottomColor: theme.colors.border }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={[typography.bodyMedium, { color: theme.colors.text }]}>
+        <View className="flex-row items-center gap-3 py-3 border-b border-border">
+          <View className="flex-1">
+            <Text className="text-body font-semibold text-fg">
               {t("app.edit.published")}
             </Text>
-            <Text style={[typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>
+            <Text className="text-caption text-fg-muted mt-1">
               {t("app.edit.publishedDescription")}
             </Text>
           </View>
@@ -162,30 +153,9 @@ export default function EditAppScreen() {
           onPress={handleSave}
           loading={saving}
           disabled={saving}
-          style={{ marginTop: 16 }}
+          className="mt-4"
         />
       </ScrollView>
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  content: {
-    padding: 16,
-    gap: 24,
-  },
-  input: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-});
