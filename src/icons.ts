@@ -65,6 +65,9 @@ import Settings from "lucide-react-native/icons/settings";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Tag from "lucide-react-native/icons/tag";
 import Square from "lucide-react-native/icons/square";
+import Wrench from "lucide-react-native/icons/wrench";
+import ChevronsUp from "lucide-react-native/icons/chevrons-up";
+import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import SquarePen from "lucide-react-native/icons/square-pen";
 import Terminal from "lucide-react-native/icons/terminal";
 import Type from "lucide-react-native/icons/type";
@@ -142,6 +145,9 @@ export const icons = {
   tag: Tag,
   "square-pen": SquarePen,
   stop: Square,
+  wrench: Wrench,
+  "chevrons-up": ChevronsUp,
+  "chevrons-down": ChevronsDown,
   sync: RefreshCw,
   terminal: Terminal,
   trash: Trash2,

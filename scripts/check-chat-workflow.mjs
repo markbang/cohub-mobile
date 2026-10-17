@@ -10,6 +10,7 @@ import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
+import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout } from "../src/ui/message-bubble-layout.ts";
@@ -377,6 +378,8 @@ function loadChromeComponent(path, name, scope) {
   const code = ts.transpileModule(`${statements.join("\n")}\nreturn ${name};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   return new Function(...Object.keys(scope), code)(...Object.values(scope));
 }
+// theme.ts builds its themes from the token module; evaluated in isolation, they need it in scope.
+const themeTokenScope = { lightPalette, darkPalette, pureBlackOverrides, spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 }, radius: { sm: RADIUS.sm, md: RADIUS.md, lg: RADIUS.lg, pill: 999 } };
 function chromeNodes(node) {
   if (Array.isArray(node)) return node.flatMap(chromeNodes);
   if (!node || typeof node !== "object") return [];
@@ -997,7 +1000,7 @@ for (const [tab, component, expectedRequests] of [
 // Both tabs share compact capsules inside full-sized touch targets in both themes.
 {
   for (const name of ["lightTheme", "darkTheme"]) {
-    const theme = loadChromeComponent("../src/theme.ts", name, {});
+    const theme = loadChromeComponent("../src/theme.ts", name, themeTokenScope);
     const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", { ...formScope, useAppTheme: () => theme });
     for (const selected of [false, true]) {
       let taps = 0;
@@ -1025,7 +1028,7 @@ for (const [tab, component, expectedRequests] of [
   const luminance = (color) => color.map((value) => { const s = value / 255; return s <= .04045 ? s / 12.92 : ((s + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
   const ratio = (left, right) => (Math.max(luminance(left), luminance(right)) + .05) / (Math.min(luminance(left), luminance(right)) + .05);
   for (const name of ["lightTheme", "darkTheme"]) {
-    const { colors } = loadChromeComponent("../src/theme.ts", name, {});
+    const { colors } = loadChromeComponent("../src/theme.ts", name, themeTokenScope);
     const background = rgb(colors.userBubble);
     for (const key of ["userBubbleText", "userBubbleLink", "userBubbleMeta"]) {
       const color = colors[key];
@@ -1307,7 +1310,7 @@ for (const [path, labels, chips] of [
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/, "both tabs must use the same filter component");
   assert.equal((source.match(/<FilterChip\s/g) ?? []).length, chips, "all filters must use the shared capsule");
-  const theme = loadChromeComponent("../src/theme.ts", "darkTheme", {});
+  const theme = loadChromeComponent("../src/theme.ts", "darkTheme", themeTokenScope);
   const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", { ...chromeScope, useAppTheme: () => theme });
   for (const label of labels) {
     for (const selected of [false, true]) {
@@ -3405,6 +3408,7 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
     "react-native": { useColorScheme: () => "light" },
     react: { useEffect: () => {}, useSyncExternalStore: (_, snapshot) => snapshot() },
     "@/src/data/config-theme": { compileConfigTheme },
+    "@/src/design/tokens": { lightPalette, darkPalette, pureBlackOverrides, RADIUS, TEXT_RAMP },
   };
   new Function("require", "exports", source)((name) => dependencies[name], themeExports);
   const bases = { light: themeExports.getAppThemeColors("light", false), dark: themeExports.getAppThemeColors("dark", false) };
