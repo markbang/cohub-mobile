@@ -393,7 +393,9 @@ function BubbleMeta({ clock, local = false, side, live = false, t }: { clock?: s
   const theme = useAppTheme();
   const color = side === "user" ? theme.colors.userBubbleMeta : theme.colors.textFaint;
   if (!clock && !local && !live) return null;
-  return <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 3, maxWidth: "100%" }}>
+  // Never wraps: the bubble shrink-wraps to this row, and fractional text widths can leave it a
+  // sub-pixel short of its own content, which wrapped the receipt out under the bubble.
+  return <View className="shrink-0 flex-row items-center justify-end" style={{ gap: 3 }}>
     {live ? <View className="rounded-full bg-accent" style={{ width: 5, height: 5, marginRight: 2 }} /> : null}
     {/* design-system: the bubble meta color depends on the bubble it sits in; its width feeds the inline-meta layout. */}
     {clock ? <Text style={[typography.micro, { color, fontVariant: ["tabular-nums"] }]}>{clock}</Text> : null}
