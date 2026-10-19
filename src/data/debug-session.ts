@@ -206,11 +206,11 @@ async function upload(content: string, current: DebugSnapshot | null, attachment
     form.append("app", APP_SLUG);
     form.append("content", content);
     form.append("extra", JSON.stringify(buildExtra(current, attachments.length + (sessionFile ? 1 : 0))));
-    if (sessionFile) {
-      form.append("files", { uri: sessionFile.uri, name: "cohub-diagnostics.jsonl", type: "text/plain" } as unknown as Blob);
-    }
+    // expo-fetch serializes a FormData part only when it is a Blob-like with `bytes()`;
+    // React Native's `{ uri, name, type }` parts throw "Unsupported FormDataPart implementation".
+    if (sessionFile) form.append("files", withPartType(sessionFile, "text/plain"), "cohub-diagnostics.jsonl");
     for (const attachment of attachments) {
-      form.append("files", { uri: attachment.uri, name: attachment.name, type: attachment.mimeType } as unknown as Blob);
+      form.append("files", withPartType(new File(attachment.uri), attachment.mimeType), attachment.name);
     }
     const response = await fetch(endpoint(), { method: "POST", body: form });
     return parseReceipt(response.status, await response.text());
@@ -221,6 +221,13 @@ async function upload(content: string, current: DebugSnapshot | null, attachment
       // A failed cleanup must not hide the upload result.
     }
   }
+}
+
+/** expo-fetch writes the blob's `type` as the part's content-type; a file on disk may not carry one. */
+function withPartType(file: File, mimeType: string): File {
+  if (file.type) return file;
+  Object.defineProperty(file, "type", { value: mimeType, configurable: true });
+  return file;
 }
 
 export async function submitFeedback(input: FeedbackInput): Promise<FeedbackReceipt> {
