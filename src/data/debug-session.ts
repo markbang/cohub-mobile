@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useEffect } from "react";
@@ -138,6 +139,25 @@ function formatDiagnostics(snapshot: DebugSnapshot): string {
   ].join("\n");
 }
 
+/**
+ * cfeed parses the request UA to report OS and device. Native clients otherwise send
+ * `okhttp/4.x` (Android) or a client that looks like a desktop browser (iOS), which costs
+ * both the OS version and phone/tablet detection — okhttp even matches cfeed's bot list.
+ */
+function userAgent() {
+  const app = `CohubMobile/${Constants.expoConfig?.version ?? "0.0.0"}`;
+  const osVersion = Device.osVersion ?? String(Platform.Version);
+  if (Platform.OS === "ios") {
+    const name = Device.modelName ?? (Device.deviceType === Device.DeviceType.TABLET ? "iPad" : "iPhone");
+    return `${app} (${name}; iOS ${osVersion})`;
+  }
+  if (Platform.OS === "android") {
+    const mobile = Device.deviceType === Device.DeviceType.TABLET ? "" : "; Mobile";
+    return `${app} (Android ${osVersion}; ${Device.modelName ?? "Android"}${mobile})`;
+  }
+  return `${app} (${Platform.OS})`;
+}
+
 function endpoint() {
   return `${config.diagnosticsOrigin.replace(/\/+$/, "")}/api/v1/feedback`;
 }
@@ -168,6 +188,7 @@ function buildExtra(current: DebugSnapshot | null, attachmentCount: number) {
     app_version: Constants.expoConfig?.version ?? null,
     platform: Platform.OS,
     os_version: String(Platform.Version),
+    device_model: Device.modelName ?? null,
     runtime_version: updates.runtimeVersion,
     update_id: updates.updateId,
     include_log: current !== null,
@@ -190,7 +211,7 @@ async function upload(content: string, current: DebugSnapshot | null, attachment
     // cfeed only accepts multipart when there are files; a text-only report can use JSON.
     const response = await fetch(endpoint(), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "user-agent": userAgent() },
       body: JSON.stringify({ app: APP_SLUG, content, extra: buildExtra(null, 0) }),
     });
     return parseReceipt(response.status, await response.text());
@@ -212,7 +233,7 @@ async function upload(content: string, current: DebugSnapshot | null, attachment
     for (const attachment of attachments) {
       form.append("files", filePart(new File(attachment.uri), attachment.name, attachment.mimeType) as unknown as Blob);
     }
-    const response = await fetch(endpoint(), { method: "POST", body: form });
+    const response = await fetch(endpoint(), { method: "POST", headers: { "user-agent": userAgent() }, body: form });
     return parseReceipt(response.status, await response.text());
   } finally {
     try {

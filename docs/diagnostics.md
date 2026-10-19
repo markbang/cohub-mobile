@@ -12,12 +12,23 @@ Uploads go to [cfeed](https://github.com/netaart/cfeed) at `config.diagnosticsOr
 |---|---|
 | `app` | `cohub-mobile` |
 | `content` | The user's feedback description |
-| `extra` | JSON: `app_version`, `platform`, `os_version`, `runtime_version`, `update_id`, `include_log`, `attachment_count`, and — when the log is attached — `session` (`id`, `started_at`, `events`, `dropped`) |
+| `extra` | JSON: `app_version`, `platform`, `os_version`, `device_model`, `runtime_version`, `update_id`, `include_log`, `attachment_count`, and — when the log is attached — `session` (`id`, `started_at`, `events`, `dropped`) |
 | `files` | Zero or more: `cohub-diagnostics.jsonl` (`text/plain`, the session as `cohub-diagnostics-v1` JSON Lines) followed by the user's screenshots, recordings, or documents |
 
 The log and up to four user attachments share cfeed's five-file limit; with the log off, five attachments fit.
 
-cfeed accepts only `app`, `content`, `extra`, and `website` as top-level fields; anything app-specific belongs in `extra` and is filterable as `x.<path>` (for example `x.platform=android` or `x.session.id=...`).
+cfeed accepts only `app`, `content`, `extra`, and `website` as top-level fields; anything app-specific belongs in `extra` and is filterable as `x.<path>` (for example `x.platform=android`, `x.device_model=Pixel 8`, or `x.session.id=...`).
+
+Every request sets a custom `User-Agent` so cfeed's UA parser can identify the client:
+
+```text
+CohubMobile/2.2.21 (Android 14; Pixel 8; Mobile)
+CohubMobile/2.2.21 (Android 14; Pixel Tablet)
+CohubMobile/2.2.21 (iPhone; iOS 18.0)
+CohubMobile/2.2.21 (iPad; iOS 18.0)
+```
+
+Without it Android sends `okhttp/4.x`, which cfeed classifies as a bot, and iOS hides the device type. `device_model` in `extra` is the same model name for direct filtering.
 
 The response must be `2xx` with `{ "id": "<ulid>" }`. The id is shown back to the user as a receipt and recorded as `diagnostics.upload.completed`.
 
