@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import { File, Paths, UploadType } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
@@ -15,8 +15,8 @@ const SESSION_RETENTION = 5;
 
 type DebugFields = Record<string, unknown>;
 type ActiveSession = { id: string; startedAt: string; sequence: number; dropped: number; events: DebugEventRow[]; writes: Promise<void> };
-type UploadSource = "feedback" | "diagnostics";
-export type FeedbackInput = { description: string };
+export type FeedbackAttachment = { uri: string; name: string; mimeType: string; size: number };
+export type FeedbackInput = { description: string; includeLog: boolean; attachments?: readonly FeedbackAttachment[] };
 export type FeedbackReceipt = { id: string };
 export type DebugSnapshot = { sessionId: string; startedAt: string; dropped: number; events: DebugEventRow[] };
 
@@ -143,7 +143,15 @@ function endpoint() {
 }
 
 function parseReceipt(status: number, body: string): FeedbackReceipt {
-  if (status < 200 || status >= 300) throw new Error(`Feedback upload failed (${status}).`);
+  if (status < 200 || status >= 300) {
+    let detail: unknown;
+    try {
+      detail = (JSON.parse(body) as { error?: { message?: unknown } }).error?.message;
+    } catch {
+      detail = undefined;
+    }
+    throw new Error(typeof detail === "string" && detail ? detail : `Feedback upload failed (${status}).`);
+  }
   let payload: { id?: unknown };
   try {
     payload = JSON.parse(body) as { id?: unknown };
@@ -154,58 +162,79 @@ function parseReceipt(status: number, body: string): FeedbackReceipt {
   return { id: payload.id };
 }
 
-async function uploadWithLog(content: string, source: UploadSource): Promise<FeedbackReceipt> {
-  const current = await snapshot();
+function buildExtra(current: DebugSnapshot | null, attachmentCount: number) {
   const updates = updateMetadata();
-  const file = new File(Paths.cache, `cohub-diagnostics-${current.sessionId}.jsonl`);
-  let result;
-  try {
-    file.create({ overwrite: true, intermediates: true });
-    await file.write(formatDiagnostics(current));
-    result = await file.upload(endpoint(), {
-      uploadType: UploadType.MULTIPART,
-      fieldName: "files",
-      mimeType: "text/plain",
-      parameters: {
-        app: APP_SLUG,
-        content,
-        extra: JSON.stringify({
-          app_version: Constants.expoConfig?.version ?? null,
-          platform: Platform.OS,
-          os_version: String(Platform.Version),
-          runtime_version: updates.runtimeVersion,
-          update_id: updates.updateId,
+  return {
+    app_version: Constants.expoConfig?.version ?? null,
+    platform: Platform.OS,
+    os_version: String(Platform.Version),
+    runtime_version: updates.runtimeVersion,
+    update_id: updates.updateId,
+    include_log: current !== null,
+    attachment_count: attachmentCount,
+    ...(current
+      ? {
           session: {
             id: current.sessionId,
             started_at: current.startedAt,
             events: current.events.length,
             dropped: current.dropped,
           },
-          source,
-        }),
-      },
+        }
+      : {}),
+  };
+}
+
+async function upload(content: string, current: DebugSnapshot | null, attachments: readonly FeedbackAttachment[]): Promise<FeedbackReceipt> {
+  if (!current && attachments.length === 0) {
+    // cfeed only accepts multipart when there are files; a text-only report can use JSON.
+    const response = await fetch(endpoint(), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ app: APP_SLUG, content, extra: buildExtra(null, 0) }),
     });
+    return parseReceipt(response.status, await response.text());
+  }
+
+  const sessionFile = current ? new File(Paths.cache, `cohub-diagnostics-${newId("upload")}.jsonl`) : null;
+  try {
+    if (sessionFile && current) {
+      sessionFile.create({ overwrite: true, intermediates: true });
+      await sessionFile.write(formatDiagnostics(current));
+    }
+    const form = new FormData();
+    form.append("app", APP_SLUG);
+    form.append("content", content);
+    form.append("extra", JSON.stringify(buildExtra(current, attachments.length + (sessionFile ? 1 : 0))));
+    if (sessionFile) {
+      form.append("files", { uri: sessionFile.uri, name: "cohub-diagnostics.jsonl", type: "text/plain" } as unknown as Blob);
+    }
+    for (const attachment of attachments) {
+      form.append("files", { uri: attachment.uri, name: attachment.name, type: attachment.mimeType } as unknown as Blob);
+    }
+    const response = await fetch(endpoint(), { method: "POST", body: form });
+    return parseReceipt(response.status, await response.text());
   } finally {
     try {
-      if (file.exists) file.delete();
+      if (sessionFile?.exists) sessionFile.delete();
     } catch {
       // A failed cleanup must not hide the upload result.
     }
   }
-  const receipt = parseReceipt(result.status, result.body);
-  record("diagnostics.upload.completed", { feedbackId: receipt.id, source, events: current.events.length });
-  return receipt;
 }
 
 export async function submitFeedback(input: FeedbackInput): Promise<FeedbackReceipt> {
   const description = input.description.trim();
   if (!description) throw new Error("Feedback description is required.");
-  return uploadWithLog(description, "feedback");
-}
-
-/** Uploads the latest session without a user-written description. */
-export async function uploadDiagnostics(): Promise<FeedbackReceipt> {
-  return uploadWithLog("Diagnostic log uploaded from Cohub Mobile.", "diagnostics");
+  const current = input.includeLog ? await snapshot() : null;
+  const attachments = input.attachments ?? [];
+  const receipt = await upload(description, current, attachments);
+  record("diagnostics.feedback.submitted", {
+    feedbackId: receipt.id,
+    includeLog: current !== null,
+    attachments: attachments.length,
+  });
+  return receipt;
 }
 
 export function useDebugDiagnosticsLifecycle() {
