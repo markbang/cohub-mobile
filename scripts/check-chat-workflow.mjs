@@ -470,10 +470,10 @@ const formScope = {
     useAppTheme: () => ({ colors: {}, spacing: { md: 12 }, radius: { md: 12 } }),
     installSpaceMod,
     Alert: { prompt: () => {}, alert: (...args) => alerts.push(args) },
-    Screen: "Screen", ScrollView: "ScrollView", SegmentedControl: "SegmentedControl", ActionButton: "ActionButton", Switch: "Switch",
+    Screen: "Screen", ScrollView: "ScrollView", SpecOptionList: "SpecOptionList", ActionButton: "ActionButton", Switch: "Switch",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", ActivityIndicator: "ActivityIndicator",
-    SPEC_OPTIONS: ["standard", "boost", "ultra"], SLEEP_OPTIONS: ["never", "0.5h", "2h"],
-    specNeedsRestart: () => false, sleepFromConfig: () => "2h",
+    DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
+    specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
     deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
   });
   const render = () => { cursor = 0; return chromeNodes(renderSettings()); };

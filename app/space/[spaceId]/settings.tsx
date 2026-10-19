@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
+import { FilterChip } from "@/src/components/FilterChip";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
@@ -17,8 +18,14 @@ import { useAppTheme } from "@/src/theme";
 import { AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
-const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const;
-const SLEEP_OPTIONS = ["never", "0.5h", "2h"] as const;
+const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
+// Bounds and production default mirror the server's sandbox idle policy (sandbox-controller).
+const MIN_IDLE_TTL_SECONDS = 60;
+const MAX_IDLE_TTL_SECONDS = 30 * 86400;
+const DEFAULT_IDLE_TTL_SECONDS = 12 * 3600;
+const IDLE_TTL_PRESETS = [1800, 3600, 7200, 43200, 86400, 604800] as const;
+const CUSTOM_TTL_UNITS = { minutes: 60, hours: 3600, days: 86400 } as const;
+type CustomTtlUnit = keyof typeof CUSTOM_TTL_UNITS;
 
 export default function SpaceSettingsScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
@@ -38,6 +45,32 @@ export default function SpaceSettingsScreen() {
   const [addingMod, setAddingMod] = useState(false);
   const [modError, setModError] = useState<string | null>(null);
   const modSubmitLock = useRef(false);
+  const [customTtlOpen, setCustomTtlOpen] = useState(false);
+  const [customTtlValue, setCustomTtlValue] = useState("");
+  const [customTtlUnit, setCustomTtlUnit] = useState<CustomTtlUnit>("hours");
+  const [customTtlError, setCustomTtlError] = useState<string | null>(null);
+  const idlePolicy = config?.autoDestroy.mode === "idle" ? config.autoDestroy : null;
+  const sandboxBusy = busy || restarting || resources.config.loading;
+
+  const openCustomTtl = () => {
+    const seconds = idlePolicy?.ttlSeconds ?? DEFAULT_IDLE_TTL_SECONDS;
+    const unit: CustomTtlUnit = seconds % 86400 === 0 ? "days" : seconds % 3600 === 0 ? "hours" : "minutes";
+    setCustomTtlUnit(unit);
+    setCustomTtlValue(String(Math.round(seconds / CUSTOM_TTL_UNITS[unit])));
+    setCustomTtlError(null);
+    setCustomTtlOpen(true);
+  };
+
+  const saveCustomTtl = () => {
+    const amount = Number(customTtlValue.trim());
+    const seconds = amount * CUSTOM_TTL_UNITS[customTtlUnit];
+    if (!Number.isInteger(amount) || seconds < MIN_IDLE_TTL_SECONDS || seconds > MAX_IDLE_TTL_SECONDS) {
+      setCustomTtlError(t("space.settings.sleep.invalid"));
+      return;
+    }
+    setCustomTtlOpen(false);
+    void updateSandbox({ autoDestroy: { mode: "idle", ttlSeconds: seconds } });
+  };
 
   const addEnv = async () => {
     if (!client || !spaceId || !name.trim()) return;
@@ -269,12 +302,11 @@ export default function SpaceSettingsScreen() {
           {resources.config.loaded ? <>
           <Text className="text-caption text-fg-muted mt-2">{t("space.settings.spec")}</Text>
           <ResourceStatus state={resources.allowedSpec} onRetry={() => void loadResource("allowedSpec")} />
-          <SegmentedControl
-            values={SPEC_OPTIONS}
+          <SpecOptionList
+            config={config}
             value={config?.spec ?? "standard"}
             maxValue={allowedSpec}
-            disabled={busy || restarting || resources.config.loading || resources.allowedSpec.loading || !resources.allowedSpec.loaded}
-            labels={[t("space.settings.spec.standard"), t("space.settings.spec.boost"), t("space.settings.spec.ultra")]}
+            disabled={sandboxBusy || resources.allowedSpec.loading || !resources.allowedSpec.loaded}
             onChange={(spec) => void updateSandbox({ spec })}
             onLocked={() => toast({ title: t("space.settings.upgradeRequired"), message: t("space.settings.upgradeRequired.body"), tone: "danger" })}
           />
@@ -296,13 +328,29 @@ export default function SpaceSettingsScreen() {
             </View>
           ) : null}
           <Text className="text-caption text-fg-muted mt-5">{t("space.settings.sleep")}</Text>
-          <SegmentedControl
-            values={SLEEP_OPTIONS}
-            value={sleepFromConfig(config)}
-            labels={[t("space.settings.sleep.never"), t("space.settings.sleep.halfHour"), t("space.settings.sleep.twoHours")]}
-            disabled={busy || restarting || resources.config.loading}
-            onChange={(selected) => void updateSandbox({ autoDestroy: sleepToPolicy(selected) })}
+          <Segmented
+            className="mt-2"
+            disabled={sandboxBusy}
+            value={idlePolicy ? "idle" : "never"}
+            options={[{ value: "idle", label: t("space.settings.sleep.afterIdle") }, { value: "never", label: t("space.settings.sleep.never") }]}
+            onChange={(mode) => void updateSandbox({ autoDestroy: mode === "never" ? { mode: "never" } : { mode: "idle", ttlSeconds: DEFAULT_IDLE_TTL_SECONDS } })}
           />
+          {idlePolicy ? (
+            <View className={`flex-row flex-wrap mt-1 ${sandboxBusy ? "opacity-45" : ""}`}>
+              {idleTtlChoices(idlePolicy.ttlSeconds).map((seconds) => (
+                <FilterChip
+                  key={seconds}
+                  label={formatIdleTtl(seconds, t)}
+                  selected={seconds === idlePolicy.ttlSeconds}
+                  onPress={() => { if (!sandboxBusy && seconds !== idlePolicy.ttlSeconds) void updateSandbox({ autoDestroy: { mode: "idle", ttlSeconds: seconds } }); }}
+                />
+              ))}
+              <FilterChip label={t("space.settings.sleep.custom")} icon="square-pen" selected={false} onPress={() => { if (!sandboxBusy) openCustomTtl(); }} />
+            </View>
+          ) : null}
+          <Text className="text-caption text-fg-faint mt-1">
+            {idlePolicy ? t("space.settings.sleep.idleHint", { duration: formatIdleTtl(idlePolicy.ttlSeconds, t) }) : t("space.settings.sleep.neverHint")}
+          </Text>
           </> : null}
         </View>
 
@@ -319,7 +367,7 @@ export default function SpaceSettingsScreen() {
               <AppIcon name="globe" size={18} tone="accent" />
               <View className="flex-1 min-w-0">
                 <Text className="text-body font-semibold text-fg">{t("space.settings.portLabel", { port: key })}</Text>
-                <Text numberOfLines={1} selectable className="text-caption text-fg-muted mt-1">
+                <Text numberOfLines={1} ellipsizeMode="middle" className="text-caption text-fg-muted mt-1">
                   {endpoint.url ?? t("space.settings.portUnavailable")}
                 </Text>
               </View>
@@ -344,11 +392,11 @@ export default function SpaceSettingsScreen() {
             resources.mods.loaded && !resources.mods.error && !resources.mods.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noMods")}</Text> : null
           ) : (
             mods.map((mod) => (
-              <View key={mod.id} className="py-3 border-b border-border">
+              <View key={mod.id} className="flex-row items-center gap-3 py-3 border-b border-border">
                 <View className="flex-1 min-w-0">
                   <Text numberOfLines={1} className="text-body font-semibold text-fg">{mod.name || mod.mountSlug}</Text>
-                  <Text className="text-caption text-fg-muted mt-0.5">{mod.mountPath}</Text>
-                  <Text className="text-caption text-fg-muted mt-0.5">Space: {mod.modSpaceId}</Text>
+                  <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{mod.mountPath}</Text>
+                  <Text numberOfLines={1} ellipsizeMode="middle" className="text-micro text-fg-faint mt-0.5">Space: {mod.modSpaceId}</Text>
                 </View>
                 <Switch
                   value={mod.enabled}
@@ -424,6 +472,35 @@ export default function SpaceSettingsScreen() {
           />
           {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
           <PrimaryButton label={t("space.settings.addMod")} icon="plus" loading={addingMod} disabled={!client || !modSpaceId.trim()} onPress={() => void addMod()} />
+        </View>
+      </AdaptiveSheet> : null}
+      {customTtlOpen ? <AdaptiveSheet
+        visible
+        title={t("space.settings.sleep.customTitle")}
+        subtitle={t("space.settings.sleep.customPrompt")}
+        onClose={() => setCustomTtlOpen(false)}
+      >
+        <View className="gap-3">
+          <TextInput
+            value={customTtlValue}
+            onChangeText={(text) => { setCustomTtlValue(text.replace(/[^0-9]/g, "")); setCustomTtlError(null); }}
+            accessibilityLabel={t("space.settings.sleep.customTitle")}
+            keyboardType="number-pad"
+            returnKeyType="done"
+            onSubmitEditing={saveCustomTtl}
+            className={FIELD_INPUT_CLASS}
+          />
+          <Segmented
+            value={customTtlUnit}
+            onChange={(unit) => { setCustomTtlUnit(unit); setCustomTtlError(null); }}
+            options={[
+              { value: "minutes", label: t("space.settings.sleep.unit.minutes") },
+              { value: "hours", label: t("space.settings.sleep.unit.hours") },
+              { value: "days", label: t("space.settings.sleep.unit.days") },
+            ]}
+          />
+          {customTtlError ? <Text accessibilityRole="alert" className="text-caption text-danger">{customTtlError}</Text> : null}
+          <PrimaryButton label={t("common.save")} disabled={!customTtlValue.trim()} onPress={saveCustomTtl} />
         </View>
       </AdaptiveSheet> : null}
     </Screen>
@@ -588,34 +665,63 @@ function ActionButton({ label, icon, onPress, disabled = false }: { label: strin
   );
 }
 
-function SegmentedControl<T extends string>({
-  values,
+function SpecOptionList({
+  config,
   value,
-  labels,
   maxValue,
   disabled,
   onChange,
   onLocked,
 }: {
-  values: readonly T[];
-  value: T;
-  labels: readonly string[];
-  maxValue?: T;
-  disabled?: boolean;
-  onChange: (value: T) => void;
-  onLocked?: () => void;
+  config: SpaceSandboxConfig | null;
+  value: SandboxSpecId;
+  maxValue: SandboxSpecId;
+  disabled: boolean;
+  onChange: (value: SandboxSpecId) => void;
+  onLocked: () => void;
 }) {
-  const max = maxValue ? Math.max(0, values.indexOf(maxValue)) : values.length - 1;
+  const { t } = useTranslation();
+  const max = Math.max(0, SPEC_OPTIONS.indexOf(maxValue));
   return (
-    <Segmented
-      className="mt-2"
-      disabled={disabled}
-      onLocked={onLocked}
-      value={value}
-      onChange={onChange}
-      // Tiers above the plan's maximum stay visible but locked, so the upgrade path reads in place.
-      options={values.map((item, index) => ({ value: item, label: labels[index] ?? item, locked: index > max }))}
-    />
+    <View accessibilityRole="radiogroup" className="mt-2 overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>
+      {SPEC_OPTIONS.map((id, index) => {
+        const selected = id === value;
+        // Tiers above the plan's maximum stay visible but locked, so the upgrade path reads in place.
+        const locked = index > max;
+        const details = specDetails(config, id);
+        const label = t(`space.settings.spec.${id}`);
+        return (
+          <Pressable
+            key={id}
+            accessibilityRole="radio"
+            accessibilityLabel={[label, details.resources, locked ? details.requiredPlan : null].filter(Boolean).join(", ")}
+            accessibilityState={{ checked: selected, disabled: disabled || locked }}
+            disabled={disabled}
+            onPress={() => {
+              if (locked) onLocked();
+              else if (!selected) onChange(id);
+            }}
+            className={`min-h-16 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed ${index > 0 ? "border-t border-border" : ""} ${disabled ? "opacity-60" : ""}`}
+          >
+            <View className={`size-5 items-center justify-center rounded-full border-2 ${selected ? "border-accent" : "border-border"}`}>
+              {selected ? <View className="size-2.5 rounded-full bg-accent" /> : null}
+            </View>
+            <View className={`flex-1 min-w-0 ${locked ? "opacity-55" : ""}`}>
+              <View className="flex-row items-center gap-2">
+                <Text numberOfLines={1} className="shrink text-body font-semibold text-fg">{label}</Text>
+                {locked && details.requiredPlan ? (
+                  <View className="rounded-full bg-accent-soft px-2 py-0.5">
+                    <Text className="text-micro font-semibold text-accent">{details.requiredPlan}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text className="text-caption text-fg-muted mt-0.5">{t(`space.settings.spec.${id}.desc`)}</Text>
+            </View>
+            {details.resources ? <Text className={`text-caption font-semibold tabular-nums ${selected ? "text-fg" : "text-fg-muted"} ${locked ? "opacity-55" : ""}`}>{details.resources}</Text> : null}
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -677,13 +783,32 @@ function specNeedsRestart(config: SpaceSandboxConfig | null, pendingFromUpdate =
   return Boolean(config.appliedSpec && config.appliedSpec !== spec);
 }
 
-function sleepFromConfig(config: SpaceSandboxConfig | null) {
-  if (config?.autoDestroy?.mode === "never") return "never";
-  if (config?.autoDestroy?.ttlSeconds === 1800) return "0.5h";
-  return "2h";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-function sleepToPolicy(value: (typeof SLEEP_OPTIONS)[number]): SpaceSandboxAutoDestroyPolicy {
-  if (value === "never") return { mode: "never" };
-  return { mode: "idle", ttlSeconds: value === "0.5h" ? 1800 : 7200 };
+/** Reads the server-provided spec catalog (`config.specs`), which the SDK types as `unknown`. */
+function specDetails(config: SpaceSandboxConfig | null, id: SandboxSpecId): { resources: string | null; requiredPlan: string | null } {
+  const spec = config?.specs?.[id];
+  if (!isRecord(spec)) return { resources: null, requiredPlan: null };
+  const limits = isRecord(spec.resources) && isRecord(spec.resources.limits) ? spec.resources.limits : null;
+  const cpu = typeof limits?.cpu === "string" ? limits.cpu : null;
+  const memory = typeof limits?.memory === "string" ? limits.memory.replace(/^(\d+(?:\.\d+)?)Gi$/, "$1 GB").replace(/^(\d+)Mi$/, "$1 MB") : null;
+  return {
+    resources: cpu && memory ? `${cpu} vCPU · ${memory}` : null,
+    requiredPlan: typeof spec.requiredPlan === "string" ? spec.requiredPlan : null,
+  };
+}
+
+function idleTtlChoices(current: number) {
+  const presets: number[] = [...IDLE_TTL_PRESETS];
+  // A value set elsewhere (web, CLI) stays visible and selected instead of snapping to a preset.
+  return presets.includes(current) ? presets : [...presets, current].sort((a, b) => a - b);
+}
+
+function formatIdleTtl(seconds: number, t: Translate) {
+  if (seconds % 86400 === 0) return t("space.settings.sleep.days", { count: seconds / 86400 });
+  if (seconds % 3600 === 0) return t("space.settings.sleep.hours", { count: seconds / 3600 });
+  if (seconds % 60 === 0) return t("space.settings.sleep.minutes", { count: seconds / 60 });
+  return t("space.settings.sleep.seconds", { count: seconds });
 }
