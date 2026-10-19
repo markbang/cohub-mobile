@@ -62,7 +62,7 @@ import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liv
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns, nextTurnSequence, turnSequenceForMessage, withFallbackUserContent } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks } from "@/src/data/session-fork-tree";
-import { extractSpaceMentions, mentionDisplayText } from "@/src/data/space-mentions";
+import { extractSpaceMentions } from "@/src/data/space-mentions";
 import { clearSlashCommandCache } from "@/src/data/use-composer-slash";
 import { isOptimisticFollowup, shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
@@ -70,12 +70,14 @@ import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, load
 import { getInstallationId } from "@/src/platform/installation";
 import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
+import { sessionActivity } from "@/src/data/session-activity";
 import { loadSessionFilterMinutes } from "@/src/data/session-filter-preference";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
 import {
   displaySessionTitle,
   displaySpaceName,
   newId,
+  previewText,
   sortByRecent,
 } from "@/src/utils";
 
@@ -2304,13 +2306,15 @@ export function AppProvider({
           : normalizedStatus === "stopped"
             ? "stopped"
             : "complete";
+      const latestTurn = state.sessionLatestTurns[session.id];
+      const activity = sessionActivity(session, { status: normalizedStatus, latestTurn, live: null, t: translate });
       return {
         id: session.id,
         sessionId: session.id,
         spaceId: session.spaceId,
         title: displaySessionTitle(session),
         spaceName: session.space?.name?.trim() || "Space",
-        preview: mentionDisplayText(session.latestMessageText ?? "").trim() || "No messages yet",
+        preview: activity?.text || previewText(session.latestMessageText) || previewText(latestTurn?.assistantText || latestTurn?.userText) || translate("session.noMessages"),
         status,
         updatedAt: session.lastMessageAt ?? session.updatedAt,
       };

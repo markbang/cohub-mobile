@@ -1,10 +1,11 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
-import { displayForkSessionTitle, formatRelativeTime, shortPreview } from "@/src/utils";
+import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/utils";
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
+import { sessionActivity } from "@/src/data/session-activity";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 
@@ -29,11 +30,13 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const { state } = useApp();
   const spaceName = session.space?.name?.trim() || t("space.fallbackName");
   const status = sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses);
+  const latestTurn = state.sessionLatestTurns[session.id];
+  const activity = sessionActivity(session, { status, latestTurn, live: state.sessionViews[session.id]?.stream ?? null, t });
   const glyph = status === "running" || status === "failed" || status === "stopped" ? status : null;
   const branch = tree?.depth === 1;
   const title = displayForkSessionTitle(session, fork);
   const forkLabel = !fork ? null : fork.parentSessionId === null ? t("session.forkedFromUnavailable") : fork.parentTitle?.trim() ? t("session.forkedFrom", { title: fork.parentTitle.trim() }) : t("session.forkedFromChat");
-  const statusLabel = status === "running" ? t("ui.status.running") : status === "failed" ? t("ui.status.failed") : status === "stopped" ? t("ui.status.stopped") : null;
+  const statusLabel = activity?.text ?? null;
   // Fork children hang off the parent's avatar column; the guide spans the whole row height.
   const guideColumn = showSpace ? AVATAR_SIZE : BRANCH_COLUMN;
   const guideX = showSpace ? AVATAR_SIZE / 2 - 0.5 : 3.5;
@@ -54,7 +57,16 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     : null;
   const forkIcon = fork && !branch ? <AppIcon name="git-fork" size={13} tone="faint" /> : null;
   const titlePrefix = statusIcon || forkIcon ? <>{statusIcon}{forkIcon}</> : null;
-  const preview = shortPreview(session.latestMessageText, 84);
+  // `latestMessageText` is empty after tool-only or reasoning-only messages even
+  // though the Chat has history, so it is never evidence of a Chat without messages.
+  const turnText = latestTurn?.assistantText || latestTurn?.userText;
+  const preview = previewText(session.latestMessageText, 84) || previewText(turnText, 84);
+  const hasMessages = Boolean(session.lastMessageId);
+  const detail = activity?.text || preview || (hasMessages ? "" : t("session.noMessages"));
+  const subtitle = showSpace && !branch ? [spaceName, detail].filter(Boolean).join(" · ") : detail || undefined;
+  const subtitleNode = typeof subtitle === "string" && activity?.tone === "danger"
+    ? <Text numberOfLines={1} className="text-subhead text-danger">{subtitle}</Text>
+    : subtitle;
   const shownLabels = labels.slice(0, 2);
   return <ListRow
     leading={leading}
@@ -62,7 +74,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     title={title}
     titlePrefix={titlePrefix}
     meta={formatRelativeTime(session.lastMessageAt ?? session.updatedAt)}
-    subtitle={showSpace && !branch ? `${spaceName} · ${preview}` : preview}
+    subtitle={subtitleNode}
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
     separator={!tree || tree.lastInGroup}
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}

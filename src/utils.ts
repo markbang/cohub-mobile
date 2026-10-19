@@ -96,9 +96,14 @@ export function messageText(message: Pick<MessageRecord, "text" | "content">) {
   return message.text?.trim() || contentText(message.content).trim();
 }
 
-export function shortPreview(value: string | null | undefined, limit = 110) {
-  const normalized = mentionDisplayText(value ?? "").replace(/\s+/g, " ").trim() || translate("session.noMessages");
+/** Preview text without a fallback, for rows that carry their own empty state. */
+export function previewText(value: string | null | undefined, limit = 110) {
+  const normalized = mentionDisplayText(value ?? "").replace(/\s+/g, " ").trim();
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
+}
+
+export function shortPreview(value: string | null | undefined, limit = 110) {
+  return previewText(value, limit) || translate("session.noMessages");
 }
 
 export function messageKind(message: Pick<MessageRecord, "role" | "meta">) {

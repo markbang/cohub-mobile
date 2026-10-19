@@ -63,7 +63,21 @@ function withTimeout<T>(promise: Promise<T>) {
 
 export type SessionStatus = "running" | "completed" | "failed" | "stopped" | "idle";
 
-export type LatestSessionTurn = Pick<SessionTurnRecord, "id" | "sequence" | "status" | "updatedAt">;
+/** Turn fields the Chats list reads: identity and status, plus what the row can show instead of a missing preview. */
+export type LatestSessionTurn = Pick<SessionTurnRecord, "id" | "sequence" | "status" | "updatedAt"> & Partial<Pick<SessionTurnRecord, "userText" | "assistantText" | "errorMessage" | "startedAt">>;
+
+const LATEST_TURN_FIELDS = ["id", "sequence", "status", "updatedAt", "userText", "assistantText", "errorMessage", "startedAt"] as const;
+
+/** Narrow a Turn (or a realtime patch of one) to the fields the Chats list reads. */
+function latestTurnFields(turn: Partial<Record<(typeof LATEST_TURN_FIELDS)[number], unknown>>): Partial<LatestSessionTurn> {
+  const fields: Partial<LatestSessionTurn> = {};
+  for (const key of LATEST_TURN_FIELDS) {
+    const value = turn[key];
+    if (value === undefined) continue;
+    Object.assign(fields, { [key]: value });
+  }
+  return fields;
+}
 
 export function latestTurn<T extends { sequence: number }>(turns: readonly T[]): T | null {
   return turns.reduce<T | null>((latest, turn) => !latest || turn.sequence > latest.sequence ? turn : latest, null);
@@ -81,13 +95,13 @@ export function reconcileLatestTurn(current: LatestSessionTurn | null | undefine
       if (delta === 0 && terminal.includes(current.status) && !terminal.includes(incoming.status)) return current;
     }
   }
-  return { id: incoming.id, sequence: incoming.sequence, status: incoming.status, updatedAt: incoming.updatedAt };
+  return { id: incoming.id, sequence: incoming.sequence, status: incoming.status, updatedAt: incoming.updatedAt, ...latestTurnFields(incoming) };
 }
 
 export function reconcileTurnStatusPatch(current: LatestSessionTurn | null | undefined, patch: Partial<LatestSessionTurn>): LatestSessionTurn | null {
   const turn = current?.id === patch.id ? { ...current, ...patch } : patch;
   if (!turn.id || turn.sequence === undefined || !turn.status || !turn.updatedAt) return current ?? null;
-  return reconcileLatestTurn(current, { id: turn.id, sequence: turn.sequence, status: turn.status, updatedAt: turn.updatedAt });
+  return reconcileLatestTurn(current, { ...latestTurnFields(turn), id: turn.id, sequence: turn.sequence, status: turn.status, updatedAt: turn.updatedAt });
 }
 
 export type StatusSession = Pick<UserSessionListItem, "id" | "spaceId" | "lastMessageAt" | "activeTurn">;
@@ -156,7 +170,8 @@ export async function loadSessionLatestTurns(
           const timer = setTimeout(() => controller.abort(), STATUS_REQUEST_TIMEOUT_MS);
           const requestFetch: typeof fetch = (input, init) => fetch(input, { ...init, signal: controller.signal });
           try {
-            const turn = await (turnId ? turns.get(turnId, requestFetch).then((response) => response.turn) : turns.listPaginated({ limit: 1, direction: "older" }, requestFetch).then((response) => latestTurn(response.turns)));
+            const record = await (turnId ? turns.get(turnId, requestFetch).then((response) => response.turn) : turns.listPaginated({ limit: 1, direction: "older" }, requestFetch).then((response) => latestTurn(response.turns)));
+            const turn = record ? { ...latestTurnFields(record), id: record.id, sequence: record.sequence, status: record.status, updatedAt: record.updatedAt } : null;
             reads.cached.set(key, { turn, at: Date.now(), activity: session.lastMessageAt });
             return turn;
           } finally {

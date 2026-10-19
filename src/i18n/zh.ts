@@ -822,6 +822,10 @@ export const zh: Record<TranslationKey, string> = {
   "session.forkedFromChat": "分叉自其他对话",
   "session.forkedFromUnavailable": "分叉自无权访问的对话",
   "session.noMessages": "还没有消息",
+  "session.activity.starting": "正在启动",
+  "session.activity.stopping": "正在停止",
+  "session.activity.elapsedMinutes": "{minutes} 分钟",
+  "session.activity.elapsedHours": "{hours} 小时",
   "space.fallbackName": "空间",
   "space.readyForWork": "准备就绪",
 

@@ -39,10 +39,20 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
     case "session.turn.created":
     case "session.turn.updated":
     case "session.turn.finalized": {
-      const turn = event.payload.turn as Partial<LatestSessionTurn & { sessionId: string }> | undefined;
+      const turn = event.payload.turn as (Partial<LatestSessionTurn> & { sessionId?: string }) | undefined;
       if (typeof event.sessionId !== "string" || !event.sessionId || typeof turn?.id !== "string" || !turn.id || (turn.sessionId !== undefined && turn.sessionId !== event.sessionId) || (turn.sequence !== undefined && (!Number.isSafeInteger(turn.sequence) || turn.sequence < 1)) || (turn.status !== undefined && !["queued", "running", "abort_requested", "completed", "failed", "interrupted", "merged", "cancelled"].includes(turn.status)) || (turn.updatedAt !== undefined && (typeof turn.updatedAt !== "string" || !Number.isFinite(Date.parse(turn.updatedAt))))) throw new Error("Invalid realtime Chat status. Reopen the Space to retry.");
       change.sessionId = event.sessionId;
-      change.turn = { id: turn.id, ...(turn.sequence === undefined ? {} : { sequence: turn.sequence }), ...(turn.status === undefined ? {} : { status: turn.status }), ...(turn.updatedAt === undefined ? {} : { updatedAt: turn.updatedAt }) };
+      // The payload narrows to the reported fields; the row falls back to its preview otherwise.
+      change.turn = {
+        id: turn.id,
+        ...(turn.sequence === undefined ? {} : { sequence: turn.sequence }),
+        ...(turn.status === undefined ? {} : { status: turn.status }),
+        ...(turn.updatedAt === undefined ? {} : { updatedAt: turn.updatedAt }),
+        ...(typeof turn.userText === "string" || turn.userText === null ? { userText: turn.userText } : {}),
+        ...(typeof turn.assistantText === "string" || turn.assistantText === null ? { assistantText: turn.assistantText } : {}),
+        ...(typeof turn.errorMessage === "string" || turn.errorMessage === null ? { errorMessage: turn.errorMessage } : {}),
+        ...(typeof turn.startedAt === "string" || turn.startedAt === null ? { startedAt: turn.startedAt } : {}),
+      };
       change.exact.push("chat-statuses", `space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
       // Running membership follows the Turn state in place; account scans only reconcile.
       change.prefixes.push("chats");

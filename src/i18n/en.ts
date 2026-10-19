@@ -849,6 +849,10 @@ export const en = {
   "session.forkedFromChat": "Forked from another chat",
   "session.forkedFromUnavailable": "Forked from a chat you can't access",
   "session.noMessages": "No messages yet",
+  "session.activity.starting": "Starting",
+  "session.activity.stopping": "Stopping",
+  "session.activity.elapsedMinutes": "{minutes}m",
+  "session.activity.elapsedHours": "{hours}h",
   "space.fallbackName": "Space",
   "space.readyForWork": "Ready for work",
 
