@@ -1,28 +1,26 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { File, Paths, UploadType } from "expo-file-system";
 import * as Updates from "expo-updates";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AppState, Platform } from "react-native";
 import { config } from "@/src/config";
-import { clearAllDebugSessions, loadDebugEvents, loadDebugSessions, pruneDebugSessions, saveDebugEvent, upsertDebugSession, type DebugEventRow } from "@/src/data/local-db";
-import { chatScrollTrace, setDebugTraceSink } from "@/src/data/chat-scroll-trace";
+import { loadDebugEvents, loadDebugSessions, pruneDebugSessions, saveDebugEvent, upsertDebugSession, type DebugEventRow } from "@/src/data/local-db";
+import { setDebugTraceSink } from "@/src/data/chat-scroll-trace";
 
-const ENABLED_KEY = "cohub.debug.diagnostics.enabled";
+const APP_SLUG = "cohub-mobile";
+const NON_ACTIVITY_EVENTS = new Set(["diagnostics.session.started", "chat.scroll.recording.start"]);
 const EVENT_CAPACITY = 4000;
 /** Sessions kept on disk; older ones are pruned when a new one starts. */
 const SESSION_RETENTION = 5;
-/** Sessions always write these on start, so alone they are not evidence of activity. */
-const STARTUP_EVENTS = new Set(["diagnostics.session.started", "chat.scroll.recording.start"]);
 
 type DebugFields = Record<string, unknown>;
 type ActiveSession = { id: string; startedAt: string; sequence: number; dropped: number; events: DebugEventRow[]; writes: Promise<void> };
-export type FeedbackInput = { description: string; includeSession: boolean; includeConversation: boolean };
+type UploadSource = "feedback" | "diagnostics";
+export type FeedbackInput = { description: string };
 export type FeedbackReceipt = { id: string };
 export type DebugSnapshot = { sessionId: string; startedAt: string; dropped: number; events: DebugEventRow[] };
 
-let enabled = false;
 let activeSession: ActiveSession | null = null;
-let loadPromise: Promise<boolean> | null = null;
 
 function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -52,63 +50,38 @@ function updateMetadata() {
   }
 }
 
-function stopChatTrace() {
-  if (!chatScrollTrace.isRecording()) return;
-  chatScrollTrace.pause();
-  chatScrollTrace.reset();
-}
-
-async function ensureLoaded() {
-  if (loadPromise) return loadPromise;
-  loadPromise = AsyncStorage.getItem(ENABLED_KEY).then((value) => {
-    // Recording is on by default so a freeze can be captured without enabling anything first;
-    // only an explicit `false` (the switch turned off) disables it.
-    enabled = value !== "false";
-    setDebugTraceSink(enabled ? (name, fields) => record(name, fields) : null);
-    if (enabled) void startSession();
-    return enabled;
-  }).finally(() => { loadPromise = null; });
-  return loadPromise;
-}
-
-async function startSession() {
+function beginSession(): ActiveSession {
   if (activeSession) return activeSession;
-  const session: ActiveSession = { id: newId("debug"), startedAt: new Date().toISOString(), sequence: 0, dropped: 0, events: [], writes: Promise.resolve() };
+  const session: ActiveSession = {
+    id: newId("debug"),
+    startedAt: new Date().toISOString(),
+    sequence: 0,
+    dropped: 0,
+    events: [],
+    writes: Promise.resolve(),
+  };
   activeSession = session;
-  await upsertDebugSession({ sessionId: session.id, startedAt: session.startedAt, updatedAt: Date.now(), closedAt: null, uploadedAt: null });
-  // A freeze leaves its session open in SQLite; prune only after the new session exists so
-  // later launches cannot push the crashed one out of the retention window.
-  void pruneDebugSessions(SESSION_RETENTION).catch(() => undefined);
-  record("diagnostics.session.started", { platform: Platform.OS, appVersion: Constants.expoConfig?.version ?? null, ...updateMetadata() });
+  session.writes = upsertDebugSession({
+    sessionId: session.id,
+    startedAt: session.startedAt,
+    updatedAt: Date.now(),
+    closedAt: null,
+    uploadedAt: null,
+  })
+    // A freeze leaves its session open in SQLite; prune only after the new session exists so
+    // later launches cannot push the crashed one out of the retention window.
+    .then(() => pruneDebugSessions(SESSION_RETENTION))
+    .catch(() => undefined);
+  record("diagnostics.session.started", {
+    platform: Platform.OS,
+    appVersion: Constants.expoConfig?.version ?? null,
+    ...updateMetadata(),
+  });
   return session;
 }
 
-export async function setDebugDiagnosticsEnabled(value: boolean) {
-  if (value) {
-    enabled = true;
-    setDebugTraceSink((name, fields) => record(name, fields));
-    await AsyncStorage.setItem(ENABLED_KEY, "true");
-    await startSession();
-    return;
-  }
-  // Turning recording off is an opt-out: drop every retained session, not just the live one.
-  enabled = false;
-  setDebugTraceSink(null);
-  const session = activeSession;
-  activeSession = null;
-  stopChatTrace();
-  await AsyncStorage.setItem(ENABLED_KEY, "false");
-  if (session) await session.writes;
-  await clearAllDebugSessions();
-}
-
-export async function isDebugDiagnosticsEnabled() {
-  return ensureLoaded();
-}
-
 export function record(name: string, fields: DebugFields = {}) {
-  if (!enabled || !activeSession) return;
-  const session = activeSession;
+  const session = beginSession();
   const event: DebugEventRow = {
     sessionId: session.id,
     sequence: ++session.sequence,
@@ -125,12 +98,11 @@ export function record(name: string, fields: DebugFields = {}) {
 }
 
 function hasCapturedActivity(snapshot: DebugSnapshot) {
-  return snapshot.events.some((event) => !STARTUP_EVENTS.has(event.name));
+  return snapshot.events.some((event) => !NON_ACTIVITY_EVENTS.has(event.name));
 }
 
-async function loadActiveSnapshot(): Promise<DebugSnapshot | null> {
-  if (!activeSession) return null;
-  const session = activeSession;
+async function loadActiveSnapshot(): Promise<DebugSnapshot> {
+  const session = beginSession();
   await session.writes;
   // Copy: the live session keeps appending after the snapshot is handed out.
   return { sessionId: session.id, startedAt: session.startedAt, dropped: session.dropped, events: [...session.events] };
@@ -149,78 +121,99 @@ async function loadStoredSnapshots(): Promise<DebugSnapshot[]> {
   return snapshots;
 }
 
-/** The one session feedback attaches: the live session when it captured activity, otherwise the
-most recent stored one. A relaunch writes only startup markers, so without this the frozen
-session it replaced would always be shadowed. */
-export async function snapshot(): Promise<DebugSnapshot | null> {
-  await ensureLoaded();
+/** The live session when it captured activity, otherwise the most recent stored one. A relaunch
+writes only startup markers, so without this the frozen session it replaced would be shadowed. */
+async function snapshot(): Promise<DebugSnapshot> {
   const active = await loadActiveSnapshot();
+  if (hasCapturedActivity(active)) return active;
   const stored = await loadStoredSnapshots();
-  if (active && hasCapturedActivity(active)) return active;
-  return stored.find(hasCapturedActivity) ?? active ?? stored[0] ?? null;
+  return stored.find(hasCapturedActivity) ?? active;
 }
 
-/** Every retained session, newest first: the live one followed by the stored ones. */
-export async function listSnapshots(): Promise<DebugSnapshot[]> {
-  await ensureLoaded();
-  const active = await loadActiveSnapshot();
-  return [...(active && active.events.length > 0 ? [active] : []), ...await loadStoredSnapshots()];
-}
-
-/** JSON Lines, one `cohub-diagnostics-v1` header per session followed by its events, so a long
-export can be inspected line by line or grepped for a phase. */
-export function formatDiagnostics(snapshots: DebugSnapshot[]): string {
-  return snapshots.flatMap((snapshot) => [
+/** JSON Lines, one `cohub-diagnostics-v1` header followed by the session's events. */
+function formatDiagnostics(snapshot: DebugSnapshot): string {
+  return [
     JSON.stringify({ format: "cohub-diagnostics-v1", sessionId: snapshot.sessionId, startedAt: snapshot.startedAt, dropped: snapshot.dropped, events: snapshot.events.length, privacy: "Diagnostic events only. Fields whose names look like message text, titles, tokens or bodies are stripped before they are stored." }),
     ...snapshot.events.map((event) => JSON.stringify({ at: event.timestamp, seq: event.sequence, name: event.name, payload: event.payload })),
-  ]).join("\n");
+  ].join("\n");
 }
 
-/** Local export of every retained session for sharing or copying; no server round trip. */
-export async function exportDiagnostics(): Promise<string> {
-  const snapshots = await listSnapshots();
-  if (snapshots.length === 0) throw new Error("No diagnostic sessions recorded yet. Reproduce the issue, then export again.");
-  return formatDiagnostics(snapshots);
+function endpoint() {
+  return `${config.diagnosticsOrigin.replace(/\/+$/, "")}/api/v1/feedback`;
+}
+
+function parseReceipt(status: number, body: string): FeedbackReceipt {
+  if (status < 200 || status >= 300) throw new Error(`Feedback upload failed (${status}).`);
+  let payload: { id?: unknown };
+  try {
+    payload = JSON.parse(body) as { id?: unknown };
+  } catch {
+    throw new Error("Feedback upload returned an invalid response.");
+  }
+  if (typeof payload.id !== "string" || !payload.id) throw new Error("Feedback upload returned no id.");
+  return { id: payload.id };
+}
+
+async function uploadWithLog(content: string, source: UploadSource): Promise<FeedbackReceipt> {
+  const current = await snapshot();
+  const updates = updateMetadata();
+  const file = new File(Paths.cache, `cohub-diagnostics-${current.sessionId}.jsonl`);
+  let result;
+  try {
+    file.create({ overwrite: true, intermediates: true });
+    await file.write(formatDiagnostics(current));
+    result = await file.upload(endpoint(), {
+      uploadType: UploadType.MULTIPART,
+      fieldName: "files",
+      mimeType: "text/plain",
+      parameters: {
+        app: APP_SLUG,
+        content,
+        extra: JSON.stringify({
+          app_version: Constants.expoConfig?.version ?? null,
+          platform: Platform.OS,
+          os_version: String(Platform.Version),
+          runtime_version: updates.runtimeVersion,
+          update_id: updates.updateId,
+          session: {
+            id: current.sessionId,
+            started_at: current.startedAt,
+            events: current.events.length,
+            dropped: current.dropped,
+          },
+          source,
+        }),
+      },
+    });
+  } finally {
+    try {
+      if (file.exists) file.delete();
+    } catch {
+      // A failed cleanup must not hide the upload result.
+    }
+  }
+  const receipt = parseReceipt(result.status, result.body);
+  record("diagnostics.upload.completed", { feedbackId: receipt.id, source, events: current.events.length });
+  return receipt;
 }
 
 export async function submitFeedback(input: FeedbackInput): Promise<FeedbackReceipt> {
   const description = input.description.trim();
   if (!description) throw new Error("Feedback description is required.");
-  const current = await snapshot();
-  if (!current) throw new Error("No diagnostic session recorded yet. Reproduce the issue before submitting feedback.");
-  const response = await fetch(`${config.diagnosticsOrigin}/v1/feedback`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      feedbackId: newId("feedback"),
-      description: description.slice(0, 4000),
-      includeSession: input.includeSession,
-      includeConversation: false,
-      session: { id: current.sessionId, startedAt: current.startedAt, dropped: current.dropped, events: current.events },
-      app: { version: Constants.expoConfig?.version ?? null, platform: Platform.OS, osVersion: String(Platform.Version), ...updateMetadata() },
-    }),
-  });
-  if (!response.ok) throw new Error(`Feedback upload failed (${response.status}).`);
-  const payload = await response.json() as { id?: unknown };
-  if (typeof payload.id !== "string" || !payload.id) throw new Error("Feedback upload returned no id.");
-  record("diagnostics.feedback.submitted", { feedbackId: payload.id });
-  return { id: payload.id };
+  return uploadWithLog(description, "feedback");
 }
 
-export function useDebugDiagnostics() {
-  const [value, setValue] = useState(enabled);
-  useEffect(() => {
-    let active = true;
-    void ensureLoaded().then((loaded) => { if (active) { setValue(loaded); if (loaded) void startSession(); } });
-    return () => { active = false; };
-  }, []);
-  return { enabled: value, setEnabled: async (next: boolean) => { await setDebugDiagnosticsEnabled(next); setValue(next); }, record, submitFeedback };
+/** Uploads the latest session without a user-written description. */
+export async function uploadDiagnostics(): Promise<FeedbackReceipt> {
+  return uploadWithLog("Diagnostic log uploaded from Cohub Mobile.", "diagnostics");
 }
 
 export function useDebugDiagnosticsLifecycle() {
-  useDebugDiagnostics();
   useEffect(() => {
+    beginSession();
     const subscription = AppState.addEventListener("change", (state) => record(`app.${state === "active" ? "foregrounded" : "backgrounded"}`));
     return () => subscription.remove();
   }, []);
 }
+
+setDebugTraceSink((name, fields) => record(name, fields));

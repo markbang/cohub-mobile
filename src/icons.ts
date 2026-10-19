@@ -26,6 +26,7 @@ import Compass from "lucide-react-native/icons/compass";
 import Copy from "lucide-react-native/icons/copy";
 import Database from "lucide-react-native/icons/database";
 import Download from "lucide-react-native/icons/download";
+import Upload from "lucide-react-native/icons/upload";
 import Ellipsis from "lucide-react-native/icons/ellipsis";
 import ExternalLink from "lucide-react-native/icons/external-link";
 import Eye from "lucide-react-native/icons/eye";
@@ -105,6 +106,7 @@ export const icons = {
   copy: Copy,
   database: Database,
   download: Download,
+  upload: Upload,
   "external-link": ExternalLink,
   eye: Eye,
   "eye-off": EyeOff,

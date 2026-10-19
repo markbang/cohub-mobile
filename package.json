@@ -74,7 +74,6 @@
     "test:workflow": "node --no-warnings --experimental-strip-types scripts/check-chat-workflow.mjs && node --no-warnings --experimental-strip-types scripts/check-ota-publish.mjs",
     "doctor": "node scripts/check-expo-baseline.mjs",
     "doctor:upstream": "expo-doctor",
-    "diagnostics:server": "node scripts/diagnostics-server.mjs",
     "release:check": "node scripts/check-release.mjs",
     "check": "node scripts/patch-enriched-markdown.mjs && npm run lint && npm run typecheck && npm run test:workflow && node scripts/check-expo-go-notifications.mjs && npm run release:check && npm run doctor",
     "export:android": "expo export --platform android --output-dir dist/android",

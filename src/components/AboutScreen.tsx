@@ -1,12 +1,11 @@
 import { useRouter } from "expo-router";
-import { Directory } from "expo-file-system";
 import { useCallback, useState } from "react";
-import { Image, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AppUpdateRow } from "@/src/components/AppUpdateBanner";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
-import { exportDiagnostics, useDebugDiagnostics } from "@/src/data/debug-session";
+import { submitFeedback, uploadDiagnostics } from "@/src/data/debug-session";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { openWebLink } from "@/src/platform/browser";
 import { Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHeader, PrimaryButton, SettingsGroup } from "@/src/ui";
@@ -47,31 +46,20 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackId, setFeedbackId] = useState<string | null>(null);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
-  const [exportingLog, setExportingLog] = useState(false);
-  const diagnostics = useDebugDiagnostics();
+  const [uploadingDiagnostics, setUploadingDiagnostics] = useState(false);
   const version = getInstalledAppVersion();
   const unlockDebug = useDebugUnlock(useCallback(() => router.push("/debug"), [router]));
 
-  const saveDiagnosticLog = async () => {
-    if (exportingLog) return;
-    setExportingLog(true);
+  const uploadDiagnosticLog = async () => {
+    if (uploadingDiagnostics) return;
+    setUploadingDiagnostics(true);
     try {
-      // Local export: write the log into a folder the user picks, then they can attach the file
-      // directly. No server round trip, so a diagnostics outage cannot block capture.
-      const text = await exportDiagnostics();
-      const directory = await Directory.pickDirectoryAsync();
-      const name = `cohub-diagnostics-${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`;
-      const file = directory.createFile(name, "application/jsonl");
-      if (!file.exists) file.create();
-      await file.write(text);
-      setNotice({ title: t("about.export.saved.title"), message: t("about.export.saved.body", { name }) });
+      const receipt = await uploadDiagnostics();
+      setNotice({ title: t("about.upload.success.title"), message: t("about.upload.success.body", { id: receipt.id }) });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // Dismissing the folder picker is not a failure.
-      if (/cancel/i.test(message)) return;
-      setNotice({ title: t("about.export.failed"), message });
+      setNotice({ title: t("about.upload.failed"), message: error instanceof Error ? error.message : String(error) });
     } finally {
-      setExportingLog(false);
+      setUploadingDiagnostics(false);
     }
   };
 
@@ -104,13 +92,8 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
 
       <SectionHeader title={t("about.section.diagnostics")} />
       <SettingsGroup>
-        <SettingsRow icon="activity" title={t("about.diagnostics.title")} value={t("about.diagnostics.detail")} last={!diagnostics.enabled}>
-          <Switch accessibilityLabel={t("about.diagnostics.title")} value={diagnostics.enabled} onValueChange={(value) => void diagnostics.setEnabled(value)} />
-        </SettingsRow>
-        {diagnostics.enabled ? <>
-          <SettingsRow icon="download" title={t("about.export.save.title")} value={exportingLog ? t("common.loading") : t("about.export.save.detail")} onPress={() => void saveDiagnosticLog()} />
-          <SettingsRow icon="messages" title={t("about.feedback.title")} value={t("about.feedback.detail")} last onPress={() => { setFeedbackError(null); setFeedbackId(null); setFeedbackText(""); setFeedbackOpen(true); }} />
-        </> : null}
+        <SettingsRow icon="upload" title={t("about.upload.title")} value={uploadingDiagnostics ? t("common.loading") : t("about.upload.detail")} disabled={uploadingDiagnostics} onPress={() => void uploadDiagnosticLog()} />
+        <SettingsRow icon="messages" title={t("about.feedback.title")} value={t("about.feedback.detail")} last onPress={() => { setFeedbackError(null); setFeedbackId(null); setFeedbackText(""); setFeedbackOpen(true); }} />
       </SettingsGroup>
 
       <SectionHeader title={t("about.section.links")} />
@@ -144,7 +127,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
           <Field hint={t("about.feedback.description")} error={feedbackError}>
             <TextInput value={feedbackText} onChangeText={setFeedbackText} multiline maxLength={4000} placeholder={t("about.feedback.placeholder")} placeholderTextColor={theme.colors.textFaint} accessibilityLabel={t("about.feedback.title")} className={`min-h-30 ${FIELD_INPUT_CLASS}`} style={{ textAlignVertical: "top" }} />
           </Field>
-          <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={() => { setFeedbackSubmitting(true); setFeedbackError(null); void diagnostics.submitFeedback({ description: feedbackText, includeSession: true, includeConversation: false }).then((receipt) => setFeedbackId(receipt.id)).catch((error) => setFeedbackError(error instanceof Error ? error.message : t("about.feedback.error"))).finally(() => setFeedbackSubmitting(false)); }} />
+          <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={() => { setFeedbackSubmitting(true); setFeedbackError(null); void submitFeedback({ description: feedbackText }).then((receipt) => setFeedbackId(receipt.id)).catch((error) => setFeedbackError(error instanceof Error ? error.message : t("about.feedback.error"))).finally(() => setFeedbackSubmitting(false)); }} />
         </View>}
       </AdaptiveSheet>
     </View>

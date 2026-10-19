@@ -1,86 +1,25 @@
 # Debug Diagnostics
 
-The mobile client records diagnostic sessions in SQLite by default; the switch in About turns recording off. It keeps the most recent sessions and prunes older ones on the next launch, and it submits one session only when a user sends feedback. It never uploads credentials, message bodies, attachment bytes, image data, or raw Cohub IDs.
+The mobile client always records diagnostic sessions in SQLite; there is no switch to turn recording off. It keeps the most recent sessions and prunes older ones on the next launch, and it uploads only one session at a time: when a user submits feedback, or when they choose **Upload diagnostic log** in About. It never uploads credentials, message bodies, attachment bytes, image data, or raw Cohub IDs.
 
 ## Ingest contract
 
-The client expects the configured diagnostics origin to provide:
+Uploads go to [cfeed](https://github.com/netaart/cfeed) at `config.diagnosticsOrigin` (default `https://cfeed.neta.art`, overridable with `EXPO_PUBLIC_DIAGNOSTICS_ORIGIN`), app slug `cohub-mobile`.
 
-```text
-GET  /health
-POST /v1/feedback
-```
+`POST /api/v1/feedback` is sent as `multipart/form-data` because the session travels as a file:
 
-`POST /v1/feedback` accepts JSON with this shape:
+| Field | Value |
+|---|---|
+| `app` | `cohub-mobile` |
+| `content` | The user's feedback description, or a fixed line for a log-only upload |
+| `extra` | JSON: `app_version`, `platform`, `os_version`, `runtime_version`, `update_id`, `source` (`feedback` or `diagnostics`), and `session` (`id`, `started_at`, `events`, `dropped`) |
+| `files` | One `text/plain` attachment: the session as `cohub-diagnostics-v1` JSON Lines |
 
-```json
-{
-  "feedbackId": "feedback-...",
-  "description": "The bubble overlaps the turn marker.",
-  "includeSession": true,
-  "includeConversation": false,
-  "session": {
-    "id": "debug-...",
-    "startedAt": "2026-09-13T12:00:00.000Z",
-    "events": [
-      {
-        "sessionId": "debug-...",
-        "sequence": 1,
-        "timestamp": "2026-09-13T12:00:00.000Z",
-        "name": "chat.send.pressed",
-        "payload": "{\"attachmentCount\":0}"
-      }
-    ]
-  },
-  "app": {
-    "version": "2.2.2",
-    "platform": "android",
-    "osVersion": "36",
-    "updateId": null
-  }
-}
-```
+cfeed accepts only `app`, `content`, `extra`, and `website` as top-level fields; anything app-specific belongs in `extra` and is filterable as `x.<path>` (for example `x.platform=android` or `x.session.id=...`).
 
-The successful response must be JSON with a non-empty string id:
+The response must be `2xx` with `{ "id": "<ulid>" }`. The id is shown back to the user as a receipt and recorded as `diagnostics.upload.completed`.
 
-```json
-{ "id": "FB-2026-00042" }
-```
-
-The endpoint should enforce HTTPS, a request size limit, rate limiting, and a short retention period. The mobile app does not include a write secret because mobile bundle secrets are extractable.
-
-## SQLite schema
-
-A collector can persist one feedback and its events with:
-
-```sql
-CREATE TABLE feedback (
-  id TEXT PRIMARY KEY NOT NULL,
-  description TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  started_at TEXT NOT NULL,
-  app_version TEXT,
-  platform TEXT NOT NULL,
-  os_version TEXT,
-  update_id TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE feedback_events (
-  feedback_id TEXT NOT NULL,
-  sequence INTEGER NOT NULL,
-  timestamp TEXT NOT NULL,
-  name TEXT NOT NULL,
-  payload TEXT NOT NULL,
-  PRIMARY KEY (feedback_id, sequence),
-  FOREIGN KEY (feedback_id) REFERENCES feedback(id) ON DELETE CASCADE
-);
-
-CREATE INDEX feedback_created_at ON feedback(created_at);
-CREATE INDEX feedback_events_name ON feedback_events(name);
-```
-
-The server should reject unknown oversized fields, strip credentials and raw content fields as a second line of defence, and expire records automatically.
+The client writes the attachment to the cache directory, uploads it, and deletes it in the same call; no log file is kept on the device. The endpoint enforces rate limiting and app status; the mobile app carries no write secret because mobile bundle secrets are extractable.
 
 ## Event rules
 
@@ -96,12 +35,12 @@ chat.send_transition.target_measured
 chat.queue.state
 ```
 
-Geometry fields may include composer, bubble, marker, keyboard, and scroll frames. Message and turn identifiers must be recording-local aliases. Event payloads must not contain message text, assistant output, file paths, image bytes, access tokens, or authorization headers.
+Geometry fields may include composer, bubble, marker, keyboard, and scroll frames. Message and turn identifiers must be recording-local aliases. Event payloads must not contain message text, assistant output, file paths, image bytes, access tokens, or authorization headers. Fields whose names look like content, titles, tokens, or bodies are stripped before storage, and cfeed never exposes submitted data publicly.
 
 ## Local verification
 
-The client can be tested without a network by enabling diagnostics, exercising a flow, and inspecting the `debug_sessions` and `debug_events` tables in `cohub-mobile.db`. Upload failures must not affect chat sending or navigation.
+The client can be tested against a local cfeed by pointing `EXPO_PUBLIC_DIAGNOSTICS_ORIGIN` at it, exercising a flow, and inspecting the `debug_sessions` and `debug_events` tables in `cohub-mobile.db`. Upload failures must not affect chat sending or navigation.
 
-## Retention and export
+## Retention and upload scope
 
-A session is one app process lifetime; a relaunch starts a new one and marks the previous session closed when it is next read. The newest `SESSION_RETENTION` sessions are kept and the rest pruned at session start. Export writes every retained session to one JSONL file, newest first: each session contributes one `cohub-diagnostics-v1` header line followed by its events, so a single-session file still parses like before. Feedback sends only the most relevant session: the live one when it captured activity beyond its start markers, otherwise the most recent stored session (typically the frozen session that a relaunch shadowed). The chat scroll trace stays opt-in: it records only while the Scroll Diagnostics screen's Recording switch is on, and its events are written to the current session. Turning recording off deletes every stored session, retained ones included.
+A session is one app process lifetime; a relaunch starts a new one and marks the previous session closed when it is next read. The newest `SESSION_RETENTION` sessions are kept and the rest pruned at session start. Both uploads send only the most relevant session: the live one when it captured activity beyond its start markers, otherwise the most recent stored session (typically the frozen session that a relaunch shadowed). The chat scroll trace stays opt-in: it records only while the Scroll Diagnostics screen's Recording switch is on, and its events are written to the current session.
