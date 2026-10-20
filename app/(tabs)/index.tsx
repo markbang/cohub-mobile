@@ -232,7 +232,7 @@ export default function ChatsScreen() {
                 className="size-11 items-center justify-center"
               >
                 {({ pressed }) => (
-                  <View className={`size-8 items-center justify-center rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
+                  <View className={`size-8 items-center justify-center overflow-hidden rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
                     <AppIcon name="filter" size={17} tone={sourceFilter !== "all" ? "accent" : "muted"} />
                   </View>
                 )}

@@ -507,7 +507,7 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 						onPress={() => setDays(value)}
 						className={`min-h-12 justify-center`}
 					>
-						{({ pressed }) => <View className={`min-h-8 justify-center rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : days === value ? "bg-accent-soft" : ""}`}>
+						{({ pressed }) => <View className={`min-h-8 justify-center overflow-hidden rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : days === value ? "bg-accent-soft" : ""}`}>
 						<Text className={`text-subhead font-semibold ${days === value ? "text-accent" : "text-fg-muted"}`}>
 							{value === 365 ? t("settings.activity.range.oneYear") : t("settings.activity.range.days", { days: value })}
 						</Text></View>}
