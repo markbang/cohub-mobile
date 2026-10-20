@@ -63,6 +63,7 @@ export default function ActivityScreen() {
           onPress={() => router.push({ pathname: "/settings/billing-history", params: { kind: "subscriptions" } })}
         />
         <SettingsRow icon="activity" title={t("activity.usageDetails")} onPress={() => router.push("/settings/activity")} />
+        <SettingsRow icon="trending-up" title={t("activity.trending")} onPress={() => router.push("/trending")} />
         <SettingsRow icon="gift" title={t("settings.section.referrals")} last onPress={() => router.push("/settings/referrals")} />
       </SettingsGroup>
       {subscriptions.error ? <DataError message={subscriptions.error} onRetry={() => void subscriptions.load()} /> : null}

@@ -73,6 +73,7 @@ import SquarePen from "lucide-react-native/icons/square-pen";
 import Terminal from "lucide-react-native/icons/terminal";
 import Type from "lucide-react-native/icons/type";
 import Trash2 from "lucide-react-native/icons/trash";
+import TrendingUp from "lucide-react-native/icons/trending-up";
 import UserRound from "lucide-react-native/icons/user-round";
 import Wifi from "lucide-react-native/icons/wifi";
 import X from "lucide-react-native/icons/x";
@@ -153,6 +154,7 @@ export const icons = {
   sync: RefreshCw,
   terminal: Terminal,
   trash: Trash2,
+  "trending-up": TrendingUp,
   type: Type,
   user: UserRound,
   wifi: Wifi,

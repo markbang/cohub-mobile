@@ -265,6 +265,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
             <Stack.Screen name="language" options={{ title: t("route.language") }} />
             <Stack.Screen name="about" options={{ title: t("route.about") }} />
+            <Stack.Screen name="trending" options={{ title: t("activity.trending") }} />
             <Stack.Screen name="debug/index" options={{ title: t("route.debug") }} />
             <Stack.Screen name="debug/chat-scroll" options={{ title: "Scroll Diagnostics" }} />
             <Stack.Screen name="debug/bubble-layout" options={{ title: "Bubble Layout" }} />
