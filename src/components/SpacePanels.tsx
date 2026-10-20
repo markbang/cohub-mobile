@@ -205,6 +205,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
     clearIdleTimer();
     if (pagerSeed.get() !== 0) return;
     const panel = panelForScrollOffset(scrollOffset.get(), centerOffset, filesOffset);
+    recordDebugEvent("navigation.pager.settled", { panel, offset: Math.round(scrollOffset.get()) });
     if (panel) commitOpen(panel);
     else commitClosed();
   }, [centerOffset, clearIdleTimer, commitClosed, commitOpen, filesOffset, pagerSeed, scrollOffset]);
@@ -287,12 +288,12 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
     return { transform: [{ translateX: pagerNativeX.value - pagerTarget.value }] };
   });
   const handleSwipeBegin = useCallback(() => {
-    recordDebugEvent("navigation.pager.drag_begin", { pagerReady, pagerSwipeEnabled });
+    recordDebugEvent("navigation.pager.drag_begin", { pagerReady, pagerSwipeEnabled, panel: visiblePanelRef.current });
     clearIdleTimer();
   }, [clearIdleTimer, pagerReady, pagerSwipeEnabled]);
   const handleSwipeEnd = useCallback(() => {
-    recordDebugEvent("navigation.pager.drag_end", { pagerReady, pagerSwipeEnabled });
-  }, [pagerReady, pagerSwipeEnabled]);
+    recordDebugEvent("navigation.pager.drag_end", { pagerReady, pagerSwipeEnabled, offset: Math.round(swipeOffset.get()), panel: visiblePanelRef.current });
+  }, [pagerReady, pagerSwipeEnabled, swipeOffset]);
   useAnimatedReaction(() => swipeOffset.get(), (offset) => {
     if (offset >= 0) scrollTo(pagerRef, offset, 0, false);
   }, [pagerRef, swipeOffset]);

@@ -5,6 +5,7 @@ import { useIsFocused } from "expo-router";
 import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
+import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
 
 export type AnchoredMenuAction = {
   icon: IconName;
@@ -49,9 +50,10 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
 
   useEffect(() => {
     if (!focused) { onClose(); return; }
+    setDialogOpen(`menu:${testID}`, true);
     const back = BackHandler.addEventListener("hardwareBackPress", () => { onClose(); return true; });
-    return () => back.remove();
-  }, [focused, onClose]);
+    return () => { setDialogOpen(`menu:${testID}`, false); back.remove(); };
+  }, [focused, onClose, testID]);
 
   // Keep this in the screen, not a native Modal, so actions can immediately open their own surface.
   return <View ref={overlayRef} collapsable={false} onLayout={measure} style={styles.overlay}>
@@ -71,7 +73,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           accessibilityLabel={action.title}
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
-          onPress={() => { onClose(); action.onPress(); }}
+          onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
           className="min-h-12 flex-row items-center gap-3.5 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
         >
           <AppIcon name={action.icon} size={21} tone="secondary" />

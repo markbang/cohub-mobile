@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
+import { record as recordDebugEvent } from "@/src/data/debug-session";
 
 export type UpdateChannel = "production" | "staging";
 
@@ -22,11 +23,14 @@ export async function switchUpdateChannel(channel: UpdateChannel): Promise<Chann
   }
   // Override keys must match the embedded headers, so the full map is sent, not just the channel.
   Updates.setUpdateRequestHeadersOverride(channel === "production" ? null : { ...embedded, "expo-channel-name": channel });
+  recordDebugEvent("update.channel.switch", { channel });
   const result = await Updates.fetchUpdateAsync().catch((error: unknown) => {
+    recordDebugEvent("update.channel.error", { channel, message: error instanceof Error ? error.message : String(error) });
     Updates.setUpdateRequestHeadersOverride(null);
     throw error;
   });
   if (result.isNew) {
+    recordDebugEvent("update.channel.new", { channel, updateId: result.manifest?.id ?? null });
     await Updates.reloadAsync();
     return "reloading";
   }

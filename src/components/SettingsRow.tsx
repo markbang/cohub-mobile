@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
+import { traceAction } from "@/src/data/interaction-trace";
 
 /** A grouped settings row: 52 pt, separator inset past the icon, chevron only when it drills in. */
 export function SettingsRow({ icon, title, value, detail, children, onPress, disabled = false, danger = false, last = false, external = false }: {
@@ -17,7 +18,7 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   external?: boolean;
 }) {
   return (
-    <PressableOrView onPress={onPress} disabled={disabled} title={title} role={external ? "link" : "button"}>
+    <PressableOrView onPress={onPress} disabled={disabled} title={title} icon={icon} role={external ? "link" : "button"}>
       <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
         <AppIcon name={icon} size={20} tone={danger ? "danger" : "muted"} />
         <View className="min-w-0 flex-1 gap-0.5">
@@ -33,10 +34,10 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   );
 }
 
-function PressableOrView({ onPress, disabled, title, role, children }: { onPress?: () => void; disabled: boolean; title: string; role: "button" | "link"; children: ReactNode }) {
+function PressableOrView({ onPress, disabled, title, icon, role, children }: { onPress?: () => void; disabled: boolean; title: string; icon: IconName; role: "button" | "link"; children: ReactNode }) {
   const className = "flex-row items-center bg-surface px-4";
   return onPress
-    ? <Pressable accessibilityRole={role} accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} className={`${className} active:bg-surface-pressed disabled:opacity-55`}>{children}</Pressable>
+    ? <Pressable accessibilityRole={role} accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled} onPress={() => { traceAction("settings_row", { icon, role }); onPress(); }} className={`${className} active:bg-surface-pressed disabled:opacity-55`}>{children}</Pressable>
     : <View className={className}>{children}</View>;
 }
 

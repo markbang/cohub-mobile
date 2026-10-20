@@ -597,7 +597,7 @@ export const en = {
   "about.feedback.attachments.limit": "You can attach up to {count} files.",
   "about.feedback.photoOff": "Photo access is off. Allow it in Settings to attach photos.",
   "about.feedback.log.title": "Attach diagnostic log",
-  "about.feedback.log.detail": "Includes recent app events; no message content or credentials",
+  "about.feedback.log.detail": "Includes the last 3 launches: taps, gestures, navigation and network events; no message content or credentials",
   "about.linkError.title": "Unable to open link",
   "about.linkUnavailable.title": "{title} unavailable",
   "about.linkUnavailable.body": "Unable to open {title}.",

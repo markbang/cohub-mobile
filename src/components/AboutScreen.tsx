@@ -8,6 +8,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AppUpdateRow } from "@/src/components/AppUpdateBanner";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { submitFeedback, type FeedbackAttachment } from "@/src/data/debug-session";
+import { traceAction } from "@/src/data/interaction-trace";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { openWebLink } from "@/src/platform/browser";
 import { AppIcon, Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHeader, PrimaryButton, SettingsGroup } from "@/src/ui";
@@ -192,6 +193,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
               value={feedbackIncludeLog}
               disabled={feedbackSubmitting}
               onValueChange={(value) => {
+                traceAction("feedback_log_toggle", { value });
                 setFeedbackIncludeLog(value);
                 if (value) setFeedbackAttachments((current) => current.slice(0, MAX_ATTACHMENTS - 1));
               }}

@@ -22,9 +22,13 @@ import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
-import { useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
+import { record as recordDebugEvent, useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
+import { globalTouchHandlers, installInteractionInstrumentation, useRouteTracking } from "@/src/data/interaction-trace";
 
 export { ErrorBoundary } from "expo-router";
+
+// Install network, error and console capture before the first render starts any request.
+installInteractionInstrumentation();
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -61,7 +65,12 @@ export default function RootLayout() {
   // keep the splash up until the bundled font is registered.
   const [fontsLoaded, fontError] = useFonts({ SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf") });
   if (!fontsLoaded && !fontError) return null;
-  return <LocaleProvider><AuthEnvironmentRoot /></LocaleProvider>;
+  return <LocaleProvider><TracedRoot><AuthEnvironmentRoot /></TracedRoot></LocaleProvider>;
+}
+
+/** The root view sees every touch no nested view consumes, so blank-space taps reach the log. */
+function TracedRoot({ children }: { children: React.ReactNode }) {
+  return <View style={{ flex: 1 }} {...globalTouchHandlers}>{children}</View>;
 }
 
 /** Resolves the sign-in environment before any request runs, then owns the Logto client for it. */
@@ -75,6 +84,7 @@ function AuthEnvironmentRoot() {
       .then((preference) => {
         if (!active) return;
         const selected = preference ?? defaultEnvironment;
+        recordDebugEvent("auth.environment", { environment: selected, fromPreference: preference !== null });
         setActiveEnvironment(selected);
         setEnvironment(selected);
       });
@@ -84,6 +94,7 @@ function AuthEnvironmentRoot() {
   }, []);
 
   const selectEnvironment = useCallback((next: CohubEnvironment) => {
+    recordDebugEvent("auth.environment", { environment: next, fromPreference: true });
     setActiveEnvironment(next);
     setEnvironment(next);
     void saveEnvironmentPreference(next).catch(() => undefined);
@@ -192,6 +203,7 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
   }, [client, rejectSession]);
 
   const handleSignIn = useCallback(async () => {
+    recordDebugEvent("auth.sign_in", { phase: "start", authenticated: isAuthenticated });
     setAuthLoading(true);
     setAuthFailure(null);
     try {
@@ -199,8 +211,10 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
       await signIn(config.redirectUri);
       setIdentityAttempt((attempt) => attempt + 1);
     } catch (error) {
+      recordDebugEvent("auth.sign_in", { phase: "failed", message: error instanceof Error ? error.message : String(error) });
       setAuthFailure({ environment, message: error instanceof Error ? error.message : "Sign in was not completed" });
     } finally {
+      recordDebugEvent("auth.sign_in", { phase: "end" });
       setAuthLoading(false);
     }
   }, [environment, isAuthenticated, signIn, signOut]);
@@ -222,6 +236,7 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
 
 function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
   const { t } = useTranslation();
+  useRouteTracking();
   // The authenticated navigation tree owns the lifetime of diagnostic recordings.
   useEffect(() => () => chatScrollTrace.reset(), []);
   const navigationTheme = theme.mode === "dark" ? DarkTheme : DefaultTheme;

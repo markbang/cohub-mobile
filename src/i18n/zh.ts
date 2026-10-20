@@ -573,7 +573,7 @@ export const zh: Record<TranslationKey, string> = {
   "about.feedback.attachments.limit": "最多可以添加 {count} 个附件。",
   "about.feedback.photoOff": "相册权限已关闭，请在系统设置中允许后再添加图片。",
   "about.feedback.log.title": "附带诊断日志",
-  "about.feedback.log.detail": "包含最近的应用事件，不含消息内容或凭证",
+  "about.feedback.log.detail": "包含最近 3 次启动的点击、手势、导航和网络事件；不含消息内容或凭证",
   "about.linkError.title": "无法打开链接",
   "about.linkUnavailable.title": "{title}不可用",
   "about.linkUnavailable.body": "无法打开{title}。",

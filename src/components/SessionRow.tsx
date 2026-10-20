@@ -8,6 +8,8 @@ import { sessionListStatus } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
+import { debugAlias } from "@/src/data/debug-session";
+import { traceAction } from "@/src/data/interaction-trace";
 
 type SessionRowProps = {
   session: UserSessionListItem;
@@ -78,7 +80,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
     separator={!tree || tree.lastInGroup}
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
-    onPress={onPress}
+    onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}
     onLongPress={onLongPress}
   />;

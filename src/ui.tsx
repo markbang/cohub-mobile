@@ -25,6 +25,7 @@ import Svg, { G, Path, Rect } from "react-native-svg";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { icons, type IconName } from "@/src/icons";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
+import { traceAction } from "@/src/data/interaction-trace";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
@@ -100,7 +101,7 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       onTouchCancel={onTouchCancel}
-      onPress={onPress}
+      onPress={(event) => { traceAction("icon", { label, id: testID ?? name }); onPress(event); }}
       className={`items-center justify-center rounded-full disabled:opacity-45 ${tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
       style={{ width: target, height: target }}
     >
@@ -112,6 +113,21 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
+  const scrollTrace = useRef({ at: 0, y: 0, height: 0, viewport: 0 });
+  const traceScroll = (phase: string, event?: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number }; velocity?: { y?: number } | null } }) => {
+    const native = event?.nativeEvent;
+    const now = Date.now();
+    if (phase === "scroll" && now - scrollTrace.current.at < 150) return;
+    scrollTrace.current.at = now;
+    const y = native?.contentOffset.y ?? scrollTrace.current.y;
+    const height = native?.contentSize.height ?? scrollTrace.current.height;
+    const viewport = native?.layoutMeasurement.height ?? scrollTrace.current.viewport;
+    const deltaY = Math.round(y - scrollTrace.current.y);
+    scrollTrace.current.y = y;
+    scrollTrace.current.height = height;
+    scrollTrace.current.viewport = viewport;
+    recordDebugEvent("ui.scroll", { phase, offsetY: Math.round(y), contentHeight: Math.round(height), viewportHeight: Math.round(viewport), deltaY, velocityY: native?.velocity?.y ?? null });
+  };
   const body = scroll ? (
     <ScrollView
       ref={scrollRef}
@@ -119,6 +135,12 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
       contentContainerStyle={[{ paddingBottom: insets.bottom + 28 }, contentStyle]}
       refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} colors={[theme.colors.accent]} /> : undefined}
       keyboardShouldPersistTaps="handled"
+      scrollEventThrottle={100}
+      onScroll={(event) => traceScroll("scroll", event)}
+      onScrollBeginDrag={() => traceScroll("drag_begin")}
+      onScrollEndDrag={(event) => traceScroll("drag_end", event)}
+      onMomentumScrollBegin={() => traceScroll("momentum_begin")}
+      onMomentumScrollEnd={(event) => traceScroll("momentum_end", event)}
     >
       {children}
     </ScrollView>
@@ -154,7 +176,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
       {onBack ? <IconButton
         name="arrow-left"
         label={backLabel ?? t("ui.detail.back")}
-        onPress={() => { recordDebugEvent("navigation.back.dispatch"); onBack(); }}
+        onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
         onPressOut={() => recordDebugEvent("navigation.back.press_out")}
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
@@ -232,7 +254,7 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   // The danger fill is a token pair; its foreground is not one of the icon tones.
   const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={onPress} className={`min-h-12 flex-row items-center justify-center gap-2 rounded-sm px-4.5 disabled:opacity-55 ${classes.box} ${className}`} style={[CONTINUOUS, style]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-12 flex-row items-center justify-center gap-2 rounded-sm px-4.5 disabled:opacity-55 ${classes.box} ${className}`} style={[CONTINUOUS, style]}>
       {loading ? <ActivityIndicator color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} size="small" /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
       <Text className={`shrink text-body font-semibold ${classes.text}`}>{label}</Text>
     </Pressable>
@@ -268,6 +290,7 @@ export function Segmented<T extends string>({ options, value, onChange, disabled
             aria-checked={selected}
             disabled={disabled}
             onPress={() => {
+              traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
               if (!selected) onChange(option.value);
             }}
@@ -326,6 +349,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const [lastUserText, setLastUserText] = useState(value);
   const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
   const inputRef = useRef<TextInput | null>(null);
+  const inputTrace = useRef({ at: 0, length: value.length, selectionAt: 0 });
   const keyboardVisible = keyboardTop !== null;
   // Android keeps its bottom safe-area inset while KeyboardAvoidingView is active.
   useEffect(() => {
@@ -371,7 +395,16 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             testID="chat-composer-input"
             accessibilityLabel={t("ui.composer.placeholder")}
             value={value}
-            onChangeText={(next) => { setLastUserText(next); onChangeText(next); }}
+            onChangeText={(next) => {
+              setLastUserText(next);
+              const now = Date.now();
+              if (now - inputTrace.current.at >= 300) {
+                recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
+                inputTrace.current.at = now;
+              }
+              inputTrace.current.length = next.length;
+              onChangeText(next);
+            }}
             onScroll={(event) => {
               if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
               // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
@@ -400,9 +433,16 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             placeholderTextColor={theme.colors.textFaint}
             className="min-w-0 flex-1 text-body text-fg"
             style={[styles.composerText, { height: layout.height }]}
-            onSelectionChange={onSelectionChange ? (event) => onSelectionChange(event.nativeEvent.selection) : undefined}
-            onFocus={() => { setFocused(true); onFocusChange?.(true); }}
-            onBlur={() => { setFocused(false); onFocusChange?.(false); }}
+            onSelectionChange={(event) => {
+              const now = Date.now();
+              if (now - inputTrace.current.selectionAt >= 300) {
+                inputTrace.current.selectionAt = now;
+                recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
+              }
+              onSelectionChange?.(event.nativeEvent.selection);
+            }}
+            onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); setFocused(true); onFocusChange?.(true); }}
+            onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); setFocused(false); onFocusChange?.(false); }}
             submitBehavior="newline"
           />
           <View className="w-11 h-11">
@@ -411,27 +451,27 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               accessibilityRole="button"
               accessibilityLabel={t(layout.expanded ? "ui.composer.collapse" : "ui.composer.expand")}
               accessibilityState={{ expanded: layout.expanded }}
-              onPress={() => setExpanded(!layout.expanded)}
+              onPress={() => { traceAction("composer_expand", { expanded: !layout.expanded }); setExpanded(!layout.expanded); }}
               className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"
             ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={17} tone="muted" /></Pressable> : null}
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-1.5">
-          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
-          {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: harnessLabel ?? "Cohub" })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
+          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
+          {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: harnessLabel ?? "Cohub" })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness: harnessLabel ?? null }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <AppIcon name={harnessLabel === "Cohub" ? "cloud" : "monitor"} size={16} tone="secondary" />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{harnessLabel}</Text>
             <AppIcon name="chevron-down" size={13} tone="muted" />
           </Pressable> : null}
-          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-1.5 overflow-hidden rounded-full px-2.5 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
+          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-1.5 overflow-hidden rounded-full px-2.5 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={onVoice} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
+          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
             {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
           </Pressable>
         </View>

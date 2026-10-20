@@ -1,41 +1,97 @@
+import { randomUUID } from "expo-crypto";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useEffect } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Dimensions, Platform } from "react-native";
 import { config } from "@/src/config";
-import { loadDebugEvents, loadDebugSessions, pruneDebugSessions, saveDebugEvent, upsertDebugSession, type DebugEventRow } from "@/src/data/local-db";
+import { DEBUG_EVENT_LIMIT, loadDebugEvents, loadDebugSessions, pruneDebugSessions, saveDebugEvent, upsertDebugSession, type DebugEventRow, type DebugSessionRow } from "@/src/data/local-db";
 import { setDebugTraceSink } from "@/src/data/chat-scroll-trace";
 
 const APP_SLUG = "cohub-mobile";
 const NON_ACTIVITY_EVENTS = new Set(["diagnostics.session.started", "chat.scroll.recording.start"]);
-const EVENT_CAPACITY = 4000;
-/** Sessions kept on disk; older ones are pruned when a new one starts. */
-const SESSION_RETENTION = 5;
+/** App opens kept on disk; a feedback submission attaches all of them when present. */
+const SESSION_RETENTION = 3;
+const STORAGE_WRITE_INTERVAL_MS = 500;
+/** Keep feedback uploads practical on a phone network; oldest events are trimmed first. */
+const MAX_DIAGNOSTIC_BYTES = 8 * 1024 * 1024;
+const launchEpochMs = Date.now();
 
 type DebugFields = Record<string, unknown>;
-type ActiveSession = { id: string; startedAt: string; sequence: number; dropped: number; events: DebugEventRow[]; writes: Promise<void> };
+type ActiveSession = {
+  id: string;
+  startedAt: string;
+  epochMs: number;
+  sequence: number;
+  dropped: number;
+  events: DebugEventRow[];
+  writes: Promise<void>;
+};
+/** One collected launch. `staged` marks the live launch, which was never closed by a shutdown. */
+type StoredSnapshot = { id: string; startedAt: string; endedAt: string | null; events: DebugEventRow[]; dropped: number; staged?: boolean };
 export type FeedbackAttachment = { uri: string; name: string; mimeType: string; size: number };
 export type FeedbackInput = { description: string; includeLog: boolean; attachments?: readonly FeedbackAttachment[] };
 export type FeedbackReceipt = { id: string };
 export type DebugSnapshot = { sessionId: string; startedAt: string; dropped: number; events: DebugEventRow[] };
 
+/** Correlation context attached to every stored event so a screenshot can be tied to a tap. */
+const context: Record<string, string | null> = { session: null, surface: null, focus: null };
+const aliasCounters = new Map<string, number>();
+const aliasIds = new Map<string, string>();
+export type DebugAliasKind = "session" | "space" | "message" | "turn" | "user" | "id";
+
+/** Recording-local pseudonym: raw Cohub IDs stay out of the log while events still correlate. */
+export function debugAlias(kind: DebugAliasKind, id: string): string {
+  const key = `${kind}:${id}`;
+  const existing = aliasIds.get(key);
+  if (existing) return existing;
+  const next = (aliasCounters.get(kind) ?? 0) + 1;
+  aliasCounters.set(kind, next);
+  const alias = `${kind[0]}${next}`;
+  aliasIds.set(key, alias);
+  return alias;
+}
+
+export function setDebugContext(field: "session" | "surface" | "focus", value: string | null) {
+  if (context[field] === value) return;
+  context[field] = value;
+  record("debug.context", { [field]: value });
+}
+
 let activeSession: ActiveSession | null = null;
 
 function newId(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${randomUUID().slice(0, 18)}`;
+}
+
+const REDACTED_KEYS = /^(token|secret|password|cookie|authorization|body|content|data|base64|text|title|\w*url)$/i;
+const REDACTED_FRAGMENTS = /(?:access|refresh|id|auth)[_-]?token|token[_-]?(?:id)?$|message[_-]?text|assistant[_-]?text|user[_-]?text|password|secret|authorization|api[_-]?key/i;
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
+const BEARER = /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/-]+=*/gi;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+
+/** Strips credentials and raw identifiers from anything free-form (errors, URLs, names). */
+export function redactText(value: string, limit = 400): string {
+  const clean = value
+    .replace(BEARER, "[auth]")
+    .replace(JWT, "[jwt]")
+    .replace(UUID, "[id]")
+    .replace(EMAIL, "[email]")
+    .replace(/\b[A-Za-z0-9_-]{24,}\b/g, "[id]");
+  return clean.length > limit ? `${clean.slice(0, limit)}…` : clean;
 }
 
 function sanitize(value: unknown, depth = 0): unknown {
   if (depth > 4) return "[depth-limited]";
-  if (typeof value === "string") return value.length > 600 ? `${value.slice(0, 600)}…` : value;
+  if (typeof value === "string") return redactText(value, 400);
   if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
   if (Array.isArray(value)) return value.slice(0, 50).map((item) => sanitize(item, depth + 1));
   if (typeof value === "object") {
     const output: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value)) {
-      if (/^(token|secret|password|cookie|authorization|body|content|data|base64|text|title|url)$/i.test(key) || /(?:access|refresh)[_-]?token|message[_-]?text|assistant[_-]?text|user[_-]?text/i.test(key)) continue;
+      if (REDACTED_KEYS.test(key) || REDACTED_FRAGMENTS.test(key)) continue;
       output[key] = sanitize(item, depth + 1);
     }
     return output;
@@ -51,11 +107,38 @@ function updateMetadata() {
   }
 }
 
+function readLocale() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale;
+  } catch {
+    return null;
+  }
+}
+
+function deviceSnapshot() {
+  const window = Dimensions.get("window");
+  const screen = Dimensions.get("screen");
+  return {
+    kind: Device.deviceType === Device.DeviceType.TABLET ? "tablet" : Device.deviceType === Device.DeviceType.PHONE ? "phone" : "unknown",
+    model: Device.modelName ?? null,
+    brand: Device.brand ?? null,
+    os: `${Platform.OS} ${Device.osVersion ?? String(Platform.Version)}`,
+    arch: Device.supportedCpuArchitectures?.join(",") ?? null,
+    memoryMb: Device.totalMemory ? Math.round(Device.totalMemory / 1024 / 1024) : null,
+    window: `${Math.round(window.width)}x${Math.round(window.height)}`,
+    screen: `${Math.round(screen.width)}x${Math.round(screen.height)}`,
+    scale: Math.round(window.scale * 100) / 100,
+    fontScale: Math.round(window.fontScale * 100) / 100,
+    timezoneOffset: new Date().getTimezoneOffset(),
+  };
+}
+
 function beginSession(): ActiveSession {
   if (activeSession) return activeSession;
   const session: ActiveSession = {
     id: newId("debug"),
     startedAt: new Date().toISOString(),
+    epochMs: Date.now(),
     sequence: 0,
     dropped: 0,
     events: [],
@@ -76,67 +159,160 @@ function beginSession(): ActiveSession {
   record("diagnostics.session.started", {
     platform: Platform.OS,
     appVersion: Constants.expoConfig?.version ?? null,
+    appBuild: Constants.expoConfig?.android?.versionCode ?? Constants.expoConfig?.ios?.buildNumber ?? null,
+    sdkVersion: Constants.expoConfig?.sdkVersion ?? null,
+    executionEnvironment: Constants.executionEnvironment ?? null,
+    isDevice: Device.isDevice,
     ...updateMetadata(),
+    device: deviceSnapshot(),
+    locale: readLocale(),
   });
   return session;
 }
 
+const pendingWrites: DebugEventRow[] = [];
+let flushScheduled = false;
+let lastFlushAt = 0;
+
+/** Batches into one transaction. Every event is still persisted, just with fewer round trips. */
+function scheduleFlush(session: ActiveSession) {
+  if (pendingWrites.length === 0) return;
+  const wait = Math.max(0, lastFlushAt + STORAGE_WRITE_INTERVAL_MS - Date.now());
+  if (!flushScheduled) {
+    flushScheduled = true;
+    session.writes = session.writes
+      .then(() => new Promise<void>((resolve) => setTimeout(resolve, wait)))
+      .then(async () => {
+        const batch = pendingWrites.splice(0);
+        flushScheduled = false;
+        lastFlushAt = Date.now();
+        for (const event of batch) await saveDebugEvent(event);
+        if (pendingWrites.length > 0) scheduleFlush(session);
+      })
+      .catch(() => {
+        flushScheduled = false;
+        pendingWrites.splice(0);
+      });
+  }
+}
+
 export function record(name: string, fields: DebugFields = {}) {
   const session = beginSession();
+  const now = new Date();
+  // Coordinates are measured from launch so events from every source interleave on one clock.
   const event: DebugEventRow = {
     sessionId: session.id,
     sequence: ++session.sequence,
-    timestamp: new Date().toISOString(),
+    timestamp: now.toISOString(),
     name,
-    payload: JSON.stringify(sanitize(fields)),
+    payload: JSON.stringify(sanitize({
+      t: now.getTime() - session.epochMs,
+      ...Object.fromEntries(Object.entries(context).filter(([, value]) => value !== null)),
+      ...fields,
+    })),
   };
-  if (session.events.length === EVENT_CAPACITY) {
+  if (session.events.length === DEBUG_EVENT_LIMIT) {
     session.events.shift();
     session.dropped += 1;
   }
   session.events.push(event);
-  session.writes = session.writes.then(() => saveDebugEvent(event)).catch(() => undefined);
+  pendingWrites.push(event);
+  scheduleFlush(session);
 }
 
-function hasCapturedActivity(snapshot: DebugSnapshot) {
-  return snapshot.events.some((event) => !NON_ACTIVITY_EVENTS.has(event.name));
+function hasCapturedActivity(events: readonly DebugEventRow[]) {
+  return events.some((event) => !NON_ACTIVITY_EVENTS.has(event.name));
 }
 
-async function loadActiveSnapshot(): Promise<DebugSnapshot> {
+function snapshotFromRow(row: DebugSessionRow, events: DebugEventRow[]): StoredSnapshot {
+  return {
+    id: row.sessionId,
+    startedAt: row.startedAt,
+    endedAt: row.closedAt,
+    staged: false,
+    events,
+    dropped: Math.max(0, (events.at(-1)?.sequence ?? 0) - events.length),
+  };
+}
+
+/** Previous launches first, then the live one; launches without activity are skipped. */
+async function collectSnapshots(): Promise<StoredSnapshot[]> {
   const session = beginSession();
   await session.writes;
-  // Copy: the live session keeps appending after the snapshot is handed out.
-  return { sessionId: session.id, startedAt: session.startedAt, dropped: session.dropped, events: [...session.events] };
-}
-
-async function loadStoredSnapshots(): Promise<DebugSnapshot[]> {
-  const sessions = await loadDebugSessions();
-  const snapshots: DebugSnapshot[] = [];
-  for (const session of sessions) {
-    if (activeSession?.id === session.sessionId) continue;
-    const events = await loadDebugEvents(session.sessionId);
-    if (events.length === 0) continue;
-    if (session.closedAt === null) await upsertDebugSession({ ...session, closedAt: new Date().toISOString() });
-    snapshots.push({ sessionId: session.sessionId, startedAt: session.startedAt, dropped: Math.max(0, events.at(-1)!.sequence - events.length), events });
+  const rows = await loadDebugSessions();
+  const snapshots: StoredSnapshot[] = [];
+  for (const row of rows) {
+    if (row.sessionId === session.id) continue;
+    const events = await loadDebugEvents(row.sessionId);
+    if (row.closedAt === null && hasCapturedActivity(events)) {
+      // A launch that died before its deferred close still ends when the next launch began.
+      const nextLaunch = rows
+        .map((item) => item.startedAt)
+        .filter((startedAt) => Date.parse(startedAt) > Date.parse(row.startedAt))
+        .sort()[0];
+      row.closedAt = nextLaunch ?? new Date().toISOString();
+      await upsertDebugSession(row);
+    }
+    if (!hasCapturedActivity(events)) continue;
+    snapshots.push(snapshotFromRow(row, events));
   }
-  return snapshots;
+  snapshots.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  if (hasCapturedActivity(session.events)) {
+    // Copy: the live session keeps appending after the snapshot is handed out.
+    snapshots.unshift({ id: session.id, startedAt: session.startedAt, endedAt: null, staged: true, events: [...session.events], dropped: session.dropped });
+  }
+  return snapshots.slice(0, SESSION_RETENTION);
 }
 
-/** The live session when it captured activity, otherwise the most recent stored one. A relaunch
-writes only startup markers, so without this the frozen session it replaced would be shadowed. */
-async function snapshot(): Promise<DebugSnapshot> {
-  const active = await loadActiveSnapshot();
-  if (hasCapturedActivity(active)) return active;
-  const stored = await loadStoredSnapshots();
-  return stored.find(hasCapturedActivity) ?? active;
+function sessionHeader(snapshot: StoredSnapshot, index: number, total: number) {
+  return {
+    format: "cohub-diagnostics-v1",
+    launch: index + 1,
+    launches: total,
+    sessionId: snapshot.id,
+    startedAt: snapshot.startedAt,
+    endedAt: snapshot.endedAt,
+    staged: snapshot.staged === true,
+    dropped: snapshot.dropped,
+    events: snapshot.events.length,
+    privacy: "Diagnostic events only. Credentials, message text, titles and raw identifiers are redacted before storage; IDs appear as per-launch aliases.",
+  };
 }
 
-/** JSON Lines, one `cohub-diagnostics-v1` header followed by the session's events. */
-function formatDiagnostics(snapshot: DebugSnapshot): string {
-  return [
-    JSON.stringify({ format: "cohub-diagnostics-v1", sessionId: snapshot.sessionId, startedAt: snapshot.startedAt, dropped: snapshot.dropped, events: snapshot.events.length, privacy: "Diagnostic events only. Fields whose names look like message text, titles, tokens or bodies are stripped before they are stored." }),
-    ...snapshot.events.map((event) => JSON.stringify({ at: event.timestamp, seq: event.sequence, name: event.name, payload: event.payload })),
-  ].join("\n");
+function eventLine(event: DebugEventRow) {
+  const payload = JSON.parse(event.payload) as Record<string, unknown>;
+  const { t, ...fields } = payload;
+  return JSON.stringify({ at: event.timestamp, t, name: event.name, ...fields });
+}
+
+function formatDiagnostics(snapshots: readonly StoredSnapshot[]): { content: string; snapshots: StoredSnapshot[] } {
+  const kept = snapshots.map((snapshot) => ({ ...snapshot, events: [...snapshot.events] }));
+  const lineBytes = (event: DebugEventRow) => event.payload.length + event.name.length + 80;
+  let total = kept.reduce((sum, snapshot) => sum + snapshot.events.reduce((bytes, event) => bytes + lineBytes(event), 0), 0);
+  let truncated = false;
+  // Newest launch first: spend the budget on the round that contains the report.
+  for (let index = kept.length - 1; index >= 0 && total > MAX_DIAGNOSTIC_BYTES; index -= 1) {
+    const snapshot = kept[index];
+    while (snapshot.events.length > 0 && total > MAX_DIAGNOSTIC_BYTES) {
+      total -= lineBytes(snapshot.events.shift()!);
+      snapshot.dropped += 1;
+      truncated = true;
+    }
+  }
+  const lines = [
+    JSON.stringify({
+      format: "cohub-diagnostics-v2",
+      startedAt: kept[0]?.startedAt ?? null,
+      launches: kept.length,
+      events: kept.reduce((sum, snapshot) => sum + snapshot.events.length, 0),
+      truncated,
+    }),
+  ];
+  kept.forEach((snapshot, index) => {
+    lines.push(JSON.stringify(sessionHeader(snapshot, index, kept.length)));
+    for (const event of snapshot.events) lines.push(eventLine(event));
+  });
+  return { content: lines.join("\n"), snapshots: kept };
 }
 
 /**
@@ -182,7 +358,7 @@ function parseReceipt(status: number, body: string): FeedbackReceipt {
   return { id: payload.id };
 }
 
-function buildExtra(current: DebugSnapshot | null, attachmentCount: number) {
+function buildExtra(snapshots: readonly StoredSnapshot[], attachmentCount: number) {
   const updates = updateMetadata();
   return {
     app_version: Constants.expoConfig?.version ?? null,
@@ -191,42 +367,52 @@ function buildExtra(current: DebugSnapshot | null, attachmentCount: number) {
     device_model: Device.modelName ?? null,
     runtime_version: updates.runtimeVersion,
     update_id: updates.updateId,
-    include_log: current !== null,
+    include_log: snapshots.length > 0,
     attachment_count: attachmentCount,
-    ...(current
+    ...(snapshots.length > 0
       ? {
           session: {
-            id: current.sessionId,
-            started_at: current.startedAt,
-            events: current.events.length,
-            dropped: current.dropped,
+            id: snapshots[0].id,
+            started_at: snapshots[0].startedAt,
+            events: snapshots.reduce((sum, snapshot) => sum + snapshot.events.length, 0),
+            dropped: snapshots.reduce((sum, snapshot) => sum + snapshot.dropped, 0),
           },
+          launches: snapshots.map((snapshot) => ({
+            id: snapshot.id,
+            started_at: snapshot.startedAt,
+            ended_at: snapshot.endedAt,
+            events: snapshot.events.length,
+            live: snapshot.staged === true,
+          })),
         }
       : {}),
   };
 }
 
-async function upload(content: string, current: DebugSnapshot | null, attachments: readonly FeedbackAttachment[]): Promise<FeedbackReceipt> {
-  if (!current && attachments.length === 0) {
+async function upload(content: string, snapshots: readonly StoredSnapshot[], attachments: readonly FeedbackAttachment[]): Promise<FeedbackReceipt> {
+  if (snapshots.length === 0 && attachments.length === 0) {
     // cfeed only accepts multipart when there are files; a text-only report can use JSON.
     const response = await fetch(endpoint(), {
       method: "POST",
       headers: { "content-type": "application/json", "user-agent": userAgent() },
-      body: JSON.stringify({ app: APP_SLUG, content, extra: buildExtra(null, 0) }),
+      body: JSON.stringify({ app: APP_SLUG, content, extra: buildExtra(snapshots, 0) }),
     });
     return parseReceipt(response.status, await response.text());
   }
 
-  const sessionFile = current ? new File(Paths.cache, `cohub-diagnostics-${newId("upload")}.jsonl`) : null;
+  const sessionFile = snapshots.length > 0 ? new File(Paths.cache, `cohub-diagnostics-${newId("upload")}.jsonl`) : null;
+  let uploadedSnapshots = snapshots;
   try {
-    if (sessionFile && current) {
+    if (sessionFile) {
+      const formatted = formatDiagnostics(snapshots);
       sessionFile.create({ overwrite: true, intermediates: true });
-      await sessionFile.write(formatDiagnostics(current));
+      await sessionFile.write(formatted.content);
+      uploadedSnapshots = formatted.snapshots;
     }
     const form = new FormData();
     form.append("app", APP_SLUG);
     form.append("content", content);
-    form.append("extra", JSON.stringify(buildExtra(current, attachments.length + (sessionFile ? 1 : 0))));
+    form.append("extra", JSON.stringify(buildExtra(uploadedSnapshots, attachments.length + (sessionFile ? 1 : 0))));
     // expo-fetch serializes a FormData part only when it is a Blob-like with `bytes()`;
     // React Native's `{ uri, name, type }` parts throw "Unsupported FormDataPart implementation".
     if (sessionFile) form.append("files", filePart(sessionFile, "cohub-diagnostics.jsonl", "text/plain") as unknown as Blob);
@@ -252,21 +438,33 @@ function filePart(file: File, name: string, type: string) {
 export async function submitFeedback(input: FeedbackInput): Promise<FeedbackReceipt> {
   const description = input.description.trim();
   if (!description) throw new Error("Feedback description is required.");
-  const current = input.includeLog ? await snapshot() : null;
+  // The submission itself must not appear in the log it uploads.
+  const snapshots = input.includeLog ? await collectSnapshots() : [];
   const attachments = input.attachments ?? [];
-  const receipt = await upload(description, current, attachments);
+  const receipt = await upload(description, snapshots, attachments);
   record("diagnostics.feedback.submitted", {
     feedbackId: receipt.id,
-    includeLog: current !== null,
+    includeLog: snapshots.length > 0,
+    launches: snapshots.length,
     attachments: attachments.length,
   });
   return receipt;
 }
 
+/** Launches rotate on a process restart; foregrounding never starts a new round. */
 export function useDebugDiagnosticsLifecycle() {
   useEffect(() => {
     beginSession();
-    const subscription = AppState.addEventListener("change", (state) => record(`app.${state === "active" ? "foregrounded" : "backgrounded"}`));
+    record("app.ready", { startupMs: Date.now() - launchEpochMs, state: AppState.currentState });
+    let previous = AppState.currentState;
+    let changedAt = Date.now();
+    record("app.lifecycle", { state: previous, foregroundMs: 0 });
+    const subscription = AppState.addEventListener("change", (state) => {
+      const now = Date.now();
+      record("app.lifecycle", { state, previous, sinceMs: now - changedAt, foregroundMs: previous === "active" ? now - changedAt : null });
+      previous = state;
+      changedAt = now;
+    });
     return () => subscription.remove();
   }, []);
 }

@@ -334,6 +334,8 @@ export async function clearComposerDraft(userKey: string, spaceId: string, scope
   );
 }
 
+/** Per-session cap; interactions and network events are high-volume, so keep a full app round. */
+export const DEBUG_EVENT_LIMIT = 12_000;
 export type DebugSessionRow = { sessionId: string; startedAt: string; updatedAt: number; closedAt: string | null; uploadedAt: string | null };
 export type DebugEventRow = { sessionId: string; sequence: number; timestamp: string; name: string; payload: string };
 
@@ -345,7 +347,7 @@ export async function upsertDebugSession(session: DebugSessionRow) {
 export async function saveDebugEvent(event: DebugEventRow) {
   const db = await database();
   await db.runAsync("INSERT OR REPLACE INTO debug_events (session_id, sequence, timestamp, name, payload) VALUES (?, ?, ?, ?, ?)", event.sessionId, event.sequence, event.timestamp, event.name, event.payload);
-  await db.runAsync("DELETE FROM debug_events WHERE session_id = ? AND sequence <= (SELECT MAX(sequence) - 3999 FROM debug_events WHERE session_id = ?)", event.sessionId, event.sessionId);
+  await db.runAsync("DELETE FROM debug_events WHERE session_id = ? AND sequence <= (SELECT MAX(sequence) - ? FROM debug_events WHERE session_id = ?)", event.sessionId, DEBUG_EVENT_LIMIT - 1, event.sessionId);
 }
 
 export async function loadDebugSessions(): Promise<DebugSessionRow[]> {

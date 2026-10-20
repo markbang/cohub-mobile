@@ -406,6 +406,8 @@ const chromeScope = {
   colorWithOpacity,
   edgeChrome: { headerMinHeight: 56, fade: 24 },
   recordDebugEvent: () => {},
+  traceAction: () => {},
+  setDialogOpen: () => {},
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 } },
   useAppTheme: () => ({ colors: { background: "background", text: "text", textMuted: "muted", textSecondary: "secondary", accent: "accent", accentSoft: "selected", surfacePressed: "pressed" } }),

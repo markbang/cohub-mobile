@@ -13,6 +13,7 @@ import {
   verifyAndroidUpdateIntegrity,
   type AndroidUpdateAbi,
 } from "@/src/data/update-assets";
+import { record as recordDebugEvent } from "@/src/data/debug-session";
 
 const CACHE_KEY = "cohub:mobile-update-check:v4";
 const SNOOZE_KEY = "cohub:mobile-update-snooze:v1";
@@ -169,9 +170,11 @@ export async function checkForAppUpdate(options: { force?: boolean } = {}) {
       cachedCheck.checkedAt <= Date.now() &&
       Date.now() - cachedCheck.checkedAt < CHECK_TTL_MS
     ) {
-      return cachedCheck.release && isNewerAppVersion(currentVersion, cachedCheck.release.version)
+      const cached = cachedCheck.release && isNewerAppVersion(currentVersion, cachedCheck.release.version)
         ? cachedCheck.release
         : null;
+      recordDebugEvent("update.check", { force: Boolean(options.force), cached: true, currentVersion, latestVersion: cached?.version ?? null });
+      return cached;
     }
   }
   if (request && !options.force) return request;
@@ -186,7 +189,9 @@ export async function checkForAppUpdate(options: { force?: boolean } = {}) {
       if (request === nextRequest) request = null;
     });
   request = nextRequest;
-  return nextRequest;
+  const result = await nextRequest;
+  recordDebugEvent("update.check", { force: Boolean(options.force), cached: false, currentVersion, latestVersion: result?.version ?? null });
+  return result;
 }
 
 function parseSnooze(value: string | null): SnoozeRecord | null {
@@ -249,6 +254,8 @@ export async function downloadAndInstallAndroidUpdate(
   }
   const asset = validateAndroidUpdateAsset(release, config.apkOrigin);
   apkUpdateInProgress = true;
+  const started = performance.now();
+  recordDebugEvent("update.apk.start", { version: release.version, bytes: asset.size, name: asset.name });
   try {
     const { Directory, File, Paths } = await import("expo-file-system");
     const Crypto = await import("expo-crypto");
@@ -288,9 +295,13 @@ export async function downloadAndInstallAndroidUpdate(
         flags: 1,
       });
       // Returning is not proof of installation. Keep the verified APK for a retry.
+      recordDebugEvent("update.apk.handed_off", { version: release.version, durationMs: Math.round(performance.now() - started) });
     } finally {
       if (!verified && file.exists) file.delete();
     }
+  } catch (error) {
+    recordDebugEvent("update.apk.error", { version: release.version, durationMs: Math.round(performance.now() - started), message: error instanceof Error ? error.message : String(error) });
+    throw error;
   } finally {
     apkUpdateInProgress = false;
   }

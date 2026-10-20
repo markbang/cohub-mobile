@@ -5,6 +5,7 @@ import Reanimated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { dismissToast, pushToast, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
+import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
 import { AppIcon } from "@/src/ui";
@@ -30,6 +31,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const counter = useRef(0);
 
   const show = useCallback<ShowToast>(({ title, message, tone = "neutral" }) => {
+    // Titles are UI copy, not user content; the detail line may quote an error and is not logged.
+    recordDebugEvent("ui.toast", { tone, label: title.slice(0, 80), hasMessage: Boolean(message) });
     counter.current += 1;
     const entry: ToastEntry = { key: `toast-${counter.current}`, title, message, tone };
     setToasts((current) => pushToast(current, entry));

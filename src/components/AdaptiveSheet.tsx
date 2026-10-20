@@ -20,6 +20,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
+import { setDialogOpen } from "@/src/data/interaction-trace";
 
 const COMPACT_BREAKPOINT = 720;
 const OPEN_DURATION_MS = 220;
@@ -101,6 +102,12 @@ export function AdaptiveSheet({
   useEffect(() => {
     revealDistance.set(hiddenOffset);
   }, [hiddenOffset, revealDistance]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setDialogOpen(`sheet:${title}`, true);
+    return () => setDialogOpen(`sheet:${title}`, false);
+  }, [title, visible]);
 
   useEffect(() => {
     if (!visible) return;

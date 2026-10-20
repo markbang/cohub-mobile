@@ -34,7 +34,8 @@ import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_PAGE_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailScrolledAway, chatTailStalled, nextChatTailFollowing } from "@/src/data/chat-scroll";
 import { chatScrollTrace, type TraceFields } from "@/src/data/chat-scroll-trace";
-import { record as recordDebugEvent } from "@/src/data/debug-session";
+import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
+import { traceAction } from "@/src/data/interaction-trace";
 import { useChatScrollTrace, useTraceTouches } from "@/src/components/use-chat-scroll-trace";
 import { useChatVisibleRows } from "@/src/components/use-chat-visible-rows";
 import { markChatEntry } from "@/src/data/chat-entry-trace";
@@ -187,6 +188,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     sendGenerationRef.current += 1;
     setSendTransition(null);
   }, []));
+  useFocusEffect(useCallback(() => {
+    recordDebugEvent("chat.screen.focus", { session: debugAlias("session", sessionId) });
+    return () => recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
+  }, [sessionId]));
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", () => {
       sendGenerationRef.current += 1;
@@ -299,6 +304,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const turnScrollRetriesRef = useRef(new Map<number, number>());
   const turnScrollRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollRef = useRef({ y: 0, height: 0, viewport: 0 });
+  const alwaysScrollLogRef = useRef({ at: 0, y: 0 });
   const traceRequestId = useRef(0);
   const traceCancelGeneration = useRef(0);
   const traceState = useCallback((): TraceFields => ({
@@ -817,6 +823,18 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   };
   const handleScroll = useCallback((event: ChatScrollEvent) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const now = Date.now();
+    if (now - alwaysScrollLogRef.current.at >= 250) {
+      recordDebugEvent("chat.list.scroll", {
+        session: debugAlias("session", sessionId),
+        offsetY: Math.round(contentOffset.y),
+        deltaY: Math.round(contentOffset.y - alwaysScrollLogRef.current.y),
+        contentHeight: Math.round(contentSize.height),
+        viewportHeight: Math.round(layoutMeasurement.height),
+        following: followingTailRef.current,
+      });
+      alwaysScrollLogRef.current = { at: now, y: contentOffset.y };
+    }
     trace("list.scroll", { previousY: lastScrollRef.current.y, deltaY: contentOffset.y - lastScrollRef.current.y, offsetY: contentOffset.y, contentHeight: contentSize.height, viewportHeight: layoutMeasurement.height });
     // Growth adds distance from the tail without the user going anywhere. Legend's own animated
     // tail pin also reports momentum while it catches up toward newer messages, so a burst of
@@ -876,6 +894,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
 
   const handleScrollBeginDrag = useCallback(() => {
     setSendTransition(null);
+    traceAction("chat_list_drag_begin");
     trace("list.dragBegin");
     userDraggingRef.current = true;
     momentumScrollingRef.current = false;
@@ -887,6 +906,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [cancelTurnScroll, trace]);
 
   const handleScrollEndDrag = useCallback((event: ChatScrollEvent) => {
+    traceAction("chat_list_drag_end", { velocityY: event.nativeEvent.velocity?.y ?? null, offsetY: Math.round(event.nativeEvent.contentOffset.y) });
     trace("list.dragEnd", { velocityY: event.nativeEvent.velocity?.y, offsetY: event.nativeEvent.contentOffset.y });
     const velocityY = event.nativeEvent.velocity?.y ?? 0;
     if (Math.abs(velocityY) >= 0.05) {
@@ -902,11 +922,13 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, trace]);
 
   const handleMomentumScrollBegin = useCallback(() => {
+    traceAction("chat_list_momentum_begin");
     trace("list.momentumBegin");
     if (userDraggingRef.current) momentumScrollingRef.current = true;
   }, [trace]);
 
   const handleMomentumScrollEnd = useCallback((event: ChatScrollEvent) => {
+    traceAction("chat_list_momentum_end", { offsetY: Math.round(event.nativeEvent.contentOffset.y) });
     trace("list.momentumEnd", { offsetY: event.nativeEvent.contentOffset.y });
     userDraggingRef.current = false;
     momentumScrollingRef.current = false;
@@ -919,14 +941,16 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, targetIsLatestMessage, trace]);
 
   const handleCopyMessage = useCallback((text: string) => {
+    recordDebugEvent("chat.message.copy", { session: debugAlias("session", sessionId), length: text.length });
     void copyMessageText(text).catch((error) => {
       showToast({ title: t("chat.copyFailed.title"), message: error instanceof Error ? error.message : t("chat.copyFailed.body"), tone: "danger" });
     });
-  }, [showToast, t]);
+  }, [sessionId, showToast, t]);
 
   const forkMessage = useCallback(async (message: MessageRecord) => {
     const turnId = message.meta?.turnId;
     if (!spaceId || typeof turnId !== "string" || forkingTurnId) return;
+    recordDebugEvent("chat.turn.fork", { session: debugAlias("session", sessionId), sequence: message.sequence });
     setForkingTurnId(turnId);
     try {
       const turn = view.turns.find((item) => item.id === turnId);

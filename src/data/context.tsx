@@ -18,7 +18,7 @@ import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
 import { config } from "@/src/config";
 import { createMobileClient } from "@/src/data/client";
-import { record as recordDebugEvent } from "@/src/data/debug-session";
+import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
 import { useConfigTheme } from "@/src/data/use-config-theme";
 import { useSpaceListData } from "@/src/data/use-space-list";
@@ -152,14 +152,21 @@ async function buildPromptContent(
     
     // `File.upload` defaults to POST; the presigned URL is signed for the method the plan
     // reports (PUT), and a mismatched method makes R2 reject the signature with 403.
-    const uploadResult = await file.upload(plan.asset.uploadUrl, {
-      httpMethod: plan.asset.uploadMethod,
-      uploadType: UploadType.BINARY_CONTENT,
-      headers: uploadHeaders,
-    });
-    
-    if (uploadResult.status < 200 || uploadResult.status >= 300) {
-      throw new Error(`File upload failed: HTTP ${uploadResult.status}`);
+    const uploadStarted = performance.now();
+    recordDebugEvent("net.upload", { kind: "attachment", bytes: file.size, mimeType, method: plan.asset.uploadMethod });
+    try {
+      const uploadResult = await file.upload(plan.asset.uploadUrl, {
+        httpMethod: plan.asset.uploadMethod,
+        uploadType: UploadType.BINARY_CONTENT,
+        headers: uploadHeaders,
+      });
+      recordDebugEvent("net.upload.response", { kind: "attachment", status: uploadResult.status, durationMs: Math.round(performance.now() - uploadStarted) });
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        throw new Error(`File upload failed: HTTP ${uploadResult.status}`);
+      }
+    } catch (error) {
+      recordDebugEvent("net.upload.error", { kind: "attachment", durationMs: Math.round(performance.now() - uploadStarted), message: error instanceof Error ? error.message : String(error) });
+      throw error;
     }
     
     const uploaded = plan.asset;
@@ -489,6 +496,7 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, runningSessions: { ...state.runningSessions, [action.source]: { ...current, loading: false, error: action.error ?? current.error } } };
     }
     case "realtime-error":
+      recordDebugEvent("realtime.error", { message: action.message });
       return { ...state, realtimeError: action.message };
     case "session-realtime-turn": {
       const known = action.turn.id ? state.sessionTurnStatuses[action.turn.id] : null;
@@ -765,7 +773,7 @@ function reducer(state: AppState, action: Action): AppState {
       return updateView(state, action.sessionId, { sending: false, messages });
     }
     case "send-failed": {
-      recordDebugEvent("chat.send.failed");
+      recordDebugEvent("chat.send.failed", { clientMessageIdPresent: typeof action.clientMessageId === "string", message: action.message });
       const view = state.sessionViews[action.sessionId] ?? emptyView();
       const messages = view.messages.filter((message) => !(isOptimisticFollowup(message) && message.meta?.clientMessageId === action.clientMessageId)).map((message) => {
         if (message.meta?.clientMessageId !== action.clientMessageId) return message;
@@ -1356,6 +1364,14 @@ export function AppProvider({
     const stopConnection = client.onConnection((snapshot) => {
       const previous = connectionStateRef.current;
       connectionStateRef.current = snapshot.state;
+      recordDebugEvent("net.realtime", {
+        state: snapshot.state,
+        previous,
+        willReconnect: snapshot.willReconnect,
+        attempt: snapshot.attempt ?? null,
+        delayMs: snapshot.delayMs ?? null,
+        recoverable: snapshot.recoverable ?? null,
+      });
       const displayState = connectionDisplayState(snapshot);
       if (displayState) setConnectionState(displayState);
       recovery.update(snapshot);
@@ -1439,6 +1455,11 @@ export function AppProvider({
   }, [dispatch, sync]);
 
   const handleSpaceEvent = useCallback((event: SpaceRealtimeEvent) => {
+    recordDebugEvent("realtime.space_event", {
+      type: event.type,
+      space: typeof event.spaceId === "string" ? debugAlias("space", event.spaceId) : null,
+      session: typeof event.sessionId === "string" ? debugAlias("session", event.sessionId) : null,
+    });
     try {
       applyRealtimeChange(spaceRealtimeChange(event));
     } catch (error) {
@@ -1469,6 +1490,11 @@ export function AppProvider({
       }
     };
     const stop = client.onUserEvent((event) => {
+      recordDebugEvent("realtime.user_event", {
+        type: event.type,
+        space: typeof event.spaceId === "string" ? debugAlias("space", event.spaceId) : null,
+        session: typeof event.sessionId === "string" ? debugAlias("session", event.sessionId) : null,
+      });
       try {
         const listed = typeof event.sessionId === "string" && isListed(event.sessionId);
         const change = userSessionRealtimeChange(event, () => listed);
@@ -1701,6 +1727,7 @@ export function AppProvider({
     subscriptions.current.get(sessionId)?.();
     sessionSpaces.current.set(sessionId, spaceId);
     markChatEntry("stream.subscribe");
+    recordDebugEvent("chat.stream.attach", { session: debugAlias("session", sessionId), space: debugAlias("space", spaceId) });
     const sessionClient = client.space(spaceId).session(sessionId);
     const streamBatch = createStreamBatch<StreamView>((stream) => dispatch({ type: "stream-state", sessionId, stream }));
     let seeded = false;
@@ -1710,6 +1737,7 @@ export function AppProvider({
           if (!seeded) {
             seeded = true;
             markChatEntry("stream.seed", { blocks: event.state.contentBlocks?.length ?? 0, intermediate: event.intermediateMessages?.length ?? 0 });
+            recordDebugEvent("chat.stream.seed", { session: debugAlias("session", sessionId), blocks: event.state.contentBlocks?.length ?? 0, intermediate: event.intermediateMessages?.length ?? 0 });
           }
           const status = liveStreamStatusFromPatch(event.state.status);
           if (!status) {
@@ -1740,6 +1768,7 @@ export function AppProvider({
           if (event.commit.isFinal) dispatch({ type: "stream-clear", sessionId });
         },
         finalized: (event) => {
+          recordDebugEvent("chat.stream.finalized", { session: debugAlias("session", sessionId), turnSequence: event.turn.sequence, status: event.turn.status });
           streamBatch.cancel();
           dispatch({ type: "turn-upsert", sessionId, turn: event.turn });
           dispatch({ type: "stream-clear", sessionId });
@@ -1750,10 +1779,12 @@ export function AppProvider({
         },
         lifecycle: (event) => {
           if (event.phase !== "llm_call_started") return;
+          recordDebugEvent("chat.stream.lifecycle", { session: debugAlias("session", sessionId), phase: event.phase, provider: event.provider ?? null, model: event.model ?? null });
           streamBatch.flush();
           dispatch({ type: "stream-lifecycle", sessionId, provider: event.provider, model: event.model });
         },
         error: (event) => {
+          recordDebugEvent("chat.stream.error", { session: debugAlias("session", sessionId), message: event.message });
           streamBatch.flush();
           dispatch({ type: "session-error", sessionId, message: event.message });
         },
@@ -1761,6 +1792,7 @@ export function AppProvider({
           // Only a patch whose base sequence drifted needs a fresh snapshot-seeded
           // subscription; anything else just needs the turn tail reconciled.
           const drifted = event.reason === "version_mismatch" && event.source === "patch";
+          recordDebugEvent("chat.stream.out_of_sync", { session: debugAlias("session", sessionId), reason: event.reason, source: event.source, drifted });
           if (!drifted || !resyncCoordinatorRef.current.request(sessionId, "out-of-sync")) {
             void refreshSession(sessionId, { silent: true });
           }

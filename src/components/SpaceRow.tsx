@@ -7,6 +7,8 @@ import { Avatar, AppIcon } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 import { useTranslation } from "@/src/i18n";
+import { debugAlias } from "@/src/data/debug-session";
+import { traceAction } from "@/src/data/interaction-trace";
 
 type SpaceRowProps = {
   space: SpaceListSpace;
@@ -40,7 +42,7 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
         trailing={sessionCount && countLabel && !subtitle ? <Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /> : null}
         accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
         accessibilityHint={onTogglePin && !pinning ? t("space.longPressHint") : undefined}
-        onPress={onPress}
+        onPress={() => { traceAction("space_row", { space: debugAlias("space", space.id), active, pinned }); onPress(); }}
         // The handler stays attached while pinning: without one, Pressable would turn the hold into a press and navigate.
         onLongPress={onTogglePin ? (event) => { if (pinning) return; const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
         accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
