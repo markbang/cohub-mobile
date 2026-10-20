@@ -61,7 +61,7 @@ import { channelHealthState, createSettingsChannel, createWeChatLoginPoller, isC
 import { activityContributorName, activityRange, localDateKey, tokenDays } from "../src/data/activity.ts";
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
-import { canUseRuntimeHarness, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
+import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
 import { isLocalHarness } from "@neta-art/cohub";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
@@ -4103,5 +4103,10 @@ const claudeRuntime = { kind: "local", online: true, capabilities: { harnesses: 
 assert.equal(canUseRuntimeHarness(claudeRuntime, "claude"), true);
 assert.equal(canUseRuntimeHarness(claudeRuntime, "workbuddy"), false);
 assert.equal(canUseRuntimeHarness({ ...claudeRuntime, online: false }, "claude"), false);
+const harnessView = (status) => harnessOptions(status).map(({ harness, availability }) => `${harness}:${availability}`);
+const pickerRuntime = { kind: "local", online: true, capabilities: { harnesses: ["codex", "claude"], models: [] } };
+assert.deepEqual(harnessView(pickerRuntime), ["cohub:ready", "codex:ready", "claude:ready", "pi:missing", "workbuddy:missing"]);
+// Cached capabilities of an offline Runtime are not connected harnesses.
+assert.deepEqual(harnessView({ ...pickerRuntime, online: false }), ["cohub:ready", "pi:offline", "codex:offline", "claude:offline", "workbuddy:offline"]);
 
 console.log("Chat workflow checks passed");
