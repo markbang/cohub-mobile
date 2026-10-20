@@ -23,6 +23,7 @@
 - Theme tokens, shared UI components, or visual consistency audits: read `.agents/skills/expo-design-system/SKILL.md`.
 - Explicit SDK upgrades or dependency repair: read `.agents/skills/expo-upgrade/SKILL.md`; confirm the target SDK before changing versions.
 - Native code, config plugins, `scripts/patch-*.mjs`, or native dependencies: read `.agents/skills/native-modules/SKILL.md` first; these changes block OTA until a native release.
+- Feedback reports, cfeed triage, or closing a reported issue: read `.agents/skills/feedback/SKILL.md`; it uses the `cfeed` API skill in `.agents/skills/cfeed/SKILL.md`.
 
 These upstream skills are technical references. This guide and the requested scope govern filenames, dependencies, theme/motion values, data ownership, and build/release tooling. Reuse existing conventions instead of migrating them to match examples. Verify APIs against the installed SDK and target platform. Clean prebuilds, cache deletion, and compiler changes require a task-specific reason.
 

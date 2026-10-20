@@ -13,6 +13,12 @@
       "skillPath": "skills/better-ui/SKILL.md",
       "computedHash": "d05cf568f197e47b15e71e21b19be1897eba2bf187ef7b0a341bc5ffaf3ffd4d"
     },
+    "cfeed": {
+      "source": "netaart/cfeed",
+      "sourceType": "github",
+      "skillPath": "skills/cfeed/SKILL.md",
+      "computedHash": "93265e96168e351a29d988ea463ede0fa73689cfc394c6a875b67694417ada9c"
+    },
     "emil-design-eng": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
