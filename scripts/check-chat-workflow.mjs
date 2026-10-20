@@ -61,6 +61,8 @@ import { channelHealthState, createSettingsChannel, createWeChatLoginPoller, isC
 import { activityContributorName, activityRange, localDateKey, tokenDays } from "../src/data/activity.ts";
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
+import { canUseRuntimeHarness, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
+import { isLocalHarness } from "@neta-art/cohub";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
@@ -3773,7 +3775,7 @@ for (const busy of [false, true]) {
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {},
       buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
-      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
+      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }), isLocalHarness,
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
     const request = send("fixture", text, attachments, { onOptimistic: (message) => { optimistic = message; } });
@@ -4093,5 +4095,13 @@ for (const path of [
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.ok(/<LegendList[\s\S]*?extraData=/.test(source), `${path} must pass extraData so LegendList rows re-render on external state`);
 }
+
+assert.equal(runtimeHarnessFromTurn({ meta: { harness: "claude" } }), "claude");
+assert.equal(runtimeHarnessFromTurn({ harness: "workbuddy" }), "workbuddy");
+assert.equal(runtimeHarnessFromTurn({ meta: { harness: "unknown" } }), "cohub");
+const claudeRuntime = { kind: "local", online: true, capabilities: { harnesses: ["claude"], models: [] } };
+assert.equal(canUseRuntimeHarness(claudeRuntime, "claude"), true);
+assert.equal(canUseRuntimeHarness(claudeRuntime, "workbuddy"), false);
+assert.equal(canUseRuntimeHarness({ ...claudeRuntime, online: false }, "claude"), false);
 
 console.log("Chat workflow checks passed");

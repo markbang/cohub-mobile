@@ -1,7 +1,7 @@
-import type { RuntimeStatus } from "@neta-art/cohub";
+import { isLocalHarness, type HarnessKind, type RuntimeStatus } from "@neta-art/cohub";
 import type { ChatModelSelection } from "@/src/data/types";
 
-export type RuntimeHarness = "cohub" | "pi" | "codex";
+export type RuntimeHarness = HarnessKind;
 export type LocalRuntimeModel = ChatModelSelection & { name: string };
 export type SpaceRuntimeStatus = RuntimeStatus;
 
@@ -18,5 +18,5 @@ export function localModelsForHarness(status: SpaceRuntimeStatus | null, harness
 
 export function runtimeHarnessFromTurn(turn: { meta?: Record<string, unknown> | null; harness?: string | null } | null | undefined): RuntimeHarness {
   const harness = turn?.meta?.harness ?? turn?.harness;
-  return harness === "pi" || harness === "codex" ? harness : "cohub";
+  return isLocalHarness(harness) ? harness : "cohub";
 }

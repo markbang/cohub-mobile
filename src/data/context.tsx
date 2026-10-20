@@ -1,6 +1,7 @@
 import type {
   CohubClient,
   ContentBlock,
+  HarnessKind,
   MessageRecord,
   ModelStatusResponse,
   SessionListFork,
@@ -12,6 +13,7 @@ import type {
   UnauthorizedContext,
   UserSessionListItem,
 } from "@neta-art/cohub";
+import { isLocalHarness } from "@neta-art/cohub";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
@@ -852,8 +854,8 @@ export type AppContextValue = {
   loadNewerTurns: (sessionId: string) => Promise<void>;
   loadTurnIndex: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
   jumpToTurn: (sessionId: string, target: number | { turnId: string }) => Promise<number>;
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: "cohub" | "pi" | "codex"; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
-  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: "cohub" | "pi" | "codex" }) => Promise<NewChatMessageResult>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind }) => Promise<NewChatMessageResult>;
   loadComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<string>;
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
   clearComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<void>;
@@ -1985,7 +1987,7 @@ export function AppProvider({
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: "cohub" | "pi" | "codex"; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2056,7 +2058,7 @@ export function AppProvider({
           schedule: { mode: "immediate" },
           ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
           ...(options.harness ? { harness: options.harness } : {}),
-          ...(options.harness !== "pi" && options.harness !== "codex" && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+          ...(!isLocalHarness(options.harness) && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
         });
         if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
         recordDebugEvent("chat.send.server_accepted", { turnSequence: response.turn.sequence, status: response.turn.status });
@@ -2076,7 +2078,7 @@ export function AppProvider({
       spaceId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: "cohub" | "pi" | "codex" } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2095,7 +2097,7 @@ export function AppProvider({
         schedule: { mode: "immediate" },
         ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
         ...(options.harness ? { harness: options.harness } : {}),
-        ...(options.harness !== "pi" && options.harness !== "codex" && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+        ...(!isLocalHarness(options.harness) && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
       });
       if (result.mode !== "immediate" || !result.session) {
         throw new Error(translate("data.newChatNotCreated"));
