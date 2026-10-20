@@ -33,7 +33,7 @@ import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
 import { reconcileSessionHead } from "../src/data/session-list-sync.ts";
 import { mergeTaskRuns, refreshTaskRuns } from "../src/data/task-sync.ts";
-import { emptyRunningSessions, loadRunningSessions, runningSessionCandidates } from "../src/data/running-sessions.ts";
+import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionCandidates } from "../src/data/running-sessions.ts";
 import { createSpaceRealtime } from "../src/data/space-realtime.ts";
 import { spaceRealtimeChange, userSessionRealtimeChange } from "../src/data/space-realtime-events.ts";
 import { DEFAULT_SESSION_FILTER_MINUTES, getSessionStatus, sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, latestTurn, loadSessionLatestTurns, parseSessionFilterMinutes, reconcileLatestTurn, reconcileTurnStatusPatch, sessionFilterCutoff, sessionPageState } from "../src/data/session-status.ts";
@@ -198,6 +198,25 @@ await assert.rejects(loadRunningSessions({ user: { listSessions: async () => {
   return { sessions: [runningFixture], pageInfo: { hasMore: true, nextCursor: "next" } };
 } } }, { signal: discoveryAbort.signal }), /cancelled/);
 assert.equal(discoveryReads, 1, "background/account cancellation stops after the in-flight page without publishing partial results");
+
+const cacheScanAt = Date.parse("2026-10-20T00:00:00Z");
+const cachedRunning = parseCachedRunningSessions(JSON.stringify([
+  runningFixture,
+  { ...runningFixture, id: "settled", activeTurn: null },
+  { id: "broken" },
+]), cacheScanAt, cacheScanAt + 1000);
+assert.equal(cachedRunning.sessions.length, 2);
+assert.equal(parseCachedRunningSessions(JSON.stringify([runningFixture]), cacheScanAt, cacheScanAt + 31 * 24 * 60 * 60 * 1000), null, "stale Running snapshots are ignored");
+assert.equal(parseCachedRunningSessions("not json", cacheScanAt, cacheScanAt), null);
+assert.deepEqual(
+  reconcileRunningSessions(
+    [{ ...runningFixture, id: "web", source: "web", updatedAt: "2026-10-20T00:00:00Z" }],
+    [{ ...runningFixture, id: "web", source: "web", updatedAt: "2026-10-19T00:00:00Z" }, { ...runningFixture, id: "older", source: "web" }],
+  ).map((session) => [session.id, session.updatedAt]),
+  [["web", "2026-10-20T00:00:00Z"], ["older", "2020-01-01T00:00:00Z"]],
+  "server rows win and cached rows fill an unfinished scan",
+);
+assert.deepEqual(reconcileRunningSessions([], [{ ...runningFixture, activeTurn: null }]), [], "settled cached rows are not candidates");
 
 const roomListeners = new Map();
 const roomJoins = [];

@@ -159,6 +159,7 @@ export const en = {
   "chats.error.body":
     "Retry above after checking your connection and sign-in session.",
   "chats.loadingStatuses": "Loading Chat statuses",
+  "chats.running.scanning": "Checking older Chats…",
   "chats.search.retry": "Retry Chat search",
 
   // Spaces tab

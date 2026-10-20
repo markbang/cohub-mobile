@@ -27,7 +27,7 @@ import { useSpaceListData } from "@/src/data/use-space-list";
 import { listAllSpaces } from "@/src/data/space-list";
 import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-scheduler";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
-import { emptyRunningSessions, loadRunningSessions } from "@/src/data/running-sessions";
+import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionsForCache, type CachedRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
@@ -39,8 +39,10 @@ import {
   hydrateHome,
   loadComposerDraft as loadLocalComposerDraft,
   loadMessages,
+  loadRunningSessionCache,
   loadSessionReadSequence,
   pruneUserCache,
+  saveRunningSessionCache,
   saveComposerDraft as saveLocalComposerDraft,
   saveHome,
   saveMessages,
@@ -89,6 +91,7 @@ const SESSION_RESYNC_DEBOUNCE_MS = 250;
 // Mirrors the web client: never re-seed the same session's stream more than once per window.
 const OUT_OF_SYNC_RESYNC_COOLDOWN_MS = 15_000;
 const REALTIME_UNAVAILABLE_GRACE_MS = 5_000;
+const RUNNING_RELEASE_GRACE_MS = 2_000;
 const REALTIME_RETRY_BASE_MS = 2_000;
 const REALTIME_RETRY_MAX_MS = 30_000;
 
@@ -264,6 +267,7 @@ type Action =
   | { type: "running-start"; source: SessionSourceFilter }
   | { type: "running-success"; source: SessionSourceFilter; sessions: UserSessionListItem[]; changedSessionIds: string[]; complete?: boolean }
   | { type: "running-end"; source: SessionSourceFilter; error?: string }
+  | { type: "running-cached"; source: SessionSourceFilter; cache: CachedRunningSessions }
   | { type: "realtime-error"; message: string | null }
   | { type: "session-realtime-turn"; sessionId: string; turn: Partial<LatestSessionTurn> }
   | { type: "running-session-found"; session: UserSessionListItem }
@@ -496,6 +500,13 @@ function reducer(state: AppState, action: Action): AppState {
     case "running-end": {
       const current = state.runningSessions[action.source] ?? emptyRunningSessions;
       return { ...state, runningSessions: { ...state.runningSessions, [action.source]: { ...current, loading: false, error: action.error ?? current.error } } };
+    }
+    case "running-cached": {
+      const current = state.runningSessions[action.source] ?? emptyRunningSessions;
+      // A live scan always wins; the cache only fills a bucket that has not painted rows yet.
+      if (current.loaded || current.loading || current.sessions.length > 0) return state;
+      const sessions = reconcileRunningSessions(current.sessions, action.cache.sessions);
+      return { ...state, runningSessions: { ...state.runningSessions, [action.source]: { ...current, sessions: sortByRecent(action.source === "all" ? sessions : sessions.filter((session) => sessionSourceFilterOf(session.source) === action.source)), loaded: true } } };
     }
     case "realtime-error":
       recordDebugEvent("realtime.error", { message: action.message });
@@ -839,6 +850,10 @@ export type AppContextValue = {
   spaceRealtime: SpaceRealtime | null;
   refreshChats: () => Promise<void>;
   discoverRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
+  /** Restarts account-wide Running discovery for the filter that now shows it. */
+  requestRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
+  /** Stops a scan the filter no longer shows, after a short grace for back-to-back requests. */
+  releaseRunningSessions: (source?: SessionSourceFilter) => void;
   connectionState: ConnectionState;
   connectionUnavailable: boolean;
   installationId: string | null;
@@ -923,7 +938,8 @@ export function AppProvider({
   const homeRefreshRequestRef = useRef<Promise<void> | null>(null);
   const chatsRefreshRequestRef = useRef<Promise<void> | null>(null);
   const runningDiscoveryRequests = useRef(new Map<SessionSourceFilter, Promise<void>>());
-  const runningDiscoveryControllers = useRef(new Set<AbortController>());
+  const runningDiscoveryControllers = useRef(new Map<SessionSourceFilter, AbortController>());
+  const runningDiscoveryRequestedAt = useRef(new Map<SessionSourceFilter, number>());
   const sessionEventRevisions = useRef(new Map<string, number>());
   const sessionEventRevision = useRef(0);
   const statusSessionsRef = useRef(new Map<string, StatusSession>());
@@ -1219,6 +1235,20 @@ export function AppProvider({
     return request;
   }, [client, dispatch, refreshSessionStatuses, userKey]);
 
+  const cancelRunningDiscovery = useCallback((source?: SessionSourceFilter) => {
+    const sources = source ? [source] : [...runningDiscoveryControllers.current.keys()];
+    for (const key of sources) {
+      const controller = runningDiscoveryControllers.current.get(key);
+      // Only a visible scan is worth cancelling; a silent one keeps reconciling older pages.
+      if (!controller) continue;
+      // Drop the identity before aborting so the run's finally block cannot clear a newer scan.
+      runningDiscoveryControllers.current.delete(key);
+      runningDiscoveryRequests.current.delete(key);
+      dispatch({ type: "running-end", source: key });
+      controller.abort();
+    }
+  }, [dispatch]);
+
   const discoverRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
     const pending = runningDiscoveryRequests.current.get(source);
     if (pending) return pending;
@@ -1226,7 +1256,7 @@ export function AppProvider({
     const generation = statusGenerationRef.current;
     const revision = sessionEventRevision.current;
     const controller = new AbortController();
-    runningDiscoveryControllers.current.add(controller);
+    runningDiscoveryControllers.current.set(source, controller);
     dispatch({ type: "running-start", source });
     const request = (async () => {
       try {
@@ -1247,14 +1277,19 @@ export function AppProvider({
         const unchanged = sessions.filter((session) => !changed.has(session.id));
         for (const session of unchanged) statusSessionsRef.current.set(session.id, session);
         dispatch({ type: "running-success", source, sessions, changedSessionIds });
+        void saveRunningSessionCache(userKey, source, runningSessionsForCache(sessions)).catch((error) => {
+          console.warn("[mobile-cache] failed to save Running Chats", error);
+        });
       } catch (error) {
         if (generation === statusGenerationRef.current && !controller.signal.aborted) {
           dispatch({ type: "running-end", source, error: errorMessage(error, "Unable to discover running Chats. Check your connection and retry.") });
           throw error;
         }
       } finally {
-        runningDiscoveryControllers.current.delete(controller);
-        if (generation === statusGenerationRef.current && controller.signal.aborted) dispatch({ type: "running-end", source });
+        if (runningDiscoveryControllers.current.get(source) === controller) {
+          runningDiscoveryControllers.current.delete(source);
+          if (generation === statusGenerationRef.current && controller.signal.aborted) dispatch({ type: "running-end", source });
+        }
       }
     })();
     runningDiscoveryRequests.current.set(source, request);
@@ -1262,7 +1297,20 @@ export function AppProvider({
       if (runningDiscoveryRequests.current.get(source) === request) runningDiscoveryRequests.current.delete(source);
     }).catch(() => undefined);
     return request;
-  }, [client, dispatch]);
+  }, [client, dispatch, userKey]);
+
+  /** The Chats screen asks for Running data only while its filter shows; each request restarts the check. */
+  const requestRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
+    runningDiscoveryRequestedAt.current.set(source, Date.now());
+    return discoverRunningSessions(source);
+  }, [discoverRunningSessions]);
+
+  const releaseRunningSessions = useCallback((source: SessionSourceFilter = "all") => {
+    const requestedAt = runningDiscoveryRequestedAt.current.get(source);
+    runningDiscoveryRequestedAt.current.delete(source);
+    if (!requestedAt || Date.now() - requestedAt < RUNNING_RELEASE_GRACE_MS) return;
+    cancelRunningDiscovery(source);
+  }, [cancelRunningDiscovery]);
 
   const loadMoreSessions = useCallback(async () => {
     if (sessionsMoreRequestRef.current) return sessionsMoreRequestRef.current;
@@ -1306,6 +1354,17 @@ export function AppProvider({
     const eventRevisions = sessionEventRevisions.current;
     const activeResyncCoordinator = resyncCoordinatorRef.current;
     const activeSessionLifecycle = sessionLifecycleRef.current;
+    const hydrateRunningCache = async () => {
+      for (const source of ["all", "web", "other"] as const) {
+        try {
+          const row = await loadRunningSessionCache(userKey, source);
+          const cache = row ? parseCachedRunningSessions(row.payload, row.scannedAt) : null;
+          if (active && cache) dispatch({ type: "running-cached", source, cache });
+        } catch (error) {
+          console.warn("[mobile-cache] failed to hydrate Running Chats", error);
+        }
+      }
+    };
     void (async () => {
       try {
         await applyCacheRetention();
@@ -1320,6 +1379,7 @@ export function AppProvider({
       } catch (error) {
         console.warn("[mobile-cache] failed to hydrate home", error);
       }
+      void hydrateRunningCache();
       if (active) {
         await refreshHome();
       }
@@ -1342,7 +1402,7 @@ export function AppProvider({
       activeSubscriptions.clear();
       activeSessionSpaces.clear();
       statusSessions.clear();
-      for (const controller of discoveryControllers) controller.abort();
+      for (const controller of discoveryControllers.values()) controller.abort();
       discoveryControllers.clear();
       discoveryRequests.clear();
       eventRevisions.clear();
@@ -1394,7 +1454,9 @@ export function AppProvider({
     const subscription = NativeAppState.addEventListener("change", (next) => {
       sync.setActive(next === "active");
       if (next !== "active") {
-        for (const controller of runningDiscoveryControllers.current) controller.abort();
+        for (const controller of runningDiscoveryControllers.current.values()) controller.abort();
+        runningDiscoveryControllers.current.clear();
+        runningDiscoveryRequests.current.clear();
         return;
       }
       // A suspended native socket can still report open after foregrounding.
@@ -1423,12 +1485,8 @@ export function AppProvider({
         await refreshSessionStatuses(active, { silent: true, activeOnly: true });
       },
     });
-    // User-room Turn projections keep Running current; the account scan only seeds and reconciles.
-    const stopRunningDiscovery = sync.watch("running:all", {
-      intervalMs: () => 300_000,
-      minRefreshMs: 30_000,
-      run: discoverRunningSessions,
-    });
+    // Account-wide Running discovery is owned by the Chats screen while its Running filter is visible;
+    // Turn projections keep membership current in between, so boot does not scan every Chat.
     const stopSpaces = sync.watch("spaces", {
       intervalMs: () => 120_000,
       run: async () => {
@@ -1443,8 +1501,8 @@ export function AppProvider({
         }
       },
     });
-    return () => { stopChats(); stopStatuses(); stopRunningDiscovery(); stopSpaces(); };
-  }, [client, dispatch, discoverRunningSessions, refreshChats, refreshSessionStatuses, state.booting, sync]);
+    return () => { stopChats(); stopStatuses(); stopSpaces(); };
+  }, [client, dispatch, refreshChats, refreshSessionStatuses, state.booting, sync]);
 
   const applyRealtimeChange = useCallback((change: ReturnType<typeof spaceRealtimeChange>) => {
     if (change.sessionId) {
@@ -2312,7 +2370,9 @@ export function AppProvider({
   const clearCache = useCallback(async () => {
     homeRefreshGenerationRef.current += 1;
     statusGenerationRef.current += 1;
-    for (const controller of runningDiscoveryControllers.current) controller.abort();
+    for (const controller of runningDiscoveryControllers.current.values()) controller.abort();
+    runningDiscoveryControllers.current.clear();
+    runningDiscoveryRequests.current.clear();
     statusSessionsRef.current.clear();
     resetSpaceList();
     clearSlashCommandCache();
@@ -2365,6 +2425,8 @@ export function AppProvider({
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
+      requestRunningSessions,
+      releaseRunningSessions,
       connectionState,
       connectionUnavailable,
       installationId,
@@ -2414,6 +2476,8 @@ export function AppProvider({
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
+      requestRunningSessions,
+      releaseRunningSessions,
       abortSession,
       applyCacheRetention,
       clearCache,

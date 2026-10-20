@@ -9,6 +9,12 @@ export type RunningSessionsSnapshot = {
 
 export const emptyRunningSessions: RunningSessionsSnapshot = { sessions: [], loading: false, loaded: false, error: null };
 
+/** The last complete account scan for one source, replayed before the next scan finishes. */
+export type CachedRunningSessions = {
+  sessions: UserSessionListItem[];
+  scannedAt: number;
+};
+
 /** Known list rows remain usable while account-wide discovery fills the older pages. */
 export function runningSessionCandidates(discovered: UserSessionListItem[], known: UserSessionListItem[]): UserSessionListItem[] {
   const sessions = new Map(discovered.map((session) => [session.id, session]));
@@ -64,4 +70,38 @@ export async function loadRunningSessions(
     }
   } while (cursor);
   return [...sessions.values()].filter((session) => session.activeTurn !== null);
+}
+
+const MAX_CACHED_RUNNING_SESSIONS = 500;
+const MAX_CACHE_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Older rows are the most likely to have settled while the app was closed, so drop them. */
+export function runningSessionsForCache(sessions: readonly UserSessionListItem[]): UserSessionListItem[] {
+  return [...sessions]
+    .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0))
+    .slice(0, MAX_CACHED_RUNNING_SESSIONS);
+}
+
+export function parseCachedRunningSessions(value: string | null, scannedAt: number, now = Date.now()): CachedRunningSessions | null {
+  if (scannedAt <= 0 || now - scannedAt > MAX_CACHE_AGE_MS) return null;
+  let parsed: unknown;
+  try {
+    parsed = value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  // A stale row only means a settled Chat can show briefly until the background scan reconciles it.
+  const sessions = parsed.filter((session): session is UserSessionListItem => Boolean(session && typeof session === "object" && typeof (session as UserSessionListItem).id === "string" && typeof (session as UserSessionListItem).spaceId === "string" && Number.isFinite(Date.parse((session as UserSessionListItem).updatedAt)) && (session as UserSessionListItem).activeTurn !== undefined));
+  return { sessions, scannedAt };
+}
+
+/** Newer server rows win; cached rows only fill scans that have not finished yet. */
+export function reconcileRunningSessions(current: readonly UserSessionListItem[], cached: readonly UserSessionListItem[]): UserSessionListItem[] {
+  const merged = new Map(cached.map((session) => [session.id, session]));
+  for (const session of current) {
+    const previous = merged.get(session.id);
+    merged.set(session.id, previous && Date.parse(previous.updatedAt) > Date.parse(session.updatedAt) ? previous : session);
+  }
+  return [...merged.values()].filter((session) => session.activeTurn !== null);
 }

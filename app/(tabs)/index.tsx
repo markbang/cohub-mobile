@@ -41,7 +41,7 @@ export default function ChatsScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
   const isFocused = useIsFocused();
-  const { state, client, connectionUnavailable, refreshHome, refreshChats, discoverRunningSessions, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
+  const { state, client, connectionUnavailable, refreshHome, refreshChats, discoverRunningSessions, requestRunningSessions, releaseRunningSessions, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
   const filterPreference = useSessionFilterPreference();
   const [cutoff, setCutoff] = useState(() => sessionFilterCutoff(filterPreference.minutes, Date.now()));
   const searchRef = useRef<TextInput>(null);
@@ -66,7 +66,17 @@ export default function ChatsScreen() {
   const runningQuery = state.runningSessions[sourceFilter] ?? emptyRunningSessions;
   const knownSessions = sourceFilter === "all" ? state.sessions : sourceSessionList;
   const baseSessions = useMemo(() => filter === "running" ? runningSessionCandidates(runningQuery.sessions, knownSessions) : knownSessions, [filter, knownSessions, runningQuery.sessions]);
-  useSyncScope(`running:${sourceFilter}`, () => discoverRunningSessions(sourceFilter), 300_000, filter === "running" && !state.booting, 30_000);
+  const runningVisible = filter === "running";
+  useSyncScope(`running:${sourceFilter}`, () => requestRunningSessions(sourceFilter), 300_000, runningVisible && !state.booting, 0);
+  const runningSourceRef = useRef<typeof sourceFilter | null>(null);
+  useEffect(() => {
+    if (runningVisible) {
+      runningSourceRef.current = sourceFilter;
+      return;
+    }
+    releaseRunningSessions(runningSourceRef.current ?? sourceFilter);
+    runningSourceRef.current = null;
+  }, [runningVisible, sourceFilter, releaseRunningSessions]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
@@ -230,6 +240,7 @@ export default function ChatsScreen() {
             </View>
           </View>
           {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
+          {filter === "running" && runningQuery.loading && runningQuery.loaded && runningQuery.sessions.length > 0 ? <Text accessibilityLiveRegion="polite" className="text-caption text-fg-faint">{t("chats.running.scanning")}</Text> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}
         ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (filter === "running" ? !runningQuery.loaded : (filter === "completed" && (state.refreshing || !filterPreference.loaded || statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized))) ? <LoadingRows count={5} /> : searchEmpty}

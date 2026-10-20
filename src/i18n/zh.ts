@@ -155,6 +155,7 @@ export const zh: Record<TranslationKey, string> = {
   "chats.error.title": "对话不可用",
   "chats.error.body": "请检查网络连接和登录状态后重试。",
   "chats.loadingStatuses": "正在加载对话状态",
+  "chats.running.scanning": "仍在检查更早的对话…",
   "chats.search.retry": "重试对话搜索",
 
   // Spaces tab

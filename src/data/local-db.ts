@@ -37,6 +37,13 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
       user_key TEXT PRIMARY KEY NOT NULL,
       payload TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS running_session_cache (
+      user_key TEXT NOT NULL,
+      source TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      scanned_at INTEGER NOT NULL,
+      PRIMARY KEY (user_key, source)
+    );
     CREATE TABLE IF NOT EXISTS space_visits (
       user_key TEXT NOT NULL,
       space_id TEXT NOT NULL,
@@ -390,6 +397,7 @@ export async function clearUserCache(userKey: string) {
     await db.runAsync("DELETE FROM composer_drafts WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM config_theme_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_list_cache WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM running_session_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_visits WHERE user_key = ?", userKey);
   });
 }
@@ -425,6 +433,23 @@ export async function loadSpaceListCache(userKey: string): Promise<import("@neta
 export async function saveSpaceListCache(userKey: string, overview: import("@neta-art/cohub").PaletteOverviewResponse): Promise<void> {
   const db = await database();
   await db.runAsync("INSERT OR REPLACE INTO space_list_cache (user_key, payload) VALUES (?, ?)", userKey, JSON.stringify(overview));
+}
+
+/** Last complete Running scan per source, so the filter paints before the account scan finishes. */
+export async function loadRunningSessionCache(userKey: string, source: string): Promise<{ payload: string; scannedAt: number } | null> {
+  const db = await database();
+  return db.getFirstAsync<{ payload: string; scannedAt: number }>("SELECT payload, scanned_at AS scannedAt FROM running_session_cache WHERE user_key = ? AND source = ?", userKey, source);
+}
+
+export async function saveRunningSessionCache(userKey: string, source: string, sessions: readonly UserSessionListItem[]): Promise<void> {
+  const db = await database();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO running_session_cache (user_key, source, payload, scanned_at) VALUES (?, ?, ?, ?)",
+    userKey,
+    source,
+    JSON.stringify(sessions),
+    Date.now(),
+  );
 }
 
 export async function loadSpaceVisits(userKey: string): Promise<import("./space-list").SpaceVisit[]> {
