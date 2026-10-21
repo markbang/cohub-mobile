@@ -1,10 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useColorScheme } from "react-native";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { compileConfigTheme, type ConfigThemePalette } from "@/src/data/config-theme";
-import type { ConfigThemeUpdate } from "@/src/data/config-theme-sync";
+import { ACCENTS, DEFAULT_ACCENT, isAccentId, type AccentId } from "@/src/design/accents";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides, type Palette } from "@/src/design/tokens";
-export { colorWithOpacity } from "@/src/data/config-theme";
+export { colorWithOpacity } from "@/src/design/color";
 
 export const edgeChrome = { headerMinHeight: 56, fade: 40, topFade: 24 } as const;
 
@@ -142,81 +141,55 @@ export async function setPureBlackPreference(next: boolean) {
   await AsyncStorage.setItem(PURE_BLACK_PREFERENCE_KEY, String(next));
 }
 
-export type CustomThemeState = ConfigThemeUpdate & { enabled: boolean; warnings: string[] };
-const CUSTOM_THEME_ENABLED_KEY = "cohub:mobile:custom-theme-enabled:v1";
-let customThemeState: CustomThemeState = { spaceId: null, css: null, enabled: true, loading: false, error: null, warnings: [] };
-let customPalette: ConfigThemePalette = { light: {}, dark: {}, warnings: [] };
-let customThemeOwner: symbol | null = null;
-let customEnabledLoaded = false;
-let customEnabledLoad: Promise<void> | null = null;
-const customThemeListeners = new Set<() => void>();
-const notifyCustomTheme = () => customThemeListeners.forEach((listener) => listener());
+const ACCENT_PREFERENCE_KEY = "cohub:mobile:accent:v1";
+let accentPreference: AccentId = DEFAULT_ACCENT;
+let accentPreferenceLoaded = false;
+let accentPreferenceLoad: Promise<void> | null = null;
+const accentPreferenceListeners = new Set<() => void>();
+const notifyAccentPreference = () => accentPreferenceListeners.forEach((listener) => listener());
 
-export function beginConfigTheme(): { update(value: ConfigThemeUpdate): void; dispose(): void } {
-  const owner = Symbol("config-theme");
-  customThemeOwner = owner;
-  customPalette = { light: {}, dark: {}, warnings: [] };
-  customThemeState = { ...customThemeState, spaceId: null, css: null, loading: true, error: null, warnings: [] };
-  notifyCustomTheme();
-  return {
-    update(value) {
-      if (customThemeOwner !== owner) return;
-      if (value.css !== customThemeState.css) {
-        customPalette = value.css === null ? { light: {}, dark: {}, warnings: [] }
-          : compileConfigTheme(value.css, { light: lightTheme.colors, dark: darkTheme.colors });
-      }
-      customThemeState = { ...customThemeState, ...value, warnings: customPalette.warnings };
-      notifyCustomTheme();
-    },
-    dispose() {
-      if (customThemeOwner !== owner) return;
-      customThemeOwner = null;
-      customPalette = { light: {}, dark: {}, warnings: [] };
-      customThemeState = { ...customThemeState, spaceId: null, css: null, loading: false, error: null, warnings: [] };
-      notifyCustomTheme();
-    },
-  };
+function loadAccentPreference() {
+  if (accentPreferenceLoad) return accentPreferenceLoad;
+  accentPreferenceLoad = AsyncStorage.getItem(ACCENT_PREFERENCE_KEY)
+    .then((value) => {
+      if (!accentPreferenceLoaded && isAccentId(value)) accentPreference = value;
+      accentPreferenceLoaded = true;
+      notifyAccentPreference();
+    })
+    .catch(() => {
+      accentPreferenceLoaded = true;
+    })
+    .finally(() => {
+      accentPreferenceLoad = null;
+    });
+  return accentPreferenceLoad;
 }
 
-export async function setCustomThemeEnabled(enabled: boolean): Promise<void> {
-  try {
-    await AsyncStorage.setItem(CUSTOM_THEME_ENABLED_KEY, String(enabled));
-    customEnabledLoaded = true;
-    customThemeState = { ...customThemeState, enabled };
-    notifyCustomTheme();
-  } catch (error) {
-    customThemeState = { ...customThemeState, error: "Unable to save the custom theme preference. Retry in Appearance." };
-    notifyCustomTheme();
-    throw error;
-  }
+function subscribeAccentPreference(listener: () => void): () => void {
+  accentPreferenceListeners.add(listener);
+  if (!accentPreferenceLoaded) void loadAccentPreference();
+  return () => { accentPreferenceListeners.delete(listener); };
 }
 
-function subscribeCustomTheme(listener: () => void): () => void {
-  customThemeListeners.add(listener);
-  return () => { customThemeListeners.delete(listener); };
+export function useAccentPreference(): AccentId {
+  return useSyncExternalStore(subscribeAccentPreference, () => accentPreference);
 }
 
-export function useCustomThemeState(): CustomThemeState {
-  const snapshot = useSyncExternalStore(subscribeCustomTheme, () => customThemeState);
-  useEffect(() => {
-    if (customEnabledLoaded || customEnabledLoad) return;
-    customEnabledLoad = AsyncStorage.getItem(CUSTOM_THEME_ENABLED_KEY).then((value) => {
-      if (customEnabledLoaded) return;
-      customEnabledLoaded = true;
-      customThemeState = { ...customThemeState, enabled: value !== "false" };
-      notifyCustomTheme();
-    }).catch(() => {
-      customEnabledLoaded = true;
-      customThemeState = { ...customThemeState, error: "Unable to load the custom theme preference. Retry in Appearance." };
-      notifyCustomTheme();
-    }).finally(() => { customEnabledLoad = null; });
-  }, []);
-  return snapshot;
+export async function setAccentPreference(next: AccentId) {
+  accentPreference = next;
+  accentPreferenceLoaded = true;
+  notifyAccentPreference();
+  await AsyncStorage.setItem(ACCENT_PREFERENCE_KEY, next);
 }
 
-export function getAppThemeColors(mode: AppTheme["mode"], pureBlack: boolean): AppTheme["colors"] {
+function themeColors(mode: AppTheme["mode"], pureBlack: boolean, accent: AccentId): Palette {
   const base = mode === "light" ? lightTheme : pureBlack ? pureBlackDarkTheme : darkTheme;
-  return customThemeState.enabled ? { ...base.colors, ...customPalette[mode] } : base.colors;
+  return accent === DEFAULT_ACCENT ? base.colors : { ...base.colors, ...ACCENTS[accent][mode] };
+}
+
+/** Colors for a mode other than the active one (previews, className variables), with the chosen accent. */
+export function getAppThemeColors(mode: AppTheme["mode"], pureBlack: boolean): AppTheme["colors"] {
+  return themeColors(mode, pureBlack, accentPreference);
 }
 
 export function useAppTheme(): AppTheme {
@@ -224,16 +197,16 @@ export function useAppTheme(): AppTheme {
   const preference = useThemePreference();
   const pureBlack = usePureBlackPreference();
   const fontScale = useFontScalePreference();
-  const custom = useCustomThemeState();
+  const accent = useAccentPreference();
   const mode = preference === "system"
     ? colorScheme === "light" ? "light" : "dark"
     : preference;
-  const base = mode === "light" ? lightTheme : pureBlack ? pureBlackDarkTheme : darkTheme;
-  const overrides = custom.enabled ? customPalette[mode] : null;
   return useMemo(() => {
-    if (overrides && Object.keys(overrides).length) return { ...base, colors: { ...base.colors, ...overrides } };
+    const base = mode === "light" ? lightTheme : pureBlack ? pureBlackDarkTheme : darkTheme;
+    if (accent !== DEFAULT_ACCENT) return { ...base, colors: themeColors(mode, pureBlack, accent) };
+    // A new object on a scale change re-renders consumers that read the mutable typography tokens.
     return fontScale === "default" ? base : { ...base };
-  }, [base, fontScale, overrides]);
+  }, [accent, fontScale, mode, pureBlack]);
 }
 
 export type FontScalePreference = "small" | "default" | "large" | "xlarge";

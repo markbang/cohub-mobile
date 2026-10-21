@@ -1,18 +1,17 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { useApp } from "@/src/data/context";
 import { Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ACCENTS, ACCENT_IDS, type AccentId } from "@/src/design/accents";
 import {
   getAppThemeColors,
-  setCustomThemeEnabled,
-  useCustomThemeState,
+  setAccentPreference,
   setFontScalePreference,
   setPureBlackPreference,
   setThemePreference,
   type AppTheme,
   type FontScalePreference,
   type ThemePreference,
+  useAccentPreference,
   useAppTheme,
   useFontScalePreference,
   usePureBlackPreference,
@@ -34,6 +33,17 @@ const TEXT_SIZE_OPTIONS: { value: FontScalePreference; labelKey: TranslationKey 
   { value: "large", labelKey: "appearance.textSize.large" },
   { value: "xlarge", labelKey: "appearance.textSize.xlarge" },
 ];
+
+const ACCENT_LABELS: Record<AccentId, TranslationKey> = {
+  ember: "appearance.accent.ember",
+  blue: "appearance.accent.blue",
+  violet: "appearance.accent.violet",
+  rose: "appearance.accent.rose",
+  teal: "appearance.accent.teal",
+  green: "appearance.accent.green",
+  amber: "appearance.accent.amber",
+  graphite: "appearance.accent.graphite",
+};
 
 type PreviewColors = Pick<AppTheme["colors"], "background" | "surface" | "surfaceRaised" | "border" | "accent" | "text" | "textMuted">;
 
@@ -62,11 +72,7 @@ export function AppearanceContent() {
   const preference = useThemePreference();
   const pureBlack = usePureBlackPreference();
   const fontScalePreference = useFontScalePreference();
-  const customTheme = useCustomThemeState();
-  const { sync } = useApp();
-  const [savingCustomTheme, setSavingCustomTheme] = useState(false);
-  const customStatus = customTheme.loading ? "appearance.custom.loading"
-    : customTheme.css === null ? "appearance.custom.empty" : "appearance.custom.body";
+  const accent = useAccentPreference();
   const { width } = useWindowDimensions();
   const previewWidth = Math.max(108, Math.min(124, (width - 48) / 3.05));
 
@@ -109,32 +115,17 @@ export function AppearanceContent() {
         })}
       </ScrollView>
 
-      <View className="mt-4">
-        <SettingsGroup>
-          <SettingsRow icon="palette" title={t("appearance.custom.title")} value={t(customStatus)}>
-            <Switch
-              accessibilityLabel={t("appearance.custom.title")}
-              value={customTheme.enabled}
-              disabled={savingCustomTheme}
-              onValueChange={(value) => {
-                setSavingCustomTheme(true);
-                void setCustomThemeEnabled(value).catch(() => undefined).finally(() => setSavingCustomTheme(false));
-              }}
-              {...switchColors}
-              thumbColor={customTheme.enabled ? theme.colors.accent : theme.colors.textFaint}
-            />
-          </SettingsRow>
-          {customTheme.error || customTheme.warnings.length ? (
-            <View className="bg-surface px-4 pb-3">
-              <Text accessibilityRole="alert" selectable className="text-caption text-danger">
-                {customTheme.error ?? t("appearance.custom.partial")}
-              </Text>
-              {customTheme.warnings.length ? <Text selectable className="mt-1 text-caption text-fg-muted">{customTheme.warnings.join("\n")}</Text> : null}
-            </View>
-          ) : null}
-          <SettingsRow icon="refresh" title={t("appearance.custom.refresh")} last onPress={() => sync.invalidate("config-theme")} />
-        </SettingsGroup>
+      <SectionHeader title={t("appearance.section.accent")} />
+      <SettingsGroup>
+        <View accessibilityRole="radiogroup" accessibilityLabel={t("appearance.section.accent")} className="flex-row flex-wrap bg-surface px-2 pt-3">
+          {ACCENT_IDS.map((id) => (
+            <AccentSwatch key={id} id={id} mode={theme.mode} selected={accent === id} label={t(ACCENT_LABELS[id])} onPress={() => void setAccentPreference(id)} />
+          ))}
+        </View>
+        <Text className="bg-surface px-4 pb-3 pt-1 text-caption text-fg-muted">{t("appearance.accent.body", { name: t(ACCENT_LABELS[accent]) })}</Text>
+      </SettingsGroup>
 
+      <View className="mt-4">
         <SettingsGroup>
           <SettingsRow icon="moon" title={t("appearance.pureBlack.title")} value={t("appearance.pureBlack.body")} last>
             <Switch
@@ -190,6 +181,29 @@ function preferenceLabel(preference: ThemePreference, t: (key: TranslationKey) =
 function appliedModeLabel(mode: AppTheme["mode"], pureBlack: boolean, t: (key: TranslationKey) => string) {
   if (mode === "dark") return pureBlack ? t("appearance.mode.pureBlack") : t("appearance.mode.dark");
   return t("appearance.mode.light");
+}
+
+function AccentSwatch({ id, mode, selected, label, onPress }: { id: AccentId; mode: AppTheme["mode"]; selected: boolean; label: string; onPress: () => void }) {
+  const { accent, accentText } = ACCENTS[id][mode];
+  return (
+    <View className="w-1/4 items-center pb-3">
+      <Pressable
+        accessibilityRole="radio"
+        accessibilityLabel={label}
+        accessibilityState={{ selected, checked: selected }}
+        onPress={onPress}
+        hitSlop={4}
+        className="size-12 items-center justify-center rounded-full active:opacity-70"
+        // design-system: each swatch shows a preset other than the applied accent, so it reads that preset's color.
+        style={{ borderWidth: 2, borderColor: selected ? accent : "transparent" }}
+      >
+        {/* design-system: swatch fill, see above. */}
+        <View className="size-9 items-center justify-center rounded-full" style={{ backgroundColor: accent }}>
+          {selected ? <AppIcon name="check" size={18} color={accentText} strokeWidth={2.6} /> : null}
+        </View>
+      </Pressable>
+    </View>
+  );
 }
 
 function ThemePreviewCard({ label, mode, pureBlack, selected, width, onPress }: { label: string; mode: "light" | "dark"; pureBlack: boolean; selected: boolean; width: number; onPress: () => void }) {

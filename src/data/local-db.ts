@@ -29,10 +29,7 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
   const db = await openDatabaseAsync("cohub-mobile.db");
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS config_theme_cache (
-      user_key TEXT PRIMARY KEY NOT NULL,
-      payload TEXT NOT NULL
-    );
+    DROP TABLE IF EXISTS config_theme_cache;
     CREATE TABLE IF NOT EXISTS space_list_cache (
       user_key TEXT PRIMARY KEY NOT NULL,
       payload TEXT NOT NULL
@@ -395,33 +392,10 @@ export async function clearUserCache(userKey: string) {
     await db.runAsync("DELETE FROM spaces WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM composer_drafts WHERE user_key = ?", userKey);
-    await db.runAsync("DELETE FROM config_theme_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_list_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM running_session_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_visits WHERE user_key = ?", userKey);
   });
-}
-
-export async function loadConfigThemeCache(userKey: string): Promise<import("./config-theme-sync").CachedConfigTheme | null> {
-  const db = await database();
-  const row = await db.getFirstAsync<{ payload: string }>("SELECT payload FROM config_theme_cache WHERE user_key = ?", userKey);
-  if (!row) return null;
-  const value: unknown = JSON.parse(row.payload);
-  if (!value || typeof value !== "object" || !("spaceId" in value) || !("css" in value)
-    || !(value.spaceId === null || typeof value.spaceId === "string") || !(value.css === null || typeof value.css === "string")) {
-    throw new Error("Invalid cached Config theme. Clear the cache in Settings and retry.");
-  }
-  return { spaceId: value.spaceId, css: value.css };
-}
-
-export async function saveConfigThemeCache(userKey: string, value: import("./config-theme-sync").CachedConfigTheme): Promise<void> {
-  const db = await database();
-  await db.runAsync("INSERT OR REPLACE INTO config_theme_cache (user_key, payload) VALUES (?, ?)", userKey, JSON.stringify(value));
-}
-
-export async function clearConfigThemeCache(userKey: string): Promise<void> {
-  const db = await database();
-  await db.runAsync("DELETE FROM config_theme_cache WHERE user_key = ?", userKey);
 }
 
 export async function loadSpaceListCache(userKey: string): Promise<import("@neta-art/cohub").PaletteOverviewResponse | null> {

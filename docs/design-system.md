@@ -122,7 +122,7 @@ Weights: 400 body, 500 captions, 600 titles, emphasis, and micro labels, 700 dis
   `bg-surface`, `bg-surface-raised`, `bg-surface-pressed`, `bg-surface-float`, `border-border`, `bg-accent`,
   `text-on-accent`, `bg-accent-soft`, `text-success|warning|danger|info` and their `-soft`
   backgrounds. Tailwind's default palette is removed: a class like `bg-red-500` does nothing.
-- **Runtime theming** stays: pure black, the Config Space `theme.css`, and the font scale
+- **Runtime theming** stays: pure black, the accent preset (`src/design/accents.ts`), and the font scale
   preference all flow through `useUniwindThemeSync()` into the same CSS variables, so className
   styling and JS colors can never disagree.
 
@@ -270,7 +270,7 @@ What stays JS on purpose, with that comment: the Markdown renderer's style objec
 in bubbles, the code editor, and the send overlay; navigator and WebView backgrounds; Link-slotted
 thumbnails; theme preview cards; the always-black photo viewer and scrims; the logo.
 
-Per-screen definition of done: light, dark, pure black, a Config theme, font scale small and
+Per-screen definition of done: light, dark, pure black, a non-default accent, font scale small and
 extra large, long titles, empty, loading, error, offline banner, VoiceOver/TalkBack labels on
 every icon-only control, 44 pt targets.
 

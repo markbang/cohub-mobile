@@ -14,8 +14,8 @@ const RULES = [
   { name: "pressed style function", pattern: /style=\{\(\{ pressed \}\) =>/, fix: "use active: and disabled: classes" },
 ];
 
-// The token source, the palette compiler, and the theme store that reads them.
-const EXEMPT = [/^src\/design\//, /^src\/data\/config-theme\.ts$/, /^src\/theme\.ts$/];
+// The token source and the theme store that reads them.
+const EXEMPT = [/^src\/design\//, /^src\/theme\.ts$/];
 
 const files = execFileSync("git", ["ls-files", "app", "src"], { encoding: "utf8" })
   .split("\n")

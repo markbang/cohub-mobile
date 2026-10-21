@@ -74,42 +74,12 @@ is set through `src/platform/device-runtime.ts`, not hardcoded into service life
   downloading an OTA alone does not update native preferences. New permissions, system capabilities,
   dependencies, and native implementation fixes still require a new APK.
 
-## Config Space colors
+## Accent color
 
-The mobile app follows the signed-in user's global Config Space, resolved with the SDK's
-`spaces.getOwnedBySlug("config")`. Its `.cohub/theme.css` overrides the existing mobile palette across
-screens; it does not use the currently open Space or hardcode a Space ID. Settings > Appearance has
-an enable switch, a refresh action, and load/error/partial-support states. Custom colors take
-precedence over pure-black surfaces; switching custom colors off restores the native palette.
-
-Supported root selectors are `:root`, `html`, `*`, `[data-theme]`, and `[data-theme="light"/"dark"]`,
-including compound selectors and `:where()`, `:is()`, and `:not()` over those selectors. Source order,
-specificity, `!important`, and `prefers-color-scheme` media queries are respected (the queries use the
-app's selected light/dark mode). The supported
-colors include hex, named colors, RGB/HSL/HWB, Lab/LCH/OKLab/OKLCH, CSS `color()` spaces,
-`light-dark()`, nested `var()` with defaults, and `color-mix()` with transparency and hue interpolation.
-Colors are converted to native sRGB. CSS neutral/brand scales feed their semantic roles; references
-to unchanged base variables use the mobile palette rather than reproducing a web preset exactly.
-
-Mapped tokens cover `--bg-primary`, `--bg-content`, `--bg-surface`, `--bg-elevated`, `--bg-active`,
-`--text-primary/secondary/tertiary/placeholder`, borders, `--brand` and its states/contrast,
-`--success/warning/error/info-*`, `--error-fg`, overlay-control color, shadow color, and
-`--chat-user-message-bg/fg` / `--chat-assistant-message-bg/fg`. Mobile also recognizes
-`--chat-user-message-link`, `--chat-user-message-code-bg`, and `--chat-user-message-meta`.
-Dependent bubble and status colors update when their shared semantic colors change.
-
-CSS layout, component selectors, fonts, arbitrary at-rules, imports, URLs as colors, `calc()`,
-relative color expressions, and non-color styling are not executed. Unsupported mapped colors
-keep their native values and produce a warning; invalid stylesheets keep the last valid theme.
-Files are limited to 256 KiB. Inline UTF-8/base64 and SDK-provided HTTPS download delivery are
-supported without forwarding credentials. The user-scoped SQLite cache renders first and the
-server reconciles it; foreground/reconnect, watched Config file events, and periodic foreground
-refreshes revalidate it. File deletion or access rejection removes cached colors. Sign-out/account
-changes dispose the old reader, clear its cache, and prevent late results from applying.
-
-This is JS-only behavior, including its two runtime dependencies (`css-tree` and `culori`); no new
-native module or permissions are required. OTA publication must still pass the repository's native
-fingerprint compatibility check.
+Settings > Appearance offers eight accent presets (`src/design/accents.ts`), stored per device. Each
+preset is tuned for light and dark and replaces only the accent and own-message bubble tokens, so pure
+black and the rest of the palette stay unchanged. The mobile app no longer reads the Config Space
+`.cohub/theme.css`.
 
 ## Thanks
 
