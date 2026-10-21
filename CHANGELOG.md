@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.3.0](https://github.com/markbang/cohub-mobile/compare/v2.2.21...v2.3.0) (2026-10-21)
+
+
+### Features
+
+* **about:** upload diagnostics to cfeed by default ([cb729db](https://github.com/markbang/cohub-mobile/commit/cb729db3b800d46292a0704494383a7f1f0fcfbe))
+* **activity:** add trending leaderboards ([774f7ce](https://github.com/markbang/cohub-mobile/commit/774f7ce31424dd70bd39d752bc02e769a84ea04d))
+* **chats:** cache Running scans and stop discovery when the filter is hidden ([d9a13bc](https://github.com/markbang/cohub-mobile/commit/d9a13bc8e59993b9f8fbe8340c23d4c202376be6))
+* **chats:** show turn activity instead of an empty preview ([dc22adc](https://github.com/markbang/cohub-mobile/commit/dc22adc5c4c571bd1f1552f4df8d7c880370b924))
+* **design:** add Uniwind with generated tokens and a runtime theme bridge ([df7f72d](https://github.com/markbang/cohub-mobile/commit/df7f72dc57e3252efff6c4e576511e5954fe3260))
+* **design:** finish migrating chat, settings, debug, and the remaining components ([d80b7da](https://github.com/markbang/cohub-mobile/commit/d80b7daebb51e9fdf46d08ce793b19bd487613f6))
+* **design:** finish the copy pass and guard the design system in CI ([38cf6cb](https://github.com/markbang/cohub-mobile/commit/38cf6cb22a326ae1d3187339f9b44cbd90282c35))
+* **design:** give list rows back their breathing room ([a8cffea](https://github.com/markbang/cohub-mobile/commit/a8cffea7ccceea601589d5da36beb4154984925e))
+* **design:** label the floating tabs ([3bb905f](https://github.com/markbang/cohub-mobile/commit/3bb905f3bce0daeb3eaf13e26230f0ccc33fb3d2))
+* **design:** move shared primitives and the tab screens onto the design system ([d537d1b](https://github.com/markbang/cohub-mobile/commit/d537d1b0a9a175d43dac37607cc9105b0297d011))
+* **design:** move sheets, pickers, composer menus, and auth onto primitives ([84d15f0](https://github.com/markbang/cohub-mobile/commit/84d15f04cda3e24d841af344790b14c4d967237d))
+* **design:** move the composer, chat chrome, Appearance, and Space settings onto primitives ([4c6f845](https://github.com/markbang/cohub-mobile/commit/4c6f84502192f793f072cabef62293213736a424))
+* **design:** move the Space stack, sheets, and settings screens onto tokens ([55962a7](https://github.com/markbang/cohub-mobile/commit/55962a7310912a1cc6356e579248e9d156a66a41))
+* **design:** unify menus, About, Language, update surfaces, and Space panel filters ([90d30d9](https://github.com/markbang/cohub-mobile/commit/90d30d94939de65f86ecf6a9adae23eff5f5ce71))
+* **diagnostics:** attach the last three launches with full interaction and network logs ([672cc30](https://github.com/markbang/cohub-mobile/commit/672cc30b4dbd6e68814d2cc9269b5af53db4843c))
+* **feedback:** identify the app in the cfeed user agent ([d8acf78](https://github.com/markbang/cohub-mobile/commit/d8acf78128839eefa5fd26aed0a9087d9d9643f6))
+* **feedback:** make diagnostics optional and allow attachments ([cc87c06](https://github.com/markbang/cohub-mobile/commit/cc87c06f99e4e228bbb37ea7442a2ab22ff6843f))
+* **runtime:** group local harnesses and show their availability in the picker ([703b767](https://github.com/markbang/cohub-mobile/commit/703b767e2a9ae481033027591e1aef534a665952))
+* **runtime:** support Claude Code and WorkBuddy harnesses with brand icons ([d49c7aa](https://github.com/markbang/cohub-mobile/commit/d49c7aaf32ad8fee8e4289bdefdd0ddc1091c737))
+* **space:** add spec details and custom hibernation window ([bbce7f7](https://github.com/markbang/cohub-mobile/commit/bbce7f781a5583bc3643ff377c077cdfdb8fdea1))
+* **ui:** adopt an iOS-style design language with native iOS controls ([6c6bb5b](https://github.com/markbang/cohub-mobile/commit/6c6bb5b526f95652a47e12584ee9fd5fe51abdc9))
+* **updates:** preview OTA staging from the debug menu ([712e44f](https://github.com/markbang/cohub-mobile/commit/712e44fd107344abc31b6bc59a4e5e4354ceb942))
+
+
+### Fixes
+
+* **chat:** keep the bubble clock and read receipt on one row ([56dfd14](https://github.com/markbang/cohub-mobile/commit/56dfd1414dcfde1fd4be9eed4622e047d6aeaa88))
+* **design:** address review findings before release ([2d6d015](https://github.com/markbang/cohub-mobile/commit/2d6d015e05503a1ee2e9fe287efcdaa3d9c13067))
+* **design:** declare CSS imports without the generated expo-env types ([8ad2e51](https://github.com/markbang/cohub-mobile/commit/8ad2e512a2176228368eeb6d7b4e107d9be06b22))
+* **design:** drop the untyped userSelect on the sheet drag handle ([1627411](https://github.com/markbang/cohub-mobile/commit/16274117e1c137e23a40f408ee3fe2f16ed0fe8b))
+* **design:** keep the pin long-press attached and let the ramp own default weights ([04877ac](https://github.com/markbang/cohub-mobile/commit/04877ac469a3c19dafc1451465c03ba3383e2f8d))
+* **feedback:** stream file parts without mutating File ([3d877f2](https://github.com/markbang/cohub-mobile/commit/3d877f24ed41e9573016e0655e5ccb2db824ef10))
+* **feedback:** upload attachments through expo-fetch ([df8edaa](https://github.com/markbang/cohub-mobile/commit/df8edaa44fafc4e14784bbf07650504589624120))
+* **ota:** keep staging branch code away from the publishing key ([1f52e4a](https://github.com/markbang/cohub-mobile/commit/1f52e4a8b61fd8b13e3b06c9134aa9cc3ee6ce4b))
+* **ui:** keep conditional pill backgrounds rounded on Android ([a880b85](https://github.com/markbang/cohub-mobile/commit/a880b85c95c6ecb68741692e303d632128f89c15))
+
+
+### Refactoring
+
+* **design:** convert remaining token-exact styles to className ([a282ea5](https://github.com/markbang/cohub-mobile/commit/a282ea50503de237323c37f4f2017928461a9b90))
+
+
+### Documentation
+
+* **releasing:** match the channel button label and expo-updates recovery ([d04f636](https://github.com/markbang/cohub-mobile/commit/d04f6368678624162c37571503f50f2abe72a05e))
+* **releasing:** state which OTA jobs run the selected commit ([8171f4e](https://github.com/markbang/cohub-mobile/commit/8171f4ec1b9234f9eb637a612fa6b813faffa9a7))
+
 ## [2.2.21](https://github.com/markbang/cohub-mobile/compare/v2.2.20...v2.2.21) (2026-10-16)
 
 
