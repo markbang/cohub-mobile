@@ -345,8 +345,71 @@ const SEGMENT_THUMB_STYLE = { ...SEGMENT_CORNER, top: SEGMENT_INSET, bottom: SEG
 type SegmentedProps<T extends string> = { options: readonly SegmentOption<T>[]; value: T; onChange: (value: T) => void; disabled?: boolean; onLocked?: () => void; className?: string };
 
 /** Mutually exclusive choices: the system segmented control on iOS, the drawn one elsewhere. */
-export function Segmented<T extends string>(props: SegmentedProps<T>) {
-  return nativeSegmented ? <NativeSegmented {...props} /> : <DrawnSegmented {...props} />;
+export function Segmented<T extends string>({ size = "regular", ...props }: SegmentedProps<T> & { size?: "regular" | "compact" }) {
+  if (nativeSegmented) return <NativeSegmented {...props} />;
+  return size === "compact" ? <CompactDrawnSegmented {...props} /> : <DrawnSegmented {...props} />;
+}
+
+const COMPACT_SEGMENT_HIT_SLOP = { top: 5, bottom: 5 } as const;
+
+/** Bar-sized: segments fit their labels and the thumb is a tint, so it sits beside bar buttons without outshouting them. */
+function CompactDrawnSegmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: SegmentedProps<T>) {
+  const [layouts, setLayouts] = useState<Partial<Record<T, { x: number; width: number }>>>({});
+  const selectedX = layouts[value]?.x;
+  const selectedWidth = layouts[value]?.width;
+  const thumbX = useSharedValue(0);
+  const thumbWidth = useSharedValue(0);
+  const placedValue = useRef<T | null>(null);
+  useEffect(() => {
+    if (selectedX === undefined || selectedWidth === undefined) return;
+    // A first placement or a label resize re-seats the thumb; only a change of choice slides.
+    if (placedValue.current !== value) {
+      const slide = placedValue.current !== null;
+      placedValue.current = value;
+      if (slide) {
+        thumbX.set(withSpring(selectedX, springs.indicator));
+        thumbWidth.set(withSpring(selectedWidth, springs.indicator));
+        return;
+      }
+    }
+    thumbX.set(selectedX);
+    thumbWidth.set(selectedWidth);
+  }, [selectedWidth, selectedX, thumbWidth, thumbX, value]);
+  const thumbStyle = useAnimatedStyle(() => ({ width: thumbWidth.get(), transform: [{ translateX: thumbX.get() }] }));
+  return (
+    <View className={className}>
+    <View accessibilityRole="radiogroup" className="flex-row self-start rounded-full bg-surface-raised" style={{ padding: SEGMENT_INSET }}>
+      {selectedWidth !== undefined ? <Animated.View pointerEvents="none" className="absolute bg-accent-soft" style={[SEGMENT_CORNER, { top: SEGMENT_INSET, bottom: SEGMENT_INSET, left: 0 }, thumbStyle]} /> : null}
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected, checked: selected, disabled: disabled || Boolean(option.locked) }}
+            aria-checked={selected}
+            disabled={disabled}
+            hitSlop={COMPACT_SEGMENT_HIT_SLOP}
+            onLayout={(event) => {
+              const { x, width } = event.nativeEvent.layout;
+              setLayouts((current) => current[option.value]?.x === x && current[option.value]?.width === width ? current : { ...current, [option.value]: { x, width } });
+            }}
+            onPress={() => {
+              traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
+              if (option.locked) { onLocked?.(); return; }
+              if (!selected) onChange(option.value);
+            }}
+            className={`min-h-8.5 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            style={SEGMENT_CORNER}
+          >
+            <Text numberOfLines={1} className={`shrink text-caption ${selected ? "font-semibold text-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+    </View>
+  );
 }
 
 /** A capsule track with the selected choice on an accent thumb that slides between them. */

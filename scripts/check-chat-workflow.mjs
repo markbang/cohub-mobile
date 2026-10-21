@@ -733,7 +733,7 @@ for (const [tab, component, expectedRequests] of [
     }
     state.sessions = [runningFixture];
     state.runningSessions.all = { ...emptyRunningSessions, loading: true };
-    chromeNodes(control().props.ListHeaderComponent).find((node) => node.type === "Segmented").props.onChange("running");
+    chromeNodes(render().find((node) => node.type === "ExpandableSearchBar").props.filters).find((node) => node.type === "Segmented").props.onChange("running");
     assert.deepEqual(control().props.data.map((row) => row.session.id), [runningFixture.id], "Running immediately uses known active rows, even years outside the time window");
     assert.ok(control().props.ListFooterComponent, "a partial Running result still indicates an unfinished account scan");
     const laterPage = { ...runningFixture, id: "older-page-running", activeTurn: { id: "older-turn", status: "running" } };
@@ -1166,12 +1166,16 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   assert.ok(headerClasses.has("bg-background"), "an opaque header paints the screen background token");
   const transparentHeader = renderTopBar({ title: "Chats", transparent: true });
   assert.equal([...classes(transparentHeader)].some((name) => name.startsWith("bg-")), false, "a transparent header paints nothing");
-  const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", useAppTheme: () => ({ colors: { background } }) });
+  const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", SCRIM_CURVE: [{ at: 0, alpha: 1 }, { at: 0.6, alpha: 0.5 }, { at: 1, alpha: 0 }], useAppTheme: () => ({ colors: { background } }) });
   for (const edge of ["top", "bottom"]) {
-    const scrim = renderScrim({ edge });
-    assert.deepEqual(scrim.props.colors, [background, colorWithOpacity(background, 245 / 255), colorWithOpacity(background, 184 / 255), colorWithOpacity(background, 0)]);
+    const root = renderScrim({ edge, solid: edge === "top" ? 24 : 0 });
+    const scrim = chromeNodes(root).find((node) => node.type === "LinearGradient");
+    assert.equal(scrim.props.colors[0], colorWithOpacity(background, 1));
+    assert.equal(scrim.props.colors.at(-1), colorWithOpacity(background, 0));
+    assert.equal(scrim.props.colors.length, scrim.props.locations.length);
     assert.ok(scrim.props.colors.every((color) => /^#[\da-f]{6}(?:[\da-f]{2})?$/.test(color)), "custom alpha colors must not become invalid ten-digit gradient colors");
-    assert.equal(scrim.props.pointerEvents, "none", "the fade never intercepts scrolling or button presses");
+    assert.equal(root.props.pointerEvents, "none", "the fade never intercepts scrolling or button presses");
+    assert.equal(chromeNodes(root).some((node) => node.props?.style?.height === 24), edge === "top", "the status bar stays opaque");
     assert.equal(scrim.props.start.y, edge === "top" ? 0 : 1);
     assert.equal(scrim.props.end.y, edge === "top" ? 1 : 0);
   }

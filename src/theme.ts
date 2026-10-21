@@ -6,7 +6,7 @@ import type { ConfigThemeUpdate } from "@/src/data/config-theme-sync";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides, type Palette } from "@/src/design/tokens";
 export { colorWithOpacity } from "@/src/data/config-theme";
 
-export const edgeChrome = { headerMinHeight: 56, fade: 24 } as const;
+export const edgeChrome = { headerMinHeight: 56, fade: 40 } as const;
 
 export type AppTheme = {
   mode: "light" | "dark";

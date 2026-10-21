@@ -135,7 +135,7 @@ export const en = {
   // Chats tab
   "chats.filter.all": "All",
   "chats.filter.running": "Running",
-  "chats.filter.completed": "Completed",
+  "chats.filter.completed": "Done",
   "chats.filter.window": "Chats with messages in the last {window}",
   "chats.source.all": "All",
   "chats.source.web": "Web app",

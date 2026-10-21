@@ -9,7 +9,7 @@ import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, LoadingRows, Screen, SectionHeader, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, LoadingRows, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
@@ -39,12 +39,11 @@ export default function ActivityScreen() {
   };
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
-      <TopBar transparent titleHidden title={t("activity.title")} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>
     <ScrollView ref={scrollRef} className="flex-1" contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
-      <View className="mb-6 mt-2 px-4">
+      <View className="mb-6 mt-4 px-4">
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>
           <View className="flex-row items-center gap-2">
             <View className="size-8 items-center justify-center rounded-xs bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="database" size={16} tone="accent" strokeWidth={2.1} /></View>

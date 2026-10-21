@@ -191,6 +191,38 @@ export default function ChatsScreen() {
         query={query}
         onQueryChange={setQuery}
         queryRef={searchRef}
+        filters={
+          <View className="flex-row items-center gap-1">
+            <Segmented<Filter>
+              className="min-w-0 flex-1"
+              size="compact"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: t("chats.filter.all") },
+                { value: "running", label: runningQuery.loaded && runningCount > 0 ? `${t("chats.filter.running")} ${runningCount}` : t("chats.filter.running") },
+                { value: "completed", label: t("chats.filter.completed") },
+              ]}
+            />
+            {nativeMenus ? <View className="size-11 items-center justify-center">
+              <NativeMenuButton appearance="plain" icon="filter" label={t("chats.source.filter")} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu" />
+            </View> : <View ref={sourceButtonRef} collapsable={false}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("chats.source.filter")}
+                accessibilityState={{ expanded: sourceMenuOpen, selected: sourceFilter !== "all" }}
+                onPress={() => setSourceMenuOpen(true)}
+                className="size-11 items-center justify-center"
+              >
+                {({ pressed }) => (
+                  <View className={`size-8 items-center justify-center overflow-hidden rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
+                    <AppIcon name="filter" size={17} tone={sourceFilter !== "all" ? "accent" : "muted"} />
+                  </View>
+                )}
+              </Pressable>
+            </View>}
+          </View>
+        }
         onCreate={() => router.push("/new-chat")}
       />
       <ConnectionBanner visible={connectionUnavailable} />
@@ -221,35 +253,6 @@ export default function ChatsScreen() {
         scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">
-          <View className="flex-row items-center gap-1 py-1">
-            <Segmented<Filter>
-              className="flex-1"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: t("chats.filter.all") },
-                { value: "running", label: runningQuery.loaded && runningCount > 0 ? `${t("chats.filter.running")} ${runningCount}` : t("chats.filter.running") },
-                { value: "completed", label: t("chats.filter.completed") },
-              ]}
-            />
-            {nativeMenus ? <View className="size-11 items-center justify-center">
-              <NativeMenuButton appearance="plain" icon="filter" label={t("chats.source.filter")} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu" />
-            </View> : <View ref={sourceButtonRef} collapsable={false}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t("chats.source.filter")}
-                accessibilityState={{ expanded: sourceMenuOpen, selected: sourceFilter !== "all" }}
-                onPress={() => setSourceMenuOpen(true)}
-                className="size-11 items-center justify-center"
-              >
-                {({ pressed }) => (
-                  <View className={`size-8 items-center justify-center overflow-hidden rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
-                    <AppIcon name="filter" size={17} tone={sourceFilter !== "all" ? "accent" : "muted"} />
-                  </View>
-                )}
-              </Pressable>
-            </View>}
-          </View>
           {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
           {filter === "completed" && filterPreference.loaded ? <Text className="px-1 pt-1 text-caption text-fg-faint">{t("chats.filter.window", { window: formatWindow(filterPreference.minutes) })}</Text> : null}
           {filter === "running" && runningQuery.loading && runningQuery.loaded && runningQuery.sessions.length > 0 ? <Text accessibilityLiveRegion="polite" className="text-caption text-fg-faint">{t("chats.running.scanning")}</Text> : null}

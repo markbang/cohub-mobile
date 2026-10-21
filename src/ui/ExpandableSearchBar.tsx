@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Keyboard, TextInput } from "react-native";
 import { IconButton, TopBar } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
@@ -10,12 +10,14 @@ type ExpandableSearchBarProps = {
   onQueryChange: (value: string) => void;
   placeholder?: string;
   queryRef?: React.RefObject<TextInput | null>;
+  /** Shown in the bar while search is closed; the search field takes its place when open. */
+  filters?: ReactNode;
   onCreate: () => void;
   createLabel: string;
   transparent?: boolean;
 };
 
-export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, queryRef, onCreate, createLabel, transparent = false }: ExpandableSearchBarProps) {
+export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, queryRef, filters, onCreate, createLabel, transparent = false }: ExpandableSearchBarProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
@@ -59,7 +61,7 @@ export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, 
         returnKeyType="search"
         autoCapitalize="none"
         autoCorrect={false}
-      /> : undefined}
+      /> : filters}
     </TopBar>
   );
 }
