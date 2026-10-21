@@ -5,7 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, w
 import { icons, type IconName } from "@/src/icons";
 import { motion, springs } from "@/src/motion";
 
-export type AnimatedTabIconName = "messages" | "layers" | "activity";
+export type AnimatedTabIconName = "messages" | "layers" | "activity" | "user";
 
 type AnimatedTabIconProps = {
   name: AnimatedTabIconName;
@@ -18,6 +18,7 @@ const iconNames: Record<AnimatedTabIconName, IconName> = {
   messages: "messages",
   layers: "layers",
   activity: "activity",
+  user: "user",
 };
 
 const POP_FROM_SCALE = 0.84;

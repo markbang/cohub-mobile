@@ -1,10 +1,10 @@
-import { Link, useRouter } from "expo-router";
+import { useRouter, useScrollToTop } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCurrentUser } from "@/src/auth/current-user";
 import { useProfileSession } from "@/src/auth/profile-session";
+import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { saveBrowserPreference, useBrowserPreference, type BrowserPreference } from "@/src/data/browser-preference";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -16,12 +16,13 @@ import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation, type LocalePreference } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
-import { useAppTheme, useThemePreference } from "@/src/theme";
-import { AppIcon, Avatar, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { useThemePreference } from "@/src/theme";
+import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
 
 export function SettingsHomeScreen() {
-  const theme = useAppTheme();
-  const insets = useSafeAreaInsets();
+  const tabBarInset = useFloatingTabBarInset();
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const { t, preference: language, setPreference: setLanguage } = useTranslation();
   const showToast = useToast();
   // A press sliding through a pop-up menu must not scroll the page under it.
@@ -69,10 +70,9 @@ export function SettingsHomeScreen() {
   };
 
   return <Screen>
-    <TopBar large title={t("settings.title")} onBack={() => router.back()} />
-    <ScrollView scrollEnabled={!selecting} contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} scrollEnabled={!selecting} contentContainerStyle={{ paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
-      <View className="mb-6 mt-2 px-4">
+      <View className="mb-6 mt-4 px-4">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("settings.section.profile")}
@@ -80,7 +80,7 @@ export function SettingsHomeScreen() {
           className="min-h-18 flex-row items-center gap-3 rounded-md bg-surface py-3 pl-3 pr-2 active:bg-surface-pressed"
           style={{ borderCurve: "continuous" }}
         >
-          <Link.AppleZoomTarget><Avatar name={name} uri={avatar} size={48} /></Link.AppleZoomTarget>
+          <Avatar name={name} uri={avatar} size={48} />
           <View className="min-w-0 flex-1 gap-0.5">
             <Text numberOfLines={1} className="text-headline font-semibold text-fg">{name}</Text>
             {email ? <Text numberOfLines={1} className="text-subhead text-fg-muted">{email}</Text> : null}

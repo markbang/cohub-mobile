@@ -5,7 +5,6 @@ import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-nativ
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
-import { AccountAvatar } from "@/src/components/AccountAvatar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
 import { DeviceSpaceRow } from "@/src/components/DeviceSpaceRow";
 import { useToast } from "@/src/components/Toast";
@@ -205,7 +204,6 @@ export default function SpacesScreen() {
       query={query}
       onQueryChange={setQuery}
       placeholder={t("spaces.search.placeholder")}
-      account={<AccountAvatar />}
       onCreate={() => { setCreateError(null); setCreateOpen(true); }}
     />
     {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}

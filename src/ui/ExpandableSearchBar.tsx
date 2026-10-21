@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Keyboard, TextInput } from "react-native";
 import { IconButton, TopBar } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
@@ -10,13 +10,12 @@ type ExpandableSearchBarProps = {
   onQueryChange: (value: string) => void;
   placeholder?: string;
   queryRef?: React.RefObject<TextInput | null>;
-  account: ReactNode;
   onCreate: () => void;
   createLabel: string;
   transparent?: boolean;
 };
 
-export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, queryRef, account, onCreate, createLabel, transparent = false }: ExpandableSearchBarProps) {
+export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, queryRef, onCreate, createLabel, transparent = false }: ExpandableSearchBarProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
@@ -39,7 +38,6 @@ export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, 
       transparent={transparent}
       titleHidden={!expanded}
       title={title}
-      leading={account}
       onBack={expanded ? closeSearch : undefined}
       backLabel={t("ui.search.close")}
       actions={expanded

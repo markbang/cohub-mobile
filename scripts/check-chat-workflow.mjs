@@ -322,7 +322,6 @@ assert.equal(parseBrowserPreference(null), "system");
 assert.equal(parseBrowserPreference("in-app"), "in-app");
 assert.throws(() => parseBrowserPreference("embedded"), /Invalid browser preference/);
 assert.ok(!readFileSync(new URL("../src/components/SettingsScreen.tsx", import.meta.url), "utf8").includes('accessibilityRole="tab"'));
-assert.ok(readFileSync(new URL("../src/components/AccountAvatar.tsx", import.meta.url), "utf8").includes('href="/settings"'));
 assert.equal(isChannelProvider("wechat"), true);
 for (const invalid of ["web", "unknown", ["discord"], undefined]) assert.equal(isChannelProvider(invalid), false);
 const channelDraft = { name: " My bot ", token: " token ", appId: " app ", secret: " secret ", brand: "lark" };
@@ -653,7 +652,7 @@ for (const [tab, component, expectedRequests] of [
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
     EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
-    AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip",
+    AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
     AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
@@ -734,7 +733,7 @@ for (const [tab, component, expectedRequests] of [
     }
     state.sessions = [runningFixture];
     state.runningSessions.all = { ...emptyRunningSessions, loading: true };
-    chromeNodes(control().props.ListHeaderComponent).find((node) => node.props?.label === "chats.filter.running").props.onPress();
+    chromeNodes(control().props.ListHeaderComponent).find((node) => node.type === "Segmented").props.onChange("running");
     assert.deepEqual(control().props.data.map((row) => row.session.id), [runningFixture.id], "Running immediately uses known active rows, even years outside the time window");
     assert.ok(control().props.ListFooterComponent, "a partial Running result still indicates an unfinished account scan");
     const laterPage = { ...runningFixture, id: "older-page-running", activeTurn: { id: "older-turn", status: "running" } };
@@ -1362,11 +1361,10 @@ for (const isPinned of [false, true]) {
 
 // Spaces also uses the capsule for the create sheet's Cloud / This device choice.
 for (const [path, labels, chips] of [
-  ["../app/(tabs)/index.tsx", ["All", "Running", "Completed"], 3],
   ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 6],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/, "both tabs must use the same filter component");
+  assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/);
   assert.equal((source.match(/<FilterChip\s/g) ?? []).length, chips, "all filters must use the shared capsule");
   const theme = loadChromeComponent("../src/theme.ts", "darkTheme", themeTokenScope);
   const renderChip = loadChromeComponent("../src/components/FilterChip.tsx", "FilterChip", { ...chromeScope, useAppTheme: () => theme });

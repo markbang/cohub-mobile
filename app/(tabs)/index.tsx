@@ -2,10 +2,8 @@ import { useFocusEffect, useIsFocused, useRouter, useScrollToTop } from "expo-ro
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
-import { AccountAvatar } from "@/src/components/AccountAvatar";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
-import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
@@ -15,7 +13,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, Screen } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, Screen, Segmented } from "@/src/ui";
 import { sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, sessionFilterCutoff } from "@/src/data/session-status";
 import { loadSessionFilterMinutes, loadSessionSourcePreference, saveSessionSourcePreference, useSessionFilterPreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
@@ -193,7 +191,6 @@ export default function ChatsScreen() {
         query={query}
         onQueryChange={setQuery}
         queryRef={searchRef}
-        account={<AccountAvatar />}
         onCreate={() => router.push("/new-chat")}
       />
       <ConnectionBanner visible={connectionUnavailable} />
@@ -224,14 +221,20 @@ export default function ChatsScreen() {
         scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">
-          <View accessibilityRole="tablist" className="flex-row flex-wrap items-center">
-            <FilterChip label={t("chats.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
-            <FilterChip label={t("chats.filter.running")} suffix={runningQuery.loaded && runningCount > 0 ? String(runningCount) : undefined} selected={filter === "running"} onPress={() => setFilter("running")} />
-            {/* The completion window rides on the chip, so selecting it adds no extra line. */}
-            <FilterChip label={t("chats.filter.completed")} suffix={filter === "completed" ? formatWindow(filterPreference.minutes) : undefined} suffixLabel={t("chats.filter.window", { minutes: filterPreference.minutes })} selected={filter === "completed"} onPress={() => setFilter("completed")} />
-            {nativeMenus ? <View className="ml-auto size-11 items-center justify-center">
+          <View className="flex-row items-center gap-1 py-1">
+            <Segmented<Filter>
+              className="flex-1"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: t("chats.filter.all") },
+                { value: "running", label: runningQuery.loaded && runningCount > 0 ? `${t("chats.filter.running")} ${runningCount}` : t("chats.filter.running") },
+                { value: "completed", label: t("chats.filter.completed") },
+              ]}
+            />
+            {nativeMenus ? <View className="size-11 items-center justify-center">
               <NativeMenuButton appearance="plain" icon="filter" label={t("chats.source.filter")} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu" />
-            </View> : <View ref={sourceButtonRef} collapsable={false} className="ml-auto">
+            </View> : <View ref={sourceButtonRef} collapsable={false}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t("chats.source.filter")}
@@ -248,6 +251,7 @@ export default function ChatsScreen() {
             </View>}
           </View>
           {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
+          {filter === "completed" && filterPreference.loaded ? <Text className="px-1 pt-1 text-caption text-fg-faint">{t("chats.filter.window", { window: formatWindow(filterPreference.minutes) })}</Text> : null}
           {filter === "running" && runningQuery.loading && runningQuery.loaded && runningQuery.sessions.length > 0 ? <Text accessibilityLiveRegion="polite" className="text-caption text-fg-faint">{t("chats.running.scanning")}</Text> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}

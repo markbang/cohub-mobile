@@ -72,6 +72,7 @@ export const zh: Record<TranslationKey, string> = {
   "tabs.chats": "对话",
   "tabs.spaces": "空间",
   "tabs.activity": "动态",
+  "tabs.me": "我",
 
   // Shared UI
   "ui.search.placeholder": "搜索",
@@ -132,7 +133,7 @@ export const zh: Record<TranslationKey, string> = {
   "chats.filter.all": "全部",
   "chats.filter.running": "进行中",
   "chats.filter.completed": "已完成",
-  "chats.filter.window": "最近 {minutes} 分钟内有消息活动的对话",
+  "chats.filter.window": "最近 {window} 内有消息的对话",
   "chats.source.all": "全部",
   "chats.source.web": "网页应用",
   "chats.source.other": "其他",

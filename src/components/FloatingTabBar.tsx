@@ -17,7 +17,8 @@ import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 // grows under a press, follows a drag across the bar, and settles on the tab it is let go over.
 const BAR_HEIGHT = 62;
 const BAR_PADDING = 4;
-const ITEM_WIDTH = 84;
+// Four tabs plus the glass outset must fit a 360dp-wide screen.
+const ITEM_WIDTH = 76;
 const LENS_HEIGHT = BAR_HEIGHT - BAR_PADDING * 2;
 /** How far a lifted lens grows past its resting size on each side. */
 const LENS_GROWTH = 8;

@@ -2,7 +2,6 @@ import { useRouter, useScrollToTop } from "expo-router";
 import type { BillingSubscriptionHistoryStatus } from "@neta-art/cohub";
 import { useRef, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
-import { AccountAvatar } from "@/src/components/AccountAvatar";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
 import { useApp } from "@/src/data/context";
@@ -40,7 +39,7 @@ export default function ActivityScreen() {
   };
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
-      <TopBar transparent titleHidden title={t("activity.title")} leading={<AccountAvatar />} />
+      <TopBar transparent titleHidden title={t("activity.title")} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>
     <ScrollView ref={scrollRef} className="flex-1" contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>

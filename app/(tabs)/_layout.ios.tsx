@@ -25,6 +25,10 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Icon sf="waveform.path.ecg" />
         <NativeTabs.Trigger.Label>{t("tabs.activity")}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings" disableAutomaticContentInsets>
+        <NativeTabs.Trigger.Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
+        <NativeTabs.Trigger.Label>{t("tabs.me")}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

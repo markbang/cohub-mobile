@@ -73,6 +73,7 @@ export const en = {
   "tabs.chats": "Chats",
   "tabs.spaces": "Spaces",
   "tabs.activity": "Activity",
+  "tabs.me": "Me",
 
   // Shared UI
   "ui.search.placeholder": "Search",
@@ -135,7 +136,7 @@ export const en = {
   "chats.filter.all": "All",
   "chats.filter.running": "Running",
   "chats.filter.completed": "Completed",
-  "chats.filter.window": "Last {minutes} minutes of message activity",
+  "chats.filter.window": "Chats with messages in the last {window}",
   "chats.source.all": "All",
   "chats.source.web": "Web app",
   "chats.source.other": "Other",

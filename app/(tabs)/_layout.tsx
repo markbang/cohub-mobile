@@ -34,6 +34,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="activity" color={color} size={size} focused={focused} />,
         }}
       />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: t("tabs.me"),
+          tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="user" color={color} size={size} focused={focused} />,
+        }}
+      />
     </Tabs>
     </TabBlurTargetsProvider>
   );

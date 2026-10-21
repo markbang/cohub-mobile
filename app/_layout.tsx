@@ -261,7 +261,6 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             {/* design-system: the photo viewer is black in every theme so images read true. */}
           <Stack.Screen name="image-viewer" options={{ contentStyle: { backgroundColor: "#000000" } }} />
             <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: "slide_from_bottom" }} />
-            <Stack.Screen name="settings" options={{ title: t("route.settings") }} />
             <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
             <Stack.Screen name="language" options={{ title: t("route.language") }} />
             <Stack.Screen name="about" options={{ title: t("route.about") }} />
