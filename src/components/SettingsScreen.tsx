@@ -25,7 +25,6 @@ import {
 } from "react-native";
 import { ConfirmSheet, NoticeSheet } from "@/src/components/SystemDialogs";
 import { BrowserSettings } from "@/src/components/BrowserSettings";
-import { ChatFilterSettings } from "@/src/components/ChatFilterSettings";
 import { ChannelBindingSheet } from "@/src/components/ChannelBindingSheet";
 import { channelHealthState } from "@/src/data/channel-settings";
 import { useUserRules } from "@/src/data/use-user-rules";
@@ -86,7 +85,6 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 				{section === "profile" ? (
 					<ProfileSection client={client} onNotice={setNotice} />
 				) : null}
-				{section === "chats" ? <ChatFilterSettings /> : null}
 				{section === "browser" ? <BrowserSettings /> : null}
 				{section === "activity" ? <ActivitySection client={client} /> : null}
 				{section === "notifications" ? (

@@ -73,9 +73,8 @@ import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
 import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
-import { sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
+import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
-import { loadSessionFilterMinutes } from "@/src/data/session-filter-preference";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
 import {
   displaySessionTitle,
@@ -1084,7 +1083,6 @@ export function AppProvider({
     dispatch({ type: "session-status-start", silent: options.silent });
     let statusError: string | undefined;
     try {
-      const minutes = await loadSessionFilterMinutes();
       await loadSessionLatestTurns(activeClient, sessions, (sessionId, turn) => {
         if (generation !== statusGenerationRef.current) return;
         dispatch({ type: "session-latest-turn", sessionId, turn });
@@ -1093,7 +1091,7 @@ export function AppProvider({
           (isTerminalTurnStatus(turn.status) && stream?.turnId === turn.id) ||
           (isActiveTurnStatus(turn.status) && !stream)
         )) resyncCoordinatorRef.current.request(sessionId, "out-of-sync");
-      }, minutes, {
+      }, DEFAULT_SESSION_FILTER_MINUTES, {
         knownTurns: stateRef.current.sessionLatestTurns,
         turnStatuses: stateRef.current.sessionTurnStatuses,
         cached: options.silent,

@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
-import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
 import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
@@ -9,9 +10,12 @@ export function useEdgeChrome(options?: { reserveComposer?: boolean }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(insets.top + edgeChrome.headerMinHeight);
   const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom) : 0);
+  const scrollY = useSharedValue(0);
   return {
     headerHeight,
     footerHeight,
+    scrollY,
+    onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => scrollY.set(event.nativeEvent.contentOffset.y),
     onHeaderLayout: (event: LayoutChangeEvent) => setHeaderHeight(event.nativeEvent.layout.height),
     onFooterLayout: (event: LayoutChangeEvent) => setFooterHeight(event.nativeEvent.layout.height),
   };
@@ -42,10 +46,17 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
   </View>;
 }
 
-export function EdgeHeader({ children, onLayout }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void }) {
+/**
+ * With `scrollY`, the fade shows only once content has scrolled under the header, so nothing is
+ * veiled at rest; without it the fade is always on, for screens whose content starts beneath it.
+ */
+export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void; scrollY?: SharedValue<number> }) {
   const insets = useSafeAreaInsets();
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), [0, edgeChrome.fade], [0, 1], "clamp") : 1 }));
   return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
-    <EdgeScrim edge="top" solid={insets.top} style={{ bottom: -edgeChrome.fade }} />
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -edgeChrome.fade }, scrimStyle]}>
+      <EdgeScrim edge="top" solid={insets.top} />
+    </Animated.View>
     {children}
   </View>;
 }

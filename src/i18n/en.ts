@@ -133,22 +133,12 @@ export const en = {
   "auth.environment.dev": "Development",
 
   // Chats tab
-  "chats.filter.all": "All",
-  "chats.filter.running": "Running",
-  "chats.filter.completed": "Done",
-  "chats.filter.window": "Chats with messages in the last {window}",
   "chats.source.all": "All",
   "chats.source.web": "Web app",
   "chats.source.other": "Other",
   "chats.source.title": "Chat source",
   "chats.source.filter": "Filter Chats by source",
   "chats.source.saveFailed": "Could not save the Chat source filter. Try again.",
-  "settings.section.chats": "Chats",
-  "settings.chats.window": "Recent activity window (minutes)",
-  "settings.chats.range": "1-{max} minutes",
-  "settings.chats.invalid": "Enter a whole number from 1 to {max}.",
-  "settings.chats.saved": "Chat filter updated",
-  "settings.chats.saveFailed": "Could not save the Chat filter. Try again.",
   "chats.searching": "Searching Cohub",
   "chats.empty.matching.title": "No matching Chats",
   "chats.empty.matching.body": "Try another search or filter.",
@@ -160,7 +150,6 @@ export const en = {
   "chats.error.body":
     "Retry above after checking your connection and sign-in session.",
   "chats.loadingStatuses": "Loading Chat statuses",
-  "chats.running.scanning": "Checking older Chats…",
   "chats.search.retry": "Retry Chat search",
 
   // Spaces tab
@@ -168,6 +157,7 @@ export const en = {
   "spaces.filter.recent": "Recent",
   "spaces.filter.all": "All",
   "spaces.filter.pinned": "Pinned",
+  "spaces.filter.label": "Show Spaces",
   "spaces.section.yourWorkspaces": "Your workspaces",
   "spaces.searching": "Searching Cohub",
   "spaces.empty.pinned.title": "No pinned Spaces",

@@ -3,6 +3,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
@@ -36,7 +38,7 @@ export default function SpacesScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout } = useEdgeChrome();
+  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
   const { state, client, refreshHome, createSpace, toggleSpacePin, spaceList, userUuid } = useApp();
   const dataError = state.error ?? state.spacesError ?? spaceList.error;
   const refreshSpaceList = spaceList.refresh;
@@ -63,6 +65,8 @@ export default function SpacesScreen() {
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);
   const [filter, setFilter] = useState<SpacesTabFilter>("recent");
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterButtonRef = useRef<View>(null);
   const [pinningSpaceId, setPinningSpaceId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -195,8 +199,17 @@ export default function SpacesScreen() {
       ? <EmptyState icon="smartphone" title={t("spaces.empty.device.title")} description={t("spaces.empty.device.body")} action={{ icon: "plus", label: t("spaces.action.create"), onPress: () => { setCreateError(null); setPlacement("device"); setCreateOpen(true); } }} />
       : <EmptyState icon={filter === "pinned" ? "pin" : trimmedQuery ? "search" : "layers"} title={filter === "pinned" ? t("spaces.empty.pinned.title") : trimmedQuery ? t("spaces.empty.matching.title") : t("spaces.empty.none.title")} action={filter === "pinned" || trimmedQuery ? { icon: "x", label: t("spaces.action.clearFilters"), onPress: () => { setFilter("recent"); setQuery(""); } } : undefined} />;
 
+  const filterOptions = [
+    { value: "recent", label: t("spaces.filter.recent"), icon: "clock" },
+    { value: "all", label: t("spaces.filter.all"), icon: "layers" },
+    { value: "pinned", label: t("spaces.filter.pinned"), icon: "pin" },
+    ...(deviceRuntimeSupported ? [{ value: "device", label: t("deviceRuntime.thisDevice"), icon: "smartphone" }] as const : []),
+  ] as const satisfies readonly { value: SpacesTabFilter; label: string; icon: NativeMenuAction["icon"] }[];
+  const filterLabel = filterOptions.find((option) => option.value === filter)?.label ?? t("spaces.filter.recent");
+  // Android menus have no check mark of their own, so the chosen scope trades its glyph for one.
+  const filterActions: NativeMenuAction[] = filterOptions.map((option) => ({ icon: !nativeMenus && option.value === filter ? "check" : option.icon, title: option.label, checked: option.value === filter, onPress: () => setFilter(option.value) }));
   return <Screen edgeToEdge>
-    <EdgeHeader onLayout={onHeaderLayout}>
+    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
     <ExpandableSearchBar
       transparent
       title={t("tabs.spaces")}
@@ -205,11 +218,30 @@ export default function SpacesScreen() {
       onQueryChange={setQuery}
       placeholder={t("spaces.search.placeholder")}
       onCreate={() => { setCreateError(null); setCreateOpen(true); }}
+      filters={<View className="flex-row">
+        {nativeMenus
+          ? <NativeMenuButton appearance="chip" icon="filter" label={t("spaces.filter.label")} title={filterLabel} actions={filterActions} testID="spaces-filter-menu" />
+          : <View ref={filterButtonRef} collapsable={false}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${t("spaces.filter.label")}, ${filterLabel}`}
+              accessibilityState={{ expanded: filterMenuOpen }}
+              hitSlop={{ top: 5, bottom: 5 }}
+              onPress={() => setFilterMenuOpen(true)}
+              className="min-h-8.5 flex-row items-center gap-1.5 rounded-full bg-surface-raised pl-3.5 pr-2.5 active:bg-surface-pressed"
+            >
+              <Text numberOfLines={1} className="text-subhead font-semibold text-fg">{filterLabel}</Text>
+              <AppIcon name="chevron-down" size={14} tone="muted" />
+            </Pressable>
+          </View>}
+      </View>}
     />
     {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>
     <LegendList
       ref={listRef}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       data={listItems}
       extraData={rowExtraData}
       estimatedItemSize={80}
@@ -225,18 +257,13 @@ export default function SpacesScreen() {
       scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
       contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
       ListHeaderComponent={<View className="px-3">
-        <View className="flex-row flex-wrap items-center">
-          <FilterChip label={t("spaces.filter.recent")} selected={filter === "recent"} onPress={() => setFilter("recent")} />
-          <FilterChip label={t("spaces.filter.all")} selected={filter === "all"} onPress={() => setFilter("all")} />
-          <FilterChip label={t("spaces.filter.pinned")} icon="pin" selected={filter === "pinned"} onPress={() => setFilter("pinned")} />
-          {deviceRuntimeSupported ? <FilterChip label={t("deviceRuntime.thisDevice")} icon="smartphone" selected={filter === "device"} onPress={() => setFilter("device")} /> : null}
-        </View>
         {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("spaces.searching")} size="small" color={theme.colors.accent} /></View> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
       </View>}
       ListEmptyComponent={state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null) ? <LoadingRows count={4} /> : dataError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} /> : searchEmpty}
     />
+    {filterMenuOpen ? <AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /> : null}
     <AdaptiveSheet
       visible={createOpen}
       title={pickingFolder ? t("deviceRuntime.chooseFolder") : t("spaces.create.title")}

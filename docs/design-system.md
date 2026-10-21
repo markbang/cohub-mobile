@@ -196,12 +196,11 @@ Touching the bar lifts the lens (it grows, stands off the bar with a shadow, and
 under it) and moves it to the touched tab; dragging slides it across the bar with a selection
 haptic at each tab, stretching with its speed and rubber-banding past either end. Letting go selects
 the tab under the lens, carrying a flick on by at most one tab; the lens drops once it has arrived.
-The bar hugs its 84 pt slots instead of spanning the screen. Height 62.
+The bar hugs its 76 pt slots instead of spanning the screen. Height 62.
 
 ### Chats
-- Header: account avatar · "Chats" · search · new chat (unchanged structure).
-- Filters: one compact segmented row: **All · Running (count) · Done**, plus the source filter
-  icon. The "Done" window moves into the chip as a suffix (`Done · 24h`) instead of a caption line.
+- Header: source filter chip (All / Web app / Other) · search · new chat. The account lives in the
+  Me tab. There are no status filters; row status comes from `AvatarStatus`.
 - Row (`ListRow`, 72 pt): Space avatar 46 with `AvatarStatus`; line 1 = title (fork icon prefix
   when forked) + time; line 2 = `Space name · preview` in `text-subhead`. The separate
   "Forked from…" line and the "Running" pill are removed; labels collapse to at most two

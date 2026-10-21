@@ -19,7 +19,7 @@ export default function ActivityScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout } = useEdgeChrome();
+  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
   const { connectionUnavailable } = useApp();
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -38,10 +38,10 @@ export default function ActivityScreen() {
     }
   };
   return <Screen edgeToEdge>
-    <EdgeHeader onLayout={onHeaderLayout}>
+    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>
-    <ScrollView ref={scrollRef} className="flex-1" contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>

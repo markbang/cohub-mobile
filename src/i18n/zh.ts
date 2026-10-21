@@ -130,22 +130,12 @@ export const zh: Record<TranslationKey, string> = {
   "auth.secure": "通过 Logto 安全登录",
 
   // Chats tab
-  "chats.filter.all": "全部",
-  "chats.filter.running": "进行中",
-  "chats.filter.completed": "已完成",
-  "chats.filter.window": "最近 {window} 内有消息的对话",
   "chats.source.all": "全部",
   "chats.source.web": "网页应用",
   "chats.source.other": "其他",
   "chats.source.title": "对话来源",
   "chats.source.filter": "按来源筛选对话",
   "chats.source.saveFailed": "无法保存对话来源筛选，请重试。",
-  "settings.section.chats": "对话",
-  "settings.chats.window": "最近活动时间范围（分钟）",
-  "settings.chats.range": "1-{max} 分钟",
-  "settings.chats.invalid": "请输入 1 到 {max} 之间的整数。",
-  "settings.chats.saved": "对话筛选已更新",
-  "settings.chats.saveFailed": "无法保存对话筛选，请重试。",
   "chats.searching": "正在搜索 Cohub",
   "chats.empty.matching.title": "没有匹配的对话",
   "chats.empty.matching.body": "试试其他搜索词或筛选条件。",
@@ -156,7 +146,6 @@ export const zh: Record<TranslationKey, string> = {
   "chats.error.title": "对话不可用",
   "chats.error.body": "请检查网络连接和登录状态后重试。",
   "chats.loadingStatuses": "正在加载对话状态",
-  "chats.running.scanning": "仍在检查更早的对话…",
   "chats.search.retry": "重试对话搜索",
 
   // Spaces tab
@@ -164,6 +153,7 @@ export const zh: Record<TranslationKey, string> = {
   "spaces.filter.recent": "最近",
   "spaces.filter.all": "全部",
   "spaces.filter.pinned": "已置顶",
+  "spaces.filter.label": "显示空间",
   "spaces.section.yourWorkspaces": "你的工作区",
   "spaces.searching": "正在搜索 Cohub",
   "spaces.empty.pinned.title": "没有置顶的空间",

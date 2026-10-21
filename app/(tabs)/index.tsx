@@ -1,9 +1,9 @@
-import { useFocusEffect, useIsFocused, useRouter, useScrollToTop } from "expo-router";
+import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
-import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
-import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
+import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionRow } from "@/src/components/SessionRow";
@@ -13,19 +13,16 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, Screen, Segmented } from "@/src/ui";
-import { sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, sessionFilterCutoff } from "@/src/data/session-status";
-import { loadSessionFilterMinutes, loadSessionSourcePreference, saveSessionSourcePreference, useSessionFilterPreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, LoadingRows, Screen } from "@/src/ui";
+import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
-import { emptyRunningSessions, runningSessionCandidates } from "@/src/data/running-sessions";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
-type Filter = "all" | "running" | "completed";
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
   | { kind: "remote-session"; hit: RemoteSessionSearchHit }
@@ -38,16 +35,12 @@ export default function ChatsScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout } = useEdgeChrome();
-  const isFocused = useIsFocused();
-  const { state, client, connectionUnavailable, refreshHome, refreshChats, discoverRunningSessions, requestRunningSessions, releaseRunningSessions, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
-  const filterPreference = useSessionFilterPreference();
-  const [cutoff, setCutoff] = useState(() => sessionFilterCutoff(filterPreference.minutes, Date.now()));
+  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
+  const { state, client, connectionUnavailable, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
   const searchRef = useRef<TextInput>(null);
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
   const sourcePreference = useSessionSourcePreference();
   const sourceFilter = sourcePreference.filter;
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
@@ -62,20 +55,7 @@ export default function ChatsScreen() {
   const sourceSessionList = sourceSessions.sessions;
   const sourceLoadMore = sourceSessions.loadMore;
   const sourceLoadingMore = sourceSessions.loadingMore;
-  const runningQuery = state.runningSessions[sourceFilter] ?? emptyRunningSessions;
-  const knownSessions = sourceFilter === "all" ? state.sessions : sourceSessionList;
-  const baseSessions = useMemo(() => filter === "running" ? runningSessionCandidates(runningQuery.sessions, knownSessions) : knownSessions, [filter, knownSessions, runningQuery.sessions]);
-  const runningVisible = filter === "running";
-  useSyncScope(`running:${sourceFilter}`, () => requestRunningSessions(sourceFilter), 300_000, runningVisible && !state.booting, 0);
-  const runningSourceRef = useRef<typeof sourceFilter | null>(null);
-  useEffect(() => {
-    if (runningVisible) {
-      runningSourceRef.current = sourceFilter;
-      return;
-    }
-    releaseRunningSessions(runningSourceRef.current ?? sourceFilter);
-    runningSourceRef.current = null;
-  }, [runningVisible, sourceFilter, releaseRunningSessions]);
+  const baseSessions = sourceFilter === "all" ? state.sessions : sourceSessionList;
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
@@ -83,50 +63,32 @@ export default function ChatsScreen() {
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
   useSyncScope("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
-  const dataError = (filter === "running" ? runningQuery.error : filterPreference.error ?? state.sessionsError ?? sourceSessions.error) ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
-  const remoteSearch = useRemoteSearch(client, query, { enabled: filter === "all" && sourceFilter === "all", types: CHAT_SEARCH_TYPES });
+  const dataError = state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
+  const remoteSearch = useRemoteSearch(client, query, { enabled: sourceFilter === "all", types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
-  const sessionsRef = useRef(baseSessions);
-  useEffect(() => { sessionsRef.current = baseSessions; }, [baseSessions]);
   useEffect(() => {
     if (sourceFilter === "all" || sourceSessionList.length === 0) return;
     void refreshSessionStatuses(sourceSessionList, { silent: true });
   }, [refreshSessionStatuses, sourceFilter, sourceSessionList]);
-  useFocusEffect(useCallback(() => {
-    if (filter !== "completed" || !filterPreference.loaded) return;
-    const updateCutoff = () => setCutoff(sessionFilterCutoff(filterPreference.minutes, Date.now()));
-    updateCutoff();
-    void refreshSessionStatuses(sessionsRef.current, { silent: true });
-    const timer = setInterval(updateCutoff, 30_000);
-    return () => clearInterval(timer);
-  }, [filter, filterPreference.loaded, filterPreference.minutes, refreshSessionStatuses]));
 
-  // The chip counts exactly what the Running filter would list, not the raw discovery result.
-  const runningCount = useMemo(() => runningSessionCandidates(runningQuery.sessions, knownSessions)
-    .filter((session) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running").length,
-  [knownSessions, runningQuery.sessions, state.sessionLatestTurns, state.sessionTurnStatuses]);
   const localSessions = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
-    return baseSessions.filter((session) => {
-      const matchesFilter = filter === "all" || ((filter === "running" || isSessionInFilterWindow(session, cutoff)) && sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === filter);
-      if (!matchesFilter) return false;
-      if (!needle) return true;
-      return [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false);
-    });
-  }, [baseSessions, cutoff, filter, state.sessionLatestTurns, state.sessionTurnStatuses, trimmedQuery]);
+    if (!needle) return baseSessions;
+    return baseSessions.filter((session) => [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
+  }, [baseSessions, trimmedQuery]);
   const localSpaces = useMemo(() => {
-    if (filter !== "all" || sourceFilter !== "all" || !trimmedQuery) return [];
+    if (sourceFilter !== "all" || !trimmedQuery) return [];
     const needle = trimmedQuery.toLowerCase();
     return state.spaces.filter((space) => [space.name, space.title, space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [filter, sourceFilter, state.spaces, trimmedQuery]);
+  }, [sourceFilter, state.spaces, trimmedQuery]);
   const countSpaceIds = useMemo(() => localSpaces.filter((space) => !space.description?.trim()).map((space) => space.id), [localSpaces]);
   // Search results reuse already-probed counts; they do not fan out probes of their own.
   const spaceSessionCounts = useSpaceSessionCounts(client, countSpaceIds, { probe: false });
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatListItem[]>(() => {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
-    if (!trimmedQuery && filter === "all" && sourceFilter === "all") return buildSessionForkTree(localSessions, sessionForks).map((row) => ({ kind: "local-session", ...row }));
-    if (!trimmedQuery || filter !== "all" || sourceFilter !== "all") return localSessions.map(flatSession);
+    if (!trimmedQuery && sourceFilter === "all") return buildSessionForkTree(localSessions, sessionForks).map((row) => ({ kind: "local-session", ...row }));
+    if (!trimmedQuery || sourceFilter !== "all") return localSessions.map(flatSession);
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
@@ -138,7 +100,7 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [filter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, trimmedQuery]);
+  }, [localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, trimmedQuery]);
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
@@ -147,17 +109,7 @@ export default function ChatsScreen() {
     [spaceSessionCounts, t, theme, prefetchSession],
   );
 
-  const filteringPages = isFocused && client !== null && sourceFilter === "all" && filter === "completed" && filterPreference.loaded && !state.refreshing && !dataError && hasMoreRecentSessions({ hasMore: state.sessionsHasMore, cursor: state.sessionsCursor, boundary: state.sessionsPageBoundary, cutoff });
-  const sourceBoundary = sourceSessionList.at(-1) ?? null;
-  const sourceFilteringPages = isFocused && client !== null && sourceFilter !== "all" && filter === "completed" && filterPreference.loaded && !dataError && hasMoreRecentSessions({ hasMore: sourceSessions.hasMore, cursor: sourceSessions.hasMore ? "more" : null, boundary: sourceBoundary ? { lastMessageAt: sourceBoundary.lastMessageAt } : null, cutoff });
-  const statusesLoading = state.sessionStatusRequests > 0;
-  useEffect(() => {
-    if (filteringPages && !state.refreshing && !state.sessionsLoadingMore && !statusesLoading) void loadMoreSessions();
-  }, [filteringPages, loadMoreSessions, state.refreshing, state.sessionsCursor, state.sessionsLoadingMore, statusesLoading]);
-  useEffect(() => {
-    if (sourceFilteringPages && !sourceLoadingMore && !statusesLoading) sourceLoadMore();
-  }, [sourceFilteringPages, sourceLoadMore, sourceLoadingMore, statusesLoading]);
-  const refresh = () => { if (filter === "running") return discoverRunningSessions(sourceFilter).catch(() => undefined); setCutoff(sessionFilterCutoff(filterPreference.minutes, Date.now())); if (sourceFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return loadSessionFilterMinutes().then(() => refreshHome()).catch(() => undefined); };
+  const refresh = () => { if (sourceFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
   const refreshOnPull = async () => {
     setPullRefreshing(true);
     try {
@@ -171,19 +123,22 @@ export default function ChatsScreen() {
     router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
   };
 
-  const sourceActions: AnchoredMenuAction[] = [
-    { icon: sourceFilter === "all" ? "check" : "messages", title: t("chats.source.all"), onPress: () => selectSource("all") },
-    { icon: sourceFilter === "web" ? "check" : "globe", title: t("chats.source.web"), onPress: () => selectSource("web") },
-    { icon: sourceFilter === "other" ? "check" : "globe", title: t("chats.source.other"), onPress: () => selectSource("other") },
-  ];
-  const hasActiveFilter = Boolean(trimmedQuery) || filter !== "all" || sourceFilter !== "all";
+  const sourceOptions = [
+    { value: "all", label: t("chats.source.all"), icon: "messages" },
+    { value: "web", label: t("chats.source.web"), icon: "globe" },
+    { value: "other", label: t("chats.source.other"), icon: "globe" },
+  ] as const satisfies readonly { value: SessionSourceFilter; label: string; icon: NativeMenuAction["icon"] }[];
+  const sourceLabel = sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
+  // Android menus have no check mark of their own, so the chosen source trades its glyph for one.
+  const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: !nativeMenus && option.value === sourceFilter ? "check" : option.icon, title: option.label, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
+  const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <View className="min-h-45 flex-1 items-center justify-center"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View>
-    : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); setFilter("all"); selectSource("all"); } } : undefined} />;
+    : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
     <Screen edgeToEdge>
-      <EdgeHeader onLayout={onHeaderLayout}>
+      <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <ExpandableSearchBar
         transparent
         title={t("tabs.chats")}
@@ -191,38 +146,23 @@ export default function ChatsScreen() {
         query={query}
         onQueryChange={setQuery}
         queryRef={searchRef}
-        filters={
-          <View className="flex-row items-center gap-1">
-            <Segmented<Filter>
-              className="min-w-0 flex-1"
-              size="compact"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: t("chats.filter.all") },
-                { value: "running", label: runningQuery.loaded && runningCount > 0 ? `${t("chats.filter.running")} ${runningCount}` : t("chats.filter.running") },
-                { value: "completed", label: t("chats.filter.completed") },
-              ]}
-            />
-            {nativeMenus ? <View className="size-11 items-center justify-center">
-              <NativeMenuButton appearance="plain" icon="filter" label={t("chats.source.filter")} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu" />
-            </View> : <View ref={sourceButtonRef} collapsable={false}>
+        filters={<View className="flex-row">
+          {nativeMenus
+            ? <NativeMenuButton appearance="chip" icon="filter" label={t("chats.source.filter")} title={sourceLabel} actions={sourceActions} testID="chats-source-menu" />
+            : <View ref={sourceButtonRef} collapsable={false}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={t("chats.source.filter")}
-                accessibilityState={{ expanded: sourceMenuOpen, selected: sourceFilter !== "all" }}
+                accessibilityLabel={`${t("chats.source.filter")}, ${sourceLabel}`}
+                accessibilityState={{ expanded: sourceMenuOpen }}
+                hitSlop={{ top: 5, bottom: 5 }}
                 onPress={() => setSourceMenuOpen(true)}
-                className="size-11 items-center justify-center"
+                className={`min-h-8.5 flex-row items-center gap-1.5 rounded-full pl-3.5 pr-2.5 ${sourceFilter !== "all" ? "bg-accent-soft active:bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"}`}
               >
-                {({ pressed }) => (
-                  <View className={`size-8 items-center justify-center overflow-hidden rounded-full ${pressed ? "bg-surface-pressed" : sourceFilter !== "all" ? "bg-accent-soft" : ""}`}>
-                    <AppIcon name="filter" size={17} tone={sourceFilter !== "all" ? "accent" : "muted"} />
-                  </View>
-                )}
+                <Text numberOfLines={1} className={`text-subhead font-semibold ${sourceFilter !== "all" ? "text-accent" : "text-fg"}`}>{sourceLabel}</Text>
+                <AppIcon name="chevron-down" size={14} tone={sourceFilter !== "all" ? "accent" : "muted"} />
               </Pressable>
             </View>}
-          </View>
-        }
+        </View>}
         onCreate={() => router.push("/new-chat")}
       />
       <ConnectionBanner visible={connectionUnavailable} />
@@ -230,6 +170,8 @@ export default function ChatsScreen() {
       </EdgeHeader>
       <LegendList
         ref={listRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         data={listItems}
         extraData={rowExtraData}
         estimatedItemSize={80}
@@ -246,7 +188,7 @@ export default function ChatsScreen() {
         keyboardShouldPersistTaps="handled"
         refreshing={pullRefreshing}
         onRefresh={refreshOnPull}
-        onEndReached={() => { if (trimmedQuery || filter === "running") return; if (sourceFilter !== "all") { sourceLoadMore(); return; } if (filter === "all") void loadMoreSessions(); }}
+        onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         contentInsetAdjustmentBehavior="never"
         progressViewOffset={headerHeight}
@@ -254,12 +196,10 @@ export default function ChatsScreen() {
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">
           {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
-          {filter === "completed" && filterPreference.loaded ? <Text className="px-1 pt-1 text-caption text-fg-faint">{t("chats.filter.window", { window: formatWindow(filterPreference.minutes) })}</Text> : null}
-          {filter === "running" && runningQuery.loading && runningQuery.loaded && runningQuery.sessions.length > 0 ? <Text accessibilityLiveRegion="polite" className="text-caption text-fg-faint">{t("chats.running.scanning")}</Text> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}
-        ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (filter === "running" ? !runningQuery.loaded : (filter === "completed" && (state.refreshing || !filterPreference.loaded || statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized))) ? <LoadingRows count={5} /> : searchEmpty}
-        ListFooterComponent={!dataError && (filter === "running" ? runningQuery.loading : (state.sessionsLoadingMore || (filter !== "all" && (statusesLoading || filteringPages)) || (sourceFilter !== "all" && (sourceLoadingMore || (filter !== "all" && (statusesLoading || sourceFilteringPages)))))) ? <View className="items-center py-4.5"><ActivityIndicator accessibilityLabel={t("chats.loadingStatuses")} size="small" color={theme.colors.accent} /></View> : null}
+        ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
+        ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <View className="items-center py-4.5"><ActivityIndicator accessibilityLabel={t("chats.loadingStatuses")} size="small" color={theme.colors.accent} /></View> : null}
       />
       {sourceMenuOpen ? <AnchoredActionMenu
         anchorRef={sourceButtonRef}
@@ -272,9 +212,3 @@ export default function ChatsScreen() {
   );
 }
 
-/** The completion window as a chip suffix in its largest exact unit: 90m, 24h, 7d. */
-function formatWindow(minutes: number) {
-  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
-  if (minutes % 60 === 0) return `${minutes / 60}h`;
-  return `${minutes}m`;
-}

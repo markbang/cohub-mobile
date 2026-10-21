@@ -3,7 +3,6 @@ import type { IconName } from "../icons";
 
 export const settingsSections = {
   profile: { labelKey: "settings.section.profile", icon: "user" },
-  chats: { labelKey: "settings.section.chats", icon: "messages" },
   notifications: { labelKey: "settings.section.notifications", icon: "bell" },
   channels: { labelKey: "settings.section.channels", icon: "messages" },
   rules: { labelKey: "settings.section.rules", icon: "file-text" },
@@ -27,7 +26,7 @@ export const settingsMenu = [
     { labelKey: "profile.language.title", icon: "globe", href: "/language" },
     { labelKey: "settings.browser.title", icon: "external-link", href: "/settings/browser" },
   ] },
-  { labelKey: "settings.group.workspace", items: (["chats", "notifications", "channels", "rules"] as const).map((section) => ({
+  { labelKey: "settings.group.workspace", items: (["notifications", "channels", "rules"] as const).map((section) => ({
     ...settingsSections[section], href: `/settings/${section}` as const,
   })) },
   { labelKey: "settings.group.app", items: [

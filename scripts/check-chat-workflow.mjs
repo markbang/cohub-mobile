@@ -731,16 +731,6 @@ for (const [tab, component, expectedRequests] of [
         }
       }
     }
-    state.sessions = [runningFixture];
-    state.runningSessions.all = { ...emptyRunningSessions, loading: true };
-    chromeNodes(render().find((node) => node.type === "ExpandableSearchBar").props.filters).find((node) => node.type === "Segmented").props.onChange("running");
-    assert.deepEqual(control().props.data.map((row) => row.session.id), [runningFixture.id], "Running immediately uses known active rows, even years outside the time window");
-    assert.ok(control().props.ListFooterComponent, "a partial Running result still indicates an unfinished account scan");
-    const laterPage = { ...runningFixture, id: "older-page-running", activeTurn: { id: "older-turn", status: "running" } };
-    state.runningSessions.all = { ...emptyRunningSessions, loading: true, sessions: [laterPage] };
-    assert.deepEqual(new Set(control().props.data.map((row) => row.session.id)), new Set([runningFixture.id, laterPage.id]), "later discovery pages append without hiding known rows");
-    state.sessionTurnStatuses.active = { id: "active", sequence: 1, status: "completed", updatedAt: "2026-09-16T01:00:00Z" };
-    assert.deepEqual(control().props.data.map((row) => row.session.id), [laterPage.id], "a known terminal turn is not resurrected by the immediate candidate list");
   }
   if (tab === "spaces") {
     const list = control();
@@ -1363,9 +1353,9 @@ for (const isPinned of [false, true]) {
   }
 }
 
-// Spaces also uses the capsule for the create sheet's Cloud / This device choice.
+// Spaces uses the capsule for the create sheet's Cloud / This device choice.
 for (const [path, labels, chips] of [
-  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 6],
+  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 2],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/);
@@ -1412,12 +1402,14 @@ for (const [path, labels, chips] of [
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
     EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
+    nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu",
   });
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
-  const deviceChip = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "FilterChip" && node.props.icon === "smartphone");
-  deviceChip().props.onPress();
-  assert.equal(deviceChip().props.selected, true);
+  chromeNodes(render().find((node) => node.type === "ExpandableSearchBar").props.filters).find((node) => node.type === "Pressable").props.onPress();
+  const deviceAction = () => render().find((node) => node.type === "AnchoredActionMenu").props.actions.find((action) => action.title === "deviceRuntime.thisDevice");
+  deviceAction().onPress();
+  assert.equal(deviceAction().checked, true);
   assert.deepEqual(list().props.data.map((item) => [item.kind, item.instance.spaceId, item.space?.name ?? null]), [["device", "space-a", "Field notes"], ["device", "space-gone", null]], "only served Spaces are listed; an unloaded one stays manageable");
   const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] }))[0];
   assert.equal(row.type, "DeviceSpaceRow");
@@ -2376,40 +2368,11 @@ function loadPreferenceModule(storage) {
   const exports = {};
   new Function("require", "exports", preferenceSource)((name) => {
     if (name === "@react-native-async-storage/async-storage") return storage;
-    if (name === "./session-status") return { DEFAULT_SESSION_FILTER_MINUTES, parseSessionFilterMinutes };
     if (name === "react") return {};
     throw new Error(`Unexpected preference dependency: ${name}`);
   }, exports);
   return exports;
 }
-let storedFilterMinutes = null;
-let rejectPreferenceWrite = false;
-const filterStorage = {
-  getItem: async () => storedFilterMinutes,
-  setItem: async (_key, value) => {
-    if (rejectPreferenceWrite) throw new Error("Storage unavailable");
-    storedFilterMinutes = value;
-  },
-};
-const filterPreference = loadPreferenceModule(filterStorage);
-assert.equal(await filterPreference.loadSessionFilterMinutes(), 30, "missing preference defaults to 30 minutes");
-await filterPreference.saveSessionFilterMinutes(45);
-assert.equal(storedFilterMinutes, "45");
-assert.equal(await filterPreference.loadSessionFilterMinutes(), 45);
-assert.equal(await loadPreferenceModule(filterStorage).loadSessionFilterMinutes(), 45, "a new module instance restores the saved window");
-rejectPreferenceWrite = true;
-await assert.rejects(filterPreference.saveSessionFilterMinutes(90), /Storage unavailable/);
-assert.equal(await filterPreference.loadSessionFilterMinutes(), 45, "failed saves do not replace the active preference");
-await assert.rejects(filterPreference.saveSessionFilterMinutes(0), /whole number/);
-let finishPreferenceRead;
-const concurrentPreference = loadPreferenceModule({ ...filterStorage, getItem: () => new Promise((resolve) => { finishPreferenceRead = resolve; }), setItem: async () => {} });
-const pendingPreferenceRead = concurrentPreference.loadSessionFilterMinutes();
-await concurrentPreference.saveSessionFilterMinutes(90);
-finishPreferenceRead("15");
-assert.equal(await pendingPreferenceRead, 90, "a late stored snapshot cannot overwrite a user save");
-const invalidPreference = loadPreferenceModule({ ...filterStorage, getItem: async () => "30minutes" });
-await assert.rejects(invalidPreference.loadSessionFilterMinutes(), /whole number/);
-
 let storedSource = null;
 const sourceStorage = { getItem: async () => storedSource, setItem: async (_key, value) => { storedSource = value; } };
 const sourcePreference = loadPreferenceModule(sourceStorage);
