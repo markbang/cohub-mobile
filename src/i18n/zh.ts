@@ -639,6 +639,7 @@ export const zh: Record<TranslationKey, string> = {
   "chat.copyTitleFailed.title": "复制失败",
   "chat.copyTitleFailed.body": "无法复制对话标题。",
   "chat.loadNewer": "加载更新的轮次",
+  "chat.catchingUp": "正在加载新消息",
   "chat.loadNewer.short": "更新",
   "chat.loadOlder": "加载更早的轮次",
   "chat.loadOlder.short": "更早",

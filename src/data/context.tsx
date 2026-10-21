@@ -225,6 +225,7 @@ const emptyView = (): SessionView => ({
   newestCursor: null,
   loading: false,
   refreshing: false,
+  catchingUp: false,
   sending: false,
   error: null,
   stream: null,
@@ -288,7 +289,7 @@ type Action =
   | { type: "session-cache"; sessionId: string; messages: MessageRecord[] }
   | { type: "session-success"; sessionId: string; space: SpaceRecord; session: SessionRecord; messages: MessageRecord[]; turns: SessionTurnRecord[]; hasMoreOlder: boolean; hasMoreNewer?: boolean; oldestCursor?: number | null; newestCursor?: number | null }
   | { type: "session-error"; sessionId: string; message: string }
-  | { type: "session-refresh-start"; sessionId: string; silent?: boolean }
+  | { type: "session-refresh-start"; sessionId: string; silent?: boolean; catchUp?: boolean }
   | { type: "session-refresh-end"; sessionId: string; silent?: boolean; session?: SessionRecord; messages?: MessageRecord[]; turns?: SessionTurnRecord[]; hasMoreOlder?: boolean; hasMoreNewer?: boolean; oldestCursor?: number | null; newestCursor?: number | null; error?: string }
   | { type: "session-page-start"; sessionId: string; direction: "older" | "newer" }
   | { type: "session-page-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMore: boolean; direction: "older" | "newer" }
@@ -571,6 +572,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "session-start":
       return updateView(state, action.sessionId, {
         loading: true,
+        catchingUp: false,
         historyLoaded: false,
         loadingOlder: false,
         loadingNewer: false,
@@ -584,7 +586,7 @@ function reducer(state: AppState, action: Action): AppState {
         session: action.session,
       });
     case "session-cache":
-      return updateView(state, action.sessionId, { messages: action.messages, loading: false });
+      return updateView(state, action.sessionId, { messages: action.messages, loading: false, catchingUp: true });
     case "session-success": {
       const session = preferNewerSession(
         state.sessionViews[action.sessionId]?.session,
@@ -607,6 +609,7 @@ function reducer(state: AppState, action: Action): AppState {
         {
           loading: false,
           refreshing: false,
+          catchingUp: false,
           error: null,
           space: action.space,
           session,
@@ -623,9 +626,9 @@ function reducer(state: AppState, action: Action): AppState {
       );
     }
     case "session-error":
-      return updateView(state, action.sessionId, { loading: false, refreshing: false, error: action.message });
+      return updateView(state, action.sessionId, { loading: false, refreshing: false, catchingUp: false, error: action.message });
     case "session-refresh-start":
-      return updateView(state, action.sessionId, action.silent ? { error: null } : { refreshing: true, error: null });
+      return updateView(state, action.sessionId, { ...(action.silent ? {} : { refreshing: true }), ...(action.catchUp ? { catchingUp: true } : {}), error: null });
     case "session-refresh-end": {
       const current = state.sessionViews[action.sessionId];
       const session = action.session && current?.session
@@ -642,6 +645,7 @@ function reducer(state: AppState, action: Action): AppState {
       });
       return updateView(action.turns ? updateLatestTurn(state, action.sessionId, tail) : state, action.sessionId, {
         ...(action.silent ? {} : { refreshing: false }),
+        catchingUp: false,
         ...(session ? { session } : {}),
         ...(action.messages ? { messages: action.messages } : {}),
         ...(action.turns ? { turns: action.turns, historyLoaded: true } : {}),
@@ -863,7 +867,7 @@ export type AppContextValue = {
   openSession: (sessionId: string) => Promise<void>;
   prefetchSession: (sessionId: string) => void;
   closeSession: (sessionId: string) => void;
-  refreshSession: (sessionId: string, options?: { silent?: boolean; throwOnError?: boolean }) => Promise<void>;
+  refreshSession: (sessionId: string, options?: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean }) => Promise<void>;
   loadOlderTurns: (sessionId: string) => Promise<void>;
   loadNewerTurns: (sessionId: string) => Promise<void>;
   loadTurnIndex: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
@@ -1587,7 +1591,7 @@ export function AppProvider({
   }, []);
 
   const refreshSession = useCallback(
-    async (sessionId: string, options: { silent?: boolean; throwOnError?: boolean } = {}) => {
+    async (sessionId: string, options: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean } = {}) => {
       if (!client) return;
       const view = stateRef.current.sessionViews[sessionId];
       // A failed initial detail read needs discovery and subscriptions, not just a history refresh.
@@ -1604,7 +1608,7 @@ export function AppProvider({
       const request = (async () => {
       markChatEntry("refresh.start", { silent: Boolean(options.silent) });
       // Recovery resyncs must not flash the pull-to-refresh spinner.
-      dispatch({ type: "session-refresh-start", sessionId, ...(options.silent ? { silent: true } : {}) });
+      dispatch({ type: "session-refresh-start", sessionId, ...(options.silent ? { silent: true } : {}), ...(options.catchUp ? { catchUp: true } : {}) });
       try {
         const response = await withTimeout(client.space(spaceId).session(sessionId).turns.listPaginated({ limit: 30 }), "Loading Chat");
         if (!isCurrentRequest()) return;
@@ -1904,7 +1908,7 @@ export function AppProvider({
     const spaceId = sessionSpaces.current.get(sessionId);
     if (!activeClient || !spaceId || !subscriptions.current.has(sessionId)) return;
     attachSessionRealtime(activeClient, spaceId, sessionId);
-    await refreshSession(sessionId, { silent: true });
+    await refreshSession(sessionId, { silent: true, catchUp: true });
   }, [attachSessionRealtime, refreshSession]);
 
   useEffect(() => {
@@ -1923,7 +1927,7 @@ export function AppProvider({
         recordSpaceVisit(view.space.id);
         // Memory already owns the history window; disk hydration would replace newer live messages.
         attachSessionRealtime(client, view.space.id, sessionId);
-        await refreshSession(sessionId, { silent: true });
+        await refreshSession(sessionId, { silent: true, catchUp: true });
         return;
       }
       dispatch({ type: "session-start", sessionId, session: summary ?? null });

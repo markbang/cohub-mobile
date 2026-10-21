@@ -663,6 +663,7 @@ export const en = {
   "chat.copyTitleFailed.title": "Copy failed",
   "chat.copyTitleFailed.body": "Unable to copy this Chat title.",
   "chat.loadNewer": "Load newer turns",
+  "chat.catchingUp": "Loading new messages",
   "chat.loadNewer.short": "Later",
   "chat.loadOlder": "Load earlier turns",
   "chat.loadOlder.short": "Earlier",

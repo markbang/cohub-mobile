@@ -2320,7 +2320,7 @@ const reopenScope = {
   userKey: "test-user",
   recordSpaceVisit: () => {},
   attachSessionRealtime: () => { reopenAttachments += 1; },
-  refreshSession: async (_id, options) => { assert.equal(options.silent, true); reopenRefreshes += 1; },
+  refreshSession: async (_id, options) => { assert.equal(options.silent, true); assert.equal(options.catchUp, true, "a warm open shows the catch-up state while the tail reconciles"); reopenRefreshes += 1; },
   messagesFromTurns: () => [],
   isLiveMessage: () => false,
   mergeDisplayMessages: (messages) => messages,
@@ -3397,6 +3397,7 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", TurnMarker: "TurnMarker", LiveReply: "LiveReply",
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
+  Animated: { View: "AnimatedView" }, arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, ARRIVAL_STYLE: {}, ARRIVAL_STYLE_REDUCED: {},
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -3413,7 +3414,8 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
 assert.equal(typeof ownerRow.props.onLayout, "function");
-assert.deepEqual(ownerRow.props.children.filter((child) => child?.type === "MessageBubble" || child?.type === "LiveReply").map((child) => child.type), ["MessageBubble", "LiveReply"]);
+assert.equal(ownerRow.props.children.length, 1, "the measured row has one content wrapper, so the catch-up fade never remounts its children");
+assert.deepEqual(ownerRow.props.children[0].props.children.filter((child) => child?.type === "MessageBubble" || child?.type === "LiveReply").map((child) => child.type), ["MessageBubble", "LiveReply"]);
 assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 })).filter((node) => node.type === "LiveReply").length, 0);
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
@@ -3838,6 +3840,33 @@ const reduceQueueFailure = new Function("isOptimisticFollowup", "recordDebugEven
 const failedQueuedMessage = { id: "upload", role: "user", meta: { optimistic: true, queuedFollowup: true, clientMessageId: "failed" } };
 const queueFailure = reduceQueueFailure({ sessionViews: { fixture: { messages: [failedQueuedMessage] } } }, { type: "send-failed", sessionId: "fixture", clientMessageId: "failed", message: "Upload failed" });
 assert.deepEqual(queueFailure.sessionViews.fixture.messages, [], "failed queued uploads return to the composer, not a failed message bubble");
+const cachedOpen = reduceQueueFailure({ sessionViews: { fixture: { messages: [], catchingUp: false } } }, { type: "session-cache", sessionId: "fixture", messages: [{ id: "cached" }] });
+assert.equal(cachedOpen.sessionViews.fixture.catchingUp, true, "cached history on screen waits visibly for the server tail");
+assert.equal(reduceQueueFailure(cachedOpen, { type: "session-start", sessionId: "fixture" }).sessionViews.fixture.catchingUp, false, "a restarted open does not inherit an abandoned catch-up");
+assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: false } } }, { type: "session-refresh-start", sessionId: "fixture", silent: true, catchUp: true }).sessionViews.fixture.catchingUp, true);
+assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: false } } }, { type: "session-refresh-start", sessionId: "fixture", silent: true }).sessionViews.fixture.catchingUp, false, "the periodic tail poll must not flash the catch-up loader");
+assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } } }, { type: "session-error", sessionId: "fixture", message: "x" }).sessionViews.fixture.catchingUp, false);
+{
+  // The response replaces messages and clears catchingUp in one commit, so the baseline must
+  // already exist in that render or the new rows paint once before they could fade in.
+  const slots = [];
+  let cursor = 0;
+  let pendingRender = false;
+  const hooks = {
+    useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; pendingRender = true; }]; },
+    useEffect: () => {},
+  };
+  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800 });
+  const isCatchUpArrival = loadChromeComponent("../src/components/use-chat-catch-up.ts", "isCatchUpArrival", {});
+  const render = (catchingUp, messages) => { let result; do { pendingRender = false; cursor = 0; result = catchUpHook(catchingUp, messages); } while (pendingRender); return result; };
+  const cached = [{ id: "a" }, { id: "b" }];
+  assert.equal(render(true, cached).showLoader, false, "a catch-up shows its loader only after the delay");
+  const landed = render(false, [...cached, { id: "c" }, { id: "local", meta: { optimistic: true } }]);
+  assert.ok(landed.arrivalBaseline, "the arrival baseline survives the commit that ends the catch-up");
+  assert.deepEqual([...cached, { id: "c" }, { id: "local", meta: { optimistic: true } }].filter((message) => isCatchUpArrival(landed.arrivalBaseline, message)).map((message) => message.id), ["c"], "only rows the response added fade in; local sends keep their own entrance");
+  slots.length = 0;
+  assert.equal(render(true, []).arrivalBaseline, null, "a cold open with nothing on screen has nothing to arrive after");
+}
 const cachedSends = [];
 const saveQueueMessages = loadChromeComponent("../src/data/local-db.ts", "saveMessages", {
   isOptimisticFollowup,

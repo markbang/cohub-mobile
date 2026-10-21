@@ -78,6 +78,8 @@ export type SessionView = {
   newestCursor: number | null;
   loading: boolean;
   refreshing: boolean;
+  /** Earlier history is on screen while the request for what arrived since is in flight. */
+  catchingUp: boolean;
   sending: boolean;
   error: string | null;
   stream: StreamView | null;
