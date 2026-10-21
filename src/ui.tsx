@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { G, Path, Rect } from "react-native-svg";
 import { ClaudeCode, CodeBuddy, Codex, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { icons, type IconName } from "@/src/icons";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -34,7 +34,12 @@ import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame"
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import { LIST_AVATAR_SIZE, type ColorKey } from "@/src/design/tokens";
-import { motion } from "@/src/motion";
+import { motion, springs } from "@/src/motion";
+import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
+import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
+import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
+import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
@@ -99,14 +104,23 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
         : <View className="items-center justify-center bg-accent-soft" style={shape}>
           <Text className="font-semibold text-accent" style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}>{initials(name)}</Text>
         </View>}
-      {online ? <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-success" /> : null}
+      {online ? <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-success" /> : null}
     </View>
   );
 }
 
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+/** Icon buttons in a top bar's actions draw filled unless they say otherwise. */
+const BarButtonContext = createContext(false);
+
+/** `filled` draws the glyph on a solid circle, for bar buttons over content; an accent one fills with the accent. */
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+  const theme = useAppTheme();
+  const inBar = useContext(BarButtonContext);
+  const filled = filledProp ?? inBar;
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
+  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" ? "accent" : tone === "danger" ? "danger" : filled ? "fg" : "secondary";
+  const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
       accessibilityRole="button"
@@ -119,13 +133,21 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       onPressOut={onPressOut}
       onTouchCancel={onTouchCancel}
       onPress={(event) => { traceAction("icon", { label, id: testID ?? name }); onPress(event); }}
-      className={`items-center justify-center rounded-full disabled:opacity-45 ${tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
+      className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
       style={{ width: target, height: target }}
     >
-      <AppIcon name={name} size={Math.round(Math.min(size, 44) * 0.5)} tone={tone === "accent" ? "accent" : tone === "danger" ? "danger" : "secondary"} />
+      {filled
+        ? ({ pressed }) => <View className="size-9 items-center justify-center" style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
+          {/* Glass where the platform draws it; an accent button is glass tinted with the accent. */}
+          <GlassBackground radius={18} tint={tone === "accent" ? theme.colors.accent : undefined} />
+          {icon}
+        </View>
+        : icon}
     </Pressable>
   );
 }
+
+const FILLED_ICON_SIZE = 18;
 
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
   const theme = useAppTheme();
@@ -180,17 +202,40 @@ type TopBarProps = {
   titleRef?: RefObject<View | null>;
   onTitleLongPress?: () => void;
   titleLongPressLabel?: string;
+  /** The title's long-press menu as the iOS system context menu; Android keeps `onTitleLongPress`. */
+  titleMenu?: { menu: string; actions: readonly NativeMenuAction[] };
+  /** A Large Title: the buttons keep the bar and the title sits below it. */
+  large?: boolean;
+  /**
+   * Tab roots: the bar holds only its buttons, since the selected tab already names the screen.
+   * The title stays as the screen reader's header.
+   */
+  titleHidden?: boolean;
 };
 
-export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel }: TopBarProps) {
+export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false }: TopBarProps) {
   const { t } = useTranslation();
   const titleContent = children ?? <>
     <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
     {subtitle ? <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
+  if ((large || titleHidden) && !children) return (
+    <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
+      <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
+        {onBack ? <IconButton filled name="arrow-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
+        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
+      </View>
+      {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
+        <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-bold text-fg">{title}</Text>
+        {subtitle ? <Text numberOfLines={1} className="text-subhead text-fg-muted">{subtitle}</Text> : null}
+      </View>}
+    </View>
+  );
   return (
     <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1.5 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
+        filled
         name="arrow-left"
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
@@ -199,9 +244,9 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
       /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
       <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1">
-        {onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
+        {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View className="shrink-0 flex-row items-center">{actions}</View> : null}
+      {actions ? <View className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
     </View>
   );
 }
@@ -219,7 +264,7 @@ export function SettingsGroup({ label, children }: { label?: string; children: R
 export function SectionHeader({ title, action }: { title: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   return (
     <View className={`flex-row items-center justify-between pl-4 pt-6 ${action ? "pr-1" : "min-h-12 pb-2 pr-4"}`}>
-      <Text accessibilityRole="header" className="flex-1 text-caption font-semibold text-fg-muted">{title}</Text>
+      <Text accessibilityRole="header" className="flex-1 text-headline font-bold text-fg">{title}</Text>
       {action ? <IconButton name={action.icon} label={action.label} onPress={action.onPress} tone="accent" /> : null}
     </View>
   );
@@ -248,8 +293,8 @@ export function StatusPill({ label, tone = "neutral", dot = true }: { label: str
 export function EmptyState({ icon, title, description, action }: { icon: IconName; title: string; description?: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   return (
     <View className="min-h-64 flex-1 items-center justify-center px-6">
-      <View className="size-14 items-center justify-center rounded-full bg-surface-raised">
-        <AppIcon name={icon} size={24} tone="muted" />
+      <View className="size-18 items-center justify-center rounded-full bg-accent-soft">
+        <AppIcon name={icon} size={30} tone="accent" strokeWidth={1.8} />
       </View>
       <Text className="mt-4 text-center text-headline font-semibold text-fg">{title}</Text>
       {description ? <Text className="mt-1.5 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}
@@ -271,7 +316,7 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   // The danger fill is a token pair; its foreground is not one of the icon tones.
   const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-12 flex-row items-center justify-center gap-2 rounded-sm px-4.5 disabled:opacity-55 ${classes.box} ${className}`} style={[CONTINUOUS, style]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
       {loading ? <ActivityIndicator color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} size="small" /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
       <Text className={`shrink text-body font-semibold ${classes.text}`}>{label}</Text>
     </Pressable>
@@ -292,10 +337,36 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
 
 export type SegmentOption<T extends string> = { value: T; label: string; icon?: IconName; locked?: boolean };
 
-/** Mutually exclusive choices: a filled track with the selected segment raised above it. */
-export function Segmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: { options: readonly SegmentOption<T>[]; value: T; onChange: (value: T) => void; disabled?: boolean; onLocked?: () => void; className?: string }) {
+// A capsule track holding capsule segments: concentric at any height, since both corners are full.
+const SEGMENT_INSET = 3;
+const SEGMENT_CORNER = { borderRadius: 999 } as const;
+const SEGMENT_THUMB_STYLE = { ...SEGMENT_CORNER, top: SEGMENT_INSET, bottom: SEGMENT_INSET, left: SEGMENT_INSET } as const;
+
+type SegmentedProps<T extends string> = { options: readonly SegmentOption<T>[]; value: T; onChange: (value: T) => void; disabled?: boolean; onLocked?: () => void; className?: string };
+
+/** Mutually exclusive choices: the system segmented control on iOS, the drawn one elsewhere. */
+export function Segmented<T extends string>(props: SegmentedProps<T>) {
+  return nativeSegmented ? <NativeSegmented {...props} /> : <DrawnSegmented {...props} />;
+}
+
+/** A capsule track with the selected choice on an accent thumb that slides between them. */
+function DrawnSegmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: SegmentedProps<T>) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const segmentWidth = trackWidth > 0 ? (trackWidth - SEGMENT_INSET * 2) / options.length : 0;
+  const thumbX = useSharedValue(0);
+  const placedWidth = useRef(0);
+  useEffect(() => {
+    if (segmentWidth <= 0 || selectedIndex < 0) return;
+    const x = selectedIndex * segmentWidth;
+    // A first placement or a resize re-seats the thumb; only a change of choice slides.
+    if (placedWidth.current !== segmentWidth) { placedWidth.current = segmentWidth; thumbX.set(x); return; }
+    thumbX.set(withSpring(x, springs.indicator));
+  }, [segmentWidth, selectedIndex, thumbX]);
+  const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: thumbX.get() }] }));
   return (
-    <View accessibilityRole="radiogroup" className={`min-h-11 flex-row rounded-sm bg-surface-raised p-0.5 ${className}`} style={CONTINUOUS}>
+    <View accessibilityRole="radiogroup" onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} className={`min-h-12 flex-row rounded-full bg-surface-raised ${className}`} style={{ padding: SEGMENT_INSET }}>
+      {segmentWidth > 0 && selectedIndex >= 0 ? <Animated.View pointerEvents="none" className="absolute bg-accent" style={[SEGMENT_THUMB_STYLE, { width: segmentWidth }, thumbStyle]} /> : null}
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -311,11 +382,11 @@ export function Segmented<T extends string>({ options, value, onChange, disabled
               if (option.locked) { onLocked?.(); return; }
               if (!selected) onChange(option.value);
             }}
-            className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 rounded-sm px-2 ${selected ? "bg-surface" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
-            style={CONTINUOUS}
+            className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            style={SEGMENT_CORNER}
           >
-            {option.icon ? <AppIcon name={option.icon} size={15} tone={selected ? "accent" : "muted"} /> : null}
-            <Text numberOfLines={1} className={`shrink text-caption ${selected ? "font-semibold text-fg" : "text-fg-secondary"}`}>{option.label}</Text>
+            {option.icon ? <AppIcon name={option.icon} size={15} tone={selected ? "onAccent" : "muted"} /> : null}
+            <Text numberOfLines={1} className={`shrink text-subhead ${selected ? "font-semibold text-on-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -339,7 +410,7 @@ export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-
 
 /** Skeleton in the exact shape of `ListRow`, so content replaces it without a jump. */
 export function LoadingRows({ count = 5 }: { count?: number }) {
-  return <View accessibilityLabel="Loading" className="px-4">{Array.from({ length: count }).map((_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3.5 py-3">
+  return <View accessibilityLabel="Loading">{Array.from({ length: count }).map((_, index) => <View key={index} className="mx-4 mb-2 min-h-18 flex-row items-center gap-3.5 rounded-md bg-surface px-4 py-3" style={CONTINUOUS}>
     <View className="bg-surface-raised" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderRadius: LIST_AVATAR_SIZE * 0.3, borderCurve: "continuous" }} />
     <View className="flex-1 gap-2">
       <View className="h-3 rounded-full bg-surface-raised" style={{ width: `${58 + (index % 3) * 10}%` }} />
@@ -350,12 +421,12 @@ export function LoadingRows({ count = 5 }: { count?: number }) {
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
-export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void }) {
+export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { height: windowHeight, fontScale } = useWindowDimensions();
-  const [focused, setFocused] = useState(false);
+  const material = useGlassMaterial();
   const [keyboardTop, setKeyboardTop] = useState<number | null>(() => { const frame = Keyboard.metrics(); return frame && isUsableKeyboardFrame(frame) ? frame.screenY : null; });
   const [expanded, setExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
@@ -405,7 +476,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   return (
     <View style={[styles.composerWrap, { paddingBottom: (Platform.OS === "android" && keyboardVisible ? 0 : insets.bottom) + 10 }]}>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" className="gap-2 overflow-hidden rounded-lg bg-surface p-2" style={[{ borderWidth: 1, borderCurve: "continuous", borderColor: focused ? theme.colors.borderStrong : theme.colors.border }]}>
+      {/* Glyphs pop only when they change, not when the composer first appears. */}
+      <LayoutAnimationConfig skipEntering>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
+        <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-surface" />
         <View className="flex-row items-start">
           <TextInput
             ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
@@ -458,8 +532,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               }
               onSelectionChange?.(event.nativeEvent.selection);
             }}
-            onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); setFocused(true); onFocusChange?.(true); }}
-            onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); setFocused(false); onFocusChange?.(false); }}
+            onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
+            onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
             submitBehavior="newline"
           />
           <View className="w-11 h-11">
@@ -474,8 +548,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-1.5">
-          <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Pressable>
-          {showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
+          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
+          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
             <AppIcon name="chevron-down" size={13} tone="muted" />
@@ -489,10 +563,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           <View className="flex-1 min-w-0" />
           {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
-            {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+            <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering}>
+              {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+            </Animated.View>
           </Pressable>
         </View>
       </View>
+      </LayoutAnimationConfig>
     </View>
   );
 }
@@ -510,7 +587,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   if (!visible) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
-    <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-raised px-3 py-1.5 shadow-float">
+    <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
       <AppIcon name="cloud-off" size={14} tone="danger" />
       <Text numberOfLines={1} className="text-caption text-fg">{t("ui.banner.unavailable")}</Text>
     </View>
@@ -577,7 +654,18 @@ function IOSKeyboardPaddingView({ children }: { children: ReactNode }) {
   return <View className="flex-1 bg-background" style={{ paddingBottom: bottom }}>{children}</View>;
 }
 
+/** A control whose glyph changes (send, stop, sent; add, close) pops the new glyph in instead of swapping it. */
+function controlIconEntering() {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.6 }] },
+    animations: { opacity: withTiming(1, { duration: motion.fade.duration }), transform: [{ scale: withSpring(1, springs.pop) }] },
+  };
+}
+
 const styles = StyleSheet.create({
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
+  // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
+  composerSurface: { padding: 8, borderRadius: 30, borderCurve: "continuous" },
   composerText: { paddingHorizontal: 5, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
 });

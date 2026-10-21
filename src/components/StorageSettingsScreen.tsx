@@ -1,14 +1,15 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { SettingsRow } from "@/src/components/SettingsRow";
+import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
+import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { CACHE_RETENTION_OPTIONS, setCacheRetention, useCacheRetention, type CacheRetention } from "@/src/data/cache-retention";
 import { useApp } from "@/src/data/context";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, TopBar, PrimaryButton, Screen } from "@/src/ui";
+import { TopBar, Screen } from "@/src/ui";
 
 export function StorageSettingsScreen() {
   const theme = useAppTheme();
@@ -17,17 +18,16 @@ export function StorageSettingsScreen() {
   const router = useRouter();
   const { state, clearCache, applyCacheRetention } = useApp();
   const retention = useCacheRetention();
-  const [sheet, setSheet] = useState<"clear-cache" | "cache-retention" | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const openSheet = (next: "clear-cache" | "cache-retention") => { setError(null); setSheet(next); };
   const confirmClearCache = async () => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
       await clearCache();
-      setSheet(null);
+      setClearOpen(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("profile.clearCache.error"));
     } finally {
@@ -41,7 +41,6 @@ export function StorageSettingsScreen() {
     try {
       await setCacheRetention(next);
       await applyCacheRetention();
-      setSheet(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("profile.cacheRetention.error"));
     } finally {
@@ -53,33 +52,31 @@ export function StorageSettingsScreen() {
     <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }}>
       <SettingsRow icon="database" title={t("profile.data.spaces")} value={String(state.spaces.length)} />
       <SettingsRow icon="messages" title={t("profile.data.chats")} value={String(state.sessions.length)} />
-      <SettingsRow icon="clock" title={t("profile.data.retention")} value={retentionLabel(retention, t)} onPress={() => openSheet("cache-retention")} />
-      <SettingsRow icon="trash" title={t("profile.data.clearCache")} onPress={() => openSheet("clear-cache")} danger />
+      {/* Retention is a short single choice, picked in place like Language; clearing asks first. */}
+      <SettingsSelectRow<CacheRetention>
+        icon="clock"
+        title={t("profile.data.retention")}
+        value={retention}
+        disabled={busy}
+        options={CACHE_RETENTION_OPTIONS.map((option) => ({ value: option, label: retentionLabel(option, t) }))}
+        onChange={(next) => void selectRetention(next)}
+        testID="cache-retention-select"
+      />
+      <SettingsRow icon="trash" title={t("profile.data.clearCache")} onPress={() => { setError(null); setClearOpen(true); }} danger />
+      {error && !clearOpen ? <Text accessibilityRole="alert" className="px-4 pt-3 text-caption text-danger">{error}</Text> : null}
     </ScrollView>
-    <AdaptiveSheet
-      visible={sheet !== null}
-      title={t(sheet === "clear-cache" ? "profile.clearCache.title" : "profile.cacheRetention.title")}
-      onClose={() => { if (!busy) setSheet(null); }}
-      dismissible={!busy}
-      scrollable={false}
-      testID={sheet === "clear-cache" ? "clear-cache-sheet" : "cache-retention-sheet"}
-      footer={sheet === "clear-cache" ? <PrimaryButton label={t("profile.clearCache.action")} icon="trash" variant="danger" loading={busy} onPress={() => void confirmClearCache()} /> : undefined}
-    >
-      {sheet === "clear-cache" ? <Text className="text-body text-fg-secondary">{t("profile.clearCache.body")}</Text> : <View>
-        {CACHE_RETENTION_OPTIONS.map((option) => <Pressable
-          key={option}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: retention === option, disabled: busy }}
-          disabled={busy}
-          onPress={() => void selectRetention(option)}
-          className="min-h-13 flex-row items-center gap-3 p-3 border-b border-border active:bg-surface-pressed"
-        >
-          <Text className="text-body flex-1 text-fg">{retentionLabel(option, t)}</Text>
-          {retention === option ? <AppIcon name="check" size={18} tone="accent" /> : null}
-        </Pressable>)}
-      </View>}
-      {error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}
-    </AdaptiveSheet>
+    <ConfirmSheet
+      visible={clearOpen}
+      title={t("profile.clearCache.title")}
+      message={t("profile.clearCache.body")}
+      confirmLabel={t("profile.clearCache.action")}
+      confirmIcon="trash"
+      busy={busy}
+      error={error}
+      onConfirm={() => void confirmClearCache()}
+      onClose={() => setClearOpen(false)}
+      testID="clear-cache-sheet"
+    />
   </Screen>;
 }
 

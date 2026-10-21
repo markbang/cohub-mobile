@@ -37,6 +37,7 @@ export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, 
   return (
     <TopBar
       transparent={transparent}
+      titleHidden={!expanded}
       title={title}
       leading={account}
       onBack={expanded ? closeSearch : undefined}
@@ -44,8 +45,8 @@ export function ExpandableSearchBar({ title, query, onQueryChange, placeholder, 
       actions={expanded
         ? query ? <IconButton name="x" label={t("ui.search.clear")} onPress={() => { onQueryChange(""); inputRef.current?.focus(); }} /> : undefined
         : <>
-          <IconButton name="search" label={placeholder ?? t("ui.search.placeholder")} onPress={() => setExpanded(true)} />
-          <IconButton name="plus" label={createLabel} tone="accent" onPress={onCreate} />
+          <IconButton filled name="search" label={placeholder ?? t("ui.search.placeholder")} onPress={() => setExpanded(true)} />
+          <IconButton filled name="plus" label={createLabel} tone="accent" onPress={onCreate} />
         </>}
     >
       {expanded ? <TextInput

@@ -24,10 +24,10 @@ export function FilterChip({ label, icon, suffix, suffixLabel, selected, onPress
       className="min-h-12 min-w-12 justify-center"
     >
       {({ pressed }) => (
-        <View className={`min-h-8 flex-row items-center justify-center gap-1 overflow-hidden rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : selected ? "bg-accent-soft" : ""}`}>
-          {icon ? <AppIcon name={icon} size={13} tone={selected ? "accent" : "muted"} /> : null}
-          <Text className={`text-subhead font-semibold ${selected ? "text-accent" : "text-fg-muted"}`}>{label}</Text>
-          {suffix ? <Text className={`text-caption tabular-nums ${selected ? "text-accent" : "text-fg-faint"}`}>{suffix}</Text> : null}
+        <View className={`min-h-9 flex-row items-center justify-center gap-1.5 overflow-hidden rounded-full px-3.5 py-1 ${selected ? pressed ? "bg-accent-pressed" : "bg-accent" : pressed ? "bg-surface-pressed" : "bg-surface"}`}>
+          {icon ? <AppIcon name={icon} size={14} tone={selected ? "onAccent" : "muted"} /> : null}
+          <Text className={`text-subhead font-semibold ${selected ? "text-on-accent" : "text-fg-secondary"}`}>{label}</Text>
+          {suffix ? <Text className={`text-caption tabular-nums ${selected ? "text-on-accent" : "text-fg-faint"}`}>{suffix}</Text> : null}
         </View>
       )}
     </Pressable>

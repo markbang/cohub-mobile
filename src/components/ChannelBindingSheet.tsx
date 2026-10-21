@@ -1,6 +1,7 @@
 import type { Channel } from "@neta-art/cohub";
 import { ActivityIndicator, Text, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useApp } from "@/src/data/context";
 import { useChannelBinding } from "@/src/data/use-channel-binding";
@@ -13,6 +14,22 @@ export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: 
   const { t } = useTranslation();
   const theme = useAppTheme();
   const { spaces, loading, saving, error, load, save } = useChannelBinding(client, channel, onChanged);
+  // Unbinding is a yes-or-no confirmation; binding picks a Space from a list and stays a sheet.
+  if (channel.boundSpace) {
+    const boundSpaceId = channel.boundSpace.id;
+    return <ConfirmSheet
+      visible
+      title={t("settings.channels.unbind")}
+      subtitle={channel.name}
+      message={t("settings.channels.unbindConfirm")}
+      confirmLabel={t("settings.channels.unbind")}
+      confirmIcon="x"
+      busy={saving}
+      error={error}
+      onConfirm={() => void save(boundSpaceId)}
+      onClose={onClose}
+    />;
+  }
   return <AdaptiveSheet
     visible
     title={t(channel.boundSpace ? "settings.channels.unbind" : "settings.channels.bind")}

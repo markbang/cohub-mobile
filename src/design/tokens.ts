@@ -6,7 +6,7 @@
  */
 
 export type ColorKey =
-  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "pressOverlay"
+  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "pressOverlay"
   | "border" | "borderStrong"
   | "text" | "textSecondary" | "textMuted" | "textFaint"
   | "accent" | "accentPressed" | "accentSoft" | "accentBorder" | "accentText"
@@ -24,6 +24,7 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   surface: "surface",
   surfaceRaised: "surface-raised",
   surfacePressed: "surface-pressed",
+  surfaceFloat: "surface-float",
   pressOverlay: "press-overlay",
   border: "border",
   borderStrong: "border-strong",
@@ -55,14 +56,17 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   shadow: "shadow",
 };
 
+// Light mode alternates gray and paper: a near-white card on a gray page, a gray well in the card.
+// Cards stop short of pure white so they do not glare beside the tinted page.
 export const lightPalette: Palette = {
-  background: "#f7f7f5",
-  surface: "#ffffff",
-  surfaceRaised: "#f0f1ef",
-  surfacePressed: "#e6e8e5",
+  background: "#f0f0ec",
+  surface: "#fcfcfa",
+  surfaceRaised: "#e8e8e3",
+  surfacePressed: "#dedfd9",
+  surfaceFloat: "#fcfcfa",
   pressOverlay: "rgba(29, 32, 36, 0.10)",
-  border: "#e1e3df",
-  borderStrong: "#c9cdc8",
+  border: "#e0e0da",
+  borderStrong: "#c9cac3",
   text: "#1d2024",
   textSecondary: "#4d535c",
   textMuted: "#59616b",
@@ -77,7 +81,7 @@ export const lightPalette: Palette = {
   userBubbleLink: "#ffe0cf",
   userBubbleCodeBackground: "rgba(29, 32, 36, 0.18)",
   userBubbleMeta: "rgba(255, 255, 255, 0.88)",
-  assistantBubble: "#eceee9",
+  assistantBubble: "#fcfcfa",
   assistantBubbleText: "#1d2024",
   success: "#238552",
   successSoft: "#e7f5ed",
@@ -91,14 +95,17 @@ export const lightPalette: Palette = {
   shadow: "#15202b",
 };
 
+// Dark mode only lightens as surfaces nest: a darker step inside a lighter one reads as a hole.
 export const darkPalette: Palette = {
-  background: "#0f1114",
-  surface: "#171a1f",
-  surfaceRaised: "#22262e",
-  surfacePressed: "#2b3039",
+  background: "#0c0d10",
+  surface: "#1a1c21",
+  surfaceRaised: "#25282f",
+  surfacePressed: "#30343c",
+  // A shadow barely shows on a dark page, so floating chrome steps up a level instead of drawing a border.
+  surfaceFloat: "#25282f",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
-  border: "#2d333c",
-  borderStrong: "#424a56",
+  border: "#2c3039",
+  borderStrong: "#434954",
   text: "#f7f8fa",
   textSecondary: "#d0d5dd",
   textMuted: "#a2aab6",
@@ -114,7 +121,7 @@ export const darkPalette: Palette = {
   userBubbleLink: "#ffe0cf",
   userBubbleCodeBackground: "rgba(15, 17, 20, 0.24)",
   userBubbleMeta: "rgba(255, 246, 240, 0.88)",
-  assistantBubble: "#22262e",
+  assistantBubble: "#1a1c21",
   assistantBubbleText: "#f7f8fa",
   success: "#62c994",
   successSoft: "#1d3329",
@@ -131,35 +138,41 @@ export const darkPalette: Palette = {
 /** Applied over `darkPalette` when the pure black preference is on. */
 export const pureBlackOverrides: Partial<Palette> = {
   background: "#000000",
-  surface: "#070809",
-  surfaceRaised: "#15171a",
-  surfacePressed: "#23262b",
-  border: "#25292f",
+  surface: "#121316",
+  surfaceRaised: "#1d1f23",
+  surfacePressed: "#292c31",
+  surfaceFloat: "#1d1f23",
+  border: "#24272c",
   borderStrong: "#3b424d",
   userBubbleCodeBackground: "rgba(0, 0, 0, 0.24)",
-  assistantBubble: "#15171a",
+  assistantBubble: "#121316",
 };
 
 export type TextToken = "display" | "title" | "headline" | "body" | "chat" | "subhead" | "caption" | "micro" | "code";
 
 /**
- * Size, line height, and the default weight. A `font-*` class overrides the weight, so emphasis
- * never forks the ramp. Small text defaults heavier to stay legible. Minimum 11.
+ * Size, line height, and the default weight, on Apple's Dynamic Type scale: display is the Large
+ * Title, title Title 2, body and headline 17, subhead the Subheadline, caption the Footnote. A
+ * `font-*` class overrides the weight, so emphasis never forks the ramp. Small text defaults heavier
+ * to stay legible. Minimum 11.
  */
 export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number; weight?: 500 | 600 }> = {
-  display: { size: 28, lineHeight: 34 },
-  title: { size: 20, lineHeight: 26 },
+  display: { size: 34, lineHeight: 41 },
+  title: { size: 22, lineHeight: 28 },
   headline: { size: 17, lineHeight: 22 },
-  body: { size: 15, lineHeight: 22 },
-  chat: { size: 15, lineHeight: 23 },
-  subhead: { size: 13, lineHeight: 18 },
-  caption: { size: 12, lineHeight: 16, weight: 500 },
+  body: { size: 17, lineHeight: 22 },
+  chat: { size: 17, lineHeight: 24 },
+  subhead: { size: 15, lineHeight: 20 },
+  caption: { size: 13, lineHeight: 18, weight: 500 },
   micro: { size: 11, lineHeight: 14, weight: 600 },
-  code: { size: 12, lineHeight: 19 },
+  code: { size: 13, lineHeight: 20 },
 };
 
-/** One stated rule: tags 6, controls 10, cards and menus 14, sheets and the composer 20, capsules full. */
-export const RADIUS = { xs: 6, sm: 10, md: 14, lg: 20 } as const;
+/**
+ * Picked by a shape's shortest side: tags and wells 8, controls 14, cards, menus, and bubbles 20,
+ * sheets 28, capsules full. Nested shapes derive theirs (outer = inner + inset) instead of adding a token.
+ */
+export const RADIUS = { xs: 8, sm: 14, md: 20, lg: 28 } as const;
 
 /**
  * File-type hues: a recognizable legend across themes (code, config, sheets, images, audio,

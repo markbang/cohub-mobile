@@ -14,16 +14,18 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Reanimated, { cancelAnimation, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Reanimated, { cancelAnimation, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
 import { setDialogOpen } from "@/src/data/interaction-trace";
+import { springs } from "@/src/motion";
 
 const COMPACT_BREAKPOINT = 720;
-const OPEN_DURATION_MS = 220;
+// UIScrollView's fast deceleration rate (0.99 per ms) projects a release to where it would coast: v * r / (1 - r) / 1000.
+const RELEASE_PROJECTION_S = 0.099;
 
 type AdaptiveSheetProps = {
   visible: boolean;
@@ -62,6 +64,7 @@ export function AdaptiveSheet({
   const dragY = useSharedValue(0);
   const dragContext = useSharedValue(0);
   const revealDistance = useSharedValue(hiddenOffset);
+  const panelHeight = useSharedValue(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const requestClose = useCallback(() => {
@@ -83,20 +86,23 @@ export function AdaptiveSheet({
           dragY.set(Math.max(0, dragContext.get() + event.translationY));
         })
         .onEnd((event) => {
-          if (event.translationY > 88 || event.velocityY > 850) {
+          // As UISheetPresentationController does: close once the projected release passes half the sheet.
+          const projected = dragY.get() + event.velocityY * RELEASE_PROJECTION_S;
+          if (projected > panelHeight.get() / 2) {
             dragY.set(
-              withSpring(height, { duration: 300, dampingRatio: 1, velocity: event.velocityY, overshootClamping: true, reduceMotion: ReduceMotion.System }, (finished) => {
+              withSpring(height, { ...springs.sheet, velocity: event.velocityY, overshootClamping: true }, (finished) => {
                 if (finished) scheduleOnRN(requestClose);
               }),
             );
             return;
           }
-          dragY.set(withSpring(0, { duration: 300, dampingRatio: 0.8, velocity: event.velocityY, reduceMotion: ReduceMotion.System }));
+          // A throw back up keeps its speed and lands with UIKit's slight overshoot; a release away from rest lands dead.
+          dragY.set(event.velocityY < 0 ? withSpring(0, { ...springs.sheetThrown, velocity: event.velocityY }) : withSpring(0, springs.sheet));
         })
         .onFinalize((_event, success) => {
-          if (!success) dragY.set(withSpring(0, { duration: 300, dampingRatio: 0.8, reduceMotion: ReduceMotion.System }));
+          if (!success) dragY.set(withSpring(0, springs.sheet));
         }),
-    [compact, dismissible, dragContext, dragY, height, requestClose],
+    [compact, dismissible, dragContext, dragY, height, panelHeight, requestClose],
   );
 
   useEffect(() => {
@@ -133,7 +139,7 @@ export function AdaptiveSheet({
     }
 
     const frame = requestAnimationFrame(() => {
-      progress.set(withTiming(1, { duration: OPEN_DURATION_MS, reduceMotion: ReduceMotion.System }));
+      progress.set(withSpring(1, { ...springs.sheet, overshootClamping: true }));
     });
 
     return () => cancelAnimationFrame(frame);
@@ -143,7 +149,8 @@ export function AdaptiveSheet({
     opacity: progress.get() * 0.56,
   }));
   const compactPanelStyle = useAnimatedStyle(() => ({
-    opacity: progress.get(),
+    // A sheet slides rather than fades; the brief fade only hides the first frame below the screen edge.
+    opacity: interpolate(progress.get(), [0, 0.25], [0, 1], Extrapolation.CLAMP),
     transform: [{ translateY: (1 - progress.get()) * revealDistance.get() + dragY.get() }],
   }));
   const desktopPanelStyle = useAnimatedStyle(() => ({
@@ -184,11 +191,12 @@ export function AdaptiveSheet({
         >
           <Reanimated.View
             collapsable={false}
+            onLayout={(event) => panelHeight.set(event.nativeEvent.layout.height)}
             accessibilityViewIsModal
             role="dialog"
-            className={`min-h-0 w-full overflow-hidden border-border bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
+            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
             style={[
-              { borderWidth: StyleSheet.hairlineWidth, borderBottomWidth: compact ? 0 : StyleSheet.hairlineWidth, borderCurve: "continuous" },
+              { borderCurve: "continuous" },
               { maxHeight, height: compact && fullHeight ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}

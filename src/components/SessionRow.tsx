@@ -78,7 +78,8 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     meta={formatRelativeTime(session.lastMessageAt ?? session.updatedAt)}
     subtitle={subtitleNode}
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
-    separator={!tree || tree.lastInGroup}
+    // A fork tree draws as one card so its guide lines run unbroken from parent to children.
+    group={!tree ? "single" : tree.depth === 0 ? (tree.hasChildren ? "first" : "single") : tree.lastInGroup ? "last" : "middle"}
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}

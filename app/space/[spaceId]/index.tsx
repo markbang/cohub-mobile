@@ -2,7 +2,8 @@ import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, T
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionRow } from "@/src/components/SessionRow";
@@ -329,6 +330,13 @@ export default function SpaceScreen() {
   };
   const detailsFailed = resourceFailures.checkpoints || resourceFailures.apps || resourceFailures.tasks || resourceFailures.activity || sessionsFailed;
   const activity = resources.activity;
+  const spaceActions: AnchoredMenuAction[] = [
+    { icon: "messages", title: t("chat.actions.openChats"), onPress: () => setActivePanel("chat") },
+    { icon: "square-pen", title: t("space.edit.action"), onPress: () => router.push({ pathname: "/space/[spaceId]/edit", params: { spaceId: space.id } }) },
+    { icon: space.isPinned ? "pin-off" : "pin", title: space.isPinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: () => void togglePin() },
+    { icon: "folder-open", title: t("space.openFiles"), onPress: () => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } }) },
+    { icon: "bookmark", title: checkpointing ? t("space.saveCheckpointSaving") : t("space.saveCheckpoint"), disabled: checkpointing, onPress: () => void createCheckpoint() },
+  ];
   return <Screen>
     <View className="flex-1" accessibilityElementsHidden={spaceActionsOpen} importantForAccessibility={spaceActionsOpen ? "no-hide-descendants" : "auto"}>
     <SpacePanels
@@ -348,7 +356,7 @@ export default function SpaceScreen() {
     <TopBar
       title={name}
       onBack={() => router.back()}
-      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} /><View ref={spaceActionsRef} collapsable={false}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View></>}
+      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} actions={spaceActions} testID="space-actions-menu" /> : <View ref={spaceActionsRef} collapsable={false}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View>}</>}
     />
     {state.realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{state.realtimeError}</Text> : null}
     {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}
@@ -430,20 +438,14 @@ export default function SpaceScreen() {
       title={name}
       testID="space-actions-menu"
       onClose={closeSpaceActions}
-      actions={[
-        { icon: "messages", title: t("chat.actions.openChats"), onPress: () => setActivePanel("chat") },
-        { icon: "square-pen", title: t("space.edit.action"), onPress: () => router.push({ pathname: "/space/[spaceId]/edit", params: { spaceId: space.id } }) },
-        { icon: space.isPinned ? "pin-off" : "pin", title: space.isPinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: () => void togglePin() },
-        { icon: "folder-open", title: t("space.openFiles"), onPress: () => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } }) },
-        { icon: "bookmark", title: checkpointing ? t("space.saveCheckpointSaving") : t("space.saveCheckpoint"), disabled: checkpointing, onPress: () => void createCheckpoint() },
-      ]}
+      actions={spaceActions}
     /> : null}
   </Screen>;
 }
 
 function ResourceRow({ icon, tone, status, title, meta, subtitle, onPress }: { icon: IconName; tone: IconTone; status?: string; title: string; meta?: string; subtitle: string; onPress?: () => void }) {
   return <ListRow
-    leading={<View className="flex-1 justify-center"><View className="items-center justify-center rounded-sm bg-surface" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderCurve: "continuous" }}><AppIcon name={icon} size={20} tone={tone} /></View></View>}
+    leading={<View className="flex-1 justify-center"><View className="items-center justify-center rounded-sm bg-surface-raised" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderCurve: "continuous" }}><AppIcon name={icon} size={20} tone={tone} /></View></View>}
     title={title}
     meta={meta}
     subtitle={subtitle}

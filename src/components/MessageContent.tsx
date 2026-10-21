@@ -4,7 +4,7 @@ import { Link, useRouter } from "expo-router";
 import { createContext, memo, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
-import { ActivityIndicator, FlatList, Image, Linking, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
+import { ActivityIndicator, FlatList, Image, Linking, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import Reanimated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
@@ -16,7 +16,7 @@ import { isWebLink, openWebLink } from "@/src/platform/browser";
 import { resolveMessageLink } from "@/src/data/message-links";
 import type { StreamView } from "@/src/data/types";
 import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog";
-import { scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
+import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { AppIcon, type IconName } from "@/src/ui";
 import { BUBBLE_PADDING_X, getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
@@ -63,28 +63,84 @@ function useOpenMessageLink(spaceId: string | null) {
 // design-system-begin: react-native-enriched-markdown is a native renderer that takes JS style objects, so it reads tokens through the theme.
 function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false): MarkdownStyle {
   const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color };
-  const heading = (size: number): MarkdownStyle["h1"] => ({ ...body, fontSize: scaleFontSize(size), fontWeight: "700", marginTop: 3 });
+  // Blocks in a bubble sit closer than in a document: one gap for paragraphs, lists, quotes, and code.
+  const gap = Math.round(body.lineHeight * 0.45);
+  const heading = (size: number, fontWeight: "700" | "600" = "700"): MarkdownStyle["h1"] => {
+    const fontSize = scaleFontSize(size);
+    return { ...body, fontSize, lineHeight: Math.round(fontSize * 1.3), fontWeight, marginTop: Math.round(gap / 2), marginBottom: Math.round(gap / 2) };
+  };
+  const dark = theme.mode === "dark";
+  // Inline code sits in prose: a narrow platform monospace (Space Mono is too wide beside CJK) on a
+  // faint wash of the text color. The renderer paints the wash to the full line height, so a solid
+  // chip would stack into a block when the code wraps.
+  const inlineMono = Platform.OS === "ios" ? "Menlo" : "monospace";
+  // Syntax colors per mode, after GitHub's palettes; the library default is tuned for a dark block only.
+  const syntaxColors = dark
+    ? { keyword: "#FF7B72", string: "#A5D6FF", number: "#79C0FF", constant: "#79C0FF", comment: "#8B949E", function: "#D2A8FF", type: "#FFA657", property: "#79C0FF", tag: "#7EE787", attribute: "#79C0FF" }
+    : { keyword: "#CF222E", string: "#0A3069", number: "#0550AE", constant: "#0550AE", comment: "#6E7781", function: "#8250DF", type: "#953800", property: "#0550AE", tag: "#116329", attribute: "#0550AE" };
   return {
-    paragraph: body,
-    h1: heading(19),
+    paragraph: { ...body, marginBottom: gap },
+    h1: heading(21),
     h2: heading(19),
     h3: heading(17),
-    h4: heading(17),
-    h5: heading(15),
-    h6: heading(15),
-    blockquote: { ...body, color: theme.colors.textMuted, borderColor: theme.colors.accentBorder, backgroundColor: "transparent" },
-    list: { ...body, bulletColor: theme.colors.textMuted, markerColor: theme.colors.textMuted },
+    h4: heading(17, "600"),
+    h5: heading(15, "600"),
+    h6: heading(15, "600"),
+    strong: { color },
+    em: { color },
+    strikethrough: { color: onUserBubble ? color : theme.colors.textMuted },
+    blockquote: {
+      ...body,
+      color: onUserBubble ? color : theme.colors.textSecondary,
+      borderColor: onUserBubble ? colorWithOpacity(color, 0.5) : theme.colors.borderStrong,
+      borderWidth: 3,
+      gapWidth: 10,
+      borderRadius: 2,
+      backgroundColor: "transparent",
+      marginBottom: gap,
+      admonitions: {
+        note: { color: theme.colors.info, backgroundColor: theme.colors.infoSoft },
+        tip: { color: theme.colors.success, backgroundColor: theme.colors.successSoft },
+        important: { color: theme.colors.accent, backgroundColor: theme.colors.accentSoft },
+        warning: { color: theme.colors.warning, backgroundColor: theme.colors.warningSoft },
+        caution: { color: theme.colors.danger, backgroundColor: theme.colors.dangerSoft },
+      },
+    },
+    // The bubble's padding already insets the text, so markers hang just inside it instead of the
+    // library's document indent; a fixed marker column keeps bullets and numbers aligned.
+    list: {
+      ...body,
+      marginBottom: gap,
+      marginLeft: 2,
+      markerMinWidth: 14,
+      gapWidth: 6,
+      itemSpacing: 2,
+      bulletSize: 5,
+      bulletColor: onUserBubble ? color : theme.colors.textMuted,
+      markerColor: onUserBubble ? color : theme.colors.textMuted,
+      markerFontWeight: "600",
+    },
+    taskList: {
+      checkboxSize: 15,
+      checkboxBorderRadius: 4,
+      borderColor: onUserBubble ? color : theme.colors.borderStrong,
+      checkedColor: onUserBubble ? color : theme.colors.accent,
+      checkmarkColor: onUserBubble ? theme.colors.userBubble : theme.colors.accentText,
+      checkedTextColor: onUserBubble ? color : theme.colors.textMuted,
+      checkedStrikethrough: true,
+    },
     link: { color: linkColor, underline: true },
-    thematicBreak: { color: theme.colors.border },
+    thematicBreak: { color: onUserBubble ? colorWithOpacity(color, 0.4) : theme.colors.border, height: 1, marginTop: gap, marginBottom: gap },
     // The library ships light defaults; without an override a table renders as a white block in
     // dark mode and inline code keeps its pink chip with a visible border.
     table: {
       ...body,
       fontSize: typography.caption.fontSize,
       lineHeight: typography.caption.lineHeight,
+      marginBottom: gap,
       borderColor: theme.colors.border,
       borderWidth: 1,
-      borderRadius: 10,
+      borderRadius: 12,
       headerBackgroundColor: theme.colors.surfaceRaised,
       headerTextColor: theme.colors.text,
       rowEvenBackgroundColor: "transparent",
@@ -92,10 +148,19 @@ function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme
       cellPaddingHorizontal: 10,
       cellPaddingVertical: 6,
     },
-    codeBlock: { fontFamily: "SpaceMono", fontSize: typography.code.fontSize, lineHeight: typography.code.lineHeight, color: theme.colors.text, backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.border, borderWidth: 1, borderRadius: 10, padding: 12 },
-    code: { fontFamily: "SpaceMono", fontSize: Math.max(11, typography.chatBody.fontSize - 2), color: onUserBubble ? color : theme.colors.text, backgroundColor: onUserBubble ? theme.colors.userBubbleCodeBackground : theme.colors.surfaceRaised, borderColor: "transparent" },
-    math: { color: theme.colors.text, backgroundColor: "transparent" },
-    inlineMath: { color: theme.colors.text },
+    codeBlock: { fontFamily: "SpaceMono", fontSize: typography.code.fontSize, lineHeight: typography.code.lineHeight, color: theme.colors.text, backgroundColor: theme.colors.surfaceRaised, borderColor: "transparent", borderWidth: 0, borderRadius: 12, padding: 12, marginBottom: gap, syntaxColors },
+    code: {
+      fontFamily: inlineMono,
+      fontSize: Math.max(11, Math.round(typography.chatBody.fontSize * 0.86)),
+      color: onUserBubble ? color : theme.colors.text,
+      backgroundColor: onUserBubble ? theme.colors.userBubbleCodeBackground : colorWithOpacity(theme.colors.text, dark ? 0.1 : 0.07),
+      borderColor: "transparent",
+    },
+    image: { borderRadius: 12, marginBottom: gap },
+    highlight: { color, backgroundColor: onUserBubble ? colorWithOpacity(color, 0.2) : theme.colors.warningSoft },
+    spoiler: { color: onUserBubble ? color : theme.colors.textMuted },
+    math: { color, backgroundColor: "transparent", fontSize: scaleFontSize(body.fontSize + 1), padding: 0, marginBottom: gap },
+    inlineMath: { color },
   };
 }
 // design-system-end
@@ -340,12 +405,12 @@ function chatBubbleStyle(theme: AppTheme, side: "user" | "assistant", maxWidth: 
     minWidth: 0,
     position: "relative",
     alignSelf: side === "user" ? "flex-end" : "flex-start",
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     borderCurve: "continuous",
     backgroundColor: side === "user" ? theme.colors.userBubble : theme.colors.assistantBubble,
     paddingHorizontal: BUBBLE_PADDING_X,
-    paddingTop: 8,
-    paddingBottom: 7,
+    paddingTop: 9,
+    paddingBottom: 8,
     opacity: 1,
   };
 }

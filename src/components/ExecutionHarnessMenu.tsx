@@ -6,6 +6,32 @@ import { harnessOptions, type RuntimeHarness, type SpaceRuntimeStatus } from "@/
 import { ComposerMenu } from "@/src/components/ComposerMenu";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, HarnessIcon, IconButton } from "@/src/ui";
+import type { NativeMenuSection } from "@/src/components/NativeMenu";
+import type { Translate } from "@/src/i18n";
+
+/**
+ * The picker's choices as system menu sections (iOS): cloud execution, then the local harnesses
+ * with their availability, the current one checked, and a retry while the device is offline.
+ */
+export function harnessMenuSections({ value, status, t, onSelect, onRefresh }: { value: RuntimeHarness; status: SpaceRuntimeStatus | null; t: Translate; onSelect: (harness: RuntimeHarness) => void; onRefresh: () => void }): NativeMenuSection[] {
+  const online = status?.kind === "local" && status.online;
+  const [cloud, ...local] = harnessOptions(status);
+  const item = ({ harness, availability }: (typeof local)[number]) => ({
+    icon: "check" as const,
+    title: harnessLabel(harness),
+    detail: harness === "cohub" ? t("runtime.cloudExecution") : availability === "missing" ? t("runtime.harness.notInstalled") : undefined,
+    checked: value === harness,
+    disabled: availability !== "ready",
+    onPress: () => onSelect(harness),
+  });
+  return [
+    { actions: [item(cloud)] },
+    { title: online ? t("runtime.localExecution") : `${t("runtime.localExecution")} · ${t("runtime.offline")}`, actions: [
+      ...local.map(item),
+      ...(online ? [] : [{ icon: "refresh" as const, title: t("common.retry"), onPress: onRefresh }]),
+    ] },
+  ];
+}
 
 export function HarnessPicker({
   anchorRef,

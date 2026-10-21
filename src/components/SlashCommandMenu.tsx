@@ -4,6 +4,7 @@ import type { SlashCommandMenuState } from "@/src/data/use-composer-slash";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { IconButton } from "@/src/ui";
+import { PopoverSurface } from "@/src/ui/PopoverSurface";
 
 /** Non-modal so the composer keeps focus and the keyboard while the query is typed. */
 export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: SlashCommandMenuState; onSelect: (item: SlashCommandItem) => void; onDismiss: () => void; style?: ViewStyle }) {
@@ -16,7 +17,8 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
       : menu.loading
         ? t("slash.loading")
         : t("slash.hint");
-  return <View testID="slash-command-menu" accessibilityLabel={t("slash.title")} className="overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[{ borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }, style]}>
+  // Grows up out of the composer it sits on.
+  return <PopoverSurface origin={["50%", "100%", 0]} fromScale={0.92} testID="slash-command-menu" accessibilityLabel={t("slash.title")} className="overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[{ borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }, style]}>
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("slash.title")}</Text>
@@ -43,7 +45,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
         </Pressable>;
       })}
     </ScrollView>}
-  </View>;
+  </PopoverSurface>;
 }
 
 const styles = StyleSheet.create({

@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { subscriptionCheckoutUrl } from "@/src/data/billing-settings";
 import { openWebLink } from "@/src/platform/browser";
@@ -58,9 +58,16 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
       <Text className="text-caption text-fg-muted">{page}</Text>
       <IconButton name="arrow-right" label={t("settings.billing.next")} disabled={busy || data?.list.page !== page || !data?.list.pagination.hasMore || data.list.pagination.nextPage === null} onPress={() => { const next = data?.list.pagination.nextPage; if (next) setPage(next); }} />
     </View>
-    <AdaptiveSheet visible={candidate !== null} title={t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} subtitle={candidate?.subscription.productName} onClose={() => { if (!saving) setCandidate(null); }} dismissible={!saving} scrollable={false} footer={<PrimaryButton label={t("common.confirm")} icon="check" variant="danger" loading={saving} onPress={() => { if (candidate) void cancel(candidate).then((ok) => { if (ok) setCandidate(null); }); }} />}>
-      <Text className="text-body text-fg">{t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckoutConfirm" : "settings.billing.cancelRenewalConfirm")}</Text>
-      {error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}
-    </AdaptiveSheet>
+    <ConfirmSheet
+      visible={candidate !== null}
+      title={t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")}
+      subtitle={candidate?.subscription.productName}
+      message={t(candidate?.kind === "checkout" ? "settings.billing.cancelCheckoutConfirm" : "settings.billing.cancelRenewalConfirm")}
+      confirmLabel={t("common.confirm")}
+      busy={saving}
+      error={error}
+      onConfirm={() => { if (candidate) void cancel(candidate).then((ok) => { if (ok) setCandidate(null); }); }}
+      onClose={() => setCandidate(null)}
+    />
   </Screen>;
 }

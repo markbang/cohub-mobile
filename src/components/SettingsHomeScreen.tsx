@@ -5,22 +5,27 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCurrentUser } from "@/src/auth/current-user";
 import { useProfileSession } from "@/src/auth/profile-session";
-import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
-import { useBrowserPreference } from "@/src/data/browser-preference";
+import { ConfirmSheet } from "@/src/components/SystemDialogs";
+import { saveBrowserPreference, useBrowserPreference, type BrowserPreference } from "@/src/data/browser-preference";
 import { SettingsRow } from "@/src/components/SettingsRow";
+import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
+import { useToast } from "@/src/components/Toast";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { useApp } from "@/src/data/context";
 import { settingsMenu } from "@/src/data/settings-navigation";
-import { useTranslation } from "@/src/i18n";
+import { useTranslation, type LocalePreference } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useAppTheme, useThemePreference } from "@/src/theme";
-import { AppIcon, Avatar, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, Avatar, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
 export function SettingsHomeScreen() {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { t, preference: language } = useTranslation();
+  const { t, preference: language, setPreference: setLanguage } = useTranslation();
+  const showToast = useToast();
+  // A press sliding through a pop-up menu must not scroll the page under it.
+  const [selecting, setSelecting] = useState(false);
   const appearance = useThemePreference();
   const browser = useBrowserPreference();
   const router = useRouter();
@@ -60,14 +65,12 @@ export function SettingsHomeScreen() {
 
   const detailFor = (href: string) => {
     if (href === "/appearance") return t(`appearance.theme.${appearance}`);
-    if (href === "/language") return t(language === "system" ? "language.option.system" : language === "en" ? "language.device.english" : "language.device.chinese");
-    if (href === "/settings/browser") return t(browser.preference === "in-app" ? "settings.browser.inApp" : "settings.browser.system");
     return undefined;
   };
 
   return <Screen>
-    <TopBar title={t("settings.title")} onBack={() => router.back()} />
-    <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }} keyboardShouldPersistTaps="handled">
+    <TopBar large title={t("settings.title")} onBack={() => router.back()} />
+    <ScrollView scrollEnabled={!selecting} contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }} keyboardShouldPersistTaps="handled">
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
       <View className="mb-6 mt-2 px-4">
         <Pressable
@@ -87,14 +90,48 @@ export function SettingsHomeScreen() {
       </View>
       <View testID="settings-list">
         {settingsMenu.map((group) => <SettingsGroup key={group.labelKey} label={t(group.labelKey)}>
-          {group.items.map((item, index) => <SettingsRow
-            key={item.href}
-            icon={item.icon}
-            title={t(item.labelKey)}
-            detail={detailFor(item.href)}
-            last={index === group.items.length - 1}
-            onPress={() => router.push(item.href)}
-          />)}
+          {group.items.map((item, index) => {
+            const last = index === group.items.length - 1;
+            // Short single choices are picked in place from a pop-up menu; their pages stay reachable by link.
+            if (item.href === "/language") return <SettingsSelectRow<LocalePreference>
+              key={item.href}
+              icon={item.icon}
+              title={t(item.labelKey)}
+              value={language}
+              options={[
+                { value: "system", label: t("language.option.system") },
+                { value: "en", label: t("language.option.en") },
+                { value: "zh", label: t("language.option.zh") },
+              ]}
+              onChange={(next) => void setLanguage(next)}
+              onOpenChange={setSelecting}
+              last={last}
+              testID="settings-language-select"
+            />;
+            if (item.href === "/settings/browser") return <SettingsSelectRow<BrowserPreference>
+              key={item.href}
+              icon={item.icon}
+              title={t(item.labelKey)}
+              value={browser.preference}
+              disabled={!browser.loaded && !browser.error}
+              options={[
+                { value: "system", label: t("settings.browser.system") },
+                { value: "in-app", label: t("settings.browser.inApp") },
+              ]}
+              onChange={(next) => void saveBrowserPreference(next).catch(() => showToast({ title: t("settings.browser.saveFailed"), tone: "danger" }))}
+              onOpenChange={setSelecting}
+              last={last}
+              testID="settings-browser-select"
+            />;
+            return <SettingsRow
+              key={item.href}
+              icon={item.icon}
+              title={t(item.labelKey)}
+              detail={detailFor(item.href)}
+              last={last}
+              onPress={() => router.push(item.href)}
+            />;
+          })}
         </SettingsGroup>)}
       </View>
       <SettingsGroup>
@@ -110,18 +147,18 @@ export function SettingsHomeScreen() {
         <Text className="text-center text-micro tabular-nums text-fg-faint">Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
       </Pressable>
     </ScrollView>
-    <AdaptiveSheet
+    <ConfirmSheet
       visible={signOutOpen}
       title={t("profile.signOut.title")}
       subtitle={t("profile.signOut.subtitle")}
-      onClose={() => { if (!signingOut) setSignOutOpen(false); }}
-      dismissible={!signingOut}
-      scrollable={false}
+      message={t("profile.signOut.body")}
+      confirmLabel={t("common.signOut")}
+      confirmIcon="arrow-right"
+      busy={signingOut}
+      error={error}
+      onConfirm={() => void confirmSignOut()}
+      onClose={() => setSignOutOpen(false)}
       testID="sign-out-sheet"
-      footer={<PrimaryButton label={t("common.signOut")} icon="arrow-right" variant="danger" loading={signingOut} onPress={() => void confirmSignOut()} />}
-    >
-      <Text className="text-body text-fg-secondary">{t("profile.signOut.body")}</Text>
-      {error ? <Text accessibilityRole="alert" className="mt-3 text-caption text-danger">{error}</Text> : null}
-    </AdaptiveSheet>
+    />
   </Screen>;
 }

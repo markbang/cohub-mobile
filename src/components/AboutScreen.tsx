@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { Image, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { AppUpdateRow } from "@/src/components/AppUpdateBanner";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { submitFeedback, type FeedbackAttachment } from "@/src/data/debug-session";
@@ -147,15 +148,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
       <Text className="mx-6 mt-2 text-center text-caption text-fg-faint">{t("about.builtWith")}</Text>
 
       {!onNotice ? (
-        <AdaptiveSheet
-          visible={notice !== null}
-          title={notice?.title ?? t("about.linkError.title")}
-          onClose={() => setNotice(null)}
-          scrollable={false}
-          testID="about-link-error-sheet"
-        >
-          <Text className="text-body text-fg-secondary">{notice?.message}</Text>
-        </AdaptiveSheet>
+        <NoticeSheet notice={notice} fallbackTitle={t("about.linkError.title")} onClose={() => setNotice(null)} testID="about-link-error-sheet" />
       ) : null}
 
       <AdaptiveSheet visible={feedbackOpen} title={t("about.feedback.title")} onClose={() => { if (!feedbackSubmitting) setFeedbackOpen(false); }}>

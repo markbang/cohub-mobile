@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { AccountAvatar } from "@/src/components/AccountAvatar";
-import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
@@ -172,6 +173,11 @@ export default function ChatsScreen() {
     router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
   };
 
+  const sourceActions: AnchoredMenuAction[] = [
+    { icon: sourceFilter === "all" ? "check" : "messages", title: t("chats.source.all"), onPress: () => selectSource("all") },
+    { icon: sourceFilter === "web" ? "check" : "globe", title: t("chats.source.web"), onPress: () => selectSource("web") },
+    { icon: sourceFilter === "other" ? "check" : "globe", title: t("chats.source.other"), onPress: () => selectSource("other") },
+  ];
   const hasActiveFilter = Boolean(trimmedQuery) || filter !== "all" || sourceFilter !== "all";
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <View className="min-h-45 flex-1 items-center justify-center"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View>
@@ -197,7 +203,7 @@ export default function ChatsScreen() {
         ref={listRef}
         data={listItems}
         extraData={rowExtraData}
-        estimatedItemSize={72}
+        estimatedItemSize={80}
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -223,7 +229,9 @@ export default function ChatsScreen() {
             <FilterChip label={t("chats.filter.running")} suffix={runningQuery.loaded && runningCount > 0 ? String(runningCount) : undefined} selected={filter === "running"} onPress={() => setFilter("running")} />
             {/* The completion window rides on the chip, so selecting it adds no extra line. */}
             <FilterChip label={t("chats.filter.completed")} suffix={filter === "completed" ? formatWindow(filterPreference.minutes) : undefined} suffixLabel={t("chats.filter.window", { minutes: filterPreference.minutes })} selected={filter === "completed"} onPress={() => setFilter("completed")} />
-            <View ref={sourceButtonRef} collapsable={false} className="ml-auto">
+            {nativeMenus ? <View className="ml-auto size-11 items-center justify-center">
+              <NativeMenuButton appearance="plain" icon="filter" label={t("chats.source.filter")} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu" />
+            </View> : <View ref={sourceButtonRef} collapsable={false} className="ml-auto">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t("chats.source.filter")}
@@ -237,7 +245,7 @@ export default function ChatsScreen() {
                   </View>
                 )}
               </Pressable>
-            </View>
+            </View>}
           </View>
           {remoteSearch.query === trimmedQuery && remoteSearch.loading ? <View className="min-h-4 items-end"><ActivityIndicator accessibilityLabel={t("chats.searching")} size="small" color={theme.colors.accent} /></View> : null}
           {filter === "running" && runningQuery.loading && runningQuery.loaded && runningQuery.sessions.length > 0 ? <Text accessibilityLiveRegion="polite" className="text-caption text-fg-faint">{t("chats.running.scanning")}</Text> : null}
@@ -251,11 +259,7 @@ export default function ChatsScreen() {
         title={t("chats.source.title")}
         testID="chats-source-menu"
         onClose={() => setSourceMenuOpen(false)}
-        actions={[
-          { icon: sourceFilter === "all" ? "check" : "messages", title: t("chats.source.all"), onPress: () => selectSource("all") },
-          { icon: sourceFilter === "web" ? "check" : "globe", title: t("chats.source.web"), onPress: () => selectSource("web") },
-          { icon: sourceFilter === "other" ? "check" : "globe", title: t("chats.source.other"), onPress: () => selectSource("other") },
-        ]}
+        actions={sourceActions}
       /> : null}
     </Screen>
   );

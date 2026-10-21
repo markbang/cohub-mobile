@@ -6,6 +6,9 @@ import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
 import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
+import { PopoverSurface } from "@/src/ui/PopoverSurface";
+import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { RADIUS } from "@/src/design/tokens";
 
 export type AnchoredMenuAction = {
   icon: IconName;
@@ -27,6 +30,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const focused = useIsFocused();
+  const material = useGlassMaterial();
   const contentWidth = Math.max(...actions.map((action) => Array.from(action.title).length * 9 + 16 * 2 + 21 + 14), 0);
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
@@ -58,14 +62,17 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
   // Keep this in the screen, not a native Modal, so actions can immediately open their own surface.
   return <View ref={overlayRef} collapsable={false} onLayout={measure} style={styles.overlay}>
     <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
-    {layout ? <View
+    {layout ? <PopoverSurface
       testID={testID}
       accessibilityViewIsModal
       accessibilityRole="menu"
       accessibilityLabel={title}
       onAccessibilityEscape={onClose}
-      className="absolute overflow-hidden rounded-md border-border bg-surface-raised shadow-float" style={[layout, { borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
+      // The layout opens the menu below its anchor, aligned to the anchor's trailing edge.
+      origin={["100%", 0, 0]}
+      className={`absolute overflow-hidden rounded-md ${material === "liquid" ? "" : "shadow-float"}`} style={[layout, { borderCurve: "continuous" }]}
     >
+      <GlassBackground radius={RADIUS.md} />
       <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-1.5">
         {actions.map((action) => <Pressable
           key={action.title}
@@ -80,7 +87,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
         </Pressable>)}
       </ScrollView>
-    </View> : null}
+    </PopoverSurface> : null}
   </View>;
 }
 

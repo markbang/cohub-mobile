@@ -8,7 +8,7 @@ export const COMPOSER_CHROME_HEIGHT = 132;
  * JS-appended dictation final is corrected by one on iOS and carried by the estimate on
  * Android until the user types.
  */
-const COLUMNS_PER_LINE = 34;
+const COLUMNS_PER_LINE = 30;
 
 /** CJK, Hangul, Kana, and fullwidth punctuation occupy roughly two Latin columns. */
 function columnWidth(ch: string) {

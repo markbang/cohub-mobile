@@ -1,14 +1,16 @@
 import { Tabs } from "expo-router";
 import { AnimatedTabIcon } from "@/src/components/AnimatedTabIcon";
-import { FloatingTabBar } from "@/src/components/FloatingTabBar";
+import { FloatingTabBar, TabBlurTargetsProvider, TabScreenLayout } from "@/src/components/FloatingTabBar";
 import { useTranslation } from "@/src/i18n";
 
 export default function TabLayout() {
   const { t } = useTranslation();
   // Tabs are peers, not a hierarchy: switching must never slide.
   return (
+    <TabBlurTargetsProvider>
     <Tabs
       screenOptions={{ headerShown: false, animation: "none" }}
+      screenLayout={({ route, children }) => <TabScreenLayout routeKey={route.key}>{children}</TabScreenLayout>}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
       <Tabs.Screen
@@ -33,5 +35,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </TabBlurTargetsProvider>
   );
 }

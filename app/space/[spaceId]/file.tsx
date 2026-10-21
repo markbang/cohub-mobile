@@ -199,6 +199,7 @@ export default function FileScreen() {
         subtitle={subtitle}
         titleRef={pathTitleRef}
         onTitleLongPress={path ? () => setPathMenuOpen(true) : undefined}
+        titleMenu={path ? { menu: "file-path-actions-menu", actions: [{ icon: "copy", title: t("file.copyPath"), onPress: () => void copyPath() }] } : undefined}
         titleLongPressLabel={t("file.pathActions.open")}
         onBack={handleBack}
         actions={

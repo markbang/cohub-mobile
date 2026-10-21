@@ -13,7 +13,7 @@ export const MAX_THEME_CSS_LENGTH = 262_144;
 
 const COLOR_TOKENS = {
   background: "bg-primary", surface: "bg-surface", surfaceRaised: "bg-elevated",
-  surfacePressed: "bg-active", pressOverlay: "overlay-control-bg", border: "border-primary",
+  surfacePressed: "bg-active", surfaceFloat: "bg-elevated", pressOverlay: "overlay-control-bg", border: "border-primary",
   borderStrong: "border-strong", text: "text-primary", textSecondary: "text-secondary",
   textMuted: "text-tertiary", textFaint: "text-placeholder", accent: "brand",
   accentPressed: "brand-hover", accentSoft: "brand-soft", accentBorder: "brand-border",

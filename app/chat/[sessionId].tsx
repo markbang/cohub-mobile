@@ -4,11 +4,12 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Dimensions, Modal, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
 import Animated, { useAnimatedRef, useReducedMotion } from "react-native-reanimated";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
-import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
-import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
+import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { copyMessageText, MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { SendBubbleOverlay } from "@/src/components/SendBubbleOverlay";
@@ -19,7 +20,7 @@ import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/Re
 import { forkPoint } from "@/src/data/session-fork";
 import type { RelatedSessionRef } from "@/src/data/related-sessions";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
-import { HarnessPicker } from "@/src/components/ExecutionHarnessMenu";
+import { HarnessPicker, harnessMenuSections } from "@/src/components/ExecutionHarnessMenu";
 import { AttachmentMenu } from "@/src/components/AttachmentMenu";
 import { SpaceMentionMenu } from "@/src/components/SpaceMentionMenu";
 import { SlashCommandMenu } from "@/src/components/SlashCommandMenu";
@@ -51,6 +52,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
+import { GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
@@ -61,6 +63,7 @@ const NEW_COMPOSER_DRAFT_SCOPE = { kind: "new" } as const;
 const messageViewabilityConfig = { itemVisiblePercentThreshold: 20 };
 /** Only used to estimate the destination of a jump the list cannot resolve on its own. */
 const FALLBACK_ROW_HEIGHT = 140;
+const RENAME_MAX_LENGTH = 80;
 
 // Row height depends on rendered text/blocks, not on the metadata JSON stringify would also
 // walk. A transcript-wide JSON.stringify on every turn patch dominated list re-renders.
@@ -810,7 +813,19 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   }, []);
   // Edit the stored title, not its `@Label` display, so saving unchanged keeps mention markup.
-  const openRename = () => { setRenameValue(session ? session.title?.trim() || displaySessionTitle(session) : ""); setRenameOpen(true); };
+  const openRename = () => {
+    const current = session ? session.title?.trim() || displaySessionTitle(session) : "";
+    // iOS asks with the system alert and its text field; Android draws the same dialog.
+    if (Platform.OS === "ios") {
+      Alert.prompt(t("chat.rename.title"), undefined, [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("common.save"), isPreferred: true, onPress: (value?: string) => void saveRename((value ?? "").slice(0, RENAME_MAX_LENGTH)) },
+      ], "plain-text", current);
+      return;
+    }
+    setRenameValue(current);
+    setRenameOpen(true);
+  };
   const openLabelSheet = () => {
     setLabelSheetOpen(true);
     if (!client || !spaceId) return;
@@ -818,9 +833,21 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       .then((tree) => setChatLabels(toUserSessionLabels(tree)))
       .catch(() => setChatLabels([]));
   };
-  const saveRename = async () => {
-    try { await renameSession(sessionId, renameValue); setRenameOpen(false); } catch (error) { showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }); }
+  const saveRename = async (title = renameValue) => {
+    try { await renameSession(sessionId, title); setRenameOpen(false); } catch (error) { showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }); }
   };
+  const titleActions: AnchoredMenuAction[] = [
+    { icon: "copy", title: t("chat.titleActions.copy"), onPress: () => void copySessionTitle() },
+    { icon: "square-pen", title: t("chat.titleActions.edit"), onPress: openRename },
+  ];
+  const chatActions: AnchoredMenuAction[] = [
+    ...(tracing ? [{ icon: "activity" as const, title: "Scroll Diagnostics", onPress: () => { trace("experiment.mark", { origin: "chatMenu" }); router.push("/debug/chat-scroll"); } }] : []),
+    { icon: "share", title: t("chat.actions.share"), onPress: () => void shareChat() },
+    { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
+    { icon: "folder-open", title: t("chat.actions.openFiles"), disabled: !spaceId, onPress: () => setActivePanel("files") },
+    { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
+    { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
+  ];
   const handleScroll = useCallback((event: ChatScrollEvent) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const now = Date.now();
@@ -1101,7 +1128,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     <SpacePanels edgeToEdge key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} /><View ref={moreButtonRef} collapsable={false}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View></>} />
+        <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} actions={chatActions} testID="chat-actions-menu" /> : <View ref={moreButtonRef} collapsable={false}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View>}</>} />
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <View className="mx-4 mt-3 flex-row items-center gap-2 rounded-md bg-danger-soft py-1 pl-3 pr-1" style={{ borderCurve: "continuous" }}><AppIcon name="alert" size={16} tone="danger" /><Text selectable className="flex-1 text-caption text-danger">{view.error}</Text><IconButton name="refresh" label={t("common.retry")} tone="danger" onPress={() => void refreshSession(sessionId)} /></View> : null}
         </EdgeHeader>
@@ -1148,7 +1175,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         /> : null}
         {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}
 
-        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} onPress={() => { cancelTurnScroll(); setFollowingTail(true); requestFollowTail(true); }} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full bg-surface-raised shadow-float active:bg-surface-pressed" style={{ bottom: footerHeight + 12 }}><AppIcon name="arrow-down" size={18} tone="accent" /></Pressable> : null}
+        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} onPress={() => { cancelTurnScroll(); setFollowingTail(true); requestFollowTail(true); }} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} /><AppIcon name="arrow-down" size={18} tone="accent" /></Pressable> : null}
         {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 5 }} /> : null}
         {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 6 }} /> : null}
         </View>
@@ -1165,7 +1192,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: 136 }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 7 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <View className="bg-background px-4" style={{ paddingTop: 5 }}><Text className={`text-caption ${voice.error ? "text-danger" : "text-fg-muted"}`}>{voice.error ? voice.error : t("chat.listening", { text: voice.partial })}</Text></View> : null}
-        <ComposerInput anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        <ComposerInput harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
+          { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
+          { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
+          { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
+        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {sendTransition && transitionMessage && (sendTransition.destination === "bubble" || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || windowWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
         {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={null} onLabelsReload={() => { if (client && spaceId) void fetchSessionLabels(client, spaceId).then((tree) => setChatLabels(toUserSessionLabels(tree))).catch(() => undefined); }} onClose={() => setLabelSheetOpen(false)} onChanged={() => undefined} /> : null}
@@ -1173,8 +1204,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => setTurnNavigatorOpen(false)} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
         {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerRef} value={composerHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
         {modelSelectorOpen ? composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); setModelSelectorOpen(false); }} /> : null}
-        <AdaptiveSheet visible={notice !== null} title={notice?.title ?? t("common.notice")} onClose={() => setNotice(null)} scrollable={false} testID="chat-notice-sheet"><Text className="text-body text-fg-secondary">{notice?.message ?? ""}</Text></AdaptiveSheet>
-        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}><View className="flex-1 justify-center p-6" style={SCRIM}><View className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}><Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text><TextInput autoFocus value={renameValue} onChangeText={setRenameValue} maxLength={80} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} /><View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => setRenameOpen(false)} /><PrimaryButton label={t("common.save")} onPress={() => void saveRename()} /></View></View></View></Modal>
+        <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="chat-notice-sheet" />
+        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}><View className="flex-1 justify-center p-6" style={SCRIM}><View className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}><Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text><TextInput autoFocus value={renameValue} onChangeText={setRenameValue} maxLength={RENAME_MAX_LENGTH} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} /><View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => setRenameOpen(false)} /><PrimaryButton label={t("common.save")} onPress={() => void saveRename()} /></View></View></View></Modal>
       </Animated.View>
     </SpacePanels>
     </View>
@@ -1183,24 +1214,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       title={session ? displaySessionTitle(session) : t("chat.title")}
       testID="chat-title-actions-menu"
       onClose={closeTitleMenu}
-      actions={[
-        { icon: "copy", title: t("chat.titleActions.copy"), onPress: () => void copySessionTitle() },
-        { icon: "square-pen", title: t("chat.titleActions.edit"), onPress: openRename },
-      ]}
+      actions={titleActions}
     /> : null}
     {moreOpen ? <AnchoredActionMenu
       anchorRef={moreButtonRef}
       title={session ? displaySessionTitle(session) : t("chat.title")}
       testID="chat-actions-menu"
       onClose={closeMore}
-      actions={[
-        ...(tracing ? [{ icon: "activity" as const, title: "Scroll Diagnostics", onPress: () => { trace("experiment.mark", { origin: "chatMenu" }); router.push("/debug/chat-scroll"); } }] : []),
-        { icon: "share", title: t("chat.actions.share"), onPress: () => void shareChat() },
-        { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
-        { icon: "folder-open", title: t("chat.actions.openFiles"), disabled: !spaceId, onPress: () => setActivePanel("files") },
-        { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
-        { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
-      ]}
+      actions={chatActions}
     /> : null}
   </Screen>;
 }
@@ -1400,12 +1421,16 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
           {attachments.length > 0 ? <View ref={attachmentSourceRef} collapsable={false} className="bg-background px-3 pt-1" style={{ gap: 7 }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</View> : null}
           {voice.partial || voice.error ? <View className="bg-background px-4" style={{ paddingTop: 5 }}><Text className={`text-caption ${voice.error ? "text-danger" : "text-fg-muted"}`}>{voice.error ? voice.error : t("chat.listening", { text: voice.partial })}</Text></View> : null}
-          <ComposerInput anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={selectedHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
+          <ComposerInput harnessSections={harnessMenuSections({ value: selectedHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={selectedHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
+          { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
+          { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
+          { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
+        ]} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
         </View>
         {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerRef} value={selectedHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
         {modelSelectorOpen ? selectedHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerRef} title={t("model.runtimeTitle", { harness: harnessLabel(selectedHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, selectedHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [selectedHarness]: model })); setModelSelectorOpen(false); }} /> : null}
         {attachmentMenuOpen ? <AttachmentMenu anchorRef={composerRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /> : null}
-        <AdaptiveSheet visible={notice !== null} title={notice?.title ?? t("common.notice")} onClose={() => setNotice(null)} scrollable={false} testID="new-chat-notice-sheet"><Text className="text-body text-fg-secondary">{notice?.message ?? ""}</Text></AdaptiveSheet>
+        <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="new-chat-notice-sheet" />
       </View>
     </SpacePanels>
   </Screen>;

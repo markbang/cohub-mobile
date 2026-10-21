@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 import { traceAction } from "@/src/data/interaction-trace";
 
-/** A grouped settings row: 52 pt, separator inset past the icon, chevron only when it drills in. */
+/** A grouped settings row: 52 pt, the glyph on a tinted tile, separator inset past it, chevron only when it drills in. */
 export function SettingsRow({ icon, title, value, detail, children, onPress, disabled = false, danger = false, last = false, external = false }: {
   icon: IconName;
   title: string;
@@ -20,7 +20,9 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   return (
     <PressableOrView onPress={onPress} disabled={disabled} title={title} icon={icon} role={external ? "link" : "button"}>
       <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
-        <AppIcon name={icon} size={20} tone={danger ? "danger" : "muted"} />
+        <View className={`items-center justify-center rounded-xs ${danger ? "bg-danger-soft" : "bg-accent-soft"}`} style={ICON_TILE}>
+          <AppIcon name={icon} size={17} tone={danger ? "danger" : "accent"} strokeWidth={2.1} />
+        </View>
         <View className="min-w-0 flex-1 gap-0.5">
           <Text className={`text-body ${danger ? "text-danger" : "text-fg"}`}>{title}</Text>
           {value ? <Text className="text-caption text-fg-muted">{value}</Text> : null}
@@ -42,5 +44,6 @@ function PressableOrView({ onPress, disabled, title, icon, role, children }: { o
 }
 
 const ROW_HEIGHT = 52;
-/** 16 row padding + 20 icon + 12 gap. */
-const SEPARATOR_INSET = 48;
+const ICON_TILE = { width: 30, height: 30, borderCurve: "continuous" } as const;
+/** 16 row padding + 30 icon tile + 12 gap. */
+const SEPARATOR_INSET = 58;

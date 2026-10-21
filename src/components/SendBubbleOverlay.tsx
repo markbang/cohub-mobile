@@ -53,7 +53,7 @@ export function SendBubbleOverlay({ transition, message, queueItem, rootRef, tar
   const queued = queueItem !== null;
   const hasAttachments = transition.attachments.length > 0;
   const destinationColor = queued ? theme.colors.surface : theme.colors.userBubble;
-  const destinationRadius = queued ? 10 : theme.radius.lg;
+  const destinationRadius = queued ? 10 : theme.radius.md;
 
   useEffect(() => () => cancelAnimation(progress), [progress]);
 

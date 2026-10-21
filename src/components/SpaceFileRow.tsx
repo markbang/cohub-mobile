@@ -12,6 +12,8 @@ import Music from "lucide-react-native/icons/eighth-notes";
 import Video from "lucide-react-native/icons/video";
 import { Pressable, Text, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
+import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
+import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { AppIcon, type IconName } from "@/src/ui";
 import { FILE_TYPE_COLORS } from "@/src/design/tokens";
 import { useAppTheme } from "@/src/theme";
@@ -22,6 +24,8 @@ type SpaceFileRowProps = {
   entry: SpaceFsEntry;
   onPress: () => void;
   onLongPress?: () => void;
+  /** The iOS context menu's items; without them it offers Copy path, as the long press does elsewhere. */
+  menuActions?: readonly NativeMenuAction[];
   compact?: boolean;
 };
 
@@ -48,7 +52,7 @@ export function formatSpaceFileBytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: SpaceFileRowProps) {
+export function SpaceFileRow({ entry, onPress, onLongPress, menuActions, compact = false }: SpaceFileRowProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
@@ -62,13 +66,15 @@ export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: S
     : isSymlink
       ? t("space.file.symlink")
       : t("space.file.type", { type: entry.mimeType || t("space.file.generic"), size: formatSpaceFileBytes(entry.size) });
-  const handleLongPress = onLongPress ?? (() => {
+  const copyPath = () => {
     void Clipboard.setStringAsync(entry.path)
       .then(() => showToast({ title: t("file.pathCopied") }))
       .catch((caught: unknown) => showToast({ title: t("file.copyPathFailed.title"), message: caught instanceof Error ? caught.message : t("file.copyPathFailed.body"), tone: "danger" }));
-  });
+  };
+  // iOS lifts the row into the system context menu, which owns the hold; the no-op keeps it from becoming a press.
+  const handleLongPress = nativeContextMenus ? () => undefined : onLongPress ?? copyPath;
 
-  return (
+  const row = (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={isDirectory ? t("space.file.openFolder", { name: entry.name }) : t("space.file.openFile", { name: entry.name })}
@@ -89,4 +95,6 @@ export function SpaceFileRow({ entry, onPress, onLongPress, compact = false }: S
       {isDirectory ? <AppIcon name="chevron-right" size={16} tone="faint" /> : null}
     </Pressable>
   );
+  if (!nativeContextMenus) return row;
+  return <NativeContextMenu menu="space-file-row" actions={menuActions ?? [{ icon: "copy", title: t("file.copyPath"), onPress: copyPath }]}>{row}</NativeContextMenu>;
 }

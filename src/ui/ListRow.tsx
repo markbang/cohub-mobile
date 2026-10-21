@@ -1,16 +1,26 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
+import { Pressable, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
 export type ListRowStatus = "running" | "failed" | "stopped" | null;
 
+/** Where a row sits in a run of rows drawn as one card; a lone row is its own card. */
+export type ListRowGroup = "single" | "first" | "middle" | "last";
+
+const GROUP_SHAPE: Record<ListRowGroup, string> = {
+  single: "mb-2 rounded-md",
+  first: "rounded-t-md",
+  middle: "",
+  last: "mb-2 rounded-b-md",
+};
+
 /**
  * The two-line, 72pt row behind every content list (docs/design-system.md §2.2): identity and time
- * on line 1, context on line 2, state carried by the leading glyph. The separator starts at the
- * text column so leading avatars read as one column.
+ * on line 1, context on line 2, state carried by the leading glyph. Each row is a card on the page;
+ * rows that belong together (a fork tree) join into one card through `group`.
  */
-export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, separator = true, compact = false }: {
+export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false }: {
   leading?: ReactNode;
   title: string;
   titlePrefix?: ReactNode;
@@ -28,15 +38,12 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   accessibilityActions?: readonly AccessibilityActionInfo[];
   onAccessibilityAction?: (event: AccessibilityActionEvent) => void;
   testID?: string;
-  separator?: boolean;
+  group?: ListRowGroup;
   compact?: boolean;
 }) {
   const body = <>
     {leading ? <View className="justify-center pr-3.5">{leading}</View> : null}
-    <View
-      className="min-w-0 flex-1 flex-row items-center gap-2 border-border py-3 pr-4"
-      style={separator ? styles.separator : null}
-    >
+    <View className="min-w-0 flex-1 flex-row items-center gap-2 py-3 pr-4">
       <View className="min-w-0 flex-1 justify-center gap-1">
         <View className="flex-row items-center gap-1.5">
           {titlePrefix}
@@ -53,8 +60,8 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       {accessory}
     </View>
   </>;
-  const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-14" : "min-h-18"}`;
-  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell}>{body}</View>;
+  const shell = `mx-4 flex-row items-stretch overflow-hidden bg-surface pl-4 ${GROUP_SHAPE[group]} ${compact ? "min-h-14" : "min-h-18"}`;
+  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell} style={CONTINUOUS}>{body}</View>;
   return (
     <Pressable
       accessibilityRole="button"
@@ -69,6 +76,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       onLongPress={onLongPress}
       delayLongPress={350}
       className={`${shell} active:bg-surface-pressed`}
+      style={CONTINUOUS}
     >
       {body}
     </Pressable>
@@ -82,7 +90,7 @@ export function AvatarStatus({ status, size, children }: { status: ListRowStatus
       {children}
       {status === "running" ? <View pointerEvents="none" className="absolute border-2 border-accent" style={{ top: -3, left: -3, width: size + 6, height: size + 6, borderRadius: (size + 6) * 0.3, borderCurve: "continuous" }} /> : null}
       {status === "failed" || status === "stopped" ? (
-        <View pointerEvents="none" className="absolute -bottom-1 -right-1 size-4.5 items-center justify-center rounded-full border-2 border-background bg-background">
+        <View pointerEvents="none" className="absolute -bottom-1 -right-1 size-4.5 items-center justify-center rounded-full border-2 border-surface bg-surface">
           <AppIcon name={status === "failed" ? "alert" : "stop"} size={13} tone={status === "failed" ? "danger" : "muted"} strokeWidth={2.4} />
         </View>
       ) : null}
@@ -109,6 +117,4 @@ export function Tag({ label, tone = "accent" }: { label: string; tone?: "accent"
   );
 }
 
-const styles = StyleSheet.create({
-  separator: { borderBottomWidth: StyleSheet.hairlineWidth },
-});
+const CONTINUOUS = { borderCurve: "continuous" } as const;

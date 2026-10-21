@@ -17,9 +17,25 @@ const MARKDOWN = `# 一级标题
 - 第三项
 
 1. 有序列表第一项
-2. 第二项
+2. 第二项，换行很长的一项：删掉了 167 行的 \`native-compressed-rollout.test.ts\`，在已有的 \`native-transcript.test.ts\` 里加了测试
+   - 嵌套无序第一项
+   - 嵌套无序第二项
+3. 第三项
+
+- [x] 已完成的任务
+- [ ] 未完成的任务
 
 > 引用内容，测试左侧竖线和颜色。
+
+> [!NOTE]
+> 提示块：GitHub admonition。
+
+> [!WARNING]
+> 警告块。
+
+~~删除线~~、**粗体里的 \`code\`** 和 *斜体*。
+
+---
 
 \`\`\`ts
 type Result = { ok: true } | { ok: false; error: string };

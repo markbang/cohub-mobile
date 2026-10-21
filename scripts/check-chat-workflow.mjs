@@ -429,6 +429,7 @@ const chromeScope = {
   recordDebugEvent: () => {},
   traceAction: () => {},
   setDialogOpen: () => {},
+  nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 } },
   useAppTheme: () => ({ colors: { background: "background", text: "text", textMuted: "muted", textSecondary: "secondary", accent: "accent", accentSoft: "selected", surfacePressed: "pressed" } }),
@@ -654,6 +655,7 @@ for (const [tab, component, expectedRequests] of [
     EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip",
     AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
+    nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
   const control = () => {
@@ -1044,13 +1046,13 @@ for (const [tab, component, expectedRequests] of [
     assert.equal(chip.props.accessibilityState.selected, selected);
     assert.equal([...classes(chip)].some((name) => name.startsWith("bg-")), false, "the touch target must not become the visible surface");
     const surface = classes(chip.props.children[0]({ pressed: false }));
-    assert.ok(surface.has("min-h-8"));
+    assert.ok(surface.has("min-h-9"));
     assert.equal([...surface].some((name) => /^h-/.test(name)), false, "the label must still grow with larger text");
     assert.ok(surface.has("rounded-full"), "filters must remain fully rounded, not rounded rectangles");
     assert.ok(surface.has("overflow-hidden"), "clip the capsule surface to its rounded bounds");
     assert.equal([...surface].some((name) => name.startsWith("border")), false);
-    assert.equal(surface.has("bg-accent-soft"), selected);
-    assert.ok(classes(chip.props.children[0]({ pressed: true })).has("bg-surface-pressed"));
+    assert.equal(surface.has("bg-accent"), selected, "the selected filter is the filled accent capsule");
+    assert.ok(classes(chip.props.children[0]({ pressed: true })).has(selected ? "bg-accent-pressed" : "bg-surface-pressed"));
     chip.props.onPress();
     assert.equal(taps, 1);
   }
@@ -1158,7 +1160,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1269,6 +1271,10 @@ const menuCleanups = [];
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
   ScrollView: "ScrollView",
+  PopoverSurface: "PopoverSurface",
+  GlassBackground: "GlassBackground",
+  useGlassMaterial: () => "solid",
+  RADIUS,
   useRef: () => ({ current: null }),
   useState: () => [chatMenuLayout, () => undefined],
   useCallback: (callback) => callback,
@@ -1320,7 +1326,15 @@ function findSpaceMenu(node) {
 }
 findSpaceMenu(spaceMenuSource);
 assert.ok(spaceMenuElement);
-const spaceMenuActions = spaceMenuElement.attributes.properties.find((prop) => ts.isJsxAttribute(prop) && prop.name.getText(spaceMenuSource) === "actions").initializer.expression.getText(spaceMenuSource);
+// The menu takes a named list (the iOS system menu shares it), so follow the name to its declaration.
+const spaceMenuActionsName = spaceMenuElement.attributes.properties.find((prop) => ts.isJsxAttribute(prop) && prop.name.getText(spaceMenuSource) === "actions").initializer.expression.getText(spaceMenuSource);
+let spaceMenuActions;
+function findSpaceMenuActions(node) {
+  if (ts.isVariableDeclaration(node) && node.name.getText(spaceMenuSource) === spaceMenuActionsName) spaceMenuActions = node.initializer.getText(spaceMenuSource);
+  ts.forEachChild(node, findSpaceMenuActions);
+}
+findSpaceMenuActions(spaceMenuSource);
+assert.ok(spaceMenuActions, "the Space menu's actions are declared in the screen");
 const buildSpaceActions = new Function("space", "pinning", "t", "setActivePanel", "togglePin", "router", "checkpointing", "createCheckpoint", ts.transpileModule(`return (${spaceMenuActions});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
 for (const isPinned of [false, true]) {
   for (const pinning of [false, true]) {
@@ -1574,9 +1588,11 @@ const bubbleScope = {
   useMemo: (factory) => factory(),
   useState: (factory) => [factory()],
   useContext: () => 240,
-  useAppTheme: () => ({ colors: { text: "text", textMuted: "muted", accentBorder: "border", accent: "accent", border: "border", surfaceRaised: "raised" } }),
+  useAppTheme: () => ({ mode: "light", colors: { text: "#1d2024", textMuted: "muted", accentBorder: "border", accent: "accent", border: "border", surfaceRaised: "raised" } }),
   typography: { chatBody: { fontSize: 15, lineHeight: 23 }, caption: { fontSize: 12, lineHeight: 17 }, code: { fontSize: 12, lineHeight: 19 } },
   scaleFontSize: (size) => size,
+  colorWithOpacity,
+  Platform: { OS: "android" },
   EnrichedMarkdownText: "EnrichedMarkdownText",
   useOpenMessageLink: () => () => {},
   useRevealedStreamText: (text) => text,
@@ -1588,13 +1604,16 @@ const bubbleScope = {
 };
 const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
 const bubbleRender = bubbleModule.MessageContent;
-const markdownTheme = { colors: { text: "text", textMuted: "muted", accentBorder: "accent-border", accent: "accent", border: "border", surfaceRaised: "raised", userBubbleCodeBackground: "user-code" } };
-const userInlineCode = bubbleModule.enrichedMarkdownStyle(markdownTheme, "user-text", "user-link", true).code;
-assert.equal(userInlineCode.color, "user-text", "inline code on a user bubble keeps the bubble foreground");
+const markdownTheme = { mode: "dark", colors: { text: "#f7f8fa", textMuted: "muted", textSecondary: "secondary", borderStrong: "border-strong", accentBorder: "accent-border", accent: "accent", border: "border", surfaceRaised: "raised", userBubbleCodeBackground: "user-code" } };
+const userInlineCode = bubbleModule.enrichedMarkdownStyle(markdownTheme, "#fff6f0", "user-link", true).code;
+assert.equal(userInlineCode.color, "#fff6f0", "inline code on a user bubble keeps the bubble foreground");
 assert.equal(userInlineCode.backgroundColor, "user-code", "inline code on a user bubble uses its theme surface");
 const assistantInlineCode = bubbleModule.enrichedMarkdownStyle(markdownTheme, "body-text", "link", false).code;
-assert.equal(assistantInlineCode.color, "text");
-assert.equal(assistantInlineCode.backgroundColor, "raised");
+assert.equal(assistantInlineCode.color, "#f7f8fa");
+assert.equal(assistantInlineCode.backgroundColor, colorWithOpacity("#f7f8fa", 0.1), "inline code is a faint wash of the text, since the renderer paints it to the full line height");
+assert.equal(assistantInlineCode.borderColor, "transparent");
+const assistantList = bubbleModule.enrichedMarkdownStyle(markdownTheme, "body-text", "link", false).list;
+assert.ok(assistantList.marginLeft < 8 && assistantList.gapWidth <= 8, "list markers hang inside the bubble's padding, not at a document indent");
 function footerPlacements(node, footer, found = []) {
   if (Array.isArray(node)) { node.forEach((child) => footerPlacements(child, footer, found)); return found; }
   if (!node || typeof node !== "object") return found;
@@ -3258,10 +3277,10 @@ assert.equal(shouldAutoExpandComposer({ ...autoExpandInput, value: "a very long 
 // the text-derived estimate must expose the overflow and raise the collapsed height on its own.
 const lineHeight = 22;
 assert.equal(estimateComposerContentHeight("", lineHeight), 0, "empty text measures nothing");
-assert.equal(estimateComposerContentHeight("word ".repeat(45), lineHeight), 7 * lineHeight + COMPOSER_TEXT_PADDING, "the estimate wraps long prose into multiple lines");
-assert.equal(estimateComposerContentHeight("这是一段比较长的中文语音转写内容，".repeat(6), lineHeight), 6 * lineHeight + COMPOSER_TEXT_PADDING, "CJK glyphs count double so Chinese lines are not under-counted");
+assert.equal(estimateComposerContentHeight("word ".repeat(45), lineHeight), 8 * lineHeight + COMPOSER_TEXT_PADDING, "the estimate wraps long prose into multiple lines");
+assert.equal(estimateComposerContentHeight("这是一段比较长的中文语音转写内容，".repeat(6), lineHeight), 7 * lineHeight + COMPOSER_TEXT_PADDING, "CJK glyphs count double so Chinese lines are not under-counted");
 assert.equal(estimateComposerContentHeight("a\nb\nc", lineHeight), 3 * lineHeight + COMPOSER_TEXT_PADDING, "explicit newlines each take a line");
-assert.equal(estimateComposerContentHeight("a very long dictation transcript", lineHeight), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
+assert.equal(estimateComposerContentHeight("a short dictation transcript", lineHeight), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).scrollEnabled, true, "the estimate alone unsticks the overflow signal when the native measurement is stale");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).height, 120, "the estimated overflow still respects the collapsed height cap");
 assert.equal(COMPOSER_CHROME_HEIGHT, 132);
@@ -3322,7 +3341,7 @@ assert.equal(isSendBubbleMessage({ ...sentMessage, id: "server", meta: { clientM
 assert.ok(motion.sendBubble.duration < 500, "send bubble handoff stays within a short interaction window");
 const renderSendOverlay = loadChromeComponent("../src/components/SendBubbleOverlay.tsx", "SendBubbleOverlay", {
   ...chromeScope,
-  useAppTheme: () => ({ radius: { lg: 18 }, colors: {} }),
+  useAppTheme: () => ({ radius: { md: 20 }, colors: {} }),
   Animated: { View: "AnimatedView" }, MessageBubble: "MessageBubble", QueuedFollowupRow: "QueuedFollowupRow", AttachmentChip: "AttachmentChip",
   useAnimatedRef: () => ({ current: null }), useSharedValue: (value) => ({ get: () => value }),
   useEffect: () => {}, useFrameCallback: () => {}, useAnimatedStyle: (callback) => callback(),

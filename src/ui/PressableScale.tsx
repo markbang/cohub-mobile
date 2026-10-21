@@ -1,7 +1,8 @@
-import { useMemo, type ReactNode } from "react";
-import { Animated, Easing, Pressable, StyleSheet, View, type PressableAndroidRippleConfig, type StyleProp, type ViewStyle } from "react-native";
+import type { ReactNode } from "react";
+import { Pressable, StyleSheet, View, type PressableAndroidRippleConfig, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { motion, press } from "@/src/motion";
+import { press, springs } from "@/src/motion";
 
 type PressableScaleProps = {
   children: ReactNode;
@@ -48,24 +49,18 @@ export function PressableScale({
   haptic = false,
   androidRipple,
 }: PressableScaleProps) {
-  const progress = useMemo(() => new Animated.Value(1), []);
+  const progress = useSharedValue(1);
+  const scaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: progress.get() }] }));
   // Parent-layout flex has to live on the outer wrapper. Child layout
   // (flexDirection, padding, gap) stays on the inner view so rows keep their direction.
   const flex = StyleSheet.flatten(style)?.flex;
   const fill = flex == null ? null : { flex: 1, minWidth: 0 as const };
 
-  const settle = (toValue: number) => {
-    progress.stopAnimation();
-    Animated.timing(progress, {
-      toValue,
-      duration: toValue === press.scale ? motion.pressIn.duration : motion.settle.duration,
-      easing: toValue === press.scale ? Easing.out(Easing.quad) : Easing.out(Easing.back(1.4)),
-      useNativeDriver: true,
-    }).start();
-  };
+  // A spring picks up from wherever an interrupted press left the scale, so quick re-taps never jump.
+  const settle = (toValue: number) => progress.set(withSpring(toValue, toValue === 1 ? springs.pressOut : springs.pressIn));
 
   return (
-    <Animated.View style={[flex == null ? null : { flex, minWidth: 0 }, scale && !disabled ? { transform: [{ scale: progress }] } : null]}>
+    <Animated.View style={[flex == null ? null : { flex, minWidth: 0 }, scaleStyle]}>
       <Pressable
         accessibilityLabel={accessibilityLabel}
         accessibilityRole={accessibilityRole}

@@ -3,6 +3,10 @@ import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
 import { getComposerMenuLayout, type ComposerMenuAnchor } from "@/src/ui/composer-menu-layout";
+import { PopoverSurface, type PopoverOrigin } from "@/src/ui/PopoverSurface";
+
+// The layout stacks the menu above the composer, starting at its leading edge.
+const MENU_ORIGIN: PopoverOrigin = [0, "100%", 0];
 
 export type ComposerMenuProps = {
   anchorRef: RefObject<View | null>;
@@ -44,14 +48,15 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent hardwareAccelerated onShow={measureAnchor} onRequestClose={onClose}>
     <View className="flex-1" onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
       <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
-      {layout ? <View
+      {layout ? <PopoverSurface
         testID={testID}
+        origin={MENU_ORIGIN}
         accessibilityViewIsModal
         onAccessibilityEscape={onClose}
         accessibilityLabel={title}
         role="dialog"
         className="absolute min-h-0 overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[layout, { height: fillHeight ? layout.maxHeight : undefined, borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
-      >{children}</View> : null}
+      >{children}</PopoverSurface> : null}
     </View>
   </Modal>;
 }

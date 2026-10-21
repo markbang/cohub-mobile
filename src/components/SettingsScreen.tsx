@@ -23,7 +23,7 @@ import {
 	TextInput,
 	View,
 } from "react-native";
-import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
+import { ConfirmSheet, NoticeSheet } from "@/src/components/SystemDialogs";
 import { BrowserSettings } from "@/src/components/BrowserSettings";
 import { ChatFilterSettings } from "@/src/components/ChatFilterSettings";
 import { ChannelBindingSheet } from "@/src/components/ChannelBindingSheet";
@@ -108,26 +108,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 					<ReferralsSection client={client} onNotice={setNotice} />
 				) : null}
 			</ScrollView>
-			<AdaptiveSheet
-				visible={notice !== null}
-				title={notice?.title ?? t("common.notice")}
-				onClose={() => setNotice(null)}
-				scrollable={false}
-				footer={
-					<View className="items-end">
-						<PrimaryButton
-							label={t("common.done")}
-							onPress={() => setNotice(null)}
-							className="min-h-11 px-4"
-						/>
-					</View>
-				}
-				testID="settings-notice-sheet"
-			>
-				<Text className="text-body text-fg-secondary">
-					{notice?.message ?? ""}
-				</Text>
-			</AdaptiveSheet>
+			<NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="settings-notice-sheet" />
 		</Screen>
 	);
 }
@@ -886,48 +867,19 @@ function ChannelsSection({
 							</View>
 						))}
 					</SettingsGroup>
-					<AdaptiveSheet
+					<ConfirmSheet
 						visible={removeCandidate !== null}
 						title={t("settings.channels.removeSheet.title")}
 						subtitle={removeCandidate?.name}
-						onClose={() => {
-							if (!removing) setRemoveCandidate(null);
-						}}
-						dismissible={!removing}
-						scrollable={false}
+						message={t("settings.channels.removeSheet.body")}
+						confirmLabel={t("common.remove")}
+						confirmIcon="trash"
+						showCancel
+						busy={removing}
+						onConfirm={() => void confirmRemove()}
+						onClose={() => setRemoveCandidate(null)}
 						testID="settings-remove-channel-sheet"
-						footer={
-							<View
-								className="flex-row justify-end gap-2"
-							>
-								<Pressable
-									disabled={removing}
-									onPress={() => setRemoveCandidate(null)}
-									className="min-h-12 px-4 justify-center"
-								>
-									<Text
-										className="text-body font-semibold text-fg-secondary"
-									>
-										{t("common.cancel")}
-									</Text>
-								</Pressable>
-								<PrimaryButton
-									label={t("common.remove")}
-									icon="trash"
-									variant="danger"
-									loading={removing}
-									onPress={() => void confirmRemove()}
-									className="min-h-12 px-4"
-								/>
-							</View>
-						}
-					>
-						<Text
-							className="text-body text-fg-secondary"
-						>
-							{t("settings.channels.removeSheet.body")}
-						</Text>
-					</AdaptiveSheet>
+					/>
 				</>
 			)}
 		</View>
@@ -1145,10 +1097,7 @@ function ReferralsSection({
 								<IconButton name="refresh" label={t("settings.referrals.rotate")} disabled={rotating} onPress={() => setRotateOpen(true)} />
 							</View>
 							{error && !rotateOpen ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : null}
-							<AdaptiveSheet visible={rotateOpen} title={t("settings.referrals.rotate")} onClose={() => { if (!rotating) setRotateOpen(false); }} dismissible={!rotating} scrollable={false} footer={<PrimaryButton label={t("settings.referrals.rotate")} icon="refresh" variant="danger" loading={rotating} onPress={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} />}>
-								<Text className="text-body text-fg">{t("settings.referrals.rotateConfirm")}</Text>
-								{error ? <Text accessibilityRole="alert" className="text-caption text-danger mt-3">{error}</Text> : null}
-							</AdaptiveSheet>
+							<ConfirmSheet visible={rotateOpen} title={t("settings.referrals.rotate")} message={t("settings.referrals.rotateConfirm")} confirmLabel={t("settings.referrals.rotate")} confirmIcon="refresh" busy={rotating} error={error} onConfirm={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} onClose={() => setRotateOpen(false)} />
 						</View>
 					</SettingsGroup>
 					<View

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import type { SpaceListSpace } from "@/src/data/space-list";
 import { openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus } from "@/src/platform/device-runtime";
@@ -53,7 +53,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
   const stateLabel = t(deviceRuntimeStateKey(instance));
   return <View>
     <ListRow
-      separator={false}
+      group="first"
       leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} online={instance.state === "ready"} /></View>}
       title={name}
       titlePrefix={display && sharingHere ? <AppIcon name="monitor" size={13} tone="info" /> : null}
@@ -65,8 +65,8 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
     />
-    {/* Actions and their separator start at the row text column: row padding + avatar + its gap. */}
-    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ borderBottomWidth: StyleSheet.hairlineWidth, marginLeft: 16 + LIST_AVATAR_SIZE + 14 }}>
+    {/* The actions close the row's card; they start at its text column: row padding + avatar + its gap. */}
+    <View className="mx-4 mb-2 flex-row flex-wrap gap-2 rounded-b-md bg-surface pb-3 pr-4" style={{ paddingLeft: 16 + LIST_AVATAR_SIZE + 14, borderCurve: "continuous" }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}

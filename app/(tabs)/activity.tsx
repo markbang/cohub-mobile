@@ -40,19 +40,21 @@ export default function ActivityScreen() {
   };
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
-      <TopBar transparent title={t("activity.title")} leading={<AccountAvatar />} />
+      <TopBar transparent titleHidden title={t("activity.title")} leading={<AccountAvatar />} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>
     <ScrollView ref={scrollRef} className="flex-1" contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}>
-      {/* One figure leads the screen: the balance, tabular so it does not shift as it updates. */}
-      <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} style={{ paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg }} pressedStyle={{ opacity: 0.7 }}>
-        <View className="flex-row items-center gap-1.5">
-          <AppIcon name="database" size={14} tone="muted" />
-          <Text className="flex-1 text-caption font-semibold text-fg-muted">{t("settings.billing.balance")}</Text>
-          <AppIcon name="chevron-right" size={16} tone="faint" />
-        </View>
-        <Text className={`mt-1 text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
-      </PressableScale>
+      {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
+      <View className="mb-6 mt-2 px-4">
+        <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>
+          <View className="flex-row items-center gap-2">
+            <View className="size-8 items-center justify-center rounded-xs bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="database" size={16} tone="accent" strokeWidth={2.1} /></View>
+            <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
+            <AppIcon name="chevron-right" size={16} tone="faint" />
+          </View>
+          <Text className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
+        </PressableScale>
+      </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}
       <SettingsGroup>
         <SettingsRow
@@ -69,7 +71,7 @@ export default function ActivityScreen() {
       {subscriptions.error ? <DataError message={subscriptions.error} onRetry={() => void subscriptions.load()} /> : null}
       <SectionHeader title={t("activity.heatmap.title")} />
       {activity?.error ? <DataError message={activity.error} onRetry={retry} /> : null}
-      {activity?.data ? <View className="px-4"><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <LoadingRows count={2} /> : null}
+      {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <LoadingRows count={2} /> : null}
     </ScrollView>
   </Screen>;
 }

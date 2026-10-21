@@ -11,13 +11,14 @@
   --radius-*: initial;
   --text-*: initial;
   --shadow-*: initial;
-  --color-background: #f7f7f5;
-  --color-surface: #ffffff;
-  --color-surface-raised: #f0f1ef;
-  --color-surface-pressed: #e6e8e5;
+  --color-background: #f0f0ec;
+  --color-surface: #fcfcfa;
+  --color-surface-raised: #e8e8e3;
+  --color-surface-pressed: #dedfd9;
+  --color-surface-float: #fcfcfa;
   --color-press-overlay: rgba(29, 32, 36, 0.10);
-  --color-border: #e1e3df;
-  --color-border-strong: #c9cdc8;
+  --color-border: #e0e0da;
+  --color-border-strong: #c9cac3;
   --color-fg: #1d2024;
   --color-fg-secondary: #4d535c;
   --color-fg-muted: #59616b;
@@ -32,7 +33,7 @@
   --color-user-bubble-link: #ffe0cf;
   --color-user-bubble-code: rgba(29, 32, 36, 0.18);
   --color-user-bubble-meta: rgba(255, 255, 255, 0.88);
-  --color-assistant-bubble: #eceee9;
+  --color-assistant-bubble: #fcfcfa;
   --color-on-assistant-bubble: #1d2024;
   --color-success: #238552;
   --color-success-soft: #e7f5ed;
@@ -44,30 +45,30 @@
   --color-info: #416fae;
   --color-info-soft: #eaf1fc;
   --color-shadow: #15202b;
-  --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --text-display: 28px;
-  --text-display--line-height: 34px;
-  --text-title: 20px;
-  --text-title--line-height: 26px;
+  --radius-xs: 8px;
+  --radius-sm: 14px;
+  --radius-md: 20px;
+  --radius-lg: 28px;
+  --text-display: 34px;
+  --text-display--line-height: 41px;
+  --text-title: 22px;
+  --text-title--line-height: 28px;
   --text-headline: 17px;
   --text-headline--line-height: 22px;
-  --text-body: 15px;
+  --text-body: 17px;
   --text-body--line-height: 22px;
-  --text-chat: 15px;
-  --text-chat--line-height: 23px;
-  --text-subhead: 13px;
-  --text-subhead--line-height: 18px;
-  --text-caption: 12px;
-  --text-caption--line-height: 16px;
+  --text-chat: 17px;
+  --text-chat--line-height: 24px;
+  --text-subhead: 15px;
+  --text-subhead--line-height: 20px;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
   --text-caption--font-weight: 500;
   --text-micro: 11px;
   --text-micro--line-height: 14px;
   --text-micro--font-weight: 600;
-  --text-code: 12px;
-  --text-code--line-height: 19px;
+  --text-code: 13px;
+  --text-code--line-height: 20px;
   --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
 }
 
@@ -75,13 +76,14 @@
 @layer theme {
   :root {
     @variant light {
-      --color-background: #f7f7f5;
-      --color-surface: #ffffff;
-      --color-surface-raised: #f0f1ef;
-      --color-surface-pressed: #e6e8e5;
+      --color-background: #f0f0ec;
+      --color-surface: #fcfcfa;
+      --color-surface-raised: #e8e8e3;
+      --color-surface-pressed: #dedfd9;
+      --color-surface-float: #fcfcfa;
       --color-press-overlay: rgba(29, 32, 36, 0.10);
-      --color-border: #e1e3df;
-      --color-border-strong: #c9cdc8;
+      --color-border: #e0e0da;
+      --color-border-strong: #c9cac3;
       --color-fg: #1d2024;
       --color-fg-secondary: #4d535c;
       --color-fg-muted: #59616b;
@@ -96,7 +98,7 @@
       --color-user-bubble-link: #ffe0cf;
       --color-user-bubble-code: rgba(29, 32, 36, 0.18);
       --color-user-bubble-meta: rgba(255, 255, 255, 0.88);
-      --color-assistant-bubble: #eceee9;
+      --color-assistant-bubble: #fcfcfa;
       --color-on-assistant-bubble: #1d2024;
       --color-success: #238552;
       --color-success-soft: #e7f5ed;
@@ -110,13 +112,14 @@
       --color-shadow: #15202b;
     }
     @variant dark {
-      --color-background: #0f1114;
-      --color-surface: #171a1f;
-      --color-surface-raised: #22262e;
-      --color-surface-pressed: #2b3039;
+      --color-background: #0c0d10;
+      --color-surface: #1a1c21;
+      --color-surface-raised: #25282f;
+      --color-surface-pressed: #30343c;
+      --color-surface-float: #25282f;
       --color-press-overlay: rgba(255, 255, 255, 0.12);
-      --color-border: #2d333c;
-      --color-border-strong: #424a56;
+      --color-border: #2c3039;
+      --color-border-strong: #434954;
       --color-fg: #f7f8fa;
       --color-fg-secondary: #d0d5dd;
       --color-fg-muted: #a2aab6;
@@ -131,7 +134,7 @@
       --color-user-bubble-link: #ffe0cf;
       --color-user-bubble-code: rgba(15, 17, 20, 0.24);
       --color-user-bubble-meta: rgba(255, 246, 240, 0.88);
-      --color-assistant-bubble: #22262e;
+      --color-assistant-bubble: #1a1c21;
       --color-on-assistant-bubble: #f7f8fa;
       --color-success: #62c994;
       --color-success-soft: #1d3329;

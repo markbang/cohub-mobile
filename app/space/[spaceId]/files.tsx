@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList } from "@legendapp/list/react-native";
 import { Alert, Pressable, Share, Text, View } from "react-native";
+import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
@@ -136,6 +137,13 @@ export default function FilesScreen() {
     ]);
   }, [copyFilePath, openEntry, t]);
 
+  // The same actions as the Android alert, for the iOS context menu.
+  const fileMenuActions = useCallback((entry: SpaceFsEntry): NativeMenuAction[] => [
+    { icon: "copy", title: t("file.copyPath"), onPress: () => void copyFilePath(entry.path) },
+    { icon: "external-link", title: t("file.openExternally"), onPress: () => openEntry(entry) },
+    { icon: "share", title: "Share", onPress: () => void Share.share({ message: entry.path }).catch(() => undefined) },
+  ], [copyFilePath, openEntry, t]);
+
   const goToParent = useCallback(() => {
     dismissPath(parentSpacePath(currentPath));
   }, [currentPath, dismissPath]);
@@ -190,7 +198,7 @@ export default function FilesScreen() {
             flexGrow: entries.length === 0 ? 1 : undefined,
           }}
           renderItem={({ item }) => (
-            <SpaceFileRow entry={item} onPress={() => openEntry(item)} onLongPress={() => showFileActions(item)} />
+            <SpaceFileRow entry={item} onPress={() => openEntry(item)} onLongPress={() => showFileActions(item)} menuActions={fileMenuActions(item)} />
           )}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center p-6">

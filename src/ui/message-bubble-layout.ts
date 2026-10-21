@@ -11,7 +11,7 @@ export function bubbleTextLines(lines: readonly BubbleTextLine[] | null | undefi
   return lines.map(({ x, y, width, height }) => ({ x, y, width, height }));
 }
 
-export const BUBBLE_PADDING_X = 12;
+export const BUBBLE_PADDING_X = 14;
 export const BUBBLE_META_GAP = 8;
 export const BUBBLE_META_DROP = 2;
 

@@ -31,7 +31,7 @@ optimizes for *text comfort*. Settings are rare, so they optimize for *clarity*.
 | Time | Compact relative | `3m`, `2h`, `Mon`, `Oct 3`. Never "Active 3 minutes ago". |
 | Primary action in a sheet or empty state | Verb label (+ icon) | Text stays where the action is the point of the screen. |
 | Destructive confirmation | Verb label | "Sign out", "Delete". Never icon-only. |
-| Navigation tabs | Icon + label | Tabs name destinations, so they always keep their words (platform convention). The selected tab shows an accent capsule. |
+| Navigation tabs | Icon + label | Tabs name destinations, so they always keep their words (platform convention). The selected tab is accent on the lens. |
 
 An icon is allowed to replace text only when it is in the **icon dictionary** (§6). Anything
 else keeps its words. Icon-only controls get a long-press hint in a later phase if usage shows
@@ -44,8 +44,9 @@ confusion; the accessibility label is mandatory from day one.
   third line.
 - Row heights: **72 pt** for content lists (46 pt avatar, 12 pt vertical padding, 4 pt between the lines), **52 pt** for settings rows, **56 pt**
   minimum for anything with a 44 pt control.
-- Separators are hairlines **inset to the text column** (iOS list style), never full width
-  inside a list.
+- **Content rows are cards on a gray page.** Each `ListRow` is a `rounded-md` card inset 16 from
+  the screen edge with an 8 pt gap; rows that belong together (a fork tree) join into one card
+  through `group`. Settings rows keep hairlines **inset to the text column** inside their group card.
 - No chevrons in content lists: a tappable row with an avatar already reads as navigable.
   Chevrons stay only in grouped settings lists, where rows drill into another settings page.
 - Screen edge padding is 16. Section gap 24. Row internal gap 12. Everything is on the 4 pt grid
@@ -74,41 +75,98 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
 
 - **One accent** (the existing orange). It marks primary action, selection, and running state.
   Nothing else gets a new hue.
-- **Flat content, floating chrome.** Only the tab bar, menus, toasts, and banners use
+- **Selection is filled.** A selected filter or segment is the accent itself with
+  `text-on-accent`, not a tinted wash; unselected ones sit on the surface one level up. The tab
+  bar is the exception, as on iOS: its lens is a tint and the selected tab is marked by accent color.
+- **Flat content, floating chrome.** Only the tab bar, menus, toasts, banners, and the composer use
   `shadow-float`. Cards are separated by surface color, not shadow.
-- **Shape rule**: tags `rounded-xs` (6), controls `rounded-sm` (10), cards/menus/bubbles
-  `rounded-md` (14), sheets and the composer `rounded-lg` (20), capsules `rounded-full`. Pair
-  every rounded rectangle with `borderCurve: "continuous"` where the platform supports it.
+- **Surfaces step, borders don't.** A surface stands out from what it sits on by a step in
+  lightness, not an outline. Floating chrome without raised blocks inside (tab bar, action and
+  context menus, toasts, the offline banner, jump-to-latest) uses `bg-surface-float`: the card
+  white in light mode, one level lighter than cards in dark mode, where a shadow does not show.
+  Composer menus and the slash and mention menus keep `bg-surface` and a hairline because their
+  rows use `bg-surface-raised` blocks, which a float would swallow in dark mode.
+- **Glass for floating controls** (`src/ui/Glass.tsx`). The tab bar and its lifted lens, top-bar
+  buttons, the composer, action and context menus, and jump-to-latest draw their backdrop with
+  `GlassBackground`: iOS 26 Liquid Glass (the tab bar and lens share a `GlassGroup` so they merge),
+  a system blur on older iOS, a frosted blur on Android only where the surface has a blur target
+  (the tab bar, through `TabScreenLayout`), and the solid surface otherwise or under Reduce
+  Transparency. Glass does not render at low opacity, so a glass shape that appears and
+  disappears in place (the lifted lens) switches its style to `none` rather than fading.
+- **Shape rule** (by a shape's shortest side): tags and wells `rounded-xs` (8), controls
+  `rounded-sm` (14), cards/menus/bubbles `rounded-md` (20), sheets `rounded-lg` (28); buttons,
+  filters, segmented controls, and other capsules `rounded-full`. Pair every rounded rectangle with
+  `borderCurve: "continuous"` where the platform supports it (iOS).
+- **Concentric corners.** A shape nested in another at an inset takes `outer = inner + inset`.
+  The composer's corner is its 8 pt padding plus half its 44 pt corner controls (30); a
+  `Segmented` control is a capsule in a capsule, concentric at any height.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
 | --- | --- | --- |
-| `text-display` | 28/34 | One figure per screen (credits balance) |
-| `text-title` | 20/26 | Sheet titles, Space name on its home |
+| `text-display` | 34/41 | The Settings Large Title, one figure per screen (credits balance) |
+| `text-title` | 22/28 | Sheet titles, Space name on its home |
 | `text-headline` | 17/22 | Navigation bar titles |
-| `text-body` | 15/22 | Row titles, settings rows, form text |
-| `text-chat` | 15/23 | Message text |
-| `text-subhead` | 13/18 | Row second line, descriptions |
-| `text-caption` | 12/16 | Time, meta, section headers |
+| `text-body` | 17/22 | Row titles, settings rows, form text |
+| `text-chat` | 17/24 | Message text |
+| `text-subhead` | 15/20 | Row second line, descriptions, filters, segments |
+| `text-caption` | 13/18 | Time, meta, settings group labels |
 | `text-micro` | 11/14 | Badges, counts. Nothing smaller exists. |
-| `text-code` | 12/19 | Monospace |
+| `text-code` | 13/20 | Monospace |
 
 Weights: 400 body, 500 captions, 600 titles, emphasis, and micro labels, 700 display only. Numbers that count or change use
 `tabular-nums`.
 
 - **Colors** keep their existing values; only names change for `className`:
   `text-fg`, `text-fg-secondary`, `text-fg-muted`, `text-fg-faint`, `bg-background`,
-  `bg-surface`, `bg-surface-raised`, `bg-surface-pressed`, `border-border`, `bg-accent`,
+  `bg-surface`, `bg-surface-raised`, `bg-surface-pressed`, `bg-surface-float`, `border-border`, `bg-accent`,
   `text-on-accent`, `bg-accent-soft`, `text-success|warning|danger|info` and their `-soft`
   backgrounds. Tailwind's default palette is removed: a class like `bg-red-500` does nothing.
 - **Runtime theming** stays: pure black, the Config Space `theme.css`, and the font scale
   preference all flow through `useUniwindThemeSync()` into the same CSS variables, so className
   styling and JS colors can never disagree.
 
+### 2.4.1 System controls on iOS, drawn controls on Android
+
+Where iOS has a system control for the job, iOS uses it and Android draws the matching one, behind
+one component and a platform file (`Foo.tsx` for Android, `Foo.ios.tsx` for iOS) or a `native*`
+flag from such a file, so call sites stay the same:
+
+| Job | iOS | Android |
+| --- | --- | --- |
+| Tab bar | `NativeTabs` (`app/(tabs)/_layout.ios.tsx`) | `FloatingTabBar` (`_layout.tsx`) |
+| Segmented choice | SwiftUI segmented `Picker` (`NativeSegmented.ios.tsx`) | drawn `Segmented` |
+| Button menus: Chat and Space "more", Chats source filter, composer add | SwiftUI `Menu` (`NativeMenu.ios.tsx`) | `AnchoredActionMenu`, `AttachmentMenu` |
+| A few values picked in a settings row | SwiftUI menu `Picker` (`SettingsSelectRow.ios.tsx`) | drawn `SettingsSelectRow` |
+| Renaming a Chat | `Alert.prompt` | drawn dialog |
+| Composer harness choice | SwiftUI `Menu` with sections and checks (`harnessMenuSections`) | `HarnessPicker` |
+| Yes-or-no confirmations: sign out, cancel billing, unbind or remove a channel, rotate a referral code, clear the cache | system action sheet (`ConfirmSheet` in `SystemDialogs.ios.tsx`); a failure returns as an alert with Retry | `ConfirmSheet` drawn as a sheet |
+| Notices with one way out | system alert (`NoticeSheet`) | `NoticeSheet` drawn as a sheet |
+| Long-press menus: Space rows, file rows, the Chat and file titles | SwiftUI `ContextMenu` around the view (`NativeContextMenu.ios.tsx`), which lifts it into a preview | the drawn menu or alert from the view's own long press |
+
+Cache retention is picked in place with `SettingsSelectRow` on both. Sheets that hold forms or
+lists (create Space, add Mod, custom sleep, feedback, folder browser, labels, turn navigator, app
+update) stay drawn on both. The system tab bar mounts every tab at launch, where the drawn one mounts
+a tab on first visit.
+
 ### 2.5 Motion
 
-Unchanged (`src/motion.ts`). Rows use background highlight on press (`active:bg-surface-pressed`),
-not scale and not a haptic (a touch that starts a scroll begins on a row); buttons and cards keep `PressableScale`. Tabs never slide.
+`src/motion.ts` holds the timings and the spring presets (`springs`). Anything that moves in
+response to a touch or a choice uses a spring, so an interrupted motion continues from where it is:
+
+- Sheets use UIKit's sheet spring (mass 3, stiffness 1000, critically damped). A release closes
+  the sheet when its projected position (UIScrollView's fast deceleration) passes half its height;
+  a throw back up keeps its speed and lands with slight overshoot.
+- Menus and popovers spring out of their anchor with a small bounce (`PopoverSurface`, from 0.5
+  scale; the slash and mention menus, which reappear while typing, from 0.92) and close at once.
+- The `Segmented` thumb slides on `springs.indicator`. The tab bar's lens uses UIKit's measured
+  tab-bar springs (`springs.dock*`); a tab's icon pops when it becomes selected.
+- Composer glyphs that change (send, stop, sent; add, close) pop in instead of swapping.
+
+Rows use background highlight on press (`active:bg-surface-pressed`),
+not scale and not a haptic (a touch that starts a scroll begins on a row); buttons and cards keep `PressableScale`. Tab screens never slide.
+The chat thread's rows, bubbles, and streaming text add no motion of their own: list layout
+animations would fight scroll anchoring and turn ordering.
 
 ## 3. Components
 
@@ -117,22 +175,28 @@ Shared primitives keep their current names and props so screens migrate without 
 | Component | Change |
 | --- | --- |
 | `AppIcon` | Adds `tone` (`fg`, `muted`, `faint`, `accent`, `success`, `warning`, `danger`) so callers stop passing hex. |
-| `IconButton` | Numeric `size` for the visual circle (icon at half of it); the touch target never drops below 44 pt. Tones `default`, `accent`, `danger`. |
-| `PrimaryButton` | Adds `variant: "primary" | "secondary" | "ghost" | "danger"`. |
-| `ListRow` (new) | 72 pt. Leading slot, title, trailing meta, second line, trailing accessory, inset separator. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
+| `IconButton` | Numeric `size` for the visual circle (icon at half of it); the touch target never drops below 44 pt. Tones `default`, `accent`, `danger`. `filled` draws a solid circle (accent-filled for `accent`); buttons in a `TopBar` are filled by default. |
+| `PrimaryButton` | Capsule, 52 pt. `variant: "primary" | "secondary" | "ghost" | "danger"`. |
+| `ListRow` (new) | 72 pt card. Leading slot, title, trailing meta, second line, trailing accessory; `group` joins rows into one card. Backs Chat, Space, search, and resource rows. `Meta` and `Tag` sit beside it in `src/ui/ListRow.tsx`. |
 | `AvatarStatus` (new) | Replaces `StatusPill` in lists: a Chat that is running = accent ring around the avatar, failed = `alert` badge, stopped = `stop` badge. A Space whose runtime is up keeps the small green dot on `Avatar` (`online`). `StatusPill` stays for detail headers only. |
 | `Meta` (new) | Icon + tabular value, e.g. chats count, step count, duration. |
-| `SectionHeader` | Sentence case `text-caption font-semibold text-fg-muted`, no uppercase eyebrow. |
-| `SettingsGroup`/`SettingsRow` | 52 pt rows, inset separators, `rounded-md` group. |
+| `SectionHeader` | Sentence case `text-headline font-bold text-fg`, no uppercase eyebrow. |
+| `SettingsGroup`/`SettingsRow` | 52 pt rows, the glyph on an `accent-soft` tile, inset separators, `rounded-md` group. |
+| `SettingsSelectRow` | A settings row that picks one of a few values in place, as an iOS pop-up button: the value and `chevrons-up-down` at the trailing edge, a glass menu that springs out of it with a check on the current value. Tap opens it; a press held 120 ms opens it under the finger, and sliding onto a value and letting go picks it, with a selection haptic per row. Used for Language and Web browsing; longer or richer choices keep their own page. iOS renders the system pop-up button (`@expo/ui` SwiftUI `Picker`, `SettingsSelectRow.ios.tsx`); Android renders the drawn one with the same props. |
 | `EmptyState`, `DataError`, `LoadingRows` | Skeleton matches the 72 pt `ListRow`; errors use an icon retry button. |
-| `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`. |
-| `FloatingTabBar` | Icon + label, 58 pt, content-width capsule, `shadow-float`. |
+| `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`; `large` puts a `text-display` Large Title under the bar (Settings); `titleHidden` leaves tab roots (Chats, Spaces, Activity) with only their buttons, the selected tab naming the screen, and keeps the title as the screen reader's header. |
+| `FloatingTabBar` | Icon + label, 62 pt, content-width capsule, `shadow-float`, a lens that lifts and follows a drag. |
 
 ## 4. Screens
 
 ### Tab bar
-Floating bar with icon above a short label (messages, layers, activity); the selected tab is accent on an
-`accent-soft` capsule. The bar hugs its three 80 pt slots instead of spanning the screen. Height 58.
+Floating bar with icon above a short label (messages, layers, activity), modelled on the iOS 26 tab
+bar. A lens rests under the selected tab on `accent-soft`, with that tab's icon and label in accent.
+Touching the bar lifts the lens (it grows, stands off the bar with a shadow, and magnifies the tab
+under it) and moves it to the touched tab; dragging slides it across the bar with a selection
+haptic at each tab, stretching with its speed and rubber-banding past either end. Letting go selects
+the tab under the lens, carrying a flick on by at most one tab; the lens drops once it has arrived.
+The bar hugs its 84 pt slots instead of spanning the screen. Height 62.
 
 ### Chats
 - Header: account avatar · "Chats" · search · new chat (unchanged structure).
@@ -175,7 +239,13 @@ Floating bar with icon above a short label (messages, layers, activity); the sel
 - Error banner: icon, message, refresh icon button (no "Retry" word).
 - Follow-up queue header: icon + count.
 - Message bubbles, Markdown, and the composer keep their measured layout logic; only styling
-  moves to tokens. This screen is migrated last and profiled on a release build.
+  moves to tokens.
+- Markdown in a bubble (`enrichedMarkdownStyle`) spaces blocks closer than a document: one gap
+  (0.45 of a chat line) after paragraphs, lists, quotes, code, tables, and images; headings scale
+  from the chat size. List markers hang just inside the bubble padding in a 14 pt column. Inline code
+  is a narrow platform monospace on a faint wash of the text color, because the renderer paints its
+  background to the full line height; fenced code is a borderless `surface-raised` block with syntax
+  colors per mode. `app/debug/markdown.tsx` shows every supported element. This screen is migrated last and profiled on a release build.
 
 ### Everything else
 Settings subpages, sheets, menus, toasts, auth, Works, tasks, and files adopt the same

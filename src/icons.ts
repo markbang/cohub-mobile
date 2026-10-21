@@ -19,6 +19,7 @@ import CircleCheck from "lucide-react-native/icons/circle-check";
 import CircleX from "lucide-react-native/icons/circle-x";
 import Clock from "lucide-react-native/icons/clock";
 import ChevronDown from "lucide-react-native/icons/chevron-down";
+import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import ChevronRight from "lucide-react-native/icons/chevron-right";
 import ChevronUp from "lucide-react-native/icons/chevron-up";
 import CloudOff from "lucide-react-native/icons/cloud-off";
@@ -102,6 +103,7 @@ export const icons = {
   "chevron-down": ChevronDown,
   "chevron-right": ChevronRight,
   "chevron-up": ChevronUp,
+  "chevrons-up-down": ChevronsUpDown,
   "cloud-off": CloudOff,
   compass: Compass,
   copy: Copy,
