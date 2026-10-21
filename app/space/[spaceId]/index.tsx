@@ -1,7 +1,7 @@
 import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
@@ -15,8 +15,7 @@ import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
+import { AppIcon, AppRefreshControl, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatNumber, formatRelativeTime, sortByRecent } from "@/src/utils";
 
@@ -43,7 +42,6 @@ export default function SpaceScreen() {
   const params = useLocalSearchParams<Params>();
   const spaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
   useSpaceRealtime(spaceId ? [spaceId] : []);
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { state, client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession, spaceList: { recordVisit } } = useApp();
@@ -363,7 +361,7 @@ export default function SpaceScreen() {
     <ScrollView
       className="flex-1 bg-background"
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-      refreshControl={<RefreshControl refreshing={state.refreshing || pageRefreshing} onRefresh={() => void refreshPage()} tintColor={theme.colors.accent} colors={[theme.colors.accent]} />}
+      refreshControl={<AppRefreshControl refreshing={state.refreshing || pageRefreshing} onRefresh={() => void refreshPage()} />}
     >
     {/* The bar already names the Space; the header adds what the name cannot: who, what, how busy. */}
     <View className="flex-row items-start gap-4 px-4 pb-2 pt-3">

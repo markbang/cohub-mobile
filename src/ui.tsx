@@ -6,7 +6,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,6 +34,7 @@ import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import { LIST_AVATAR_SIZE, type ColorKey } from "@/src/design/tokens";
 import { motion, springs } from "@/src/motion";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
 import { Loader } from "@/src/ui/Loader";
 import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
@@ -44,6 +44,7 @@ import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
+export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
@@ -151,7 +152,6 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 const FILLED_ICON_SIZE = 18;
 
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
-  const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const scrollTrace = useRef({ at: 0, y: 0, height: 0, viewport: 0 });
   const traceScroll = (phase: string, event?: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number }; velocity?: { y?: number } | null } }) => {
@@ -173,7 +173,7 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
       ref={scrollRef}
       className="flex-1 bg-background"
       contentContainerStyle={[{ paddingBottom: insets.bottom + 28 }, contentStyle]}
-      refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} colors={[theme.colors.accent]} /> : undefined}
+      refreshControl={onRefresh ? <AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} /> : undefined}
       keyboardShouldPersistTaps="handled"
       scrollEventThrottle={100}
       onScroll={(event) => traceScroll("scroll", event)}

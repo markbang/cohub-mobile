@@ -13,7 +13,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, Screen } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
@@ -186,12 +186,10 @@ export default function ChatsScreen() {
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
-        refreshing={pullRefreshing}
-        onRefresh={refreshOnPull}
+        {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: headerHeight })}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         contentInsetAdjustmentBehavior="never"
-        progressViewOffset={headerHeight}
         scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
         contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">

@@ -429,7 +429,10 @@ const chromeScope = {
   setDialogOpen: () => {},
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   useTranslation: () => ({ t: (key) => key }),
-  typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 } },
+  typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
+  Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
+  AppRefreshControl: "AppRefreshControl",
+  listRefreshProps: (options) => ({ refreshControl: { type: "AppRefreshControl", props: options } }),
   useAppTheme: () => ({ colors: { background: "background", text: "text", textMuted: "muted", textSecondary: "secondary", accent: "accent", accentSoft: "selected", surfacePressed: "pressed" } }),
 };
 // A minimal hook runner exercises real screen callbacks, not native layout or gestures.
@@ -656,21 +659,19 @@ for (const [tab, component, expectedRequests] of [
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
-  const control = () => {
-    const nodes = render();
-    return tab === "activity" ? nodes.find((node) => node.type === "ScrollView").props.refreshControl : nodes.find((node) => node.type === "LegendList");
-  };
-  const scrollSurface = render().find((node) => node.type === "ScrollView" || node.type === "LegendList");
+  const surface = () => render().find((node) => node.type === (tab === "activity" ? "ScrollView" : "LegendList"));
+  const refresh = () => surface().props.refreshControl;
+  const scrollSurface = surface();
   assert.equal(render().find((node) => node.type === "Screen").props.edgeToEdge, true);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingTop, 103, `${tab}: initial content clears the measured header`);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingBottom, 80, `${tab}: the last item clears the floating tabs`);
-  assert.equal(control().props.progressViewOffset, 103, `${tab}: refresh feedback clears the header`);
-  assert.equal(control().props.refreshing, false, `${tab}: automatic loading must not show the pull-to-refresh spinner`);
+  assert.equal(refresh().props.progressViewOffset, 103, `${tab}: refresh feedback clears the header`);
+  assert.equal(refresh().props.refreshing, false, `${tab}: automatic loading must not show the pull-to-refresh spinner`);
   assert.equal(requests.length, 0, `${tab}: rendering the refresh control does not start a request`);
   for (const failed of [false, true]) {
     pending = Promise.withResolvers();
-    const task = control().props.onRefresh();
-    assert.equal(control().props.refreshing, true, `${tab}: the pull gesture immediately shows feedback, even during automatic loading`);
+    const task = refresh().props.onRefresh();
+    assert.equal(refresh().props.refreshing, true, `${tab}: the pull gesture immediately shows feedback, even during automatic loading`);
     for (let tick = 0; tick < 5; tick++) await Promise.resolve();
     assert.deepEqual(requests.splice(0), expectedRequests);
     if (failed) {
@@ -679,7 +680,7 @@ for (const [tab, component, expectedRequests] of [
     }
     pending.resolve(); // Data hooks report failures in their resource state.
     await task;
-    assert.equal(control().props.refreshing, false, `${tab}: completion stops the spinner on success and failure`);
+    assert.equal(refresh().props.refreshing, false, `${tab}: completion stops the spinner on success and failure`);
     if (failed) assert.ok(render().some((node) => node.type === "DataError"), `${tab}: refresh errors remain actionable`);
   }
   state.error = null;
@@ -696,7 +697,7 @@ for (const [tab, component, expectedRequests] of [
       for (const scroll of [0, 228]) {
         for (const change of ["status", "reorder", "prepend", "append", "remove", "empty"]) {
           state.sessions = Array.from({ length: 12 }, (_, index) => ({ ...runningFixture, id: `chat-${index}` }));
-          const before = control().props;
+          const before = surface().props;
           const adjustments = [];
           const scope = {
             Platform: { OS: platform }, MVCP_POSITION_EPSILON: 0.1,
@@ -721,7 +722,7 @@ for (const [tab, component, expectedRequests] of [
             : change === "remove" ? sessions.slice(1)
             : change === "empty" ? []
             : sessions.map((session) => ({ ...session, activeTurn: null }));
-          const after = control().props;
+          const after = surface().props;
           listState.props.data = after.data;
           listState.indexByKey.clear();
           after.data.forEach((row, index) => { listState.indexByKey.set(after.keyExtractor(row), index); listState.positions[index] = index * after.estimatedItemSize; });
@@ -732,11 +733,11 @@ for (const [tab, component, expectedRequests] of [
     }
   }
   if (tab === "spaces") {
-    const list = control();
+    const list = surface();
     assert.notEqual(list.props.ListEmptyComponent.type, "LoadingRows", "returning to a loaded empty Spaces list must not flash skeletons");
     spaceList.overview = null;
-    assert.equal(control().props.ListEmptyComponent.type, "LoadingRows", "the first Spaces load still has a placeholder");
-    assert.equal(control().props.refreshing, false, "the first Spaces load is not a pull gesture");
+    assert.equal(surface().props.ListEmptyComponent.type, "LoadingRows", "the first Spaces load still has a placeholder");
+    assert.equal(refresh().props.refreshing, false, "the first Spaces load is not a pull gesture");
   }
 }
 

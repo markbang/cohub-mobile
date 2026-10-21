@@ -54,7 +54,7 @@ import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
-import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
+import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, listRefreshProps, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
@@ -1178,12 +1178,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           onMomentumScrollBegin={handleMomentumScrollBegin}
           onMomentumScrollEnd={handleMomentumScrollEnd}
           contentInsetAdjustmentBehavior="never"
-          progressViewOffset={headerHeight}
           scrollIndicatorInsets={listIndicatorInsets}
           contentContainerStyle={listContentStyle}
           onContentSizeChange={handleContentSizeChange}
-          onRefresh={handleListRefresh}
-          refreshing={view.refreshing}
+          {...listRefreshProps({ refreshing: view.refreshing, onRefresh: handleListRefresh, progressViewOffset: headerHeight })}
           ListHeaderComponent={view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}{catchUpLoader && !view.hasMoreNewer && !liveStream ? <ListEdgeLoader label={t("chat.catchingUp")} /> : null}</View>}
         /> : null}
