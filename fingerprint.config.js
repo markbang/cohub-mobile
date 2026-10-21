@@ -5,9 +5,9 @@
  * release. Keep the default package.json script skip so prebuild does not
  * change the fingerprint either.
  *
- * `strict` keeps hashing native module files: `scripts/patch-enriched-markdown.mjs` edits native
- * sources inside node_modules without changing the package version, which the SDK 58 `balanced`
- * default would miss, letting an OTA land on a binary without the patch.
+ * `strict` keeps hashing native module files: edits to the vendored
+ * `modules/react-native-enriched-markdown` keep its package version, which the SDK 58 `balanced`
+ * default would miss, letting an OTA land on a binary without the change.
  */
 module.exports = {
   preset: "strict",

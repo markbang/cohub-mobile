@@ -11,6 +11,7 @@ module.exports = defineConfig([
     "reference/**",
     "coverage/**",
     "landing/vendor/**",
+    "modules/react-native-enriched-markdown/**",
   ]),
   {
     rules: {

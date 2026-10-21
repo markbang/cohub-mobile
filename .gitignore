@@ -44,3 +44,7 @@ yarn-error.*
 /android
 modules/*/android/build/
 modules/*/android/.cxx/
+# Restored by modules/react-native-enriched-markdown/postinstall.mjs
+modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars/
+modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter/
+modules/react-native-enriched-markdown/ios/vendor/

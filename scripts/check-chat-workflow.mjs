@@ -3007,7 +3007,8 @@ assert.ok(panelsSource.text.includes("pagerSeed"), "The first paint must compens
 assert.equal(panelsSource.text.includes("activePanelRef.current ?? visiblePanelRef.current"), false, "width realignment must not follow a pre-seed visiblePanel onto the Chats page");
 assert.ok(pagerAttributes.some((attribute) => attribute.name.getText(panelsSource) === "onContentSizeChange"), "The pager still initializes its position on first layout");
 assert.equal(panelsSource.text.includes("usePanelGestureBlocker"), false, "The pager must not be disabled for every message that happens to contain a fence");
-const markdownPatch = readFileSync(new URL("../scripts/patch-enriched-markdown.mjs", import.meta.url), "utf8");
+const markdownAndroid = "../modules/react-native-enriched-markdown/android/src/main/java/com/swmansion/enriched/markdown/segments/";
+const markdownPatch = ["NestedHorizontalScrollView.kt", "CodeBlockContainerView.kt", "TableContainerView.kt"].map((file) => readFileSync(new URL(markdownAndroid + file, import.meta.url), "utf8")).join("\n");
 assert.ok(markdownPatch.includes("NestedHorizontalScrollView"), "Code-block scrolling must use a nested HorizontalScrollView that can claim the drag");
 assert.ok(markdownPatch.includes("dispatchTouchEvent"), "Code-block scrolling must claim in dispatchTouchEvent; OnTouchListener never sees ACTION_DOWN");
 assert.equal(markdownPatch.includes("setOnTouchListener {"), false, "OnTouchListener never sees ACTION_DOWN once the code TextView consumes it");

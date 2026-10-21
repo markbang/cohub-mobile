@@ -69,7 +69,7 @@ const PANEL_SWIPE_SPRING = { duration: 300, dampingRatio: 1, overshootClamping: 
  * Push-style pager. The native ScrollView never drags itself: it would intercept any drag past
  * its slop, however slanted. A pan that only activates near horizontal drives it instead.
  * Native views that claim the touch (scrolling timeline, text selection, scrollable code blocks;
- * see scripts/patch-enriched-markdown.mjs) cancel the pan. Do not disable the pager for messages
+ * see NestedHorizontalScrollView in modules/react-native-enriched-markdown) cancel the pan. Do not disable the pager for messages
  * containing a fence — that blocks the swipe on almost every reply.
  */
 export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {

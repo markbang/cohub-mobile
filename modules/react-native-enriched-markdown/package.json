@@ -1,0 +1,49 @@
+{
+  "name": "react-native-enriched-markdown",
+  "version": "1.1.1",
+  "private": true,
+  "description": "Vendored fork of react-native-enriched-markdown; see UPSTREAM.md",
+  "license": "MIT",
+  "author": "Gregory Moskaliuk <mosckalyuck@gmail.com> (https://github.com/hryhoriiK97)",
+  "homepage": "https://enriched.swmansion.com/markdown",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/software-mansion/enriched-markdown.git",
+    "directory": "packages/react-native-enriched-markdown"
+  },
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "scripts": {
+    "postinstall": "node postinstall.mjs"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "codegenConfig": {
+    "name": "EnrichedMarkdownTextSpec",
+    "type": "components",
+    "jsSrcsDir": "src",
+    "outputDir": {
+      "ios": "ios/generated",
+      "android": "android/generated"
+    },
+    "android": {
+      "javaPackageName": "com.swmansion.enriched.markdown"
+    },
+    "ios": {
+      "components": {
+        "EnrichedMarkdownText": {
+          "className": "EnrichedMarkdownText"
+        },
+        "EnrichedMarkdown": {
+          "className": "EnrichedMarkdown"
+        },
+        "EnrichedMarkdownTextInput": {
+          "className": "EnrichedMarkdownTextInput"
+        }
+      }
+    },
+    "includesGeneratedCode": true
+  }
+}

@@ -26,7 +26,7 @@ Logto 1.3 supports SDK 57 peer dependencies, so `npm ci` no longer uses `legacy-
 The next native release moves to Expo SDK 58 (React Native 0.88, React 19.3). It changes the native fingerprint, so it needs a new APK/IPA before OTA can target it; older binaries keep their SDK 57 runtime.
 
 - `@logto/rn` 1.3.0 caps `expo-crypto`, `expo-secure-store`, and `expo-web-browser` at `<58`. A scoped `overrides` entry pins them to the app's SDK 58 versions; the APIs Logto calls are unchanged. Drop the override once Logto widens its peer range.
-- `fingerprint.config.js` sets `preset: "strict"`, because SDK 58's `balanced` default hashes native modules by version and would ignore `scripts/patch-enriched-markdown.mjs`.
+- `fingerprint.config.js` sets `preset: "strict"`, because SDK 58's `balanced` default hashes native modules by version and would ignore edits to the vendored `modules/react-native-enriched-markdown`.
 - `tsconfig.json` opts out of React Native's Strict TypeScript API with `react-native-legacy-deep-imports`. Migrate the ref types before React Native 0.89 removes the opt-out.
 - Android release builds now enable R8 by default. Validate sign-in, the device Runtime, Work previews, notifications, and voice on a release APK.
 - iOS prebuild now generates `SceneDelegate.swift` for the iOS 27 scene life cycle.

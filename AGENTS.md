@@ -39,6 +39,7 @@ This repository is the native iOS/Android client. There is no web target.
 - `src/data/`: framework-free workflow helpers, app-facing types, SDK client setup, and local persistence. Extend existing helpers where the behavior belongs.
 - `src/auth/`, `src/platform/`: authentication and platform integrations. Keep native-only APIs inside these modules.
 - `modules/cohub-device-runtime/`: local Expo module (Android Kotlin) for the device Runtime, a port of upstream `apps/android` runtime code. JS reaches it only through `src/platform/device-runtime.ts`.
+- `modules/react-native-enriched-markdown/`: vendored fork of the native Markdown renderer. Read its `UPSTREAM.md` before editing or updating it.
 - `scripts/`: repository checks and native build tooling. Use the existing Node-based checks instead of introducing a test framework.
 
 ## Cohub Reference Source
