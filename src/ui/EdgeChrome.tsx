@@ -21,24 +21,29 @@ export function useEdgeChrome(options?: { reserveComposer?: boolean }) {
   };
 }
 
-// Opacity holds briefly, then eases out with a flat start and end, so neither the edge of the
-// held part nor the end of the fade reads as a line across the content.
-const SCRIM_HOLD = 0.2;
+// Opacity eases out with a flat start and end, so neither end of the fade reads as a line across
+// the content. The top fades right below the opaque status bar, leaving content faintly visible
+// behind the header's glass like iOS 26's soft scroll edge; the bottom holds briefly behind
+// floating controls first.
 const SCRIM_STEPS = 10;
-const SCRIM_CURVE = [{ at: 0, alpha: 1 }, ...Array.from({ length: SCRIM_STEPS + 1 }, (_, step) => {
-  const t = step / SCRIM_STEPS;
-  return { at: SCRIM_HOLD + (1 - SCRIM_HOLD) * t, alpha: 1 - t * t * (3 - 2 * t) };
-})];
+function scrimCurve(hold: number) {
+  return [...(hold > 0 ? [{ at: 0, alpha: 1 }] : []), ...Array.from({ length: SCRIM_STEPS + 1 }, (_, step) => {
+    const t = step / SCRIM_STEPS;
+    return { at: hold + (1 - hold) * t, alpha: 1 - t * t * (3 - 2 * t) };
+  })];
+}
+const SCRIM_CURVES = { top: scrimCurve(0), bottom: scrimCurve(0.2) };
 
 /** `solid` keeps the first points fully opaque, e.g. the status bar, before the fade begins. */
 export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; solid?: number; style?: StyleProp<ViewStyle> }) {
   const { colors } = useAppTheme();
+  const curve = SCRIM_CURVES[edge];
   return <View pointerEvents="none" accessible={false} style={[StyleSheet.absoluteFill, style]}>
     {solid > 0 ? <View style={{ height: solid, backgroundColor: colors.background }} /> : null}
     <LinearGradient
       pointerEvents="none"
-      colors={SCRIM_CURVE.map(({ alpha }) => colorWithOpacity(colors.background, alpha)) as unknown as readonly [string, string, ...string[]]}
-      locations={SCRIM_CURVE.map(({ at }) => at) as unknown as readonly [number, number, ...number[]]}
+      colors={curve.map(({ alpha }) => colorWithOpacity(colors.background, alpha)) as unknown as readonly [string, string, ...string[]]}
+      locations={curve.map(({ at }) => at) as unknown as readonly [number, number, ...number[]]}
       start={{ x: 0, y: edge === "top" ? 0 : 1 }}
       end={{ x: 0, y: edge === "top" ? 1 : 0 }}
       style={{ flex: 1 }}
@@ -52,9 +57,9 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
  */
 export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void; scrollY?: SharedValue<number> }) {
   const insets = useSafeAreaInsets();
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), [0, edgeChrome.fade], [0, 1], "clamp") : 1 }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), [0, edgeChrome.topFade], [0, 1], "clamp") : 1 }));
   return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -edgeChrome.fade }, scrimStyle]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -edgeChrome.topFade }, scrimStyle]}>
       <EdgeScrim edge="top" solid={insets.top} />
     </Animated.View>
     {children}

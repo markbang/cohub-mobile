@@ -1156,7 +1156,7 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   assert.ok(headerClasses.has("bg-background"), "an opaque header paints the screen background token");
   const transparentHeader = renderTopBar({ title: "Chats", transparent: true });
   assert.equal([...classes(transparentHeader)].some((name) => name.startsWith("bg-")), false, "a transparent header paints nothing");
-  const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", SCRIM_CURVE: [{ at: 0, alpha: 1 }, { at: 0.6, alpha: 0.5 }, { at: 1, alpha: 0 }], useAppTheme: () => ({ colors: { background } }) });
+  const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", SCRIM_CURVES: { top: [{ at: 0, alpha: 1 }, { at: 0.5, alpha: 0.5 }, { at: 1, alpha: 0 }], bottom: [{ at: 0, alpha: 1 }, { at: 0.6, alpha: 0.5 }, { at: 1, alpha: 0 }] }, useAppTheme: () => ({ colors: { background } }) });
   for (const edge of ["top", "bottom"]) {
     const root = renderScrim({ edge, solid: edge === "top" ? 24 : 0 });
     const scrim = chromeNodes(root).find((node) => node.type === "LinearGradient");
@@ -1185,6 +1185,13 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const searchHeader = renderTopBar({ title: "Chats", children: { type: "search-input" } });
   assert.ok(chromeNodes(searchHeader).some((node) => node.type === "search-input"));
   assert.ok(!chromeNodes(searchHeader).some((node) => node.props?.accessibilityRole === "header"), "search replaces the title instead of crowding it");
+}
+const scrimCurve = loadChromeComponent("../src/ui/EdgeChrome.tsx", "scrimCurve", { SCRIM_STEPS: 10 });
+for (const hold of [0, 0.2]) {
+  const curve = scrimCurve(hold);
+  assert.deepEqual(curve[0], { at: 0, alpha: 1 }, "the fade starts opaque, so it meets the solid status bar without a line");
+  assert.deepEqual(curve.at(-1), { at: 1, alpha: 0 });
+  assert.ok(curve.every((point, index) => index === 0 || (point.at > curve[index - 1].at && point.alpha <= curve[index - 1].alpha)), "stops are distinct and never brighten");
 }
 for (const topInset of [24, 103, 160]) {
   const offset = chatListViewOffset(0.15, 8, topInset);
