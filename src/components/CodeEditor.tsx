@@ -29,9 +29,11 @@ function visualColumns(line: string) {
   return columns;
 }
 
+// The spans become the TextInput's own text, so they must spell `value` exactly or the native
+// input would replace the user's text with the tokenizer's.
 function renderLines(highlighted: HighlightedCode | null, value: string, fallbackColor: string): ReactNode {
   const lines = highlighted?.lines;
-  if (!lines) return value;
+  if (!lines || lines.map((line) => line.map((token) => token.content).join("")).join("\n") !== value) return value;
   const nodes: ReactNode[] = [];
   lines.forEach((line, lineIndex) => {
     nodes.push(
@@ -137,23 +139,14 @@ export function CodeEditor({
           <Text
             selectable={false}
             accessible={false}
-            // design-system: the editor overlays text on a TextInput, so both share measured JS metrics.
+            // design-system: the gutter shares the input's measured JS metrics so line numbers stay aligned.
             style={[metrics, { width: gutterWidth, textAlign: "right", paddingRight: 8, paddingTop: PADDING_VERTICAL, color: theme.colors.textFaint }]}
           >
             {gutter}
           </Text>
           <View style={{ width: codeWidth, height: editorHeight, overflow: "hidden" }}>
-            <Text
-              accessible={false}
-              pointerEvents="none"
-              // design-system: measured overlay metrics, see the gutter above.
-              style={[metrics, { position: "absolute", top: 0, left: 0, right: 0, height: editorHeight, paddingHorizontal: PADDING_HORIZONTAL, paddingVertical: PADDING_VERTICAL, color: theme.colors.text }]}
-            >
-              {renderLines(highlighted, value, theme.colors.text)}
-            </Text>
             <TextInput
               multiline
-              value={value}
               onChangeText={onChangeText}
               scrollEnabled={false}
               autoCapitalize="none"
@@ -166,8 +159,11 @@ export function CodeEditor({
               cursorColor={theme.colors.accent}
               underlineColorAndroid="transparent"
               accessibilityLabel={t("code.editor")}
-              style={[metrics, { width: "100%", height: editorHeight, paddingHorizontal: PADDING_HORIZONTAL, paddingVertical: PADDING_VERTICAL, color: "transparent" }]}
-            />
+              // design-system: the input shares the gutter's measured JS metrics; spans override the color per token.
+              style={[metrics, { width: "100%", height: editorHeight, paddingHorizontal: PADDING_HORIZONTAL, paddingVertical: PADDING_VERTICAL, color: theme.colors.text }]}
+            >
+              {renderLines(highlighted, value, theme.colors.text)}
+            </TextInput>
           </View>
         </View>
       </ScrollView>
