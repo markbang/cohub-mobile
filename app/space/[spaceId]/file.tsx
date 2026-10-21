@@ -3,7 +3,7 @@ import type { SpaceFsFileResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Keyboard, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { CodeBlock } from "@/src/components/CodeBlock";
@@ -14,7 +14,7 @@ import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
-import { useAppTheme } from "@/src/theme";
+import { typography, useAppTheme } from "@/src/theme";
 import { AppIcon, TopBar, IconButton, Loader, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
 
 type Params = { spaceId?: string | string[]; path?: string | string[] };
@@ -44,6 +44,21 @@ export default function FileScreen() {
   const [conflict, setConflict] = useState(false);
   const [pathMenuOpen, setPathMenuOpen] = useState(false);
   const pathTitleRef = useRef<View>(null);
+  const editorScrollRef = useRef<ScrollView>(null);
+  const editorMetrics = useRef<{ viewport: number; offset: number; caretY: number | null }>({ viewport: 0, offset: 0, caretY: null });
+
+  // Keep the caret above the keyboard; the vertical scroller does not follow a nested input on its own.
+  const revealEditorCaret = useCallback(() => {
+    const { viewport, offset, caretY } = editorMetrics.current;
+    if (!viewport || caretY === null) return;
+    const lineHeight = typography.code.lineHeight;
+    const bottom = caretY + lineHeight;
+    if (bottom + lineHeight > offset + viewport) {
+      editorScrollRef.current?.scrollTo({ y: bottom + lineHeight - viewport, animated: true });
+    } else if (caretY - lineHeight < offset) {
+      editorScrollRef.current?.scrollTo({ y: Math.max(0, caretY - lineHeight), animated: true });
+    }
+  }, []);
 
   const loadFile = useCallback(async () => {
     const requestId = ++requestIdRef.current;
@@ -94,6 +109,16 @@ export default function FileScreen() {
   const editing = draft !== null;
   const dirty = editing && file !== null && draft !== file.content;
   const editable = isEditableTextFile(file);
+
+  useEffect(() => {
+    if (!editing) return;
+    const metrics = editorMetrics.current;
+    const subscription = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", revealEditorCaret);
+    return () => {
+      subscription.remove();
+      metrics.caretY = null;
+    };
+  }, [editing, revealEditorCaret]);
 
   const exitEditing = useCallback(() => {
     setDraft(null);
@@ -248,15 +273,26 @@ export default function FileScreen() {
       ) : file ? (
         editing && draft !== null ? (
           <ScrollView
+            ref={editorScrollRef}
             contentContainerStyle={{ flexGrow: 1 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
+            scrollEventThrottle={16}
+            onScroll={(event) => { editorMetrics.current.offset = event.nativeEvent.contentOffset.y; }}
+            onLayout={(event) => {
+              editorMetrics.current.viewport = event.nativeEvent.layout.height;
+              revealEditorCaret();
+            }}
           >
             <CodeEditor
               value={draft}
               onChangeText={setDraft}
               language={language}
               highlightTheme={theme.mode === "dark" ? "github-dark" : "github-light"}
+              onCaretChange={(y) => {
+                editorMetrics.current.caretY = y;
+                revealEditorCaret();
+              }}
             />
           </ScrollView>
         ) : (

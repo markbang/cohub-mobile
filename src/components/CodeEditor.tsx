@@ -67,11 +67,14 @@ export function CodeEditor({
   onChangeText,
   language,
   highlightTheme,
+  onCaretChange,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   language: CodeLanguageId | null;
   highlightTheme: CodeHighlightTheme;
+  /** The caret's top edge in content coordinates, so the editor can be scrolled above the keyboard. */
+  onCaretChange?: (y: number) => void;
 }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -117,6 +120,26 @@ export function CodeEditor({
     margin: 0,
   };
   const gutter = lines.map((_, index) => String(index + 1)).join("\n");
+  const lineStarts = useMemo(() => {
+    const starts = [0];
+    for (let index = 0; index < value.length; index += 1) {
+      if (value.charCodeAt(index) === 10) starts.push(index + 1);
+    }
+    return starts;
+  }, [value]);
+
+  const handleSelectionChange = (event: { nativeEvent: { selection: { start: number } } }) => {
+    if (!onCaretChange) return;
+    const offset = event.nativeEvent.selection.start;
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (lineStarts[middle] <= offset) low = middle;
+      else high = middle - 1;
+    }
+    onCaretChange(PADDING_VERTICAL + low * typography.code.lineHeight);
+  };
 
   const measureCharacter = (event: LayoutChangeEvent) => {
     const width = event.nativeEvent.layout.width;
@@ -134,20 +157,22 @@ export function CodeEditor({
       >
         {MEASURE_CHARACTERS}
       </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View className="flex-row items-start">
-          <Text
-            selectable={false}
-            accessible={false}
-            // design-system: the gutter shares the input's measured JS metrics so line numbers stay aligned.
-            style={[metrics, { width: gutterWidth, textAlign: "right", paddingRight: 8, paddingTop: PADDING_VERTICAL, color: theme.colors.textFaint }]}
-          >
-            {gutter}
-          </Text>
+      <View className="flex-row items-start">
+        {/* Kept outside the scroller: focusing the input must not scroll the line numbers out of view. */}
+        <Text
+          selectable={false}
+          accessible={false}
+          // design-system: the gutter shares the input's measured JS metrics so line numbers stay aligned.
+          style={[metrics, { width: gutterWidth, textAlign: "right", paddingRight: 8, paddingTop: PADDING_VERTICAL, color: theme.colors.textFaint }]}
+        >
+          {gutter}
+        </Text>
+        <ScrollView style={{ flex: 1 }} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={{ width: codeWidth, height: editorHeight, overflow: "hidden" }}>
             <TextInput
               multiline
               onChangeText={onChangeText}
+              onSelectionChange={handleSelectionChange}
               scrollEnabled={false}
               autoCapitalize="none"
               autoCorrect={false}
@@ -165,8 +190,8 @@ export function CodeEditor({
               {renderLines(highlighted, value, theme.colors.text)}
             </TextInput>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </View>
   );
 }
