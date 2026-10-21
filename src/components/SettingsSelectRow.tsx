@@ -159,13 +159,13 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
       else setHighlight(null);
       manager.end();
     })
-    .onTouchesCancelled((_event, manager) => {
+    // Already finishing: failing it here re-enters the state change (see FloatingTabBar).
+    .onTouchesCancelled(() => {
       const state = press.get();
       if (state.timer) clearTimeout(state.timer);
       press.set({ ...state, timer: null });
       highlightRef.set(null);
       setHighlight(null);
-      manager.fail();
     });
 
   return <>

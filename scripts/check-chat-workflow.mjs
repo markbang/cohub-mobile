@@ -3013,6 +3013,17 @@ assert.ok(markdownPatch.includes("NestedHorizontalScrollView"), "Code-block scro
 assert.ok(markdownPatch.includes("dispatchTouchEvent"), "Code-block scrolling must claim in dispatchTouchEvent; OnTouchListener never sees ACTION_DOWN");
 assert.equal(markdownPatch.includes("setOnTouchListener {"), false, "OnTouchListener never sees ACTION_DOWN once the code TextView consumes it");
 assert.doesNotMatch(markdownPatch, /ACTION_DOWN -> \{[^}]*requestDisallowInterceptTouchEvent/, "claiming on ACTION_DOWN cancels the panel swipe even at a code block's edge");
+for (const file of ["../src/components/FloatingTabBar.tsx", "../src/components/SettingsSelectRow.tsx"]) {
+  const gestureSource = ts.createSourceFile(file, readFileSync(new URL(file, import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const cancelCallbacks = [];
+  const findCancel = (node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "onTouchesCancelled") cancelCallbacks.push(node.arguments[0].getText(gestureSource));
+    ts.forEachChild(node, findCancel);
+  };
+  findCancel(gestureSource);
+  assert.ok(cancelCallbacks.length > 0, `${file} still handles cancelled touches`);
+  for (const callback of cancelCallbacks) assert.doesNotMatch(callback, /manager\.(fail|end|activate)\(/, `${file}: changing state from onTouchesCancelled re-enters the handler's own cancellation and crashes RNGH 3.3 on Android`);
+}
 const messageContent = readFileSync(new URL("../src/components/MessageContent.tsx", import.meta.url), "utf8");
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");

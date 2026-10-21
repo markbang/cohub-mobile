@@ -266,10 +266,11 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       scheduleOnRN(select, index);
       manager.end();
     })
-    .onTouchesCancelled((_event, manager) => {
+    // The handler is already finishing when this runs. Failing it again from here re-enters its
+    // state change, and RNGH 3.3 then resets it mid-transition and crashes on Android.
+    .onTouchesCancelled(() => {
       if (!touching.get()) return;
       settle(selected.get());
-      manager.fail();
     });
 
   const barStyle = useAnimatedStyle(() => ({
