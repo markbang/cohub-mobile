@@ -2,7 +2,7 @@ import * as Application from "expo-application";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   checkForAppUpdate,
   getInstalledAppVersion,
@@ -10,8 +10,7 @@ import {
   type AppRelease,
 } from "@/src/platform/app-updates";
 import { currentUpdateChannel, switchUpdateChannel, type UpdateChannel } from "@/src/platform/update-channel";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
+import { AppIcon, Loader, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import type { IconName } from "@/src/icons";
 
 function safe<T>(read: () => T, fallback: T): T {
@@ -35,7 +34,6 @@ function short(value: string | null | undefined, size = 12) {
 }
 
 export default function DebugUpdatesScreen() {
-  const theme = useAppTheme();
   const [busy, setBusy] = useState<string | null>(null);
   const [release, setRelease] = useState<AppRelease | null>(null);
   const [releaseChecked, setReleaseChecked] = useState(false);
@@ -219,7 +217,7 @@ export default function DebugUpdatesScreen() {
         <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {busy === "release" && !releaseChecked ? (
             <View className="p-5 items-center">
-              <ActivityIndicator size="small" color={theme.colors.accent} />
+              <Loader />
             </View>
           ) : release ? (
             <>

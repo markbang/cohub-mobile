@@ -4,7 +4,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
+import { Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
 import Animated, { useAnimatedRef, useReducedMotion } from "react-native-reanimated";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
@@ -53,7 +53,7 @@ import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
-import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
+import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
@@ -1255,16 +1255,8 @@ function LiveReply({ sessionId, showStream, processInRow, availableWidth }: { se
 }
 
 function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
-  if (kind === "opening") {
-    return (
-      <View accessible accessibilityLabel={t("chat.opening")} className="flex-1 items-center justify-center p-7">
-        <ActivityIndicator size="small" color={theme.colors.accent} />
-        <Text className="text-body text-fg-muted mt-4">{t("chat.placeholder.opening")}</Text>
-      </View>
-    );
-  }
+  if (kind === "opening") return <LoadingState label={t("chat.placeholder.opening")} />;
   return (
     <View className="flex-1 items-center justify-center p-7">
       <View className="size-14 items-center justify-center rounded-full bg-accent-soft">
@@ -1453,10 +1445,9 @@ function MissingChat() {
 
 /** Pagination control at either end of the thread: a short centered capsule, the full action spoken. */
 function LoadMoreCapsule({ icon, label, accessibilityLabel, loading, onPress }: { icon: IconName; label: string; accessibilityLabel: string; loading: boolean; onPress: () => void }) {
-  const theme = useAppTheme();
   return <View className="items-center py-2">
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onPress} hitSlop={4} className="min-h-10 flex-row items-center gap-1.5 rounded-full bg-surface-raised px-4 active:bg-surface-pressed">
-      {loading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={icon} size={16} tone="accent" />}
+      {loading ? <Loader /> : <AppIcon name={icon} size={16} tone="accent" />}
       <Text className="text-caption font-semibold text-accent">{label}</Text>
     </Pressable>
   </View>;

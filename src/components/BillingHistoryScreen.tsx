@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -9,7 +9,7 @@ import { openWebLink } from "@/src/platform/browser";
 import { useBillingHistory, type SubscriptionCancellation } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { EmptyState, IconButton, PrimaryButton, Screen, TopBar } from "@/src/ui";
+import { EmptyState, IconButton, LoadingState, PrimaryButton, Screen, TopBar } from "@/src/ui";
 
 export function BillingHistoryScreen({ kind }: { kind: "history" | "subscriptions" }) {
   const router = useRouter();
@@ -25,7 +25,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
   return <Screen>
     <TopBar title={t(kind === "history" ? "settings.billing.history" : "settings.billing.subscriptions")} onBack={() => router.back()} actions={<IconButton name="refresh" label={t("common.refresh")} disabled={busy} onPress={() => void load()} />} />
     <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }}>
-      {loading ? <ActivityIndicator color={theme.colors.accent} className="p-6" /> : null}
+      {loading ? <LoadingState fill={false} /> : null}
       {error || paymentError ? <View className="p-4 gap-3">
         <Text accessibilityRole="alert" className="text-body text-danger">{error || paymentError}</Text>
         <PrimaryButton label={t("common.retry")} icon="refresh" disabled={busy} onPress={() => { setPaymentError(null); void load(); }} />

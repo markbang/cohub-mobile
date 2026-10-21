@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { loadBrowserPreference, saveBrowserPreference, useBrowserPreference, type BrowserPreference } from "@/src/data/browser-preference";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, IconButton, SectionHeader } from "@/src/ui";
+import { AppIcon, IconButton, LoadingState, SectionHeader } from "@/src/ui";
 
 export function BrowserSettings() {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const current = useBrowserPreference();
   const [saving, setSaving] = useState(false);
@@ -25,7 +23,7 @@ export function BrowserSettings() {
   };
   return <View testID="browser-settings">
     <SectionHeader title={t("settings.browser.section")} />
-    {!current.loaded && !current.error ? <ActivityIndicator color={theme.colors.accent} className="p-6" /> : <View accessibilityRole="radiogroup">
+    {!current.loaded && !current.error ? <LoadingState fill={false} /> : <View accessibilityRole="radiogroup">
       {(["system", "in-app"] as const).map((option) => {
         const selected = current.loaded && current.preference === option;
         const title = t(option === "system" ? "settings.browser.system" : "settings.browser.inApp");

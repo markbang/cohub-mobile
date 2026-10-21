@@ -1,6 +1,6 @@
 import type { CohubClient, LabelAssignmentRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import {
   attachSessionLabel,
@@ -14,7 +14,7 @@ import {
 } from "@/src/data/session-labels";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, FIELD_INPUT_CLASS } from "@/src/ui";
+import { AppIcon, FIELD_INPUT_CLASS, Loader, LoadingState } from "@/src/ui";
 
 type SessionLabelSheetProps = {
   client: CohubClient;
@@ -148,14 +148,14 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
               />
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} className={`min-h-12 items-center justify-center rounded-sm px-3.5 ${!newLabelName.trim() || creating ? "bg-surface-raised opacity-60" : "bg-accent active:bg-accent-pressed"}`}>
-              {creating ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <Text className="text-body font-semibold text-on-accent">{t("common.create")}</Text>}
+              {creating ? <Loader color={theme.colors.accentText} /> : <Text className="text-body font-semibold text-on-accent">{t("common.create")}</Text>}
             </Pressable>
           </View>
         </View>
       }
     >
       {labelsError ? <Pressable accessibilityRole="button" accessibilityLabel={t("labels.retry")} onPress={reload} className="py-2"><Text className="text-caption text-accent">{t("labels.loadFailed")}</Text></Pressable> : null}
-      {loading && selectable.length === 0 ? <View className="py-6 items-center"><ActivityIndicator size="small" color={theme.colors.accent} /></View> : selectable.length === 0 ? (
+      {loading && selectable.length === 0 ? <LoadingState fill={false} /> : selectable.length === 0 ? (
         <Text className="text-caption text-fg-muted py-4">{t("labels.none")}</Text>
       ) : selectable.map((item) => {
         const assigned = assignedIds.has(item.id);
@@ -174,7 +174,7 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
               {assigned ? <AppIcon name="check" size={15} tone="onAccent" /> : null}
             </View>
             <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
-            {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+            {busy ? <Loader /> : null}
           </Pressable>
         );
       })}

@@ -1,14 +1,12 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import { slashCommandLabel, type SlashCommandItem } from "@/src/data/slash-commands";
 import type { SlashCommandMenuState } from "@/src/data/use-composer-slash";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { IconButton } from "@/src/ui";
+import { IconButton, Loader } from "@/src/ui";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
 
 /** Non-modal so the composer keeps focus and the keyboard while the query is typed. */
 export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: SlashCommandMenuState; onSelect: (item: SlashCommandItem) => void; onDismiss: () => void; style?: ViewStyle }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const status = menu.query.trim()
     ? t("slash.count", { count: menu.items.length })
@@ -27,7 +25,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
       <IconButton name="x" label={t("slash.dismiss")} size={40} onPress={onDismiss} />
     </View>
     {menu.items.length === 0 ? <View className="min-h-22 items-center justify-center px-5 pb-3">
-      {menu.loading ? <ActivityIndicator accessibilityLabel={t("slash.loading")} size="small" color={theme.colors.accent} /> : <>
+      {menu.loading ? <Loader accessibilityLabel={t("slash.loading")} /> : <>
         <Text className="text-body font-semibold text-fg text-center">{t("slash.empty")}</Text>
         <Text className="text-caption text-fg-muted mt-1 text-center">{t("slash.emptyHint")}</Text>
       </>}

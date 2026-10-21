@@ -503,7 +503,7 @@ const formScope = {
     installSpaceMod,
     Alert: { prompt: () => {}, alert: (...args) => alerts.push(args) },
     Screen: "Screen", ScrollView: "ScrollView", SpecOptionList: "SpecOptionList", ActionButton: "ActionButton", Switch: "Switch",
-    AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", ActivityIndicator: "ActivityIndicator",
+    AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
     specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
     deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
@@ -651,7 +651,7 @@ for (const [tab, component, expectedRequests] of [
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
+    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
     AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
@@ -800,7 +800,7 @@ for (const [tab, component, expectedRequests] of [
     firstParam: (value) => value ?? "", useApp: () => ({ client }), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
     Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict,
-    MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", SaveBanner: "SaveBanner", FileError: "FileError", ActivityIndicator: "ActivityIndicator",
+    MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const render = () => chromeNodes(runner.render(renderFile));
   const actions = () => chromeNodes(render().find((node) => node.type === "TopBar").props.actions);
@@ -1104,7 +1104,7 @@ for (const [tab, component, expectedRequests] of [
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
-    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", ActivityIndicator: "ActivityIndicator",
+    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
   const render = () => { cursor = 0; const nodes = chromeNodes(renderPanel(props)); while (effects.length) effects.shift()(); return nodes; };
@@ -1407,7 +1407,7 @@ for (const [path, labels, chips] of [
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
     selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", ActivityIndicator: "ActivityIndicator",
+    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu",
   });

@@ -1,18 +1,16 @@
 import type { Channel } from "@neta-art/cohub";
-import { ActivityIndicator, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useApp } from "@/src/data/context";
 import { useChannelBinding } from "@/src/data/use-channel-binding";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { EmptyState, PrimaryButton } from "@/src/ui";
+import { EmptyState, LoadingState, PrimaryButton } from "@/src/ui";
 
 export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: Channel; onClose: () => void; onChanged: () => void }) {
   const { client } = useApp();
   const { t } = useTranslation();
-  const theme = useAppTheme();
   const { spaces, loading, saving, error, load, save } = useChannelBinding(client, channel, onChanged);
   // Unbinding is a yes-or-no confirmation; binding picks a Space from a list and stays a sheet.
   if (channel.boundSpace) {
@@ -38,7 +36,7 @@ export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: 
     dismissible={!saving}
     footer={channel.boundSpace ? <PrimaryButton label={t("settings.channels.unbind")} icon="x" variant="danger" loading={saving} onPress={() => void save(channel.boundSpace!.id)} /> : undefined}
   >
-    {channel.boundSpace ? <Text className="text-body text-fg">{t("settings.channels.unbindConfirm")}</Text> : loading ? <ActivityIndicator color={theme.colors.accent} /> : <View>
+    {channel.boundSpace ? <Text className="text-body text-fg">{t("settings.channels.unbindConfirm")}</Text> : loading ? <LoadingState fill={false} /> : <View>
       {spaces.map((space) => <SettingsRow key={space.id} icon="layers" title={space.name || space.id} disabled={saving} onPress={() => void save(space.id)} />)}
       {!spaces.length && !error ? <EmptyState icon="layers" title={t("settings.channels.noSpaces")} /> : null}
     </View>}

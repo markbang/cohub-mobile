@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import type { SpaceListSpace } from "@/src/data/space-list";
 import { openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus } from "@/src/platform/device-runtime";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, Avatar, type IconName } from "@/src/ui";
+import { AppIcon, Avatar, Loader, type IconName } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow } from "@/src/ui/ListRow";
 import { displaySpaceName } from "@/src/utils";
 
@@ -18,7 +17,6 @@ type DeviceSpaceRowProps = {
 
 /** A Space this device serves: its connection and this screen's sharing, managed in place. */
 export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const display = useDeviceDisplayStatus();
   const [busy, setBusy] = useState(false);
@@ -61,7 +59,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       subtitle={failed
         ? <Text numberOfLines={1} className="text-subhead text-danger">{stateLabel}</Text>
         : <View className="flex-row items-center gap-1"><AppIcon name="folder" size={12} tone="faint" /><Text numberOfLines={1} ellipsizeMode="middle" className="min-w-0 flex-1 text-subhead text-fg-muted">{instance.label}</Text></View>}
-      accessory={busy || instance.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+      accessory={busy || instance.state === "connecting" ? <Loader /> : null}
       accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
     />

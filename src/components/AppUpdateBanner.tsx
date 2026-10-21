@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState as NativeAppState, Platform, Pressable, Text, View } from "react-native";
+import { AppState as NativeAppState, Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ReleaseNotes } from "@/src/components/ReleaseNotes";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, PrimaryButton } from "@/src/ui";
+import { AppIcon, Loader, PrimaryButton } from "@/src/ui";
 import { openWebLink } from "@/src/platform/browser";
 import {
   checkForAppUpdate,
@@ -254,7 +253,6 @@ export function AppUpdateDetailsSheet({
 }
 
 export function AppUpdateRow() {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const [checking, setChecking] = useState(false);
   const [release, setRelease] = useState<AppRelease | null>(null);
@@ -305,7 +303,7 @@ export function AppUpdateRow() {
         onPress={() => void check()}
         className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2 active:bg-surface-pressed disabled:opacity-65"
       >
-        {checking ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={release ? "download" : "refresh"} size={20} tone={release ? "accent" : "muted"} />}
+        {checking ? <Loader /> : <AppIcon name={release ? "download" : "refresh"} size={20} tone={release ? "accent" : "muted"} />}
         <View className="min-w-0 flex-1 gap-0.5">
           <Text className="text-body text-fg">{title}</Text>
           <Text numberOfLines={2} className={`text-caption ${release ? "text-accent" : "text-fg-muted"}`}>{detail}</Text>

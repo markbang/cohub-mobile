@@ -7,7 +7,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
@@ -18,6 +18,7 @@ import { AppProvider } from "@/src/data/context";
 import { loadEnvironmentPreference, saveEnvironmentPreference } from "@/src/data/environment-preference";
 import { LocaleProvider, useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
+import { LoadingState } from "@/src/ui/Loader";
 import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
@@ -289,6 +290,5 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
 }
 
 function LoadingScreen() {
-  const theme = useAppTheme();
-  return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="small" color={theme.colors.accent} /></View>;
+  return <View className="flex-1 bg-background"><LoadingState /></View>;
 }

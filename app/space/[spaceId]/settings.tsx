@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { FilterChip } from "@/src/components/FilterChip";
@@ -15,7 +15,7 @@ import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResource
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
+import { AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
@@ -322,7 +322,7 @@ export default function SpaceSettingsScreen() {
                 onPress={confirmRestart}
                 className="min-h-11 flex-row items-center gap-1.5 active:opacity-70 disabled:opacity-45"
               >
-                {restarting ? <ActivityIndicator color={theme.colors.accent} size="small" /> : <AppIcon name="refresh" size={14} tone="accent" />}
+                {restarting ? <Loader /> : <AppIcon name="refresh" size={14} tone="accent" />}
                 <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
               </Pressable>
             </View>
@@ -539,7 +539,6 @@ function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnviro
 }
 
 function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const instance = useDeviceRuntimeInstances()?.find((item) => item.spaceId === spaceId) ?? null;
   const running = isDeviceRuntimeRunning(instance);
@@ -571,7 +570,7 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
           <Text className={`text-body font-semibold ${instance?.state === "error" ? "text-danger" : "text-fg"}`}>{t(deviceRuntimeStateKey(instance))}</Text>
           {instance ? <Text selectable className="text-caption text-fg-muted mt-1">{instance.label}</Text> : null}
         </View>
-        {busy || instance?.state === "connecting" ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+        {busy || instance?.state === "connecting" ? <Loader /> : null}
       </View>
       {hint ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{hint}</Text> : null}
       <View className="flex-row gap-2 mt-3">
@@ -600,7 +599,6 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
 }
 
 function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: boolean }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const status = useDeviceDisplayStatus();
   const [busy, setBusy] = useState(false);
@@ -632,7 +630,7 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
           <Text className="text-body font-semibold text-fg">{t(deviceDisplayStateKey(status, spaceId))}</Text>
           {status.sharedWith && !sharingHere ? <Text className="text-caption text-fg-muted mt-1">{t("deviceRuntime.display.sharedElsewhere")}</Text> : null}
         </View>
-        {busy ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+        {busy ? <Loader /> : null}
       </View>
       {hint ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{hint}</Text> : null}
       <View className="flex-row gap-2 mt-3">

@@ -13,7 +13,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-	ActivityIndicator,
 	Linking,
 	Platform,
 	Pressable,
@@ -38,18 +37,7 @@ import {
 	type PushRegistrationResult,
 } from "@/src/platform/notifications";
 import { useAppTheme, typography } from "@/src/theme";
-import {
-	AppIcon,
-	Avatar,
-	FIELD_INPUT_CLASS,
-	TopBar,
-	EmptyState,
-	IconButton,
-	PrimaryButton,
-	Screen,
-	SectionHeader,
-	StatusPill,
-} from "@/src/ui";
+import { AppIcon, Avatar, EmptyState, FIELD_INPUT_CLASS, IconButton, Loader, LoadingState, PrimaryButton, Screen, SectionHeader, StatusPill, TopBar } from "@/src/ui";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 import { openWebLink } from "@/src/platform/browser";
 
@@ -355,7 +343,7 @@ function ProfileSection({
 							<View
 								className="flex-row items-center gap-1.5 mt-2"
 							>
-								<ActivityIndicator size="small" color={theme.colors.accent} />
+								<Loader />
 								<Text
 									className="text-caption text-fg-muted"
 								>
@@ -1172,20 +1160,8 @@ function Metric({
 }
 
 function LoadingBlock() {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
-	return (
-		<View
-			className="min-h-48 items-center justify-center"
-		>
-			<ActivityIndicator size="small" color={theme.colors.accent} />
-			<Text
-				className="text-caption text-fg-muted mt-2"
-			>
-				{t("settings.loading")}
-			</Text>
-		</View>
-	);
+	return <LoadingState fill={false} label={t("settings.loading")} />;
 }
 
 function InlineError({

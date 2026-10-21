@@ -2,7 +2,7 @@ import { ModelIcon, modelMappings } from "@lobehub/icons-rn";
 import type { ModelCatalogEntry, ModelStatusEntry } from "@neta-art/cohub";
 import { useMemo, useState, type RefObject } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
 import type { ChatModelSelection } from "@/src/data/types";
 import {
@@ -21,7 +21,7 @@ import {
 } from "@/src/model-catalog";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, IconButton } from "@/src/ui";
+import { AppIcon, IconButton, Loader } from "@/src/ui";
 
 export type ModelSelectorMenuProps = {
   anchorRef: RefObject<View | null>;
@@ -162,7 +162,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
     <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-1.5 border-b border-border">
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} className="text-body flex-1 min-w-0 text-fg py-2" returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
-      {loading || modelStatusLoading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : null}
+      {loading || modelStatusLoading ? <Loader color={theme.colors.textMuted} /> : null}
       {query ? <IconButton name="circle-x" label={t("ui.search.clear")} size={36} onPress={() => setQuery("")} /> : <IconButton name="x" label={t("ui.sheet.close", { title: t("model.title") })} size={36} onPress={onClose} />}
     </View>
     <LegendList
@@ -184,7 +184,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
         {error ? <View className="flex-row items-center gap-2 p-2"><Text className="text-caption text-danger flex-1">{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
       </>}
       ListEmptyComponent={error && !loading ? null : <View className="min-h-25 items-center justify-center p-4">
-        {loading ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="search" size={22} tone="muted" />}
+        {loading ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="search" size={22} tone="muted" />}
         <Text className="text-caption text-fg-muted text-center mt-2">{t(loading ? "model.loading" : "model.noMatch")}</Text>
       </View>}
     />

@@ -5,7 +5,7 @@ import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/sessi
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Reanimated, { cancelAnimation, Extrapolation, interpolate, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, ReduceMotion } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
@@ -33,7 +33,7 @@ import {
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, type PanelName } from "@/src/data/space-panel-pager";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
-import { AppIcon, Avatar, IconButton, PrimaryButton, SearchField, TopBar } from "@/src/ui";
+import { AppIcon, Avatar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, SearchField, TopBar } from "@/src/ui";
 import { normalizeSpacePath, parentSpacePath, sortByRecent, spacePathName } from "@/src/utils";
 
 export type SpacePanel = "chat" | "files";
@@ -657,7 +657,6 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         <PrimaryButton label={t("space.newChat")} icon="plus" onPress={onNewChat} className="min-h-11" />
         <View className="flex-row items-center gap-2">
           <View className="flex-1"><SearchField value={query} onChangeText={setQuery} placeholder={t("space.panel.searchChats")} /></View>
-          {remoteQueryMatches && remoteSearch.loading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
         </View>
         <View onTouchStart={() => onChipsTouchChange(true)} onTouchEnd={() => onChipsTouchChange(false)} onTouchCancel={() => onChipsTouchChange(false)}>{chipRow}</View>
         {remoteQueryMatches && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2"><Text selectable className="text-micro font-semibold text-danger flex-1">{remoteSearch.error}</Text><Pressable accessibilityRole="button" accessibilityLabel={t("chats.search.retry")} onPress={remoteSearch.retry}><Text className="text-micro font-semibold text-accent">{t("common.retry")}</Text></Pressable></View> : null}
@@ -676,8 +675,9 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
           : <SessionRow session={item.session} fork={item.fork} tree={item.tree} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
-        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
-        ListEmptyComponent={<View className="flex-1 min-h-45 items-center justify-center p-6">{emptyLoading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : <AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" />}<Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
+        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <Loader /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
+        ListHeaderComponent={remoteQueryMatches && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
+        ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={() => setLabelsReloadToken((value) => value + 1)} onClose={closeLabelSheet} onChanged={() => { setLabelSessionIds(new Set()); setLabelsReloadToken((value) => value + 1); }} /> : null}
     </View>
@@ -748,7 +748,7 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
       {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} className="min-h-11 flex-row items-center gap-2 border-b border-border px-3.5 active:bg-surface-pressed"><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
-        <View className="flex-1 min-h-45 items-center justify-center p-6"><ActivityIndicator size="small" color={theme.colors.accent} /><Text className="text-caption text-fg-muted mt-2">{t("files.loading")}</Text></View>
+        <LoadingState label={t("files.loading")} />
       ) : error && entries.length === 0 ? (
         <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="cloud-off" size={25} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
       ) : (

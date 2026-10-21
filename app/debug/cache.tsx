@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useApp } from "@/src/data/context";
 import { cacheStats, hydrateHome, type CacheStats } from "@/src/data/local-db";
 import type { SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
+import { AppIcon, Loader, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import { displaySessionTitle, formatRelativeTime } from "@/src/utils";
 
 const LIST_LIMIT = 50;
 
 export default function DebugCacheScreen() {
-  const theme = useAppTheme();
   const { userUuid, clearCache } = useApp();
   const [stats, setStats] = useState<CacheStats | null>(null);
   const [spaces, setSpaces] = useState<SpaceRecord[]>([]);
@@ -65,7 +63,7 @@ export default function DebugCacheScreen() {
         <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
           {loading && !stats ? (
             <View className="p-5 items-center">
-              <ActivityIndicator size="small" color={theme.colors.accent} />
+              <Loader />
             </View>
           ) : (
             <>

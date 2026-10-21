@@ -1,6 +1,6 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppIcon, BrandMark, Segmented } from "@/src/ui";
+import { AppIcon, BrandMark, Loader, Segmented } from "@/src/ui";
 import type { CohubEnvironment } from "@/src/config";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -63,7 +63,7 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
           onPress={() => void onSignIn()}
           className={`min-h-13 flex-row items-center justify-center gap-2 rounded-sm bg-accent active:bg-accent-pressed ${loading ? "opacity-65" : ""}`}
         >
-          {loading ? <ActivityIndicator color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} tone="onAccent" />}
+          {loading ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-right" size={19} tone="onAccent" />}
           <Text className="text-body font-semibold text-on-accent">{loading ? t("auth.opening") : t("auth.continue")}</Text>
         </Pressable>
         <Text className="text-micro font-semibold text-fg-faint text-center mt-3">{t("auth.secure")}</Text>

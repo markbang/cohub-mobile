@@ -2,7 +2,6 @@ import type { SessionTurnIndexItem } from "@neta-art/cohub";
 import { LegendList } from "@legendapp/list/react-native";
 import { useMemo, useState } from "react";
 import {
-	ActivityIndicator,
 	Pressable,
 	Text,
 	View,
@@ -11,7 +10,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { turnIndexPreview } from "@/src/data/session-history";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, SearchField, StatusPill } from "@/src/ui";
+import { AppIcon, Loader, LoadingState, SearchField, StatusPill } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 type TurnNavigatorSheetProps = {
@@ -110,12 +109,7 @@ export function TurnNavigatorSheet({
 			/>
 			{loading && turns.length === 0 ? (
 				<View style={styles.state}>
-					<ActivityIndicator size="small" color={theme.colors.accent} />
-					<Text
-						className="text-caption text-fg-muted mt-2"
-					>
-						{t("turn.navigator.loading")}
-					</Text>
+					<LoadingState fill={false} label={t("turn.navigator.loading")} />
 				</View>
 			) : filteredTurns.length === 0 ? (
 				<View style={styles.state}>
@@ -195,7 +189,7 @@ export function TurnNavigatorSheet({
 									</View>
 								</View>
 								{loadingSequence === turn.sequence ? (
-									<ActivityIndicator size="small" color={theme.colors.accent} />
+									<Loader />
 								) : selected ? (
 									<AppIcon name="check" size={17} tone="accent" />
 								) : (

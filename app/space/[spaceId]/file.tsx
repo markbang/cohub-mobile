@@ -3,7 +3,7 @@ import type { SpaceFsFileResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { CodeBlock } from "@/src/components/CodeBlock";
@@ -15,7 +15,7 @@ import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, TopBar, IconButton, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, TopBar, IconButton, Loader, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
 
 type Params = { spaceId?: string | string[]; path?: string | string[] };
 
@@ -208,7 +208,7 @@ export default function FileScreen() {
               <IconButton name="x" label={t("file.cancelEditing")} size={40} onPress={handleBack} disabled={saving} />
               {saving ? (
                 <View className="w-10 h-10 items-center justify-center">
-                  <ActivityIndicator size="small" color={theme.colors.accent} />
+                  <Loader accessibilityLabel={t("file.saving")} />
                 </View>
               ) : (
                 <IconButton name="check" label={t("file.save")} size={40} tone="accent" onPress={() => void save()} disabled={!dirty} />

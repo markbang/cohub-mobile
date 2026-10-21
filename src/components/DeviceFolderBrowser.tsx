@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { FilterChip } from "@/src/components/FilterChip";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -7,7 +7,7 @@ import type { DeviceFolderListing } from "@/src/data/device-runtime";
 import { useTranslation } from "@/src/i18n";
 import { browseDeviceFolder } from "@/src/platform/device-runtime";
 import { useAppTheme } from "@/src/theme";
-import { PrimaryButton } from "@/src/ui";
+import { Loader, LoadingState, PrimaryButton } from "@/src/ui";
 
 export type DeviceFolderBrowserState = ReturnType<typeof useDeviceFolderBrowser>;
 
@@ -68,7 +68,7 @@ export function DeviceFolderBrowser({ browser }: { browser: DeviceFolderBrowserS
       {listing.spaceId ? <View className="px-2 py-0.5 rounded-full bg-surface-raised">
         <Text className="text-micro font-semibold text-fg-muted">{t("deviceRuntime.linked")}</Text>
       </View> : null}
-      {loading ? <ActivityIndicator size="small" color={theme.colors.accent} /> : null}
+      {loading ? <Loader /> : null}
     </View> : null}
     {failure ? <View className="gap-3 py-3">
       <Text accessibilityRole="alert" className="text-body text-fg-secondary">{failure}</Text>
@@ -77,9 +77,7 @@ export function DeviceFolderBrowser({ browser }: { browser: DeviceFolderBrowserS
       {listing.parent ? <SettingsRow icon="arrow-up" title={t("deviceRuntime.parentFolder")} disabled={loading} onPress={() => void load(listing.parent ?? undefined)} /> : null}
       {listing.folders.map((folder) => <SettingsRow key={folder.path} icon="folder" title={folder.name} disabled={loading} onPress={() => void load(folder.path)} />)}
       {listing.folders.length === 0 ? <Text className="text-body text-fg-faint py-3">{t("deviceRuntime.noSubfolders")}</Text> : null}
-    </View> : <View className="flex-1 min-h-50 items-center justify-center">
-      <ActivityIndicator color={theme.colors.accent} />
-    </View>}
+    </View> : <LoadingState />}
   </View>;
 }
 

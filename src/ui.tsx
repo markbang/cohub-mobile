@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import { createContext, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
-  ActivityIndicator,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -36,6 +35,7 @@ import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import { LIST_AVATAR_SIZE, type ColorKey } from "@/src/design/tokens";
 import { motion, springs } from "@/src/motion";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { Loader } from "@/src/ui/Loader";
 import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
@@ -44,6 +44,7 @@ import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
+export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
 export type { IconName } from "@/src/icons";
@@ -317,7 +318,7 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
-      {loading ? <ActivityIndicator color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} size="small" /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
+      {loading ? <Loader color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
       <Text className={`shrink text-body font-semibold ${classes.text}`}>{label}</Text>
     </Pressable>
   );
@@ -624,10 +625,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <ActivityIndicator size="small" color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
+          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
             <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering}>
-              {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <ActivityIndicator size="small" color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+              {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
             </Animated.View>
           </Pressable>
         </View>

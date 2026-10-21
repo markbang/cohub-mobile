@@ -1,15 +1,13 @@
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 import type { SpaceMentionMenuState } from "@/src/data/use-composer-mentions";
 import type { SpaceMentionSuggestion } from "@/src/data/space-mentions";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { Avatar, IconButton } from "@/src/ui";
+import { Avatar, IconButton, Loader } from "@/src/ui";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
 import { displaySpaceName } from "@/src/utils";
 
 /** Non-modal so the composer keeps focus and the keyboard while the query is typed. */
 export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: SpaceMentionMenuState; onSelect: (item: SpaceMentionSuggestion) => void; onDismiss: () => void; style?: ViewStyle }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const status = !menu.query.trim()
     ? t("mentions.hint")
@@ -28,7 +26,7 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
       <IconButton name="x" label={t("mentions.dismiss")} size={40} onPress={onDismiss} />
     </View>
     {menu.items.length === 0 ? <View className="min-h-22 items-center justify-center px-5 pb-3">
-      {menu.loading ? <ActivityIndicator accessibilityLabel={t("mentions.searching")} size="small" color={theme.colors.accent} /> : <>
+      {menu.loading ? <Loader accessibilityLabel={t("mentions.searching")} /> : <>
         <Text className="text-body font-semibold text-fg text-center">{t("mentions.empty")}</Text>
         <Text className="text-caption text-fg-muted mt-1 text-center">{t("mentions.emptyHint")}</Text>
       </>}
