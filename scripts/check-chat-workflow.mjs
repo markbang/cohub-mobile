@@ -1856,6 +1856,11 @@ assert.equal(mergeDisplayMessages(
 // Persisted message sequences and turn-projected sequences are independent counters.
 const orderingTurn = { id: "ordering-turn", sessionId: "s1", sequence: 10, status: "running", userText: "Question", userContent: [], assistantContent: [], meta: { optimistic: true } };
 assert.equal(messagesFromTurns([orderingTurn])[0]?.meta?.optimistic, undefined, "confirmed turn projection never keeps the sending state");
+assert.deepEqual(
+  messagesFromTurns([{ ...orderingTurn, status: "completed", assistantText: "Answer", createdAt: "2026-10-21T12:59:28Z", updatedAt: "2026-10-21T13:02:41Z", completedAt: "2026-10-21T13:02:40Z" }]).map((message) => message.createdAt),
+  ["2026-10-21T12:59:28Z", "2026-10-21T13:02:40Z"],
+  "assistant reply clock shows turn completion, not send time",
+);
 for (const sequence of [2, 12, 80]) {
   const persistedFinal = { id: "persisted-final", sessionId: "s1", role: "assistant", sequence, text: "Answer", content: [], meta: { turnId: orderingTurn.id, messageKind: "assistant_final" } };
   for (const finalized of [false, true]) {

@@ -56,7 +56,8 @@ function baseMessage(
 		startedAt: turn.startedAt,
 		completedAt: turn.completedAt,
 		durationMs: turn.durationMs,
-		createdAt: turn.createdAt,
+		// Matches Web: the reply is stamped when the turn finished, not when it was sent.
+		createdAt: role === "assistant" ? (turn.completedAt ?? turn.updatedAt) : turn.createdAt,
 	};
 }
 
