@@ -7,7 +7,7 @@ import { latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { MessageMeasurements, createStreamBatch, liveReplyAnchor, rowHeightMeasurement } from "../src/data/chat-rendering.ts";
-import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailScrolledAway, chatTailStalled, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
+import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
@@ -3332,6 +3332,10 @@ assert.equal(chatTailStalled(0, true), false, "on the tail with a frozen pin is 
 assert.equal(chatTailStalled(CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, true), false, "a gap inside the pin window still animates");
 assert.equal(chatTailStalled(CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD + 1, true), true, "a frozen pin with an outgrown gap must recover");
 assert.equal(chatTailStalled(CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD + 1, false), false, "a moving pin is catching up, not stalled");
+const displacedReset = { dragging: false, momentum: false, contentGrew: false, offsetDelta: -8844, distanceToLatest: 8844 };
+assert.equal(chatTailDisplaced(displacedReset), true, "a list reset to the oldest row while following must re-pin the tail");
+assert.equal(chatTailDisplaced({ ...displacedReset, dragging: true }), false, "a user drag toward older messages is a scroll-away");
+assert.equal(chatTailDisplaced({ ...displacedReset, offsetDelta: 40 }), false, "a pin catching up toward the tail is not displaced");
 assert.deepEqual(chatMaintainScrollAtEnd(true), { animated: true }, "sending must not disable the moving tail");
 assert.deepEqual(chatMaintainScrollAtEnd(true, false), { animated: false }, "first-row measurement and reduced motion must not animate the pin");
 assert.equal(chatMaintainScrollAtEnd(false), false);
@@ -3378,6 +3382,7 @@ assert.ok(CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD > CHAT_TAIL_THRESHOLD, "the smooth 
 const chatSource = readFileSync(new URL("../app/chat/[sessionId].tsx", import.meta.url), "utf8");
 assert.ok(chatSource.includes("offsetDelta"), "the pin catching up is distinguished from scrolling toward older messages");
 assert.ok(chatSource.includes("chatTailStalled"), "content growth must run the stall fallback so an opened-while-streaming chat recovers without a manual nudge");
+assert.ok(chatSource.includes("chatTailDisplaced"), "a non-user scroll away from a followed tail must re-pin instead of hiding the jump-to-latest control");
 assert.ok(chatSource.includes("chatFollowPinAnimated"), "a burst larger than the pin window must snap");
 const runningRowMessages = [
   { id: "user-a", role: "user", meta: { turnId: "turn-a", turnSequence: 1 } },

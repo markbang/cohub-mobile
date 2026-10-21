@@ -76,3 +76,12 @@ export function chatMaintainScrollAtEnd(followingTail: boolean, animate = true) 
 export function chatTailStalled(distanceToLatest: number, offsetUnchanged: boolean) {
   return offsetUnchanged && distanceToLatest > CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD;
 }
+
+/**
+ * Whether a scroll event moved a following viewport away from the tail without the user. The list
+ * can reset its offset (seen on Android as a jump to the oldest row) while following stays on, and
+ * no content growth follows to trigger the stall fallback, so the scroll event itself must re-pin.
+ */
+export function chatTailDisplaced(input: { dragging: boolean; momentum: boolean; contentGrew: boolean; offsetDelta: number; distanceToLatest: number }) {
+  return !input.dragging && !input.momentum && !input.contentGrew && input.offsetDelta < 0 && input.distanceToLatest > CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD;
+}

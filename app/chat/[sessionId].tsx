@@ -33,7 +33,7 @@ import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
 import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
-import { CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_PAGE_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailScrolledAway, chatTailStalled, nextChatTailFollowing } from "@/src/data/chat-scroll";
+import { CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_PAGE_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, nextChatTailFollowing } from "@/src/data/chat-scroll";
 import { chatScrollTrace, type TraceFields } from "@/src/data/chat-scroll-trace";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -879,6 +879,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     }));
     // Native animated scrollTo cannot retarget; snap once a burst opens a gap the pin would chase.
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
+    if (initialScrollDone.current && followingTailRef.current && chatTailDisplaced({ dragging: userDraggingRef.current, momentum: momentumScrollingRef.current, contentGrew: grew, offsetDelta, distanceToLatest })) {
+      recordDebugEvent("chat.tail.displaced", { session: debugAlias("session", sessionId), offsetY: Math.round(contentOffset.y), distanceToLatest: Math.round(distanceToLatest) });
+      requestFollowTail(false);
+      return;
+    }
     if (initialScrollDone.current && distanceToOldest < CHAT_PAGE_THRESHOLD && view.hasMoreOlder && !view.loadingOlder) {
       trace("pagination.request", { direction: "older", distanceToOldest });
       void loadOlderTurns(sessionId);
@@ -887,7 +892,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       trace("pagination.request", { direction: "newer", distanceToLatest });
       void loadNewerTurns(sessionId);
     }
-  }, [loadNewerTurns, loadOlderTurns, measureVisibleRows, sessionId, setFollowPinAnimated, setFollowingTail, targetIsLatestMessage, trace, view.hasMoreNewer, view.hasMoreOlder, view.loadingNewer, view.loadingOlder]);
+  }, [loadNewerTurns, loadOlderTurns, measureVisibleRows, requestFollowTail, sessionId, setFollowPinAnimated, setFollowingTail, targetIsLatestMessage, trace, view.hasMoreNewer, view.hasMoreOlder, view.loadingNewer, view.loadingOlder]);
 
   const handleContentSizeChange = useCallback((width: number, height: number) => {
     trace("list.contentSize", { width, height });
