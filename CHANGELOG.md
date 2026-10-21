@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.3.1](https://github.com/markbang/cohub-mobile/compare/v2.3.0...v2.3.1) (2026-10-21)
+
+
+### Features
+
+* add Me tab and segmented Chats status filter ([a9b1158](https://github.com/markbang/cohub-mobile/commit/a9b11581e590c586cb2795fada7d716de02c777e))
+* **appearance:** replace Config Space colors with accent presets ([8a293a9](https://github.com/markbang/cohub-mobile/commit/8a293a98965a294cb25c16f757a1517d93d7eb33))
+* **chat:** show the catch-up while reopening a Chat and fade in new rows ([dd39db1](https://github.com/markbang/cohub-mobile/commit/dd39db124935f0c3ad83a4054e661ecdd3c272f2))
+* **ui:** move Chats filters into the header and soften edge fades ([a8406a6](https://github.com/markbang/cohub-mobile/commit/a8406a6dcd086d83a86b86503d9c4d6071871f36))
+* **ui:** replace spinners with one loader and consistent placement ([4735a2a](https://github.com/markbang/cohub-mobile/commit/4735a2a43f2b42320f3be92e2865e2b442801b4c))
+* **ui:** simplify Chats and Spaces headers ([7885b6a](https://github.com/markbang/cohub-mobile/commit/7885b6a14945a5b8bde62afdae4ec07c0bb73290))
+* **ui:** soften the top edge fade toward iOS soft scroll edge ([63f8dcf](https://github.com/markbang/cohub-mobile/commit/63f8dcfc833d39a2ec155b64cee62c34ebf3cfb1))
+
+
+### Fixes
+
+* **chat:** re-pin followed tail after a non-user scroll reset ([5067234](https://github.com/markbang/cohub-mobile/commit/506723412f2bc5d31adb38f5b5f60da56158b2a0))
+* **chat:** stamp assistant replies with turn completion time ([e9e5392](https://github.com/markbang/cohub-mobile/commit/e9e5392bcfb0c6322221afeaf8118bbaa75bb8bb))
+* **files:** edit highlighted code in a single native text input ([6c6dd35](https://github.com/markbang/cohub-mobile/commit/6c6dd35300f72691ade54aa1e8fe5ee499b6724e))
+* **gestures:** stop failing cancelled gestures and upgrade gesture handler to 3.4.0 ([0a6a7c1](https://github.com/markbang/cohub-mobile/commit/0a6a7c14b052f820817178fb7dd2b2e71aea4967))
+* **markdown:** vendor the renderer and fix CJK links and Android selection ([56fa766](https://github.com/markbang/cohub-mobile/commit/56fa766873bb23fafc46aa39980715a860c597e4))
+
 ## [2.3.0](https://github.com/markbang/cohub-mobile/compare/v2.2.21...v2.3.0) (2026-10-21)
 
 
