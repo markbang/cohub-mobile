@@ -19,10 +19,6 @@ const SHEET_CRITICAL_DAMPING = 2 * Math.sqrt(SHEET_MASS * SHEET_STIFFNESS);
 export const springs = {
   sheet: { mass: SHEET_MASS, stiffness: SHEET_STIFFNESS, damping: SHEET_CRITICAL_DAMPING },
   sheetThrown: { mass: SHEET_MASS, stiffness: SHEET_STIFFNESS, damping: SHEET_CRITICAL_DAMPING * 0.8 },
-  /** Menus and popovers growing out of their anchor, landing with a small bounce as iOS menus do. */
-  popover: { duration: 400, dampingRatio: 0.66 },
-  /** The same surface drawing back into its anchor: no bounce, so it reads as a retreat. */
-  popoverOut: { duration: 260, dampingRatio: 1 },
   /** A selection capsule sliding between tabs or segments. */
   indicator: { duration: 380, dampingRatio: 0.82 },
   pressIn: { duration: 140, dampingRatio: 1 },
@@ -45,9 +41,15 @@ export const press = {
   compactScale: 0.92,
 } as const;
 
-/** Scale a popover grows from: far enough below 1 that it visibly springs out of its anchor. */
-export const popoverFromScale = 0.85;
-/** A closing popover shrinks past its entrance scale by this factor, so the retreat into its anchor is visible. */
-export const popoverExitScale = 0.75;
-/** A closing popover stays opaque this long, so the shrink is seen before the fade. */
-export const popoverExitFadeDelay = 100;
+/**
+ * Menus and popovers, after the ColorOS popup measured frame by frame: the panel unfolds from its anchor
+ * without overshoot, mostly downward, and closes by shrinking back while it blurs and fades.
+ */
+export const popover = {
+  open: { duration: 280 },
+  close: { duration: 200 },
+  /** It grows taller far more than wider, so it reads as unfolding rather than zooming. */
+  from: { x: 0.8, y: 0.5 },
+  /** Blur radius a closing panel reaches; Android only, where `filter: blur` is supported. */
+  closeBlur: 10,
+} as const;
