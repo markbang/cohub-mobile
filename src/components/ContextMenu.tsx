@@ -45,7 +45,7 @@ export function ContextMenu({
   const originX = Math.min(Math.max(x - left, 0), menuWidth);
   const originY = top + menuHeight <= y ? menuHeight : 0;
 
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+  return <Modal visible={visible} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
     <View className="flex-1" testID={testID}>
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
       <PopoverSurface key={`${x}:${y}`} accessibilityRole="menu" origin={[originX, originY, 0]} className={`absolute overflow-hidden rounded-md py-1 ${material === "liquid" ? "" : "shadow-float"}`} style={{ top, left, width: menuWidth, borderCurve: "continuous" }}>

@@ -14,7 +14,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Reanimated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Reanimated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
@@ -165,6 +165,33 @@ export function AdaptiveSheet({
     opacity: progress.get(),
     transform: [{ translateY: (1 - progress.get()) * 14 }, { scale: 0.98 + progress.get() * 0.02 }],
   }));
+  // Owners that unmount the sheet instead of clearing `visible` get the same close as a native layout animation.
+  // Closing through `visible` animates first and then unmounts, so it carries no exit of its own.
+  const backdropExiting = useMemo<EntryExitAnimationFunction>(() => () => {
+    "worklet";
+    return {
+      initialValues: { opacity: progress.get() * 0.56 },
+      animations: { opacity: withTiming(0, CLOSE_TIMING) },
+    };
+  }, [progress]);
+  const panelExiting = useMemo<EntryExitAnimationFunction>(() => () => {
+    "worklet";
+    const shown = progress.get();
+    if (compact) {
+      const drag = dragY.get();
+      return {
+        initialValues: { opacity: interpolate(shown, [0, 0.25], [0, 1], Extrapolation.CLAMP), transform: [{ translateY: (1 - shown) * revealDistance.get() + drag }] },
+        animations: {
+          opacity: withDelay(CLOSE_TIMING.duration * 0.6, withTiming(0, { duration: CLOSE_TIMING.duration * 0.4 })),
+          transform: [{ translateY: withTiming(revealDistance.get() + drag, CLOSE_TIMING) }],
+        },
+      };
+    }
+    return {
+      initialValues: { opacity: shown, transform: [{ translateY: (1 - shown) * 14 }, { scale: 0.98 + shown * 0.02 }] },
+      animations: { opacity: withTiming(0, CLOSE_TIMING), transform: [{ translateY: withTiming(14, CLOSE_TIMING) }, { scale: withTiming(0.98, CLOSE_TIMING) }] },
+    };
+  }, [compact, dragY, progress, revealDistance]);
   const availableHeight = Math.max(0, height - keyboardHeight);
   const maxHeight = compact
     ? Math.max(0, availableHeight - insets.top - 12)
@@ -189,7 +216,7 @@ export function AdaptiveSheet({
       onRequestClose={requestClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }} testID={testID} pointerEvents={visible ? "auto" : "none"}>
-        <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]}>
+        <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]} exiting={visible ? backdropExiting : undefined}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
         </Reanimated.View>
         <KeyboardAvoidingView
@@ -200,6 +227,7 @@ export function AdaptiveSheet({
           <Reanimated.View
             collapsable={false}
             onLayout={(event) => panelHeight.set(event.nativeEvent.layout.height)}
+            exiting={visible ? panelExiting : undefined}
             accessibilityViewIsModal
             role="dialog"
             className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
