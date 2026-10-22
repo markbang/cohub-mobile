@@ -435,6 +435,20 @@ const chromeScope = {
   listRefreshProps: (options) => ({ refreshControl: { type: "AppRefreshControl", props: options } }),
   useAppTheme: () => ({ colors: { background: "background", text: "text", textMuted: "muted", textSecondary: "secondary", accent: "accent", accentSoft: "selected", surfacePressed: "pressed" } }),
 };
+// The Android ScrollView clones the refresh control and passes the list as children; the wrapper must forward them.
+{
+  const renderRefresh = loadChromeComponent("../src/ui/AppRefreshControl.tsx", "AppRefreshControl", {
+    ...chromeScope,
+    RefreshControl: "RefreshControl",
+    React: { createElement: (type, props, ...children) => ({ type, props: { ...props, ...(children.length === 0 ? null : { children: children.length === 1 ? children[0] : children }) } }) },
+  });
+  const list = { type: "List" };
+  const control = renderRefresh({ refreshing: false, onRefresh() {}, progressViewOffset: 103, children: list });
+  assert.equal(control.type, "RefreshControl");
+  assert.equal(control.props.children, list, "the wrapped list must reach the native refresh control");
+  assert.equal(control.props.progressViewOffset, 103);
+  assert.equal(control.props.colors[0], "accent");
+}
 // A minimal hook runner exercises real screen callbacks, not native layout or gestures.
 function createScreenHooks() {
   let cursor = 0;
