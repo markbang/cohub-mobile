@@ -2,6 +2,8 @@
 export const motion = {
   pressIn: { duration: 90 },
   fade: { duration: 150 },
+  /** Dismissals run shorter than their entrance: the user has already looked away. */
+  fadeOut: { duration: 120 },
   settle: { duration: 240 },
   glide: { duration: 280 },
   sendBubble: { duration: 360, dampingRatio: 1 },
@@ -42,4 +44,6 @@ export const press = {
 } as const;
 
 /** Scale a popover grows from: far enough below 1 that it visibly springs out of its anchor. */
-export const popoverFromScale = 0.5;
+export const popoverFromScale = 0.85;
+/** Scale a popover shrinks to as it fades out; a short way, since the eye has already moved on. */
+export const popoverExitScale = 0.95;

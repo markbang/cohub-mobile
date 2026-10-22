@@ -541,7 +541,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   return (
     <View style={[styles.composerWrap, { paddingBottom: (Platform.OS === "android" && keyboardVisible ? 0 : insets.bottom) + 10 }]}>
       {/* Glyphs pop only when they change, not when the composer first appears. */}
-      <LayoutAnimationConfig skipEntering>
+      <LayoutAnimationConfig skipEntering skipExiting>
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
         <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-surface" />
         <View className="flex-row items-start">
@@ -612,7 +612,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-1.5">
-          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
+          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
           {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
@@ -627,7 +627,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           <View className="flex-1 min-w-0" />
           {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
-            <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering}>
+            <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering} exiting={controlIconExiting}>
               {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
             </Animated.View>
           </Pressable>
@@ -724,6 +724,15 @@ function controlIconEntering() {
   return {
     initialValues: { opacity: 0, transform: [{ scale: 0.6 }] },
     animations: { opacity: withTiming(1, { duration: motion.fade.duration }), transform: [{ scale: withSpring(1, springs.pop) }] },
+  };
+}
+
+/** The outgoing glyph keeps its frame and fades under the incoming one, so the swap reads as one change. */
+function controlIconExiting() {
+  "worklet";
+  return {
+    initialValues: { opacity: 1, transform: [{ scale: 1 }] },
+    animations: { opacity: withTiming(0, { duration: motion.fadeOut.duration }), transform: [{ scale: withTiming(0.6, { duration: motion.fadeOut.duration }) }] },
   };
 }
 

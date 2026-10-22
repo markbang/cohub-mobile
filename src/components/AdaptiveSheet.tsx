@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -14,18 +14,20 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Reanimated, { cancelAnimation, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Reanimated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
 import { setDialogOpen } from "@/src/data/interaction-trace";
-import { springs } from "@/src/motion";
+import { motion, springs } from "@/src/motion";
 
 const COMPACT_BREAKPOINT = 720;
 // UIScrollView's fast deceleration rate (0.99 per ms) projects a release to where it would coast: v * r / (1 - r) / 1000.
 const RELEASE_PROJECTION_S = 0.099;
+// A programmatic close has no release velocity to carry, so it eases out on the iOS sheet curve.
+const CLOSE_TIMING = { duration: motion.settle.duration, easing: Easing.bezier(0.32, 0.72, 0, 1) };
 
 type AdaptiveSheetProps = {
   visible: boolean;
@@ -66,10 +68,13 @@ export function AdaptiveSheet({
   const revealDistance = useSharedValue(hiddenOffset);
   const panelHeight = useSharedValue(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // The modal outlives `visible` until the close animation lands.
+  const [presented, setPresented] = useState(visible);
+  if (visible && !presented) setPresented(true);
 
   const requestClose = useCallback(() => {
-    if (dismissible) onClose();
-  }, [dismissible, onClose]);
+    if (dismissible && visible) onClose();
+  }, [dismissible, onClose, visible]);
 
   const pan = useMemo(
     () =>
@@ -129,15 +134,18 @@ export function AdaptiveSheet({
 
   useEffect(() => {
     cancelAnimation(progress);
-    cancelAnimation(dragY);
-    dragY.set(0);
-    dragContext.set(0);
 
     if (!visible) {
-      progress.set(0);
+      // dragY stays put: a sheet dragged off screen remains there while the scrim fades.
+      progress.set(withTiming(0, CLOSE_TIMING, (finished) => {
+        if (finished) scheduleOnRN(setPresented, false);
+      }));
       return;
     }
 
+    cancelAnimation(dragY);
+    dragY.set(0);
+    dragContext.set(0);
     const frame = requestAnimationFrame(() => {
       progress.set(withSpring(1, { ...springs.sheet, overshootClamping: true }));
     });
@@ -172,15 +180,15 @@ export function AdaptiveSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={presented}
       transparent
-      animationType="fade"
+      animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       hardwareAccelerated
       onRequestClose={requestClose}
     >
-      <GestureHandlerRootView style={{ flex: 1 }} testID={testID}>
+      <GestureHandlerRootView style={{ flex: 1 }} testID={testID} pointerEvents={visible ? "auto" : "none"}>
         <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
         </Reanimated.View>
@@ -201,6 +209,8 @@ export function AdaptiveSheet({
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
+            {/* Owners often clear the data behind a sheet as they close it; keep showing what was open while it leaves. */}
+            <Freeze frozen={!visible}>
             {compact ? (
               <GestureDetector gesture={pan}>
                 <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
@@ -245,12 +255,17 @@ export function AdaptiveSheet({
                 {footer}
               </View>
             ) : null}
+            </Freeze>
           </Reanimated.View>
         </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );
 }
+
+const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: ReactNode }) {
+  return children;
+}, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
