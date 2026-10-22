@@ -5,6 +5,9 @@ import {
   type UnauthorizedContext,
 } from "@neta-art/cohub";
 import { config } from "@/src/config";
+import { withSettledClose } from "@/src/data/session-reconnect";
+
+const REALTIME_CLOSE_SETTLE_MS = 3_000;
 
 export type MobileAuthHandlers = {
   /** Lets the SDK discard 401s raised against an auth session the app has already replaced. */
@@ -32,6 +35,7 @@ export function createMobileClient(
     websocket: {
       url: config.gatewayOrigin,
       getAccessToken,
+      WebSocketImpl: withSettledClose(WebSocket, REALTIME_CLOSE_SETTLE_MS),
     },
   });
 }

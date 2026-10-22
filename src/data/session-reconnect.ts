@@ -31,6 +31,24 @@ export function isTransportRecovery(previous: ConnectionState, next: ConnectionS
   return previous === "reconnecting" || previous === "closed" || previous === "error";
 }
 
+/**
+ * OkHttp waits up to 60 s for the peer's close frame, so a pong-timeout close on a
+ * dead link would delay the SDK's reconnect that long. Report overdue closes locally.
+ */
+export function withSettledClose(Base: typeof WebSocket, settleMs: number): typeof WebSocket {
+  return class SettledCloseWebSocket extends Base {
+    override close(code?: number, reason?: string) {
+      const live = this.readyState === Base.CONNECTING || this.readyState === Base.OPEN;
+      super.close(code, reason);
+      if (!live) return;
+      setTimeout(() => {
+        if (this.readyState === Base.CLOSED) return;
+        this.onclose?.call(this, { code: code ?? 1000, reason: reason ?? "", wasClean: false } as CloseEvent);
+      }, settleMs);
+    }
+  };
+}
+
 type RealtimeRecoveryOptions = {
   reconnect: () => void;
   onUnavailableChange: (unavailable: boolean) => void;

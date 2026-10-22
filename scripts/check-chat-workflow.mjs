@@ -41,7 +41,7 @@ import { followupPreviewText, queuedFollowupTurns, followupQueueItems, isOptimis
 import { classifySaveConflict, isEditableTextFile, isFileConflictError } from "../src/data/code-file.ts";
 import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-language.ts";
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
-import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery } from "../src/data/session-reconnect.ts";
+import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, withSettledClose } from "../src/data/session-reconnect.ts";
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget } from "../src/data/space-panel-pager.ts";
 import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
@@ -2535,6 +2535,34 @@ assert.equal(connectionDisplayState({ state: "closed", willReconnect: false }), 
 assert.equal(connectionDisplayState({ state: "open" }), "open");
 assert.equal(connectionDisplayState({ state: "connecting" }), "connecting");
 assert.equal(connectionDisplayState({ state: "reconnecting" }), "reconnecting");
+
+mock.timers.enable({ apis: ["setTimeout"] });
+try {
+  // A pong-timeout close on a dead link must reach the SDK without waiting for the peer.
+  class FakeSocket {
+    static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+    readyState = FakeSocket.OPEN;
+    onclose = null;
+    close() { this.readyState = FakeSocket.CLOSING; }
+  }
+  const Socket = withSettledClose(FakeSocket, 3_000);
+  const closes = [];
+  const dead = new Socket();
+  dead.onclose = (event) => closes.push(event.code);
+  dead.close(4002, "pong timeout");
+  mock.timers.tick(2_999);
+  assert.deepEqual(closes, []);
+  mock.timers.tick(1);
+  assert.deepEqual(closes, [4002]);
+  const healthy = new Socket();
+  healthy.onclose = (event) => closes.push(event.code);
+  healthy.close(4002, "pong timeout");
+  healthy.readyState = FakeSocket.CLOSED;
+  mock.timers.tick(3_000);
+  assert.deepEqual(closes, [4002], "a native close settles the socket itself");
+} finally {
+  mock.timers.reset();
+}
 
 mock.timers.enable({ apis: ["setTimeout"] });
 try {
