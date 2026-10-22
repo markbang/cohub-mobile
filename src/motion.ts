@@ -21,6 +21,8 @@ export const springs = {
   sheetThrown: { mass: SHEET_MASS, stiffness: SHEET_STIFFNESS, damping: SHEET_CRITICAL_DAMPING * 0.8 },
   /** Menus and popovers growing out of their anchor, landing with a small bounce as iOS menus do. */
   popover: { duration: 400, dampingRatio: 0.66 },
+  /** The same surface drawing back into its anchor: no bounce, so it reads as a retreat. */
+  popoverOut: { duration: 260, dampingRatio: 1 },
   /** A selection capsule sliding between tabs or segments. */
   indicator: { duration: 380, dampingRatio: 0.82 },
   pressIn: { duration: 140, dampingRatio: 1 },
@@ -45,5 +47,7 @@ export const press = {
 
 /** Scale a popover grows from: far enough below 1 that it visibly springs out of its anchor. */
 export const popoverFromScale = 0.85;
-/** Scale a popover shrinks to as it fades out; a short way, since the eye has already moved on. */
-export const popoverExitScale = 0.95;
+/** A closing popover shrinks past its entrance scale by this factor, so the retreat into its anchor is visible. */
+export const popoverExitScale = 0.75;
+/** A closing popover stays opaque this long, so the shrink is seen before the fade. */
+export const popoverExitFadeDelay = 100;
