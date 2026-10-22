@@ -1,9 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { StyleProp, ViewProps, ViewStyle } from "react-native";
-import Animated, { Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
-import { motion, popoverExitScale, popoverFromScale, springs } from "@/src/motion";
-
-const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+import Animated, { Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
+import { motion, popoverExitFadeDelay, popoverExitScale, popoverFromScale, springs } from "@/src/motion";
 
 /** Where the surface grows from, as `transformOrigin` [x, y, z]; point it at the control or touch that opened it. */
 export type PopoverOrigin = [x: number | `${number}%`, y: number | `${number}%`, z: number];
@@ -38,15 +36,14 @@ export function PopoverSurface({ origin, fromScale = popoverFromScale, className
     "worklet";
     // Start from wherever the entrance is, so closing mid-spring does not jump to full size first.
     const shown = progress.get();
-    const config = { duration: motion.fadeOut.duration, easing: EASE_OUT };
     return {
       initialValues: {
         opacity: interpolate(shown, [0, 0.5], [0, 1], Extrapolation.CLAMP),
         transform: [{ scale: fromScale + (1 - fromScale) * shown }],
       },
       animations: {
-        opacity: withTiming(0, config),
-        transform: [{ scale: withTiming(Math.min(popoverExitScale, fromScale + (1 - fromScale) * shown), config) }],
+        opacity: withDelay(popoverExitFadeDelay, withTiming(0, { duration: motion.fadeOut.duration })),
+        transform: [{ scale: withSpring(fromScale * popoverExitScale, springs.popoverOut) }],
       },
     };
   }, [fromScale, progress]);
