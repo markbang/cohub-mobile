@@ -3411,7 +3411,7 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", TurnMarker: "TurnMarker", LiveReply: "LiveReply",
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
-  Animated: { View: "AnimatedView" }, arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, ARRIVAL_STYLE: {}, ARRIVAL_STYLE_REDUCED: {},
+  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
