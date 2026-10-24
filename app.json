@@ -7,6 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "cohub",
     "userInterfaceStyle": "automatic",
+    "locales": {
+      "zh-Hans": "./locales/zh-Hans.json"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.github.markbang.cohubmobile",
@@ -15,8 +18,8 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "Cohub uses the camera to attach references to a Chat.",
-        "NSMicrophoneUsageDescription": "Cohub uses the microphone for voice input.",
+        "NSCameraUsageDescription": "Cohub uses the camera to attach references to a Chat, and lets Works you approve use it.",
+        "NSMicrophoneUsageDescription": "Cohub uses the microphone for voice input, and lets Works you approve use it.",
         "NSPhotoLibraryUsageDescription": "Cohub uses your photo library to attach references to a Chat."
       }
     },
@@ -66,7 +69,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Cohub uses your photos to attach references to a Chat.",
-          "cameraPermission": "Cohub uses the camera to attach references to a Chat."
+          "cameraPermission": "Cohub uses the camera to attach references to a Chat, and lets Works you approve use it."
         }
       ],
       [
