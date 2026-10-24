@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Cohub 使用相机为对话添加参考图片，并在你同意后供作品使用。",
+    "NSMicrophoneUsageDescription": "Cohub 使用麦克风进行语音输入，并在你同意后供作品使用。",
+    "NSPhotoLibraryUsageDescription": "Cohub 使用你的照片为对话添加参考图片。"
+  }
+}

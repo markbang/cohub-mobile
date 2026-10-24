@@ -34,9 +34,10 @@ The next native release moves to Expo SDK 58 (React Native 0.88, React 19.3). It
 
 ## Next native baseline
 
-Native changes queued on `main` since v2.3.1. Each one changes the fingerprint, so merge them just before the release PR: OTA stops reaching installed binaries once they land.
+Native changes for the release after v2.3.1. Each one changes the fingerprint, so land them on `main` just before merging the release PR: OTA stops reaching installed binaries once they land.
 
 - Expo SDK 58 patch versions match `npx expo install --check` (Expo 58.0.19, Expo Router 58.0.26, Expo Updates 58.0.18). React stays on the SDK's 19.3.0, which React Native 0.88's renderer requires.
+- iOS camera and microphone purpose strings also name Works, which can use them after the viewer allows it, and `locales/zh-Hans.json` translates the purpose strings for Chinese devices.
 
 ## One-time repository setup
 
