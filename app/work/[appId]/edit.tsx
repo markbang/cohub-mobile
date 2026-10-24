@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { SettingsRow } from "@/src/components/SettingsRow";
 import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
@@ -145,6 +146,15 @@ export default function EditAppScreen() {
             onValueChange={setPublished}
             trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
             thumbColor={theme.colors.surface}
+          />
+        </View>
+
+        <View className="overflow-hidden rounded-md" style={{ borderCurve: "continuous" }}>
+          <SettingsRow
+            icon="globe"
+            title={t("app.domain.title")}
+            last
+            onPress={() => router.push({ pathname: "/work/[appId]/domain", params: { appId: detail.app.id, spaceId: detail.app.spaceId } })}
           />
         </View>
 

@@ -64,6 +64,14 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
     case "app.version.published":
       change.exact.push(`space:${spaceId}:resources`);
       break;
+    case "app.domain.updated":
+    case "app.domain.removed": {
+      const payload = event.payload as { appId?: unknown; domain?: { appId?: unknown } } | undefined;
+      const appId = event.type === "app.domain.updated" ? payload?.domain?.appId : payload?.appId;
+      if (typeof appId !== "string" || !appId) throw new Error("Invalid realtime App domain. Reopen the App to retry.");
+      change.exact.push(`app:${appId}:domains`);
+      break;
+    }
     case "task.created":
     case "task.updated": {
       const task = event.payload.task as { id?: unknown; status?: unknown } | undefined;

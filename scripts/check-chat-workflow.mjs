@@ -254,6 +254,9 @@ assert.deepEqual(fileChange.prefixes, ["space:space:files:", "space:space:files-
 assert.equal(fileChange.exact.length, 0, "file changes do not refetch unrelated task/resource sections");
 const finishedTask = spaceRealtimeChange({ type: "task.updated", spaceId: "space", payload: { task: { id: "task", status: "completed" } } });
 assert.ok(finishedTask.exact.includes("task:task") && finishedTask.exact.includes("space:space:resources"));
+assert.deepEqual(spaceRealtimeChange({ type: "app.domain.updated", spaceId: "space", payload: { domain: { id: "d", appId: "app" } } }).exact, ["app:app:domains"]);
+assert.deepEqual(spaceRealtimeChange({ type: "app.domain.removed", spaceId: "space", payload: { appId: "app", domainId: "d" } }).exact, ["app:app:domains"]);
+assert.throws(() => spaceRealtimeChange({ type: "app.domain.removed", spaceId: "space", payload: {} }), /Invalid realtime App domain/);
 const statusChange = spaceRealtimeChange({ type: "session.turn.updated", spaceId: "space", sessionId: "chat", payload: { turn: { id: "turn", sequence: 2, status: "running", updatedAt: "2026-09-16T00:00:00Z" } } });
 assert.equal(statusChange.turn.status, "running");
 const failedTurn = spaceRealtimeChange({ type: "session.turn.updated", spaceId: "space", sessionId: "chat", payload: { turn: { id: "turn", sequence: 2, status: "failed", errorMessage: "model overloaded" } } });
