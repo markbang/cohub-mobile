@@ -80,6 +80,7 @@ import Wifi from "lucide-react-native/icons/wifi";
 import X from "lucide-react-native/icons/x";
 import Zap from "lucide-react-native/icons/zap";
 import Box from "lucide-react-native/icons/box";
+import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import GitCompare from "lucide-react-native/icons/git-compare";
 import Play from "lucide-react-native/icons/play";
 import Wallet from "lucide-react-native/icons/wallet";
@@ -167,6 +168,7 @@ export const icons = {
   x: X,
   zap: Zap,
   box: Box,
+  "calendar-clock": CalendarClock,
   "git-compare": GitCompare,
   play: Play,
   wallet: Wallet,

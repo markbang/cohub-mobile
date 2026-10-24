@@ -50,6 +50,7 @@ import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
 import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
 import { appendWalletActivity, formatWalletUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
+import { nextCronRuns, parseCron, summarizeCron } from "../src/data/cron.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
@@ -519,7 +520,7 @@ const formScope = {
     useRef: (current) => { const index = cursor++; if (!(index in slots)) slots[index] = { current }; return slots[index]; },
     useEffect: () => {}, useFocusEffect: () => {}, useCallback: (callback) => callback, useRouter: () => ({}), useLocalSearchParams: () => ({ spaceId: "space" }),
     useApp: () => ({ client }), useToast: () => (notice) => alerts.push(notice),
-    SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatWalletUsd,
+    SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatWalletUsd, cronSummaryText: (_summary, expression) => expression, summarizeCron,
     useSpaceSettings: () => ({ env: [], config: null, ports: {}, allowedSpec: "standard", members: [], invitations: [], mods, setMods: (next) => { mods = next(mods); }, schedules: [], resources: Object.fromEntries(resourceKeys.map((key) => [key, { loaded: true, loading: false, error: null }])), loadResource: async () => {} }),
     ResourceStatus: "ResourceStatus",
     useAppTheme: () => ({ colors: {}, spacing: { md: 12 }, radius: { md: 12 } }),
@@ -1766,6 +1767,18 @@ const seeded = realtimeSessionFork(forks, "space", liveFork, "Fork A");
 assert.equal(seeded.parentSessionId, "fork-a");
 assert.equal(seeded.parentTitle, "Fork A");
 assert.equal(realtimeSessionFork(forks, "space", { ...liveFork, childSessionId: "fork-b" }, null), null, "a known edge is never replaced by a partial realtime one");
+
+// Schedules: cron reading, DST-safe next runs in the schedule's own zone, and summaries.
+assert.equal(parseCron("0 9 * * *") !== null, true);
+assert.equal(parseCron("0 9 * *"), null, "four fields are not a schedule");
+assert.equal(parseCron("61 * * * *"), null, "out-of-range minutes are rejected");
+const fromUtc = Date.UTC(2026, 9, 24, 0, 30);
+assert.deepEqual(nextCronRuns("0 9 * * *", "Asia/Shanghai", 2, fromUtc).map((date) => date.toISOString()), ["2026-10-24T01:00:00.000Z", "2026-10-25T01:00:00.000Z"]);
+assert.deepEqual(nextCronRuns("30 1 * * 0", "UTC", 1, fromUtc).map((date) => date.toISOString()), ["2026-10-25T01:30:00.000Z"], "Sunday is weekday 0");
+assert.deepEqual(nextCronRuns("0 0 31 2 *", "UTC", 1, fromUtc), [], "an impossible date ends the search instead of looping");
+assert.deepEqual(summarizeCron("0 9 * * 1-5"), { kind: "preset", id: "weekdays", time: "09:00" });
+assert.deepEqual(summarizeCron("*/15 * * * *"), { kind: "minutes", every: 15 });
+assert.deepEqual(summarizeCron("0 9 1 * *"), { kind: "custom" });
 
 // Space wallet and startup report readers.
 assert.equal(formatWalletUsd(1.23456, "en", 4), "$1.2346");

@@ -7,6 +7,8 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { FilterChip } from "@/src/components/FilterChip";
 import { SettingsRow } from "@/src/components/SettingsRow";
+import { cronSummaryText } from "@/src/components/ScheduleForm";
+import { summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
@@ -52,10 +54,10 @@ export default function SpaceSettingsScreen() {
   const [customTtlValue, setCustomTtlValue] = useState("");
   const [customTtlUnit, setCustomTtlUnit] = useState<CustomTtlUnit>("hours");
   const [customTtlError, setCustomTtlError] = useState<string | null>(null);
-  // The wallet and the startup report change on the screens this one opens.
+  // Schedules, the wallet, and the startup report change on the screens this one opens.
   const focused = useRef(false);
   useFocusEffect(useCallback(() => {
-    if (focused.current) for (const key of ["wallet", "sandbox", "config"] as const) void loadResource(key);
+    if (focused.current) for (const key of ["schedules", "wallet", "sandbox", "config"] as const) void loadResource(key);
     focused.current = true;
   }, [loadResource]));
   const idlePolicy = config?.autoDestroy.mode === "idle" ? config.autoDestroy : null;
@@ -463,7 +465,10 @@ export default function SpaceSettingsScreen() {
         </View>
 
         <View>
-          <Text className="text-headline font-semibold text-fg">{t("space.settings.schedules")}</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-headline font-semibold text-fg">{t("space.settings.schedules")}</Text>
+            <IconButton name="plus" label={t("schedule.newTitle")} tone="accent" disabled={!spaceId} onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/new", params: { spaceId } })} />
+          </View>
           <ResourceStatus state={resources.schedules} onRetry={() => void loadResource("schedules")} />
           {schedules.length === 0 ? (
             resources.schedules.loaded && !resources.schedules.error && !resources.schedules.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noSchedules")}</Text> : null
@@ -472,6 +477,7 @@ export default function SpaceSettingsScreen() {
               <ScheduleRow
                 key={schedule.id}
                 schedule={schedule}
+                onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/[jobId]", params: { spaceId, jobId: schedule.id } })}
                 onToggle={async (enabled) => {
                   if (!client) return;
                   try {
@@ -805,7 +811,7 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
   );
 }
 
-function ScheduleRow({ schedule, onToggle }: { schedule: CronJobRecord; onToggle: (enabled: boolean) => Promise<void> }) {
+function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord; onPress: () => void; onToggle: (enabled: boolean) => Promise<void> }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [toggling, setToggling] = useState(false);
@@ -820,16 +826,16 @@ function ScheduleRow({ schedule, onToggle }: { schedule: CronJobRecord; onToggle
   };
 
   return (
-    <View className="flex-row items-center gap-2 py-3 border-b border-border">
-      <View className="flex-1 min-w-0">
+    <View className="flex-row items-center gap-2 border-b border-border">
+      <Pressable accessibilityRole="button" accessibilityLabel={schedule.title || t("space.settings.schedule.unnamed")} onPress={onPress} className="min-w-0 flex-1 py-3 active:opacity-70">
         <Text numberOfLines={1} className="text-body font-semibold text-fg">{schedule.title || t("space.settings.schedule.unnamed")}</Text>
-        <Text className="text-caption text-fg-muted mt-0.5">{schedule.cronExpression}</Text>
+        <Text className="text-caption text-fg-muted mt-0.5">{cronSummaryText(summarizeCron(schedule.cronExpression), schedule.cronExpression, t)}</Text>
         {schedule.updatedAt && (
           <Text className="text-micro font-semibold text-fg-faint mt-1">
             {t("space.settings.schedule.lastRun")}: {formatRelativeTime(schedule.updatedAt)}
           </Text>
         )}
-      </View>
+      </Pressable>
       <Switch
         value={schedule.enabled}
         onValueChange={handleToggle}
