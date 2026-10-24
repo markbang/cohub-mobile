@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.3.2](https://github.com/markbang/cohub-mobile/compare/v2.3.1...v2.3.2) (2026-10-24)
+
+
+### Features
+
+* **motion:** animate dismissals for popovers, sheets, and composer glyphs ([012a340](https://github.com/markbang/cohub-mobile/commit/012a3408cad125548910ea1b48be85841b4f0878))
+* **motion:** animate sheets and context menus out when their owner unmounts them ([acef5d5](https://github.com/markbang/cohub-mobile/commit/acef5d52bab77fe8a3efa8d2f723d8c529f252c7))
+* **motion:** retract popovers into their anchor on close ([d581b66](https://github.com/markbang/cohub-mobile/commit/d581b6675890719e0a9364b4b232704a18c11467))
+* **motion:** unfold popovers from their anchor and blur them out on close ([78bcaa7](https://github.com/markbang/cohub-mobile/commit/78bcaa77c44a62390b1dabbe096aeb230da2afb7))
+* **works:** manage custom domains for published Works ([ed03334](https://github.com/markbang/cohub-mobile/commit/ed03334fa59ee8e03139676f0fd864d4148e543b))
+
+
+### Fixes
+
+* **chat:** keep the catch-up fade from stalling rows half-transparent ([ecfc93e](https://github.com/markbang/cohub-mobile/commit/ecfc93e4ce10f656908c6778c9b506ad0fd38608))
+* **files:** keep editor line numbers and caret visible ([7bc608f](https://github.com/markbang/cohub-mobile/commit/7bc608ffb94388cfe781ac4086658a0f262b8824))
+* **realtime:** settle client-initiated socket close on dead links ([8ab0ee4](https://github.com/markbang/cohub-mobile/commit/8ab0ee4c2454e2b35b1fb29181c36932cb1fef54))
+* **ui:** forward scroll children through the refresh control ([3625c3d](https://github.com/markbang/cohub-mobile/commit/3625c3da42f098a748ec8e3c4cd4d7b240f49557))
+* **ui:** use one pull-to-refresh indicator everywhere ([487539d](https://github.com/markbang/cohub-mobile/commit/487539d1997db98c3363864e2d6d501fc00cf25c))
+
+
+### Build
+
+* **deps:** upgrade @neta-art/cohub to 12.5.0 ([a1ce69f](https://github.com/markbang/cohub-mobile/commit/a1ce69ffddb86b795f7d0994db9152e8fcb9e528))
+
 ## [2.3.1](https://github.com/markbang/cohub-mobile/compare/v2.3.0...v2.3.1) (2026-10-21)
 
 
