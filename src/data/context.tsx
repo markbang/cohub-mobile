@@ -64,7 +64,7 @@ import type {
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
 import { mergeDisplayMessages, mergeTurns, messagesFromTurns, nextTurnSequence, turnSequenceForMessage, withFallbackUserContent } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
-import { mergeSessionForks } from "@/src/data/session-fork-tree";
+import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
 import { clearSlashCommandCache } from "@/src/data/use-composer-slash";
 import { isOptimisticFollowup, shouldQueueFollowup } from "@/src/data/followup-queue";
@@ -1509,6 +1509,13 @@ export function AppProvider({
     if (change.sessionId) {
       sessionEventRevisions.current.set(change.sessionId, ++sessionEventRevision.current);
       if (change.session) dispatch({ type: "session-realtime-meta", sessionId: change.sessionId, session: change.session });
+      if (change.fork) {
+        const { spaceId, ...lineage } = change.fork;
+        const parentTitle = stateRef.current.sessions.find((session) => session.id === lineage.parentSessionId)?.title ?? null;
+        const fork = realtimeSessionFork(stateRef.current.sessionForks, spaceId, lineage, parentTitle);
+        // Kept in memory only: the next list read persists the full edge.
+        if (fork) dispatch({ type: "session-forks", forks: [fork] });
+      }
       if (change.turn) dispatch({ type: "session-realtime-turn", sessionId: change.sessionId, turn: change.turn });
     }
     for (const key of change.exact) sync.invalidate(key);

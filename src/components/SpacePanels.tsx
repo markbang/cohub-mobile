@@ -11,7 +11,8 @@ import Reanimated, { cancelAnimation, Extrapolation, interpolate, scrollTo, useA
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionSearchRow } from "@/src/components/SearchResultRow";
-import { SessionRow } from "@/src/components/SessionRow";
+import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
+import { sessionListStatus } from "@/src/data/session-status";
 import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { FilterChip } from "@/src/components/FilterChip";
@@ -440,7 +441,8 @@ function cursorAfterOldestSession(sessions: UserSessionListItem[]) {
 
 type ChatPanelItem =
   | { kind: "local"; session: UserSessionListItem; fork: SessionListFork | null; tree: SessionTreePosition | null }
-  | { kind: "remote"; hit: RemoteSessionSearchHit };
+  | { kind: "remote"; hit: RemoteSessionSearchHit }
+  | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean };
 
 type ChatListFilter =
   | { kind: "all" }
@@ -452,6 +454,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   const { t } = useTranslation();
   const { state, sync, prefetchSession, refreshSessionStatuses, rememberSessionForks } = useApp();
   const [query, setQuery] = useState("");
+  const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
   const [extraSessions, setExtraSessions] = useState<UserSessionListItem[]>([]);
   const [scopeCursor, setScopeCursor] = useState<string | null>(null);
   const [scopeHasMore, setScopeHasMore] = useState(false);
@@ -556,7 +559,12 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatPanelItem[]>(() => {
     const flatSession = (session: UserSessionListItem) => ({ kind: "local" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
-    if (!trimmedQuery && listFilter.kind === "all") return buildSessionForkTree(filteredSessions, sessionForks).map((row) => ({ kind: "local", ...row }));
+    if (!trimmedQuery && listFilter.kind === "all") {
+      const keep = (session: UserSessionListItem) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running";
+      return buildSessionForkTree(filteredSessions, sessionForks, { expanded: expandedForks, keep }).map((entry): ChatPanelItem => entry.type === "toggle"
+        ? { kind: "fork-toggle", rootId: entry.rootId, hidden: entry.hidden, expanded: entry.expanded }
+        : { kind: "local", session: entry.session, fork: entry.fork, tree: entry.tree });
+    }
     if (!trimmedQuery) return filteredSessions.map(flatSession);
     const remoteSessions = remoteQueryMatches
       ? remoteSearch.sessions.filter((hit) => {
@@ -571,7 +579,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
       ...remoteSessions.map((hit) => ({ kind: "remote" as const, hit })),
       ...filteredSessions.filter((session) => !remoteIds.has(session.id)).map(flatSession),
     ];
-  }, [filteredSessions, labelSessionIds, listFilter, remoteQueryMatches, remoteSearch.sessions, sessionForks, sessionsById, trimmedQuery]);
+  }, [expandedForks, filteredSessions, labelSessionIds, listFilter, remoteQueryMatches, remoteSearch.sessions, sessionForks, sessionsById, state.sessionLatestTurns, state.sessionTurnStatuses, trimmedQuery]);
   // LegendList memoizes each row on [item, extraData]; the row reads client/theme/locale,
   // which never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(() => ({ client, t, theme, prefetchSession }), [client, t, theme, prefetchSession]);
@@ -669,8 +677,10 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         scrollsChildToFocus={false}
         data={listItems}
         extraData={rowExtraData}
-        keyExtractor={(item) => item.kind === "remote" ? `remote:${item.hit.sessionId}` : `local:${item.session.id}`}
-        renderItem={({ item }) => item.kind === "remote"
+        keyExtractor={(item) => item.kind === "remote" ? `remote:${item.hit.sessionId}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : `local:${item.session.id}`}
+        renderItem={({ item }) => item.kind === "fork-toggle"
+          ? <SessionForkToggle hidden={item.hidden} expanded={item.expanded} showSpace={false} onPress={() => setExpandedForks((current) => { const next = new Set(current); if (!next.delete(item.rootId)) next.add(item.rootId); return next; })} />
+          : item.kind === "remote"
           ? <SessionSearchRow hit={item.hit} showSpace={false} onPress={(target) => onOpenSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />
           : <SessionRow session={item.session} fork={item.fork} tree={item.tree} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
         keyboardShouldPersistTaps="handled"

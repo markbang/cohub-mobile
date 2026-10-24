@@ -1,4 +1,4 @@
-import type { CohubClient, SessionRecord } from "@neta-art/cohub";
+import type { CohubClient, RealtimeSessionFork, SessionRecord } from "@neta-art/cohub";
 import type { LatestSessionTurn } from "./session-status";
 
 export type SpaceRealtimeEvent = Parameters<Parameters<CohubClient["onUserEvent"]>[0]>[0];
@@ -9,6 +9,7 @@ type SpaceChange = {
   sessionId?: string;
   session?: Partial<SessionRecord>;
   turn?: Partial<LatestSessionTurn>;
+  fork?: RealtimeSessionFork & { spaceId: string };
 };
 
 /** Only summary/lifecycle events invalidate reads; stream patches belong to the Chat reducer. */
@@ -24,6 +25,11 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       change.sessionId = event.sessionId;
       change.prefixes.push("chats");
       change.exact.push(`space:${spaceId}:chats`, `space:${spaceId}:chat-panel`);
+      const fork = event.type === "session.created" ? (event.payload as { fork?: Partial<RealtimeSessionFork> }).fork : undefined;
+      // The lineage nests a new fork on first paint; a malformed one is dropped, since the list read carries it too.
+      if (fork && fork.childSessionId === event.sessionId && typeof fork.parentSessionId === "string" && fork.parentSessionId && fork.parentSessionId !== event.sessionId && Number.isSafeInteger(fork.depth) && Number.isSafeInteger(fork.anchorSequence)) {
+        change.fork = { spaceId, childSessionId: fork.childSessionId, parentSessionId: fork.parentSessionId, depth: fork.depth!, anchorSequence: fork.anchorSequence! };
+      }
       // Partial updates (e.g. activeTurn-only) carry no revision, so they cannot order metadata.
       if (session.updatedAt === undefined) break;
       const metadata: Partial<SessionRecord> = { id: session.id, spaceId, updatedAt: session.updatedAt };

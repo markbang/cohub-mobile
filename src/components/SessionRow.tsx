@@ -1,5 +1,5 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
 import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/utils";
@@ -26,6 +26,11 @@ type SessionRowProps = {
 
 const AVATAR_SIZE = LIST_AVATAR_SIZE;
 const BRANCH_COLUMN = 16;
+const TREE_STEP = 12;
+
+function railX(level: number, showSpace: boolean) {
+  return (showSpace ? AVATAR_SIZE / 2 - 0.5 : 3.5) + (level - 1) * TREE_STEP;
+}
 
 export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {
   const { t } = useTranslation();
@@ -35,21 +40,22 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const latestTurn = state.sessionLatestTurns[session.id];
   const activity = sessionActivity(session, { status, latestTurn, live: state.sessionViews[session.id]?.stream ?? null, t });
   const glyph = status === "running" || status === "failed" || status === "stopped" ? status : null;
-  const branch = tree?.depth === 1;
+  const depth = tree?.depth ?? 0;
+  const branch = depth > 0;
   const title = displayForkSessionTitle(session, fork);
   const forkLabel = !fork ? null : fork.parentSessionId === null ? t("session.forkedFromUnavailable") : fork.parentTitle?.trim() ? t("session.forkedFrom", { title: fork.parentTitle.trim() }) : t("session.forkedFromChat");
   const statusLabel = activity?.text ?? null;
-  // Fork children hang off the parent's avatar column; the guide spans the whole row height.
-  const guideColumn = showSpace ? AVATAR_SIZE : BRANCH_COLUMN;
-  const guideX = showSpace ? AVATAR_SIZE / 2 - 0.5 : 3.5;
-  const leading = branch
-    ? <View className="flex-1" style={{ width: guideColumn }}>
-      <View className="absolute top-0 w-px bg-border-strong" style={{ left: guideX, bottom: tree.lastInGroup ? "50%" : 0 }} />
-      <View className="absolute top-1/2 h-px bg-border-strong" style={{ left: guideX, right: showSpace ? 6 : 0 }} />
+  // Fork children hang off the parent's avatar column; rails span the whole row height.
+  const leading = branch && tree
+    ? <View className="flex-1" style={{ width: (showSpace ? AVATAR_SIZE : BRANCH_COLUMN) + (depth - 1) * TREE_STEP }}>
+      {tree.rails.map((continues, index) => continues ? <View key={index} className="absolute bottom-0 top-0 w-px bg-border-strong" style={{ left: railX(index + 1, showSpace) }} /> : null)}
+      <View className="absolute top-0 w-px bg-border-strong" style={{ left: railX(depth, showSpace), bottom: tree.last ? "50%" : 0 }} />
+      <View className="absolute top-1/2 h-px bg-border-strong" style={{ left: railX(depth, showSpace), right: showSpace ? 6 : 0 }} />
+      {tree.hasChildren ? <View className="absolute bottom-0 top-1/2 w-px bg-border-strong" style={{ left: railX(depth + 1, showSpace) }} /> : null}
     </View>
     : showSpace
       ? <View className="flex-1 justify-center">
-        {tree?.hasChildren ? <View className="absolute bottom-0 top-1/2 w-px bg-border-strong" style={{ left: guideX }} /> : null}
+        {tree?.hasChildren ? <View className="absolute bottom-0 top-1/2 w-px bg-border-strong" style={{ left: railX(1, true) }} /> : null}
         <AvatarStatus status={glyph} size={AVATAR_SIZE}><Avatar name={spaceName} uri={session.space?.publicProfile?.avatarUrl} size={AVATAR_SIZE} /></AvatarStatus>
       </View>
       : null;
@@ -79,10 +85,26 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     subtitle={subtitleNode}
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
     // A fork tree draws as one card so its guide lines run unbroken from parent to children.
-    group={!tree ? "single" : tree.depth === 0 ? (tree.hasChildren ? "first" : "single") : tree.lastInGroup ? "last" : "middle"}
+    group={!tree ? "single" : tree.depth === 0 ? (tree.lastInGroup ? "single" : "first") : tree.lastInGroup ? "last" : "middle"}
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}
     onLongPress={onLongPress}
   />;
+}
+
+export function SessionForkToggle({ hidden, expanded, showSpace = true, onPress }: { hidden: number; expanded: boolean; showSpace?: boolean; onPress: () => void }) {
+  const { t } = useTranslation();
+  const label = expanded ? t("session.forks.showFewer") : t("session.forks.showMore", { count: hidden });
+  return <Pressable
+    accessibilityRole="button"
+    accessibilityLabel={label}
+    accessibilityState={{ expanded }}
+    onPress={() => { traceAction("session_fork_toggle", { expanded: !expanded, hidden }); onPress(); }}
+    className="mx-4 mb-2 min-h-11 flex-row items-center gap-1.5 rounded-b-md bg-surface pr-4 active:bg-surface-pressed"
+    style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 14 : 0), borderCurve: "continuous" }}
+  >
+    <AppIcon name={expanded ? "chevron-up" : "chevron-down"} size={15} tone="accent" />
+    <Text numberOfLines={1} className="text-caption font-semibold text-accent">{label}</Text>
+  </Pressable>;
 }

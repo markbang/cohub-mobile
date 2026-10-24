@@ -47,7 +47,7 @@ import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount 
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
-import { buildSessionForkTree, mergeSessionForks } from "../src/data/session-fork-tree.ts";
+import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
@@ -1744,7 +1744,24 @@ const chat = (id, minutes) => ({ id, lastMessageAt: at(minutes), updatedAt: at(m
 const edge = (childSessionId, parentSessionId, extra = {}) => ({ childSessionId, parentSessionId, ...extra });
 const forks = mergeSessionForks({}, [edge("fork-a", "parent"), edge("fork-b", "parent"), edge("nested", "fork-a"), edge("orphan", "unlisted"), edge("hidden", null)]);
 const tree = buildSessionForkTree([chat("recent", 50), chat("nested", 40), chat("parent", 30), chat("fork-b", 20), chat("orphan", 10), chat("fork-a", 5), chat("hidden", 1)], forks);
-assert.deepEqual(tree.map((row) => [row.session.id, row.tree.depth]), [["recent", 0], ["parent", 0], ["fork-a", 1], ["nested", 1], ["fork-b", 1], ["orphan", 0], ["hidden", 0]], "forks nest one level under their listed ancestor, ordered by latest activity in each branch");
+assert.deepEqual(tree.map((row) => [row.session.id, row.tree.depth]), [["recent", 0], ["parent", 0], ["fork-a", 1], ["nested", 2], ["fork-b", 1], ["orphan", 0], ["hidden", 0]], "forks nest under their listed parent, ordered by latest activity in each branch");
+assert.deepEqual(tree.slice(2, 5).map((row) => [row.tree.rails, row.tree.last, row.tree.hasChildren]), [[[], false, true], [[true], true, false], [[], true, false]], "a nested fork keeps its ancestor's rail while a later sibling follows");
+const deepForks = mergeSessionForks({}, ["d1", "d2", "d3", "d4"].map((id, index) => edge(id, index ? `d${index}` : "root")));
+assert.deepEqual(buildSessionForkTree([chat("root", 9), chat("d1", 8), chat("d2", 7), chat("d3", 6), chat("d4", 5)], deepForks, { expanded: new Set(["root"]) }).map((row) => row.tree?.depth), [0, 1, 2, 3, 3, undefined], "forks past three levels flatten into the third on a phone");
+const wideForks = mergeSessionForks({}, ["w1", "w2", "w3", "w4", "w5"].map((id) => edge(id, "root")));
+const wideChats = [chat("root", 1), chat("w1", 50), chat("w2", 40), chat("w3", 30), chat("w4", 20), chat("w5", 10)];
+const collapsed = buildSessionForkTree(wideChats, wideForks, { keep: (session) => session.id === "w5" });
+assert.deepEqual(collapsed.map((entry) => entry.type === "toggle" ? `toggle:${entry.hidden}` : entry.session.id), ["root", "w1", "w2", "w5", "toggle:2"], "a busy fork group shows its latest and running forks, then a toggle");
+assert.equal(collapsed[3].tree.lastInGroup, false, "the toggle closes the group's card");
+assert.deepEqual(buildSessionForkTree(wideChats, wideForks, { expanded: new Set(["root"]) }).map((entry) => entry.type === "toggle" ? `toggle:${entry.expanded}` : entry.session.id), ["root", "w1", "w2", "w3", "w4", "w5", "toggle:true"], "an expanded group lists every fork and can fold back");
+assert.equal(buildSessionForkTree(wideChats.slice(0, 4), wideForks).some((entry) => entry.type === "toggle"), false, "hiding a single fork is not worth a toggle");
+const liveFork = { childSessionId: "fresh", parentSessionId: "fork-a", depth: 2, anchorSequence: 4 };
+assert.deepEqual(spaceRealtimeChange({ type: "session.created", spaceId: "space", sessionId: "fresh", payload: { session: { id: "fresh", spaceId: "space" }, fork: liveFork } }).fork, { spaceId: "space", ...liveFork }, "realtime creation events carry the fork lineage");
+assert.equal(spaceRealtimeChange({ type: "session.created", spaceId: "space", sessionId: "fresh", payload: { session: { id: "fresh", spaceId: "space" }, fork: { ...liveFork, childSessionId: "other" } } }).fork, undefined, "a lineage for another Chat is ignored");
+const seeded = realtimeSessionFork(forks, "space", liveFork, "Fork A");
+assert.equal(seeded.parentSessionId, "fork-a");
+assert.equal(seeded.parentTitle, "Fork A");
+assert.equal(realtimeSessionFork(forks, "space", { ...liveFork, childSessionId: "fork-b" }, null), null, "a known edge is never replaced by a partial realtime one");
 assert.equal(mergeSessionForks(forks, [edge("fork-a", "parent")]), forks, "an unchanged read keeps the edge map identity");
 
 const relatedId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;

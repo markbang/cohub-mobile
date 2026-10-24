@@ -857,6 +857,8 @@ export const en = {
   "session.untitled": "Untitled conversation",
   "session.forkedFrom": "Forked from “{title}”",
   "session.forkedFromChat": "Forked from another chat",
+  "session.forks.showMore": "Show {count} more forks",
+  "session.forks.showFewer": "Show fewer forks",
   "session.forkedFromUnavailable": "Forked from a chat you can't access",
   "session.noMessages": "No messages yet",
   "session.activity.starting": "Starting",

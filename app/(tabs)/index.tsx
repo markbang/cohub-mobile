@@ -6,7 +6,7 @@ import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
-import { SessionRow } from "@/src/components/SessionRow";
+import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
 import { useToast } from "@/src/components/Toast";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type RemoteSpaceSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
@@ -21,13 +21,15 @@ import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
+import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
   | { kind: "remote-session"; hit: RemoteSessionSearchHit }
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
-  | { kind: "remote-space"; hit: RemoteSpaceSearchHit };
+  | { kind: "remote-space"; hit: RemoteSpaceSearchHit }
+  | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean };
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 
 export default function ChatsScreen() {
@@ -45,6 +47,7 @@ export default function ChatsScreen() {
   const sourceFilter = sourcePreference.filter;
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
   const sourceButtonRef = useRef<View>(null);
   const toast = useToast();
   const selectSource = (next: SessionSourceFilter) => {
@@ -59,7 +62,7 @@ export default function ChatsScreen() {
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
-    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).map(({ item }) => item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.hit.spaceId))].slice(0, 10);
+    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
   useSyncScope("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
@@ -87,7 +90,12 @@ export default function ChatsScreen() {
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatListItem[]>(() => {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
-    if (!trimmedQuery && sourceFilter === "all") return buildSessionForkTree(localSessions, sessionForks).map((row) => ({ kind: "local-session", ...row }));
+    if (!trimmedQuery && sourceFilter === "all") {
+      const keep = (session: (typeof localSessions)[number]) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running";
+      return buildSessionForkTree(localSessions, sessionForks, { expanded: expandedForks, keep }).map((entry): ChatListItem => entry.type === "toggle"
+        ? { kind: "fork-toggle", rootId: entry.rootId, hidden: entry.hidden, expanded: entry.expanded }
+        : { kind: "local-session", session: entry.session, fork: entry.fork, tree: entry.tree });
+    }
     if (!trimmedQuery || sourceFilter !== "all") return localSessions.map(flatSession);
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
@@ -100,7 +108,7 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, trimmedQuery]);
+  }, [expandedForks, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, state.sessionLatestTurns, state.sessionTurnStatuses, trimmedQuery]);
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
@@ -178,10 +186,11 @@ export default function ChatsScreen() {
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
-        keyExtractor={(item) => item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
+        keyExtractor={(item) => item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
+          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => setExpandedForks((current) => toggleSetMember(current, item.rootId))} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
@@ -210,3 +219,8 @@ export default function ChatsScreen() {
   );
 }
 
+function toggleSetMember(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(current);
+  if (!next.delete(id)) next.add(id);
+  return next;
+}

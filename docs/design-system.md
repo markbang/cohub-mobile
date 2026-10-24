@@ -205,6 +205,9 @@ The bar hugs its 76 pt slots instead of spanning the screen. Height 62.
   when forked) + time; line 2 = `Space name · preview` in `text-subhead`. The separate
   "Forked from…" line and the "Running" pill are removed; labels collapse to at most two
   `rounded-xs` tags at the end of line 2.
+- Forks: a fork tree is one card. Forks nest up to three levels, 12 pt per level, with rails from
+  the parent's avatar; deeper forks flatten into the third level. A parent with more than three forks
+  shows its two most recent (plus any running) and closes the card with a "Show N more forks" row.
 - Result: rows settle at 72 pt instead of 76–110 pt. The gain comes from dropping lines, not from tighter spacing; density never trades away comfortable padding.
 
 ### Spaces

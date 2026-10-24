@@ -830,6 +830,8 @@ export const zh: Record<TranslationKey, string> = {
   "session.untitled": "未命名对话",
   "session.forkedFrom": "分叉自「{title}」",
   "session.forkedFromChat": "分叉自其他对话",
+  "session.forks.showMore": "再显示 {count} 个分叉",
+  "session.forks.showFewer": "收起分叉",
   "session.forkedFromUnavailable": "分叉自无权访问的对话",
   "session.noMessages": "还没有消息",
   "session.activity.starting": "正在启动",
