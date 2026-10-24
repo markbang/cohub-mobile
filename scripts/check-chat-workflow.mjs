@@ -48,6 +48,8 @@ import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
 import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
+import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
+import { appendWalletActivity, formatWalletUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
@@ -515,8 +517,9 @@ const formScope = {
     ...chromeScope,
     useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }]; },
     useRef: (current) => { const index = cursor++; if (!(index in slots)) slots[index] = { current }; return slots[index]; },
-    useEffect: () => {}, useRouter: () => ({}), useLocalSearchParams: () => ({ spaceId: "space" }),
+    useEffect: () => {}, useFocusEffect: () => {}, useCallback: (callback) => callback, useRouter: () => ({}), useLocalSearchParams: () => ({ spaceId: "space" }),
     useApp: () => ({ client }), useToast: () => (notice) => alerts.push(notice),
+    SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatWalletUsd,
     useSpaceSettings: () => ({ env: [], config: null, ports: {}, allowedSpec: "standard", members: [], invitations: [], mods, setMods: (next) => { mods = next(mods); }, schedules: [], resources: Object.fromEntries(resourceKeys.map((key) => [key, { loaded: true, loading: false, error: null }])), loadResource: async () => {} }),
     ResourceStatus: "ResourceStatus",
     useAppTheme: () => ({ colors: {}, spacing: { md: 12 }, radius: { md: 12 } }),
@@ -1763,6 +1766,16 @@ const seeded = realtimeSessionFork(forks, "space", liveFork, "Fork A");
 assert.equal(seeded.parentSessionId, "fork-a");
 assert.equal(seeded.parentTitle, "Fork A");
 assert.equal(realtimeSessionFork(forks, "space", { ...liveFork, childSessionId: "fork-b" }, null), null, "a known edge is never replaced by a partial realtime one");
+
+// Space wallet and startup report readers.
+assert.equal(formatWalletUsd(1.23456, "en", 4), "$1.2346");
+assert.equal(walletProductBalanceUsd({ display: { creditBenefits: [], creditsAmount: 500_000_000 }, pricing: { amountUsd: 9 } }), 5, "credits convert at 1e-8 USD");
+assert.deepEqual(appendWalletActivity([{ id: "a" }], { items: [{ id: "a" }, { id: "b" }], hasMore: false }).map((item) => item.id), ["a", "b"]);
+assert.equal(sandboxSetupStatus(null), "unavailable");
+assert.equal(sandboxSetupStatus({ ran: true, exitCode: 2 }), "failed", "reports without a status fall back to the exit code");
+assert.equal(sandboxSetupInfo({ setup: { ran: "yes" } }), null, "a malformed report reads as none");
+assert.equal(sandboxSetupLogPaths(".cohub/logs/setup/1/").stderr, ".cohub/logs/setup/1/stderr.log");
+assert.ok(SETUP_STATUS.running.label);
 
 // Media previews.
 assert.equal(modelFormat("models/robot.GLB"), "glb");

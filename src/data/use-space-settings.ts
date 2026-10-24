@@ -1,17 +1,19 @@
-import type { CohubClient, CronJobRecord, SandboxSpecId, SpaceMember, SpaceModListItem, SpaceRole, SpaceSandboxConfig } from "@neta-art/cohub";
+import type { CohubClient, CronJobRecord, SandboxSpecId, SpaceMember, SpaceModListItem, SpaceRole, SpaceSandboxConfig, SpaceSandboxRecord, SpaceWalletSummary } from "@neta-art/cohub";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "@/src/i18n";
 
 export type SpaceEnvironmentItem = { name: string; value: string };
 type InvitationItem = { token: string; role: SpaceRole; status: string };
 export type SpaceSettingsResourceState = { loading: boolean; loaded: boolean; error: string | null };
-const RESOURCE_KEYS = ["env", "config", "ports", "allowedSpec", "members", "invitations", "mods", "schedules"] as const;
+const RESOURCE_KEYS = ["env", "config", "sandbox", "wallet", "ports", "allowedSpec", "members", "invitations", "mods", "schedules"] as const;
 type ResourceKey = (typeof RESOURCE_KEYS)[number];
 
 export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
   const { t } = useTranslation();
   const [env, setEnv] = useState<SpaceEnvironmentItem[]>([]);
   const [config, setConfig] = useState<SpaceSandboxConfig | null>(null);
+  const [sandbox, setSandbox] = useState<SpaceSandboxRecord | null>(null);
+  const [wallet, setWallet] = useState<SpaceWalletSummary | null>(null);
   const [ports, setPorts] = useState<Record<string, { url?: string; port?: number }>>({});
   const [allowedSpec, setAllowedSpec] = useState<SandboxSpecId>("standard");
   const [members, setMembers] = useState<SpaceMember[]>([]);
@@ -21,7 +23,7 @@ export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
   const [resources, setResources] = useState<Record<ResourceKey, SpaceSettingsResourceState>>(() =>
     Object.fromEntries(RESOURCE_KEYS.map((key) => [key, { loading: true, loaded: false, error: null }])) as Record<ResourceKey, SpaceSettingsResourceState>,
   );
-  const requests = useRef<Record<ResourceKey, number>>({ env: 0, config: 0, ports: 0, allowedSpec: 0, members: 0, invitations: 0, mods: 0, schedules: 0 });
+  const requests = useRef<Record<ResourceKey, number>>({ env: 0, config: 0, sandbox: 0, wallet: 0, ports: 0, allowedSpec: 0, members: 0, invitations: 0, mods: 0, schedules: 0 });
 
   const loadResource = useCallback(async (key: ResourceKey): Promise<void> => {
     const token = ++requests.current[key];
@@ -49,6 +51,8 @@ export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
     await {
       env: () => read(() => space.env.list(), (result) => setEnv(result.env)),
       config: () => read(() => space.getConfig(), (result) => setConfig(result.config.sandbox)),
+      sandbox: () => read(() => space.sandbox.get(), (result) => setSandbox(result.sandbox)),
+      wallet: () => read(() => space.wallet.get(), setWallet),
       ports: () => read(() => space.sandbox.ports(), (result) => setPorts(result.endpoints)),
       allowedSpec: () => read(
         () => Promise.all([client.billing.getFeatureEntitlement("sandbox.spec.boost"), client.billing.getFeatureEntitlement("sandbox.spec.ultra")]),
@@ -73,5 +77,5 @@ export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
     };
   }, [loadResource]);
 
-  return { env, setEnv, config, setConfig, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource };
+  return { env, setEnv, config, setConfig, sandbox, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource };
 }

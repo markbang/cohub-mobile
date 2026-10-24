@@ -81,6 +81,7 @@ import X from "lucide-react-native/icons/x";
 import Zap from "lucide-react-native/icons/zap";
 import Box from "lucide-react-native/icons/box";
 import Play from "lucide-react-native/icons/play";
+import Wallet from "lucide-react-native/icons/wallet";
 
 export const icons = {
   activity: Activity,
@@ -166,6 +167,7 @@ export const icons = {
   zap: Zap,
   box: Box,
   play: Play,
+  wallet: Wallet,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof icons;

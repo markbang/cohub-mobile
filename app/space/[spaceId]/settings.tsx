@@ -1,17 +1,20 @@
 import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { FilterChip } from "@/src/components/FilterChip";
+import { SettingsRow } from "@/src/components/SettingsRow";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
+import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus } from "@/src/data/sandbox-setup";
+import { formatWalletUsd } from "@/src/data/space-wallet";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
@@ -31,10 +34,10 @@ export default function SpaceSettingsScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
   const theme = useAppTheme();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const toast = useToast();
   const { client } = useApp();
-  const { env, setEnv, config, setConfig, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
+  const { env, setEnv, config, setConfig, sandbox, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,6 +52,12 @@ export default function SpaceSettingsScreen() {
   const [customTtlValue, setCustomTtlValue] = useState("");
   const [customTtlUnit, setCustomTtlUnit] = useState<CustomTtlUnit>("hours");
   const [customTtlError, setCustomTtlError] = useState<string | null>(null);
+  // The wallet and the startup report change on the screens this one opens.
+  const focused = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (focused.current) for (const key of ["wallet", "sandbox", "config"] as const) void loadResource(key);
+    focused.current = true;
+  }, [loadResource]));
   const idlePolicy = config?.autoDestroy.mode === "idle" ? config.autoDestroy : null;
   const sandboxBusy = busy || restarting || resources.config.loading;
 
@@ -119,7 +128,7 @@ export default function SpaceSettingsScreen() {
     }
   };
 
-  const updateSandbox = async (next: { spec?: SandboxSpecId; autoDestroy?: SpaceSandboxAutoDestroyPolicy }) => {
+  const updateSandbox = async (next: { spec?: SandboxSpecId; image?: SandboxImage | null; autoDestroy?: SpaceSandboxAutoDestroyPolicy }) => {
     if (!client || !spaceId) return;
     setBusy(true);
     try {
@@ -127,21 +136,23 @@ export default function SpaceSettingsScreen() {
       const result = await space.updateConfig({ sandbox: next });
       const refreshed = await space.getConfig().catch(() => null);
       const sandbox = refreshed?.config.sandbox;
-      const pendingRestart = next.spec ? result.sandbox?.pendingRestart === true : false;
+      const pendingRestart = next.spec || next.image !== undefined ? result.sandbox?.pendingRestart === true : false;
       if (sandbox) {
         setConfig({
           ...sandbox,
           specPendingRestart: pendingRestart || sandbox.specPendingRestart,
         });
       } else {
+        // Without a fresh read, only the fields this screen owns are applied; preferences need the server.
         setConfig((current) => current ? {
           ...current,
-          ...next,
+          ...(next.spec ? { spec: next.spec } : {}),
+          ...(next.autoDestroy ? { autoDestroy: next.autoDestroy } : {}),
           specPendingRestart: pendingRestart || current.specPendingRestart,
         } : current);
       }
-      if (next.spec) {
-        toast({ title: specNeedsRestart(sandbox ?? null, pendingRestart) ? t("space.settings.spec.savedRestart") : t("space.settings.spec.updated") });
+      if (next.spec || next.image !== undefined) {
+        toast({ title: specNeedsRestart(sandbox ?? null, pendingRestart) ? t("space.settings.spec.savedRestart") : t(next.spec ? "space.settings.spec.updated" : "space.settings.image.updated") });
       } else {
         toast({ title: t("space.settings.saved") });
       }
@@ -203,6 +214,16 @@ export default function SpaceSettingsScreen() {
     <Screen>
       <TopBar title={t("space.settings")} onBack={() => router.back()} />
       <ScrollView contentContainerClassName="gap-6 p-4" keyboardShouldPersistTaps="handled">
+        <View className="overflow-hidden rounded-md" style={{ borderCurve: "continuous" }}>
+          <SettingsRow
+            icon="wallet"
+            title={t("space.wallet.title")}
+            detail={wallet ? formatWalletUsd(wallet.balanceUsd, locale) : undefined}
+            last
+            onPress={() => router.push({ pathname: "/space/[spaceId]/wallet", params: { spaceId } })}
+          />
+        </View>
+
         <View>
           <Text className="text-headline font-semibold text-fg">{t("space.settings.collaborators")}</Text>
           <ResourceStatus state={resources.members} onRetry={() => void loadResource("members")} />
@@ -327,6 +348,25 @@ export default function SpaceSettingsScreen() {
               </Pressable>
             </View>
           ) : null}
+          {config?.preferences ? <>
+            <Text className="text-caption text-fg-muted mt-5">{t("space.settings.image")}</Text>
+            <ImageOptionList
+              preferences={config.preferences}
+              disabled={sandboxBusy}
+              onChange={(image) => void updateSandbox({ image })}
+            />
+            <Text className="text-caption text-fg-faint mt-1">{t(config.preferences.applicable ? "space.settings.image.hint" : "space.settings.image.local")}</Text>
+            {config.preferences.applicable && config.preferences.warnings.includes("image_unavailable") ? <Text className="text-caption text-warning mt-1">{t("space.settings.image.unavailable")}</Text> : null}
+          </> : null}
+          <View className="mt-5 overflow-hidden rounded-md" style={{ borderCurve: "continuous" }}>
+            <SettingsRow
+              icon="terminal"
+              title={t("space.setup.title")}
+              detail={sandbox?.provider === "local" ? undefined : t(SETUP_STATUS[sandboxSetupStatus(sandboxSetupInfo(sandbox?.meta))].label)}
+              last
+              onPress={() => router.push({ pathname: "/space/[spaceId]/setup", params: { spaceId } })}
+            />
+          </View>
           <Text className="text-caption text-fg-muted mt-5">{t("space.settings.sleep")}</Text>
           <Segmented
             className="mt-2"
@@ -723,6 +763,48 @@ function SpecOptionList({
   );
 }
 
+type SandboxImage = NonNullable<SpaceSandboxConfig["image"]>;
+type SandboxPreferences = NonNullable<SpaceSandboxConfig["preferences"]>;
+
+function imageLabel(image: SandboxImage, t: Translate) {
+  return t(image === "game" ? "space.settings.image.game" : "space.settings.image.default");
+}
+
+/** "Follow" keeps the project and Mod preference; picking an image overrides it for this Space. */
+function ImageOptionList({ preferences, disabled, onChange }: { preferences: SandboxPreferences; disabled: boolean; onChange: (image: SandboxImage | null) => void }) {
+  const { t } = useTranslation();
+  const inherited = [...preferences.sources].reverse().find((source) => source.source !== "override" && source.preferences.image)?.preferences.image ?? "default";
+  const current = preferences.overrides.image ?? null;
+  const options: { value: SandboxImage | null; label: string }[] = [
+    { value: null, label: t("space.settings.image.follow", { image: imageLabel(inherited, t) }) },
+    ...preferences.images.map((image) => ({ value: image, label: imageLabel(image, t) })),
+  ];
+  const locked = disabled || !preferences.applicable;
+  return (
+    <View accessibilityRole="radiogroup" className="mt-2 overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>
+      {options.map((option, index) => {
+        const selected = option.value === current;
+        return (
+          <Pressable
+            key={option.value ?? "follow"}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ checked: selected, disabled: locked }}
+            disabled={locked}
+            onPress={() => { if (!selected) onChange(option.value); }}
+            className={`min-h-13 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed ${index > 0 ? "border-t border-border" : ""} ${locked ? "opacity-60" : ""}`}
+          >
+            <View className={`size-5 items-center justify-center rounded-full border-2 ${selected ? "border-accent" : "border-border"}`}>
+              {selected ? <View className="size-2.5 rounded-full bg-accent" /> : null}
+            </View>
+            <Text className="min-w-0 flex-1 text-body text-fg">{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function ScheduleRow({ schedule, onToggle }: { schedule: CronJobRecord; onToggle: (enabled: boolean) => Promise<void> }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -776,7 +858,7 @@ function roleLabel(role: SpaceRole, t: Translate) {
 function specNeedsRestart(config: SpaceSandboxConfig | null, pendingFromUpdate = false) {
   if (pendingFromUpdate) return true;
   if (!config) return false;
-  if (config.specPendingRestart) return true;
+  if (config.specPendingRestart || config.preferences?.pendingRestart) return true;
   const spec = config.spec ?? "standard";
   return Boolean(config.appliedSpec && config.appliedSpec !== spec);
 }
