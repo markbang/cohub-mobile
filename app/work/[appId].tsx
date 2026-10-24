@@ -2,11 +2,10 @@ import type { AppDetailResponse } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { WebView } from "react-native-webview";
+import { AppHostWebView } from "@/src/components/AppHostWebView";
 import { useApp } from "@/src/data/context";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
 import { DataError, TopBar, IconButton, LoadingRows, Screen } from "@/src/ui";
 
 type Params = { appId?: string | string[] };
@@ -15,7 +14,6 @@ export default function WorkScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<Params>();
   const appId = Array.isArray(params.appId) ? params.appId[0] : params.appId;
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const { client } = useApp();
   const [detail, setDetail] = useState<AppDetailResponse | null>(null);
@@ -57,29 +55,6 @@ export default function WorkScreen() {
       )} 
     />
     {error ? <DataError message={error} onRetry={() => void load()} /> : null}
-    {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <WebView
-      source={{ uri: contentUrl }}
-      // design-system: WebView does not take className.
-      style={{ flex: 1, backgroundColor: theme.colors.background }}
-      originWhitelist={["https://*"]}
-      javaScriptEnabled
-      domStorageEnabled
-      sharedCookiesEnabled={false}
-      thirdPartyCookiesEnabled={false}
-      allowsBackForwardNavigationGestures
-      setSupportMultipleWindows={false}
-      onShouldStartLoadWithRequest={(request) => {
-        try {
-          const url = new URL(request.url);
-          if (url.protocol !== "https:") return false;
-          if (!initialOrigin || url.origin === initialOrigin) return true;
-          void openWebLink(request.url).catch(() => undefined);
-          return false;
-        } catch {
-          return false;
-        }
-      }}
-      startInLoadingState
-    />}
+    {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl || !initialOrigin ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <AppHostWebView detail={detail} contentUrl={contentUrl} />}
   </Screen>;
 }

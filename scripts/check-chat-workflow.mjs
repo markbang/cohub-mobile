@@ -51,6 +51,7 @@ import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "..
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
 import { appendWalletActivity, formatWalletUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
 import { nextCronRuns, parseCron, summarizeCron } from "../src/data/cron.ts";
+import { appDevicesRequest, appHostScript, appNavigationRequest, appRuntimeSignal, readAppHostMessage } from "../src/data/app-host.ts";
 import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
@@ -918,7 +919,7 @@ for (const [tab, component, expectedRequests] of [
   const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } } };
   const renderWork = loadChromeComponent("../app/work/[appId].tsx", "WorkScreen", {
     ...formScope, ...runner.hooks, useFocusEffect: (callback) => { focus = callback; },
-    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), useApp: () => ({ client }), WebView: "WebView",
+    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), useApp: () => ({ client }), AppHostWebView: "AppHostWebView",
   });
   const render = () => chromeNodes(runner.render(renderWork));
   const detail = (title) => ({ app: { id: "work", meta: { title } }, space: { name: "Space" }, content: { url: "https://example.com/work" } });
@@ -929,7 +930,7 @@ for (const [tab, component, expectedRequests] of [
   assert.equal(render().find((node) => node.type === "TopBar").props.title, "Saved title");
   blur(); blur = focus();
   requests[2].reject(new Error("offline")); await flushSync();
-  assert.ok(render().some((node) => node.type === "WebView"), "refresh errors do not hide cached Work content");
+  assert.ok(render().some((node) => node.type === "AppHostWebView"), "refresh errors do not hide cached Work content");
   render().find((node) => node.type === "DataError").props.onRetry();
   requests[3].resolve(detail("Retried title")); await flushSync();
   assert.equal(render().some((node) => node.type === "DataError"), false);
@@ -1790,6 +1791,22 @@ assert.equal(sandboxSetupStatus({ ran: true, exitCode: 2 }), "failed", "reports 
 assert.equal(sandboxSetupInfo({ setup: { ran: "yes" } }), null, "a malformed report reads as none");
 assert.equal(sandboxSetupLogPaths(".cohub/logs/setup/1/").stderr, ".cohub/logs/setup/1/stderr.log");
 assert.ok(SETUP_STATUS.running.label);
+
+// App host relay: only the App's own origin speaks, and untrusted targets never reach the router.
+const appOrigin = "https://works.cohub.run";
+const relayed = (message) => JSON.stringify({ cohubHost: 1, message });
+assert.deepEqual(readAppHostMessage(relayed({ type: "cohub.app.context", requestId: "r1" }), `${appOrigin}/w/demo`, appOrigin), { type: "cohub.app.context", requestId: "r1" });
+assert.equal(readAppHostMessage(relayed({ type: "cohub.app.token", requestId: "r2" }), "https://evil.example/w", appOrigin), null, "another origin cannot ask for tokens");
+assert.equal(readAppHostMessage(JSON.stringify({ type: "cohub.app.token" }), `${appOrigin}/`, appOrigin), null, "only the relay envelope is accepted");
+assert.ok(appHostScript(appOrigin).includes(JSON.stringify(appOrigin)), "the relay installs only on the App's origin");
+assert.equal(appRuntimeSignal({ protocol: "cohub.app.runtime", version: 1, type: "ready" }), "ready");
+assert.deepEqual(appDevicesRequest({ type: "cohub.app.devices.request", requestId: "d", devices: "microphone, camera, keyboard" }), { requestId: "d", devices: ["camera", "microphone"] });
+const space = "00000000-0000-4000-8000-000000000001";
+const nav = (target, extra = {}) => appNavigationRequest({ protocol: "cohub.app.navigation", version: 1, type: "open", requestId: "n", target, ...extra })?.route ?? null;
+assert.deepEqual(nav({ kind: "file", spaceId: space, path: "docs/a.md" }), { pathname: "/space/[spaceId]/file", params: { spaceId: space, path: "docs/a.md" } });
+assert.equal(nav({ kind: "file", spaceId: space, path: "../secrets" }), null, "paths cannot climb out of the workspace");
+assert.equal(nav({ kind: "session", spaceId: "not-a-uuid", sessionId: space }), null);
+assert.equal(nav({ kind: "app", ref: space }, { call: { method: "x" } }), null, "method calls on other Apps are unsupported");
 
 // Work management helpers.
 assert.equal(withCohubBar({ presentation: { hideCohubBar: true } }, false), null, "clearing the only presentation flag drops the empty meta");
