@@ -83,7 +83,7 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       const task = event.payload.task as { id?: unknown; status?: unknown } | undefined;
       if (typeof task?.id !== "string" || !task.id) throw new Error("Invalid realtime Task. Reopen the Space to retry.");
       change.exact.push(`space:${spaceId}:tasks`, `task:${task.id}`);
-      if (event.type === "task.updated" && (task?.status === "completed" || task?.status === "failed")) change.exact.push(`space:${spaceId}:resources`);
+      if (event.type === "task.updated" && (task?.status === "completed" || task?.status === "failed")) change.exact.push(`space:${spaceId}:resources`, `space:${spaceId}:saves`);
       break;
     }
     case "label.assignments.updated":
