@@ -6,12 +6,12 @@ import process from "node:process";
 // Remove an entry as soon as upstream publishes a fix; stale entries fail the check.
 const accepted = new Map([
   [
-    "GHSA-vfj7-8cjw-p6xm",
-    "braces <=3.0.3 (no fix): Metro file-map glob matching on developer-controlled patterns at build time.",
-  ],
-  [
     "GHSA-86w9-cpqp-85rv",
     "node-forge <=1.4.0 (no fix): Expo CLI and expo-updates CLI code-signing tooling; native runtimes verify updates without node-forge.",
+  ],
+  [
+    "GHSA-mrhx-c7xc-m3w5",
+    "zod <4.6.6 (no 3.x fix): Expo CLI requires zod ^3.25.76; the app bundle ships only the SDK's nested zod 4.6.6.",
   ],
 ]);
 const failingSeverities = new Set(["high", "critical"]);
