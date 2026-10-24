@@ -407,7 +407,9 @@ function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift
     const over = Math.max(0, 1 - Math.abs(lens.get() - index));
     return { transform: [{ scale: 1 + LENS_MAGNIFY * lift.get() * over }] };
   });
+  // The two icons differ in stroke and offset, so the rest icon fades out where the active one shows; left under it, its edge rims the accent strokes.
   const activeIconStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(lens.get() - index)) }));
+  const restIconStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.abs(lens.get() - index)) }));
   const labelStyle = useAnimatedStyle(() => ({ color: interpolateColor(Math.max(0, 1 - Math.abs(lens.get() - index)), [0, 1], [restColor, activeColor]) }));
   return (
     <View
@@ -423,7 +425,7 @@ function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift
     >
       <Animated.View className="items-center justify-center gap-0.5" style={contentStyle}>
         <View style={{ width: ICON_SIZE, height: ICON_SIZE }}>
-          <View className="absolute inset-0 items-center justify-center">{restIcon}</View>
+          <Animated.View className="absolute inset-0 items-center justify-center" style={restIconStyle}>{restIcon}</Animated.View>
           <Animated.View className="absolute inset-0 items-center justify-center" style={activeIconStyle}>{activeIcon}</Animated.View>
         </View>
         {/* Labels are the one place icons never stand alone: tabs name destinations. */}
