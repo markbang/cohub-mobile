@@ -4,12 +4,13 @@ import { Link, useRouter } from "expo-router";
 import { createContext, memo, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
-import { FlatList, Image, Linking, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
+import { FlatList, Image, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import Reanimated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
 import { formatMessageClock } from "@/src/data/chat-format";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
+import { imageThumbnailUrl } from "@/src/data/media";
 import { toolCallPreview } from "@/src/data/tool-call";
 import { compactionFromMessage, compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { isWebLink, openWebLink } from "@/src/platform/browser";
@@ -199,6 +200,7 @@ function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; in
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [pressed, setPressed] = useState(false);
+  const [variantFailed, setVariantFailed] = useState(false);
   // Link.Trigger slots its child, and slotting spreads the child's style prop: a function
   // style would be flattened to {}. Track pressed state and pass a plain object instead.
   // design-system: className would not survive the slot either, so this stays a plain style.
@@ -221,7 +223,7 @@ function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; in
           onPressOut={() => setPressed(false)}
           style={style}
         >
-          <Image source={{ uri }} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
+          <Image source={{ uri: variantFailed ? uri : imageThumbnailUrl(uri, size, PixelRatio.get()) }} onError={() => setVariantFailed(true)} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
         </Pressable>
       </Link.Trigger>
     </Link>

@@ -48,6 +48,7 @@ import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
 import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
+import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
@@ -1762,6 +1763,12 @@ const seeded = realtimeSessionFork(forks, "space", liveFork, "Fork A");
 assert.equal(seeded.parentSessionId, "fork-a");
 assert.equal(seeded.parentTitle, "Fork A");
 assert.equal(realtimeSessionFork(forks, "space", { ...liveFork, childSessionId: "fork-b" }, null), null, "a known edge is never replaced by a partial realtime one");
+
+// Media previews.
+assert.equal(modelFormat("models/robot.GLB"), "glb");
+assert.equal(modelFormat("download?id=1", "model/stl"), "stl");
+assert.equal(modelFormat("scene.usdz"), null);
+assert.equal(imageThumbnailUrl("data:image/png;base64,AAAA", 100, 3), "data:image/png;base64,AAAA", "inline images are never rewritten");
 assert.equal(mergeSessionForks(forks, [edge("fork-a", "parent")]), forks, "an unchanged read keeps the edge map identity");
 
 const relatedId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;

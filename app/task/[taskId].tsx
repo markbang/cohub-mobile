@@ -1,7 +1,8 @@
 import type { GenerationContentBlock, TaskRunDetailResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { GenerationBlock } from "@/src/components/GenerationOutput";
 import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -125,7 +126,6 @@ function InfoRow({ icon, label, value, danger = false }: { icon: React.Component
 }
 
 function generationOutput(result: unknown): GenerationContentBlock[] { if (!result || typeof result !== "object" || !Array.isArray((result as { output?: unknown }).output)) return []; return (result as { output: GenerationContentBlock[] }).output; }
-function GenerationBlock({ block }: { block: GenerationContentBlock }) { if (block.type === "text") return <Text selectable className="text-chat text-fg">{block.text}</Text>; const source = block.source as unknown as { url?: string; data?: string; mimeType?: string }; const uri = source.url ?? (source.data && source.mimeType ? `data:${source.mimeType};base64,${source.data}` : null); return uri ? <Image accessibilityLabel={`${block.type} output`} source={{ uri }} resizeMode="contain" className="bg-surface-raised" style={{ width: "100%", height: 320 }} /> : <Text className="text-caption text-fg-muted">{block.type}</Text>; }
 
 /** Task types arrive as snake_case identifiers; titles follow the sentence-case copy rule. */
 function sentenceCase(value: string) {

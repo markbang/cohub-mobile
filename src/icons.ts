@@ -79,6 +79,8 @@ import UserRound from "lucide-react-native/icons/user-round";
 import Wifi from "lucide-react-native/icons/wifi";
 import X from "lucide-react-native/icons/x";
 import Zap from "lucide-react-native/icons/zap";
+import Box from "lucide-react-native/icons/box";
+import Play from "lucide-react-native/icons/play";
 
 export const icons = {
   activity: Activity,
@@ -162,6 +164,8 @@ export const icons = {
   wifi: Wifi,
   x: X,
   zap: Zap,
+  box: Box,
+  play: Play,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof icons;

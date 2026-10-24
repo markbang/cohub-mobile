@@ -4,10 +4,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Keyboard, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import { WebView } from "react-native-webview";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { CodeBlock } from "@/src/components/CodeBlock";
 import { CodeEditor } from "@/src/components/CodeEditor";
+import { UrlFilePreview } from "@/src/components/MediaViewers";
+import { modelFormat } from "@/src/data/media";
 import { detectCodeLanguage } from "@/src/data/code-language";
 import { classifySaveConflict, isEditableTextFile, isFileConflictError, MAX_EDITABLE_CODE_BYTES } from "@/src/data/code-file";
 import { useToast } from "@/src/components/Toast";
@@ -215,7 +216,10 @@ export default function FileScreen() {
   }, [path, showToast, t]);
   const title = path.split("/").pop() || t("file.title");
   const subtitle = editing ? (dirty ? t("file.unsaved") : t("file.editing")) : path || t("files.workspace");
-  const showWebView = Boolean(file && url && inlineContent === null);
+  // Small binaries arrive inline; a 3D model still previews from its bytes.
+  const inlineModel = file && !url && file.kind === "binary" && file.encoding === "base64" && modelFormat(path, file.mimeType) ? `data:${file.mimeType ?? "application/octet-stream"};base64,${file.content}` : null;
+  const previewUrl = url ?? inlineModel;
+  const showWebView = Boolean(file && previewUrl && inlineContent === null);
 
   return (
     <Screen keyboard={editing}>
@@ -263,13 +267,8 @@ export default function FileScreen() {
           onRetry={() => setRetryToken((value) => value + 1)}
           onBack={() => router.back()}
         />
-      ) : showWebView && url ? (
-        <WebView
-          source={{ uri: url }}
-          // design-system: WebView does not take className.
-          style={{ flex: 1, backgroundColor: theme.colors.background }}
-          startInLoadingState
-        />
+      ) : showWebView && previewUrl && file ? (
+        <UrlFilePreview url={previewUrl} path={path} mimeType={file.mimeType} />
       ) : file ? (
         editing && draft !== null ? (
           <ScrollView
