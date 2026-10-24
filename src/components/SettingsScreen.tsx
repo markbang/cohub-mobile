@@ -682,7 +682,7 @@ function NotificationsSection({
 function RulesSection() {
 	const { t } = useTranslation();
 	const router = useRouter();
-	const { data, configSpace, loading, creating, error, load, openConfig } = useUserRules();
+	const { data, loading, opening, error, openError, load, openHome } = useUserRules();
 	return (
 		<View>
 			{loading ? (
@@ -699,7 +699,7 @@ function RulesSection() {
 							<Text
 								className="text-body font-semibold text-fg"
 							>
-								/configs/user/AGENTS.md
+								{data?.path || "AGENTS.md"}
 							</Text>
 						</View>
 						<Text
@@ -717,7 +717,9 @@ function RulesSection() {
 								{data?.content?.trim() || t("settings.rules.none")}
 							</Text>
 						</ScrollView>
-						<PrimaryButton label={t(configSpace ? "settings.rules.openConfig" : "settings.rules.createConfig")} icon={configSpace ? "arrow-right" : "plus"} loading={creating} className="mt-4" onPress={() => void openConfig().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })} />
+						<Text className="text-caption text-fg-muted mt-4">{t("settings.rules.homeHint", { file: "AGENTS.md" })}</Text>
+						<PrimaryButton label={t("settings.rules.openHome")} icon="arrow-right" loading={opening} className="mt-3" onPress={() => void openHome().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })} />
+						{openError ? <Text accessibilityRole="alert" selectable className="text-caption text-danger mt-2">{openError}</Text> : null}
 					</View>
 				</SettingsGroup>
 			)}

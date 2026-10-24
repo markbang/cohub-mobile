@@ -417,14 +417,16 @@ export const zh: Record<TranslationKey, string> = {
   // Settings — rules
   "settings.rules.intro.title": "用户规则",
   "settings.rules.intro.body":
-    "查看塑造你个人 Cohub 会话的 AGENTS.md 规则。",
+    "查看从 Home 空间发布、会加入每个新对话的 AGENTS.md 规则。",
   "settings.rules.connect": "连接 Cohub 以加载用户规则。",
   "settings.rules.error": "无法加载规则",
   "settings.rules.updated": "更新于 {time}",
   "settings.rules.notPublished": "尚未发布",
   "settings.rules.none": "没有已发布的用户规则。",
-  "settings.rules.openConfig": "打开配置空间",
-  "settings.rules.createConfig": "创建配置空间",
+  "settings.rules.openHome": "打开 Home 空间",
+  "settings.rules.homeHint": "在 Home 空间里编辑 {file}，再创建存档，即可发布到之后的每个新对话。",
+  "settings.rules.homeNameTaken": "你已有一个名为 Home 的空间。请在网页端的空间设置里把它的 slug 改为 home，然后重试。",
+  "settings.rules.openHomeFailed": "无法打开 Home 空间，请重试。",
 
   // Settings — channels
   "settings.channels.intro.title": "频道",

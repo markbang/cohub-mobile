@@ -437,14 +437,16 @@ export const en = {
   // Settings — rules
   "settings.rules.intro.title": "User rules",
   "settings.rules.intro.body":
-    "Read the AGENTS.md rules that shape your personal Cohub sessions.",
+    "Read the AGENTS.md rules published from your Home Space into every new Chat.",
   "settings.rules.connect": "Connect to Cohub to load user rules.",
   "settings.rules.error": "Unable to load rules",
   "settings.rules.updated": "Updated {time}",
   "settings.rules.notPublished": "Not published yet",
   "settings.rules.none": "No published user rules.",
-  "settings.rules.openConfig": "Open config Space",
-  "settings.rules.createConfig": "Create config Space",
+  "settings.rules.openHome": "Open Home Space",
+  "settings.rules.homeHint": "Edit {file} in your Home Space, then create a Save to publish it into every new Chat.",
+  "settings.rules.homeNameTaken": "You already have a Space named Home. Set its slug to home in its settings on the web, then try again.",
+  "settings.rules.openHomeFailed": "Couldn't open your Home Space. Try again.",
 
   // Settings — channels
   "settings.channels.intro.title": "Channels",

@@ -1,18 +1,17 @@
-import type { SpaceRecord, UserRulesResponse } from "@neta-art/cohub";
+import { HttpError, type SpaceRecord, type UserRulesResponse } from "@neta-art/cohub";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { listAllSpaces } from "@/src/data/space-list";
 
 export function useUserRules() {
-  const { client, userUuid, createSpace } = useApp();
+  const { client, upsertSpace } = useApp();
   const { t } = useTranslation();
   const [data, setData] = useState<UserRulesResponse | null>(null);
-  const [configSpace, setConfigSpace] = useState<SpaceRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const generation = useRef(0);
   const load = useCallback(async () => {
     const current = ++generation.current;
@@ -20,34 +19,30 @@ export function useUserRules() {
     setLoading(true);
     setError(null);
     try {
-      const [rules, spaces] = await Promise.all([client.user.getRules(), listAllSpaces(client, { filter: "mine", name: "config" })]);
-      if (current !== generation.current) return;
-      setData(rules);
-      setConfigSpace(spaces.find((space) => space.name === "config" && space.userUuid === userUuid) ?? null);
+      const rules = await client.user.getRules();
+      if (current === generation.current) setData(rules);
     } catch (caught) {
       if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.rules.error"));
     } finally {
       if (current === generation.current) setLoading(false);
     }
-  }, [client, t, userUuid]);
+  }, [client, t]);
   useFocusEffect(useCallback(() => { void load(); return () => { generation.current += 1; }; }, [load]));
-  const openConfig = async (): Promise<SpaceRecord | null> => {
-    if (creating) return null;
-    if (configSpace) return configSpace;
-    setCreating(true);
-    setError(null);
+  const openHome = async (): Promise<SpaceRecord | null> => {
+    if (!client || opening) return null;
+    setOpening(true);
+    setOpenError(null);
     const current = generation.current;
     try {
-      const space = await createSpace("config", "Personal Cohub configuration. Edit AGENTS.md here, then create a Save to publish user rules.");
-      if (current !== generation.current) return null;
-      setConfigSpace(space);
-      return space;
+      const space = await client.spaces.ensureHome();
+      upsertSpace(space);
+      return current === generation.current ? space : null;
     } catch (caught) {
-      if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.rules.error"));
+      if (current === generation.current) setOpenError(caught instanceof HttpError && caught.code === "home_space_name_taken" ? t("settings.rules.homeNameTaken") : t("settings.rules.openHomeFailed"));
       return null;
     } finally {
-      if (current === generation.current) setCreating(false);
+      if (current === generation.current) setOpening(false);
     }
   };
-  return { data, configSpace, loading, creating, error, load, openConfig };
+  return { data, loading, opening, error, openError, load, openHome };
 }
