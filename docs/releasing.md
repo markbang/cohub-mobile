@@ -38,6 +38,7 @@ Native changes for the release after v2.3.1. Each one changes the fingerprint, s
 
 - Expo SDK 58 patch versions match `npx expo install --check` (Expo 58.0.19, Expo Router 58.0.26, Expo Updates 58.0.18). React stays on the SDK's 19.3.0, which React Native 0.88's renderer requires.
 - iOS camera and microphone purpose strings also name Works, which can use them after the viewer allows it, and `locales/zh-Hans.json` translates the purpose strings for Chinese devices.
+- `reference/cohub` moves to upstream `3886056`, so Android builds a newer `sandboxd` (Go 1.27.2): paginated directory listings for large phone folders and listings that stay readable during concurrent writes. The submodule is not a fingerprint input, so this alone does not stop OTA; it reaches users with the next APK. Recheck the device Runtime and screen sharing on a release APK.
 
 ## One-time repository setup
 
