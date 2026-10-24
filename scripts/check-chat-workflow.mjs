@@ -51,6 +51,7 @@ import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "..
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
 import { appendWalletActivity, formatWalletUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
 import { nextCronRuns, parseCron, summarizeCron } from "../src/data/cron.ts";
+import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
@@ -1789,6 +1790,13 @@ assert.equal(sandboxSetupStatus({ ran: true, exitCode: 2 }), "failed", "reports 
 assert.equal(sandboxSetupInfo({ setup: { ran: "yes" } }), null, "a malformed report reads as none");
 assert.equal(sandboxSetupLogPaths(".cohub/logs/setup/1/").stderr, ".cohub/logs/setup/1/stderr.log");
 assert.ok(SETUP_STATUS.running.label);
+
+// Work management helpers.
+assert.equal(withCohubBar({ presentation: { hideCohubBar: true } }, false), null, "clearing the only presentation flag drops the empty meta");
+assert.deepEqual(withCohubBar({ title: "A" }, true), { title: "A", presentation: { hideCohubBar: true } });
+assert.equal(promotionUrl("https://cohub.live/u/s/w/app?x=1", { id: "p1", parameters: { utm_source: "ig" } }), "https://cohub.live/u/s/w/app?x=1&cohub_campaign=p1&utm_source=ig");
+const views = dailyViews({ daily: [{ date: "2026-10-24", views: 3 }] }, 3, Date.UTC(2026, 9, 24, 12));
+assert.deepEqual(views.map((day) => day.views), [0, 0, 3]);
 
 // Media previews.
 assert.equal(modelFormat("models/robot.GLB"), "glb");

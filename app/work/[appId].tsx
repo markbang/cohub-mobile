@@ -51,7 +51,7 @@ export default function WorkScreen() {
       onBack={() => router.back()} 
       actions={(
         <>
-          {detail && <IconButton name="square-pen" label={t("app.edit.action")} size={40} onPress={() => router.push({ pathname: "/work/[appId]/edit", params: { appId: detail.app.id } })} />}
+          {detail && <IconButton name="settings" label={t("app.manage.title")} size={40} onPress={() => router.push({ pathname: "/work/[appId]/edit", params: { appId: detail.app.id } })} />}
           {contentUrl && <IconButton name="external-link" label={t("file.openExternally")} size={40} onPress={() => void openWebLink(contentUrl).catch(() => undefined)} />}
         </>
       )} 

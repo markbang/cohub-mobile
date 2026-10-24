@@ -82,7 +82,10 @@ import Zap from "lucide-react-native/icons/zap";
 import Box from "lucide-react-native/icons/box";
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import GitCompare from "lucide-react-native/icons/git-compare";
+import Link from "lucide-react-native/icons/link";
+import Megaphone from "lucide-react-native/icons/megaphone";
 import Play from "lucide-react-native/icons/play";
+import RotateCcw from "lucide-react-native/icons/rotate-ccw";
 import Wallet from "lucide-react-native/icons/wallet";
 
 export const icons = {
@@ -170,7 +173,10 @@ export const icons = {
   box: Box,
   "calendar-clock": CalendarClock,
   "git-compare": GitCompare,
+  link: Link,
+  megaphone: Megaphone,
   play: Play,
+  history: RotateCcw,
   wallet: Wallet,
 } satisfies Record<string, LucideIcon>;
 
