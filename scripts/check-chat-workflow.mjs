@@ -4111,8 +4111,8 @@ assert.equal(canUseRuntimeHarness(claudeRuntime, "workbuddy"), false);
 assert.equal(canUseRuntimeHarness({ ...claudeRuntime, online: false }, "claude"), false);
 const harnessView = (status) => harnessOptions(status).map(({ harness, availability }) => `${harness}:${availability}`);
 const pickerRuntime = { kind: "local", online: true, capabilities: { harnesses: ["codex", "claude"], models: [] } };
-assert.deepEqual(harnessView(pickerRuntime), ["cohub:ready", "codex:ready", "claude:ready", "pi:missing", "workbuddy:missing"]);
+assert.deepEqual(harnessView(pickerRuntime), ["cohub:ready", "codex:ready", "claude:ready", "pi:missing", "workbuddy:missing", "cursor:missing"]);
 // Cached capabilities of an offline Runtime are not connected harnesses.
-assert.deepEqual(harnessView({ ...pickerRuntime, online: false }), ["cohub:ready", "pi:offline", "codex:offline", "claude:offline", "workbuddy:offline"]);
+assert.deepEqual(harnessView({ ...pickerRuntime, online: false }), ["cohub:ready", "pi:offline", "codex:offline", "claude:offline", "workbuddy:offline", "cursor:offline"]);
 
 console.log("Chat workflow checks passed");

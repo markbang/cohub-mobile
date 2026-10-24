@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { G, Path, Rect } from "react-native-svg";
-import { ClaudeCode, CodeBuddy, Codex, Pi } from "@lobehub/icons-rn";
+import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { icons, type IconName } from "@/src/icons";
@@ -86,9 +86,10 @@ const LOCAL_HARNESS_ICONS: Record<LocalHarness, ComponentType<{ size?: number; c
   codex: Codex.Color,
   claude: ClaudeCode.Color,
   workbuddy: CodeBuddy.Color,
+  cursor: Cursor,
 };
 
-/** Brand marks keep their colors; Pi's mark is monochrome, so `color` makes it follow the theme text. */
+/** Brand marks keep their colors; Pi's and Cursor's marks are monochrome, so `color` makes them follow the theme text. */
 export function HarnessIcon({ harness, size = 16 }: { harness: HarnessKind; size?: number }) {
   const theme = useAppTheme();
   if (harness === "cohub") return <CohubLogo size={size} />;
