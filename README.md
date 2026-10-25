@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="landing/icon.png" width="96" height="96" alt="Cohub Mobile app icon" />
+</p>
+
 # Cohub Mobile
 
 [![CI](https://github.com/markbang/cohub-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/markbang/cohub-mobile/actions/workflows/ci.yml)
