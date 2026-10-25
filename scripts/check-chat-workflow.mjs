@@ -67,7 +67,6 @@ import { activityContributorName, activityRange, localDateKey, tokenDays } from 
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
 import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
-import { isLocalHarness } from "@neta-art/cohub";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
@@ -3822,20 +3821,21 @@ const fileDraft = { uri: "file:///report.pdf", name: "report.pdf", mimeType: "ap
 for (const busy of [false, true]) {
   for (const [text, attachments] of [["Hello", []], ["", [photoDraft]], ["", [fileDraft]], ["Review these", [photoDraft, fileDraft]]]) {
     const actions = [];
+    const prompts = [];
     const uploads = Promise.withResolvers();
     let optimistic;
     const turns = busy ? [activeQueueTurn] : [];
     const sendScope = {
       stateRef: { current: { sessionViews: { fixture: { session: { spaceId: "space" }, turns, messages: [], stream: null } } } },
-      client: { space: () => ({ prompt: async () => ({ mode: "immediate", turn: queuedFollowup("accepted", busy ? 2 : 1, { status: busy ? "queued" : "running", meta: { clientMessageId: "client" } }) }) }) },
+      client: { space: () => ({ prompt: async (body) => (prompts.push(body), { mode: "immediate", turn: queuedFollowup("accepted", busy ? 2 : 1, { status: busy ? "queued" : "running", meta: { clientMessageId: "client" } }) }) }) },
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {},
       buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
-      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }), isLocalHarness,
+      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
-    const request = send("fixture", text, attachments, { onOptimistic: (message) => { optimistic = message; } });
+    const request = send("fixture", text, attachments, { model: { provider: "openai", id: "gpt-5", thinkingLevel: "low" }, harness: "codex", onOptimistic: (message) => { optimistic = message; } });
     assert.ok(optimistic, "the animation destination exists before uploads complete");
     assert.equal(isOptimisticFollowup(optimistic), busy);
     assert.equal(optimistic.content.filter((block) => block.type === "image").length, attachments.filter((file) => file.mimeType.startsWith("image/")).length);
@@ -3849,6 +3849,7 @@ for (const busy of [false, true]) {
     }
     uploads.resolve(optimistic.content);
     await request;
+    assert.equal(prompts[0].thinkingLevel, "low", "local Harness turns forward the selected thinking level like web");
     const accepted = actions.find((action) => action.type === "turn-upsert").turn;
     const acceptedQueue = followupQueueItems([...turns, accepted], busy ? "active" : accepted.id, [optimistic]);
     assert.equal(acceptedQueue.length, busy ? 1 : 0, "acceptance replaces the optimistic queue item, never duplicates it");

@@ -1,8 +1,7 @@
-import { isLocalHarness, LOCAL_HARNESSES, type HarnessKind, type RuntimeStatus } from "@neta-art/cohub";
-import type { ChatModelSelection } from "@/src/data/types";
+import { isLocalHarness, LOCAL_HARNESSES, type HarnessKind, type RuntimeCapabilities, type RuntimeStatus } from "@neta-art/cohub";
 
 export type RuntimeHarness = HarnessKind;
-export type LocalRuntimeModel = ChatModelSelection & { name: string };
+export type LocalRuntimeModel = Omit<RuntimeCapabilities["models"][number], "harness" | "isDefault">;
 export type SpaceRuntimeStatus = RuntimeStatus;
 
 export function canUseRuntimeHarness(status: SpaceRuntimeStatus | null, harness: RuntimeHarness): boolean {
@@ -30,7 +29,7 @@ export function localModelsForHarness(status: SpaceRuntimeStatus | null, harness
   if (!status?.online || harness === "cohub") return [];
   return (status.capabilities?.models ?? [])
     .filter((model) => model.harness === harness)
-    .map((model) => ({ provider: model.provider, id: model.id, name: model.name }));
+    .map(({ provider, id, name, reasoning, defaultThinkingLevel, thinkingLevelMap }) => ({ provider, id, name, reasoning, defaultThinkingLevel, thinkingLevelMap }));
 }
 
 export function runtimeHarnessFromTurn(turn: { meta?: Record<string, unknown> | null; harness?: string | null } | null | undefined): RuntimeHarness {

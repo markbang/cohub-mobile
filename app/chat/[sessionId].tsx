@@ -542,10 +542,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const recordedLocalModel = composerHarness === "cohub" ? null : [...view.turns].reverse().find((turn) => runtimeHarnessFromTurn(turn) === composerHarness && turn.model);
   const activeModel = composerHarness === "cohub"
     ? (modelOverride ? selectedModel : recordedModel)
-    : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? { provider: recordedLocalModel.provider ?? composerHarness, id: recordedLocalModel.model! } : null);
+    : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
-  const modelTriggerLabel = composerHarness === "cohub" && activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
+  const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
   const liveStream = shouldShowLiveStream(view.stream, messages);
   // Mounting LegendList empty then filling it drops `initialScrollAtEnd`, so the first paint
   // would show the oldest rows and jump. Wait until there is a tail to pin to.
@@ -1063,7 +1063,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       const recordedLocalModel = harness === "cohub" ? null : [...view.turns].reverse().find((turn) => runtimeHarnessFromTurn(turn) === harness && turn.model);
       const requestModel = harness === "cohub"
         ? (modelOverride ? selectedModel : recordedModel)
-        : (Object.hasOwn(localModelsByHarness, harness) ? localModelsByHarness[harness] ?? null : recordedLocalModel ? { provider: recordedLocalModel.provider ?? harness, id: recordedLocalModel.model! } : null);
+        : (Object.hasOwn(localModelsByHarness, harness) ? localModelsByHarness[harness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, harness) : null);
       await sendMessage(sessionId, text, files, {
         model: requestModel,
         harness,
@@ -1412,7 +1412,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const spaceSessions = state.sessions.filter((item) => item.spaceId === space.id);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
   const modelLabel = activeModel?.name || activeModel?.id || (selectedHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
-  const modelTriggerLabel = selectedHarness === "cohub" && activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
+  const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
   const selectedStatus = selectedHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   return <Screen keyboard edgeToEdge>
     <SpacePanels edgeToEdge key={space.id} spaceId={space.id} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
@@ -1448,7 +1448,12 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
 }
 
 function runtimeCatalogModels(status: SpaceRuntimeStatus | null, harness: RuntimeHarness): ModelCatalogEntry[] {
-  return localModelsForHarness(status, harness).map((model) => ({ provider: model.provider, id: model.id, model: { name: model.name } } as ModelCatalogEntry));
+  return localModelsForHarness(status, harness).map(({ provider, id, ...model }) => ({ provider, id, model } as ModelCatalogEntry));
+}
+
+function recordedRuntimeModel(turn: { provider?: string | null; model?: string | null; meta?: unknown }, harness: RuntimeHarness): ChatModelSelection {
+  const thinkingLevel = requestedThinkingLevel(turn.meta);
+  return { provider: turn.provider ?? harness, id: turn.model!, ...(thinkingLevel ? { thinkingLevel } : {}) };
 }
 
 function MissingChat() {

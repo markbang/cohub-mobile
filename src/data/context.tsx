@@ -13,7 +13,6 @@ import type {
   UnauthorizedContext,
   UserSessionListItem,
 } from "@neta-art/cohub";
-import { isLocalHarness } from "@neta-art/cohub";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
@@ -2122,7 +2121,7 @@ export function AppProvider({
           schedule: { mode: "immediate" },
           ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
           ...(options.harness ? { harness: options.harness } : {}),
-          ...(!isLocalHarness(options.harness) && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+          ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
         });
         if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
         recordDebugEvent("chat.send.server_accepted", { turnSequence: response.turn.sequence, status: response.turn.status });
@@ -2161,7 +2160,7 @@ export function AppProvider({
         schedule: { mode: "immediate" },
         ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
         ...(options.harness ? { harness: options.harness } : {}),
-        ...(!isLocalHarness(options.harness) && options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+        ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
       });
       if (result.mode !== "immediate" || !result.session) {
         throw new Error(translate("data.newChatNotCreated"));
