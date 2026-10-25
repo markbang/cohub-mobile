@@ -4177,7 +4177,7 @@ for (const path of [
   "../app/space/[spaceId]/files.tsx",
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  assert.ok(/<LegendList[\s\S]*?extraData=/.test(source), `${path} must pass extraData so LegendList rows re-render on external state`);
+  assert.ok(/<(?:LegendList|FlatList)[\s\S]*?extraData=/.test(source), `${path} must pass extraData so list rows re-render on external state`);
 }
 
 assert.equal(runtimeHarnessFromTurn({ meta: { harness: "claude" } }), "claude");

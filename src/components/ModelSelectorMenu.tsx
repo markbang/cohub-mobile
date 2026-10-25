@@ -1,8 +1,7 @@
 import { ModelIcon, modelMappings } from "@lobehub/icons-rn";
 import type { ModelCatalogEntry, ModelStatusEntry } from "@neta-art/cohub";
 import { useMemo, useState, type RefObject } from "react";
-import { LegendList } from "@legendapp/list/react-native";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
 import type { ChatModelSelection } from "@/src/data/types";
 import {
@@ -109,7 +108,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
     return filtered;
   }, [currentModel, models, query]);
 
-  // LegendList memoizes each row on [item, extraData], so state read by renderModel
+  // Rows only re-render when `data` or extraData changes, so state read by renderModel
   // outside `data` must flow through extraData or the expanded settings panel never renders.
   const rowExtraData = useMemo(
     () => ({ currentModel, modelStatus, optionsOpenFor, t, theme }),
@@ -165,8 +164,9 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
       {loading || modelStatusLoading ? <Loader color={theme.colors.textMuted} /> : null}
       {query ? <IconButton name="circle-x" label={t("ui.search.clear")} size={36} onPress={() => setQuery("")} /> : <IconButton name="x" label={t("ui.sheet.close", { title: t("model.title") })} size={36} onPress={onClose} />}
     </View>
-    <LegendList
-      estimatedItemSize={56}
+    {/* Not LegendList: on Fabric it sizes rows with measure(), which includes the popover's
+        unfold scale, so rows stacked on top of each other until remeasured. */}
+    <FlatList
       extraData={rowExtraData}
       data={visibleModels}
       keyExtractor={(entry) => `${entry.provider}/${entry.id}`}
