@@ -16,7 +16,7 @@ import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { typography, useAppTheme } from "@/src/theme";
-import { AppIcon, TopBar, IconButton, Loader, LoadingRows, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, TopBar, IconButton, Loader, LoadingDocument, PrimaryButton, Screen } from "@/src/ui";
 
 type Params = { spaceId?: string | string[]; path?: string | string[] };
 
@@ -260,7 +260,7 @@ export default function FileScreen() {
         />
       ) : null}
       {loading ? (
-        <LoadingRows count={5} />
+        <LoadingDocument framed />
       ) : error ? (
         <FileError
           message={error}

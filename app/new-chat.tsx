@@ -7,7 +7,7 @@ import { normalizeSearchQuery } from "@/src/data/session-search";
 import { selectSpaceList } from "@/src/data/space-list";
 import { useTranslation } from "@/src/i18n";
 import { LIST_AVATAR_SIZE } from "@/src/design/tokens";
-import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingRows, Screen, SearchField, TopBar } from "@/src/ui";
+import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingFlatRows, Screen, SearchField, TopBar } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
 type Params = { spaceId?: string | string[] };
@@ -37,7 +37,7 @@ export default function NewChatScreen() {
   };
 
   const empty = state.spaces.length === 0
-    ? state.booting || state.refreshing ? <LoadingRows count={4} /> : error ? null : <EmptyState icon="layers" title={t("newChat.noSpaces")} description={t("newChat.createSpaceHint")} action={{ icon: "layers", label: t("tabs.spaces"), onPress: () => router.dismissTo("/(tabs)/spaces") }} />
+    ? state.booting || state.refreshing ? <LoadingFlatRows count={4} leading="avatar" /> : error ? null : <EmptyState icon="layers" title={t("newChat.noSpaces")} description={t("newChat.createSpaceHint")} action={{ icon: "layers", label: t("tabs.spaces"), onPress: () => router.dismissTo("/(tabs)/spaces") }} />
     : <EmptyState icon="search" title={t("spaces.empty.matching.title")} description={t("spaces.empty.matching.body")} />;
 
   return <Screen keyboard>

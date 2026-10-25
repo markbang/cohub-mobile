@@ -8,7 +8,7 @@ import { APP_SCOPES } from "@/src/data/app-manage";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { DataError, LoadingRows, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
 export default function WorkAccessScreen() {
   const { appId = "" } = useLocalSearchParams<{ appId: string }>();
@@ -49,7 +49,7 @@ export default function WorkAccessScreen() {
   return <Screen>
     <TopBar title={t("app.access.title")} onBack={() => router.back()} />
     {error && !scopes ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
-    {!scopes ? (error ? null : <LoadingRows count={5} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
+    {!scopes ? (error ? null : <LoadingSections sections={[{ kind: "caption" }, { kind: "group", rows: 8, trailing: "switch" }, { kind: "capsule" }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <Text className="mb-4 px-8 text-caption text-fg-muted">{t("app.access.hint")}</Text>
       <SettingsGroup>
         {APP_SCOPES.map((scope, index) => <View key={scope} className={`min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3 ${index === APP_SCOPES.length - 1 ? "" : "border-b border-border"}`}>

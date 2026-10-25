@@ -7,7 +7,7 @@ import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, LoadingRows, Screen, StatusPill, TopBar } from "@/src/ui";
+import { AppIcon, Bone, Screen, Skeleton, StatusPill, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 export default function TaskScreen() {
@@ -61,7 +61,7 @@ export default function TaskScreen() {
   return <Screen>
     <TopBar title={t("task.title")} onBack={() => router.back()} />
     <ScrollView contentContainerClassName="gap-4 p-4">
-      {error ? <Text className="text-body text-danger">{error}</Text> : !detail ? <LoadingRows count={4} /> : (
+      {error ? <Text className="text-body text-danger">{error}</Text> : !detail ? <TaskSkeleton /> : (
         <>
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
@@ -115,6 +115,20 @@ export default function TaskScreen() {
     </ScrollView>
   </Screen>;
 }
+function TaskSkeleton() {
+  return <Skeleton className="gap-4">
+    <View className="gap-3">
+      <View className="flex-row items-center justify-between" style={{ height: 22 }}><Bone width="45%" height={13} /><Bone width={64} height={22} /></View>
+      <View className="gap-2">
+        {(["40%", "40%", "16%"] as const).map((width, index) => <View key={index} className="flex-row items-center gap-2" style={{ height: 18 }}>
+          <Bone width={14} height={14} radius={4} /><View className="min-w-18"><Bone width={56} height={9} /></View><Bone width={width} height={9} />
+        </View>)}
+      </View>
+    </View>
+    <Bone width="100%" height={46} radius={14} />
+  </Skeleton>;
+}
+
 function InfoRow({ icon, label, value, danger = false }: { icon: React.ComponentProps<typeof AppIcon>["name"]; label: string; value: string; danger?: boolean }) {
   return (
     <View className="flex-row items-center gap-2">

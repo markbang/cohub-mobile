@@ -8,7 +8,7 @@ import { detectCodeLanguage } from "@/src/data/code-language";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
-import { DataError, IconButton, LoadingRows, Screen, TopBar } from "@/src/ui";
+import { DataError, IconButton, LoadingDocument, Screen, TopBar } from "@/src/ui";
 
 type Params = { spaceId: string; checkpointId: string; path: string };
 
@@ -33,7 +33,7 @@ export default function SaveFileScreen() {
   return <Screen>
     <TopBar title={path.split("/").pop() || t("file.title")} subtitle={path} onBack={() => router.back()} actions={url ? <IconButton name="external-link" label={t("file.openExternally")} onPress={() => void openWebLink(url).catch(() => undefined)} /> : undefined} />
     {error ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} />
-      : !file ? <LoadingRows count={5} />
+      : !file ? <LoadingDocument framed />
       : url ? <UrlFilePreview url={url} path={path} mimeType={file.mimeType} />
       : text !== null ? <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }}><CodeBlock code={text} language={detectCodeLanguage(path)} showLineNumbers /></ScrollView>
       : <View className="flex-1 items-center justify-center p-6"><Text className="text-center text-subhead text-fg-muted">{t("save.binaryFile")}</Text></View>}

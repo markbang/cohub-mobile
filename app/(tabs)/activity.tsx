@@ -3,12 +3,12 @@ import type { BillingSubscriptionHistoryStatus } from "@neta-art/cohub";
 import { useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
-import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
+import { ActivityHeatmap, ActivityHeatmapSkeleton } from "@/src/components/ActivityHeatmap";
 import { useApp } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, AppRefreshControl, ConnectionBanner, DataError, LoadingRows, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
+import { AppIcon, AppRefreshControl, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
@@ -67,7 +67,7 @@ export default function ActivityScreen() {
       {subscriptions.error ? <DataError message={subscriptions.error} onRetry={() => void subscriptions.load()} /> : null}
       <SectionHeader title={t("activity.heatmap.title")} />
       {activity?.error ? <DataError message={activity.error} onRetry={retry} /> : null}
-      {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <LoadingRows count={2} /> : null}
+      {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <ActivityHeatmapSkeleton /> : null}
     </ScrollView>
   </Screen>;
 }

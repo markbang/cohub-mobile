@@ -9,7 +9,7 @@ import { useApp } from "@/src/data/context";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus, type SandboxSetupInfo } from "@/src/data/sandbox-setup";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, LoadingRows, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
+import { AppIcon, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
 
 type SetupStep = NonNullable<SandboxSetupInfo["steps"]>[number];
 
@@ -64,7 +64,7 @@ export default function SpaceSetupScreen() {
   return <Screen>
     <TopBar title={t("space.setup.title")} onBack={() => router.back()} />
     {error && sandbox === undefined ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
-    {sandbox === undefined ? (error ? null : <LoadingRows count={3} />) : (
+    {sandbox === undefined ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 1 }, { kind: "caption" }, { kind: "group", rows: 3, label: true }]} />) : (
       <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
         <SettingsGroup>
           <View className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-3">

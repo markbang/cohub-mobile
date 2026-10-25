@@ -10,7 +10,7 @@ import { APP_HIDE_COHUB_BAR_FEATURE, dailyViews, hidesCohubBar, withCohubBar } f
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { DataError, Field, FIELD_INPUT_CLASS, LoadingRows, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
+import { DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
 import { Meta } from "@/src/ui/ListRow";
 import { formatNumber } from "@/src/utils";
 
@@ -91,7 +91,7 @@ export default function ManageWorkScreen() {
   return <Screen keyboard>
     <TopBar title={t("app.manage.title")} subtitle={app ? workTitle : undefined} onBack={() => router.back()} />
     {error && !detail ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
-    {!detail || !app ? (error ? null : <LoadingRows count={4} />) : <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
+    {!detail || !app ? (error ? null : <LoadingSections sections={[{ kind: "field" }, { kind: "field", tall: true }, { kind: "field" }, { kind: "group", rows: 2, trailing: "switch" }, { kind: "capsule" }]} />) : <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       {stats ? <ViewStats stats={stats} /> : null}
 
       <View className="mb-6 gap-4 px-4">
