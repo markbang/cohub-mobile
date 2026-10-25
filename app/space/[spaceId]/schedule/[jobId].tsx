@@ -12,7 +12,7 @@ import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, IconButton, Loader, LoadingRows, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, DataError, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const RUN_PAGE = 20;
@@ -127,7 +127,7 @@ export default function ScheduleScreen() {
   return <Screen>
     <TopBar title={job?.title || t("space.settings.schedule.unnamed")} subtitle={job ? cronSummaryText(summarizeCron(job.cronExpression), job.cronExpression, t) : undefined} onBack={() => router.back()} actions={job ? <IconButton name="square-pen" label={t("schedule.edit")} onPress={() => { setEditError(null); setEditing({ title: job.title, prompt: "", cronExpression: job.cronExpression, timezone: job.timezone }); }} /> : undefined} />
     {error && !job ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
-    {!job ? (error ? null : <LoadingRows count={4} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
+    {!job ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 4 }, { kind: "group", rows: 2, label: true }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <SettingsGroup>
         <View className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2">
           <AppIcon name="calendar-clock" size={18} tone={job.enabled ? "accent" : "muted"} />

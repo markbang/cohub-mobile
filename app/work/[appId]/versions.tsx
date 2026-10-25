@@ -7,7 +7,7 @@ import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, LoadingRows, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
+import { AppIcon, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 export default function WorkVersionsScreen() {
@@ -54,7 +54,7 @@ export default function WorkVersionsScreen() {
   return <Screen>
     <TopBar title={t("app.versions.title")} onBack={() => router.back()} />
     {error && !versions ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
-    {!versions ? (error ? null : <LoadingRows count={4} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
+    {!versions ? (error ? null : <LoadingSections sections={[{ kind: "capsule" }, { kind: "caption" }, { kind: "group", rows: 4 }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <PrimaryButton label={t("app.versions.publish")} icon="rocket" loading={publishing} onPress={() => void publish()} className="mx-4 mb-2" />
       <Text className="mb-6 px-8 text-caption text-fg-muted">{t("app.versions.publishHint")}</Text>
       <SettingsGroup>

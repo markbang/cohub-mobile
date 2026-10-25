@@ -9,7 +9,7 @@ import { useSpaceWallet } from "@/src/data/use-space-wallet";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, IconButton, Loader, LoadingRows, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, DataError, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
 const ACTIVITY_LABELS: Record<SpaceWalletActivity["kind"], TranslationKey> = {
@@ -50,7 +50,7 @@ export default function SpaceWalletScreen() {
   return <Screen scroll refreshing={refreshing} onRefresh={() => void refresh()}>
     <TopBar title={t("space.wallet.title")} subtitle={space ? displaySpaceName(space) : undefined} onBack={() => router.back()} />
     {!summary && errors.summary ? <DataError message={errors.summary} onRetry={wallet.reload} /> : null}
-    {!summary && !errors.summary ? <LoadingRows count={3} /> : null}
+    {!summary && !errors.summary ? <LoadingSections sections={[{ kind: "hero" }, { kind: "group", rows: 3, label: true, leading: true }]} /> : null}
     {summary ? <>
       <View className="h-3" />
       <SettingsGroup>

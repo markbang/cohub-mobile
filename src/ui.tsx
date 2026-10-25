@@ -31,7 +31,7 @@ import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
-import { LIST_AVATAR_SIZE, type ColorKey } from "@/src/design/tokens";
+import type { ColorKey } from "@/src/design/tokens";
 import { motion, springs } from "@/src/motion";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
@@ -46,6 +46,7 @@ import { initials } from "@/src/utils";
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
 export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
+export { Bone, LoadingDocument, LoadingFlatRows, LoadingRows, LoadingSections, Skeleton, type SkeletonSection } from "@/src/ui/Skeleton";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
 export type { IconName } from "@/src/icons";
@@ -472,17 +473,6 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 
 /** Shared classes for a `TextInput` inside `Field`, so every form field matches. */
 export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-2.5 text-body text-fg";
-
-/** Skeleton in the exact shape of `ListRow`, so content replaces it without a jump. */
-export function LoadingRows({ count = 5 }: { count?: number }) {
-  return <View accessibilityLabel="Loading">{Array.from({ length: count }).map((_, index) => <View key={index} className="mx-4 mb-2 min-h-18 flex-row items-center gap-3.5 rounded-md bg-surface px-4 py-3" style={CONTINUOUS}>
-    <View className="bg-surface-raised" style={{ width: LIST_AVATAR_SIZE, height: LIST_AVATAR_SIZE, borderRadius: LIST_AVATAR_SIZE * 0.3, borderCurve: "continuous" }} />
-    <View className="flex-1 gap-2">
-      <View className="h-3 rounded-full bg-surface-raised" style={{ width: `${58 + (index % 3) * 10}%` }} />
-      <View className="h-2.5 rounded-full bg-surface-raised" style={{ width: `${38 + (index % 2) * 15}%` }} />
-    </View>
-  </View>)}</View>;
-}
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 

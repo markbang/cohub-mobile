@@ -6,7 +6,7 @@ import { AppHostWebView } from "@/src/components/AppHostWebView";
 import { useApp } from "@/src/data/context";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
-import { DataError, TopBar, IconButton, LoadingRows, Screen } from "@/src/ui";
+import { DataError, TopBar, IconButton, LoadingState, Screen } from "@/src/ui";
 
 type Params = { appId?: string | string[] };
 
@@ -55,6 +55,6 @@ export default function WorkScreen() {
       )} 
     />
     {error ? <DataError message={error} onRetry={() => void load()} /> : null}
-    {!detail ? (error ? null : <LoadingRows count={6} />) : !contentUrl || !initialOrigin ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <AppHostWebView detail={detail} contentUrl={contentUrl} />}
+    {!detail ? (error ? null : <LoadingState />) : !contentUrl || !initialOrigin ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <AppHostWebView detail={detail} contentUrl={contentUrl} />}
   </Screen>;
 }

@@ -12,7 +12,7 @@ import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, TopBar, IconButton, LoadingRows, Screen } from "@/src/ui";
+import { AppIcon, TopBar, IconButton, LoadingFlatRows, Screen } from "@/src/ui";
 import {
   displaySpaceName,
   normalizeSpacePath,
@@ -183,7 +183,7 @@ export default function FilesScreen() {
       ) : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
-        <LoadingRows count={6} />
+        <View className="pt-2.5"><LoadingFlatRows count={8} /></View>
       ) : error && entries.length === 0 ? (
         <FilesError message={error} onRetry={() => setRefreshToken((value) => value + 1)} />
       ) : (

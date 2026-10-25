@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import type { SpaceUsageHourlyStat } from "@neta-art/cohub";
 import { colorWithOpacity, useAppTheme } from "@/src/theme";
 import { localDateKey } from "@/src/data/activity";
+import { Bone, Skeleton } from "@/src/ui/Skeleton";
 import { useTranslation } from "@/src/i18n";
 
 type HeatmapProps = {
@@ -133,3 +134,20 @@ export const ActivityHeatmap = memo(function ActivityHeatmap({ hourly, days }: H
     </View>
   );
 });
+
+export function ActivityHeatmapSkeleton({ weeks = 13 }: { weeks?: number }) {
+  return (
+    <Skeleton className="mx-4 gap-2 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}>
+      <View className="justify-center" style={{ height: 18 }}><Bone width="40%" height={9} /></View>
+      <View className="flex-row gap-2">
+        <View style={{ width: 24 }} />
+        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: CELL_GAP }}>
+          {Array.from({ length: weeks }, (_, week) => <View key={week} style={{ flex: 1, minWidth: 0, gap: CELL_GAP }}>
+            {Array.from({ length: DAYS_IN_WEEK }, (_, day) => <View key={day} className="bg-surface-raised" style={{ aspectRatio: 1, borderRadius: 3 }} />)}
+          </View>)}
+        </View>
+      </View>
+      <View className="flex-row justify-end" style={{ height: 14 }}><Bone width={120} height={9} /></View>
+    </Skeleton>
+  );
+}

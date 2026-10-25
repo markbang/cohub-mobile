@@ -10,7 +10,7 @@ import { useToast } from "@/src/components/Toast";
 import { DIFF_STATUS, formatDiffCounts, joinSavePath, saveStat, saveTitle } from "@/src/data/checkpoint-diff";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, IconButton, Loader, LoadingRows, Screen, Segmented, TopBar } from "@/src/ui";
+import { AppIcon, DataError, IconButton, Loader, LoadingSections, Screen, Segmented, TopBar } from "@/src/ui";
 import { Meta } from "@/src/ui/ListRow";
 import { formatRelativeTime, parentSpacePath } from "@/src/utils";
 
@@ -53,7 +53,7 @@ export default function SaveScreen() {
   return <Screen>
     <TopBar title={title} subtitle={save ? formatRelativeTime(save.createdAt) : undefined} onBack={() => router.back()} actions={save ? <IconButton name="copy" label={t("save.copyHash")} onPress={() => void copyHash()} /> : undefined} />
     {error && !save ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
-    {!save ? (error ? null : <LoadingRows count={4} />) : <>
+    {!save ? (error ? null : <LoadingSections paddingTop={4} sections={[{ kind: "caption" }, { kind: "capsule" }, { kind: "group", rows: 4, leading: true }]} />) : <>
       <View className="gap-3 px-4 pb-3 pt-1">
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
           <Meta icon="bookmark" value={save.commitHash.slice(0, 12)} label={t("save.commit", { hash: save.commitHash })} />
@@ -104,7 +104,7 @@ function ChangesTab({ spaceId, save, base, bottomInset, onCompare }: { spaceId: 
         <Text className="text-caption font-semibold text-accent">{t("save.compare")}</Text>
       </Pressable>
     </View>
-    {failure ? <DataError message={failure} onRetry={() => setAttempt((value) => value + 1)} /> : !summary ? <LoadingRows count={4} /> : <>
+    {failure ? <DataError message={failure} onRetry={() => setAttempt((value) => value + 1)} /> : !summary ? <LoadingSections paddingTop={0} sections={[{ kind: "caption" }, { kind: "group", rows: 4, leading: true }]} /> : <>
       <View className="flex-row flex-wrap gap-x-4 gap-y-1 px-4 pb-3">
         <Meta icon="file-text" value={String(summary.stats.changedFileCount)} label={t("save.changedFiles", { count: summary.stats.changedFileCount })} />
         <Text className="text-caption tabular-nums text-success">+{summary.stats.additions}</Text>

@@ -502,7 +502,7 @@ const formScope = {
   useTranslation: () => ({ t: translateForScreen }),
   useAppTheme: () => ({ colors: {}, spacing: { md: 12, lg: 16 }, radius: { md: 12 } }),
   Screen: "Screen", ScrollView: "ScrollView", Avatar: "Avatar", PrimaryButton: "PrimaryButton",
-  LoadingRows: "LoadingRows", LoadingBlock: "LoadingBlock", DataError: "DataError", InlineError: "InlineError",
+  LoadingRows: "LoadingRows", LoadingFlatRows: "LoadingFlatRows", LoadingDocument: "LoadingDocument", LoadingSections: "LoadingSections", LoadingBlock: "LoadingBlock", DataError: "DataError", InlineError: "InlineError",
   SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", SectionHeader: "SectionHeader", Metric: "Metric",
 };
 
@@ -919,7 +919,7 @@ for (const [tab, component, expectedRequests] of [
   const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } } };
   const renderWork = loadChromeComponent("../app/work/[appId].tsx", "WorkScreen", {
     ...formScope, ...runner.hooks, useFocusEffect: (callback) => { focus = callback; },
-    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), useApp: () => ({ client }), AppHostWebView: "AppHostWebView",
+    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), useApp: () => ({ client }), AppHostWebView: "AppHostWebView", LoadingState: "LoadingState",
   });
   const render = () => chromeNodes(runner.render(renderWork));
   const detail = (title) => ({ app: { id: "work", meta: { title } }, space: { name: "Space" }, content: { url: "https://example.com/work" } });
@@ -973,7 +973,7 @@ for (const [tab, component, expectedRequests] of [
     useEdgeChrome: () => ({ headerHeight: 100 }), useApp: () => ({ connectionState: "open" }),
     useActivity: () => ({ credits: { data: null, error: null }, activity: { data: null, error: null }, refresh: async () => {} }),
     useBillingHistory: () => subscriptions,
-    EdgeHeader: "EdgeHeader", AccountAvatar: "AccountAvatar", RefreshControl: "RefreshControl", ConnectionBanner: "ConnectionBanner", PressableScale: "PressableScale", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow",
+    EdgeHeader: "EdgeHeader", AccountAvatar: "AccountAvatar", RefreshControl: "RefreshControl", ConnectionBanner: "ConnectionBanner", PressableScale: "PressableScale", ActivityHeatmapSkeleton: "ActivityHeatmapSkeleton", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow",
   });
   const render = () => chromeNodes(runner.render(renderActivity));
   const subscriptionRow = () => render().find((node) => node.type === "SettingsRow" && node.props.title === "activity.subscription.title");
@@ -1011,7 +1011,7 @@ for (const [tab, component, expectedRequests] of [
     const list = nodes.find((node) => node.type === "FlatList");
     return list.props.data.length === 0 ? [...nodes, ...chromeNodes(list.props.ListEmptyComponent)] : nodes;
   };
-  assert.ok(render().some((node) => node.type === "LoadingRows"));
+  assert.ok(render().some((node) => node.type === "LoadingFlatRows"));
   assert.equal(render().some((node) => node.type === "SearchField"), false, "no search field before there is anything to search");
   state.booting = false; state.spacesError = "offline";
   assert.equal(render().some((node) => node.type === "EmptyState"), false);

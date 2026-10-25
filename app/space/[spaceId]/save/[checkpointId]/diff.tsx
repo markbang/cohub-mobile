@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DIFF_STATUS, formatDiffCounts } from "@/src/data/checkpoint-diff";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { DataError, LoadingRows, Screen, TopBar } from "@/src/ui";
+import { DataError, LoadingDocument, Screen, TopBar } from "@/src/ui";
 
 type Params = { spaceId: string; checkpointId: string; path: string; base?: string };
 
@@ -44,7 +44,7 @@ export default function SaveDiffScreen() {
   const unavailable = diff && diff.kind !== "text" ? t(diff.kind === "binary" || diff.kind === "asset" ? "save.binaryDiff" : diff.kind === "too_large" ? "save.tooLargeDiff" : "save.diffUnavailable") : null;
   return <Screen>
     <TopBar title={name} subtitle={subtitle || path} onBack={() => router.back()} />
-    {error ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : !diff ? <LoadingRows count={6} /> : unavailable ? <Text className="px-6 py-10 text-center text-subhead text-fg-muted">{unavailable}</Text> : (
+    {error ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : !diff ? <LoadingDocument /> : unavailable ? <Text className="px-6 py-10 text-center text-subhead text-fg-muted">{unavailable}</Text> : (
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
         {/* Long lines scroll sideways together, so columns stay aligned like a terminal diff. */}
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: "100%" }}>

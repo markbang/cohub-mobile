@@ -12,7 +12,7 @@ import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingRows, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 
 const UTM_FIELDS = [
@@ -68,7 +68,7 @@ export default function WorkPromotionsScreen() {
   return <Screen>
     <TopBar title={t("app.promo.title")} onBack={() => router.back()} actions={data ? <IconButton name="plus" label={t("app.promo.new")} onPress={() => setCreating(true)} /> : undefined} />
     {error && !data ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
-    {!data ? (error ? null : <LoadingRows count={3} />) : data.promotions.length === 0
+    {!data ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 3 }]} />) : data.promotions.length === 0
       ? <EmptyState icon="megaphone" title={t("app.promo.title")} description={t("app.promo.empty")} action={{ icon: "plus", label: t("app.promo.new"), onPress: () => setCreating(true) }} />
       : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
         <SettingsGroup>

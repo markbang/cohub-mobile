@@ -11,7 +11,7 @@ import { useAppDomains, type AppDomainProblem } from "@/src/data/use-app-domains
 import { useTranslation, type Translate, type TranslationKey } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingRows, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
 
 type Params = { appId?: string | string[]; spaceId?: string | string[] };
 
@@ -62,7 +62,7 @@ export default function AppDomainScreen() {
 
   return <Screen>
     <TopBar title={t("app.domain.title")} onBack={() => router.back()} />
-    {!list ? (domains.loadError ? <DataError message={domains.loadError} onRetry={domains.reload} /> : <LoadingRows count={3} />) : (
+    {!list ? (domains.loadError ? <DataError message={domains.loadError} onRetry={domains.reload} /> : <LoadingSections sections={[{ kind: "field" }, { kind: "capsule" }]} />) : (
       <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         {domain ? <DomainDetail domain={domain} list={list} busy={busy} onCheck={() => void domains.check(domain.id)} onRemove={() => setConfirming(true)} />
           : !list.enabled ? <EmptyState icon="globe" title={t("app.domain.unavailable")} />
