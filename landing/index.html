@@ -15,7 +15,8 @@
       content="Chats, Spaces, live agent sessions, voice input, and push notifications, in a native app."
     />
     <meta property="og:type" content="website" />
-    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="icon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <link rel="preload" href="fonts/manrope-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -67,7 +68,7 @@
     <header class="site-header">
       <div class="wrap header-inner">
         <a class="brand" href="#main" aria-label="Cohub Mobile home">
-          <span class="brand-mark" aria-hidden="true"></span>
+          <img class="brand-mark" src="icon.png" width="192" height="192" alt="" />
           Cohub<span class="brand-edition">MOBILE</span>
         </a>
         <nav class="site-nav" aria-label="Primary">
@@ -108,10 +109,10 @@
         </div>
         <div class="hero-art">
           <div class="orbit" aria-hidden="true"></div>
-          <img class="hero-phone hero-phone--back" src="screenshots/chats.png" width="1307" height="2732"
-            alt="Cohub Chats on Android, with a live agent session and running filter" decoding="async" />
-          <img class="hero-phone hero-phone--front" src="screenshots/spaces.png" width="1307" height="2732"
-            alt="Cohub Spaces on Android, with recent projects and pinned workspaces" fetchpriority="high" decoding="async" />
+          <img class="hero-phone hero-phone--back" src="screenshots/chats.png" width="1305" height="2730"
+            alt="Cohub Chats on Android, listing recent chats across Spaces" decoding="async" />
+          <img class="hero-phone hero-phone--front" src="screenshots/spaces.png" width="1305" height="2730"
+            alt="Cohub Spaces on Android, with recent and pinned Spaces" fetchpriority="high" decoding="async" />
           <div class="art-note">
             <svg class="icon" aria-hidden="true"><use href="#i-phone" /></svg>
             <div><strong>A little more freedom.</strong><span>Your workspace, wherever you are.</span></div>
@@ -155,26 +156,26 @@
             </span>
             <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
           </label>
-          <input class="sr-only" type="radio" name="screen" id="screen-settings" aria-labelledby="label-settings" aria-controls="panel-settings" />
-          <label class="screen-option" for="screen-settings">
+          <input class="sr-only" type="radio" name="screen" id="screen-activity" aria-labelledby="label-activity" aria-controls="panel-activity" />
+          <label class="screen-option" for="screen-activity">
             <span class="option-number">03</span>
-            <span><span class="option-title" id="label-settings"><span class="option-desktop">Make yourself at home.</span><span class="option-mobile">Settings</span></span>
-              <span class="option-copy">Set your appearance, manage notifications, and tune your rules. Your workspace should feel like yours.</span>
+            <span><span class="option-title" id="label-activity"><span class="option-desktop">See where your tokens go.</span><span class="option-mobile">Activity</span></span>
+              <span class="option-copy">Balance, subscription, and usage at a glance, with a heatmap of the last 13 weeks.</span>
             </span>
             <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg>
           </label>
           <div class="screen-stage">
             <figure class="screen-panel" id="panel-chats">
               <figcaption><span>01 / Chats</span><span>Inside the app</span></figcaption>
-              <img src="screenshots/chats.png" width="1307" height="2732" alt="Chats inbox with All, Running, and Completed filters and a live session" loading="lazy" decoding="async" />
+              <img src="screenshots/chats.png" width="1305" height="2730" alt="Chats inbox with a filter menu, search, and recent chats across Spaces" loading="lazy" decoding="async" />
             </figure>
             <figure class="screen-panel" id="panel-spaces">
               <figcaption><span>02 / Spaces</span><span>Inside the app</span></figcaption>
-              <img src="screenshots/spaces.png" width="1307" height="2732" alt="Spaces with recent projects, activity times, chat counts, and pin controls" loading="lazy" decoding="async" />
+              <img src="screenshots/spaces.png" width="1305" height="2730" alt="Spaces with recent projects, activity times, chat counts, and pin controls" loading="lazy" decoding="async" />
             </figure>
-            <figure class="screen-panel" id="panel-settings">
-              <figcaption><span>03 / Settings</span><span>Inside the app</span></figcaption>
-              <img src="screenshots/settings.png" width="1307" height="2732" alt="Settings for appearance, language, notifications, rules, and storage" loading="lazy" decoding="async" />
+            <figure class="screen-panel" id="panel-activity">
+              <figcaption><span>03 / Activity</span><span>Inside the app</span></figcaption>
+              <img src="screenshots/activity.png" width="1305" height="2730" alt="Activity with current balance, subscription, usage details, and a 13-week token heatmap" loading="lazy" decoding="async" />
             </figure>
           </div>
         </fieldset>
@@ -248,7 +249,7 @@
 
     <footer class="site-footer wrap">
       <div>
-        <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true"></span>Cohub</a>
+        <a class="brand" href="#main"><img class="brand-mark" src="icon.png" width="192" height="192" alt="" />Cohub</a>
         <p>A native home for your Cohub workspace.</p>
       </div>
       <nav class="footer-links" aria-label="Footer">

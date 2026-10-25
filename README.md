@@ -11,7 +11,7 @@ A native iOS and Android client for Cohub, built with React Native and Expo.
   &nbsp;&nbsp;
   <img src="landing/screenshots/spaces.png" width="28%" alt="Spaces list" />
   &nbsp;&nbsp;
-  <img src="landing/screenshots/settings.png" width="28%" alt="Settings" />
+  <img src="landing/screenshots/activity.png" width="28%" alt="Activity" />
 </p>
 
 ## Download

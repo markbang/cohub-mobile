@@ -166,25 +166,9 @@ p {
 }
 
 .brand-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 38px;
-  height: 31px;
-  border-radius: 15px;
-  background: var(--ink);
+  width: 36px;
+  height: 36px;
   flex: none;
-}
-
-.brand-mark::before,
-.brand-mark::after {
-  content: "";
-  width: 6px;
-  height: 13px;
-  border-radius: 4px;
-  background: var(--paper);
-  transform: rotate(9deg);
 }
 
 .brand-edition {
@@ -617,7 +601,7 @@ h2 {
 
 #screen-chats:checked ~ .screen-stage #panel-chats,
 #screen-spaces:checked ~ .screen-stage #panel-spaces,
-#screen-settings:checked ~ .screen-stage #panel-settings {
+#screen-activity:checked ~ .screen-stage #panel-activity {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -819,28 +803,10 @@ h2 {
   top: 27%;
   right: 7%;
   width: 260px;
-  height: 215px;
-  border-radius: 100px;
-  background: #e1b994;
-  transform: rotate(-12deg);
+  height: 245px;
+  background: url("mascot.png") center / contain no-repeat;
+  transform: rotate(-8deg);
   z-index: -1;
-}
-
-.download-mascot::before,
-.download-mascot::after {
-  content: "";
-  position: absolute;
-  top: 30%;
-  left: 30%;
-  width: 37px;
-  height: 87px;
-  background: var(--peach);
-  border-radius: 30px;
-  transform: rotate(8deg);
-}
-
-.download-mascot::after {
-  left: 53%;
 }
 
 .site-footer {
@@ -857,14 +823,8 @@ h2 {
 }
 
 .site-footer .brand-mark {
-  width: 31px;
-  height: 25px;
-}
-
-.site-footer .brand-mark::before,
-.site-footer .brand-mark::after {
-  width: 5px;
-  height: 10px;
+  width: 30px;
+  height: 30px;
 }
 
 .site-footer p {
@@ -897,8 +857,7 @@ h2 {
   .hero-phone--back { top: 78px; }
   .dl-btn { min-width: 150px; padding-inline: 16px; }
   .screen-explorer { column-gap: 40px; }
-  .download-mascot { right: 5%; width: 210px; height: 180px; }
-  .download-mascot::before, .download-mascot::after { width: 30px; height: 73px; }
+  .download-mascot { right: 5%; width: 210px; height: 198px; }
 }
 
 @media (max-width: 800px) {
@@ -939,7 +898,7 @@ h2 {
 
 @media (max-width: 560px) {
   .brand { font-size: 23px; }
-  .brand-mark { width: 33px; height: 28px; }
+  .brand-mark { width: 32px; height: 32px; }
   .header-inner { gap: 12px; }
   .site-nav { display: none; }
   .header-download { gap: 8px; padding-inline: 14px; font-size: 11px; }
