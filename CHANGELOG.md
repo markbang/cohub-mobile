@@ -1,5 +1,54 @@
 # Changelog
 
+## [2.3.2](https://github.com/markbang/cohub-mobile/compare/v2.3.1...v2.3.2) (2026-10-25)
+
+
+### Features
+
+* **brand:** ship the new app icon ([f8950ff](https://github.com/markbang/cohub-mobile/commit/f8950ffe3ba376c0b2511a59962ac92fdd665553))
+* **chats:** nest forks three levels deep and fold busy fork groups ([d0afe18](https://github.com/markbang/cohub-mobile/commit/d0afe18c81fd61cd8c9c20993ccaebe80d554d3e))
+* **media:** preview 3D models, video, and audio ([a72c5ad](https://github.com/markbang/cohub-mobile/commit/a72c5adc64c0501fc15ced49291bb23f5480a313))
+* **motion:** animate dismissals for popovers, sheets, and composer glyphs ([012a340](https://github.com/markbang/cohub-mobile/commit/012a3408cad125548910ea1b48be85841b4f0878))
+* **motion:** animate sheets and context menus out when their owner unmounts them ([acef5d5](https://github.com/markbang/cohub-mobile/commit/acef5d52bab77fe8a3efa8d2f723d8c529f252c7))
+* **motion:** retract popovers into their anchor on close ([d581b66](https://github.com/markbang/cohub-mobile/commit/d581b6675890719e0a9364b4b232704a18c11467))
+* **motion:** unfold popovers from their anchor and blur them out on close ([78bcaa7](https://github.com/markbang/cohub-mobile/commit/78bcaa77c44a62390b1dabbe096aeb230da2afb7))
+* **saves:** browse Save changes, diffs, and files ([996bd6e](https://github.com/markbang/cohub-mobile/commit/996bd6efdfcfed6909c220c2ca7f980be8f180ad))
+* **schedules:** create, edit, and review scheduled prompts ([1399694](https://github.com/markbang/cohub-mobile/commit/13996943dfea0e90e72acb79d407a4b78095a140))
+* **space:** add the Space wallet, sandbox image, and startup script reports ([5171cee](https://github.com/markbang/cohub-mobile/commit/5171ceea27684b8db43a79e0bb619e61ef2ec4b2))
+* **works:** host the App bridge in the Work web view ([b695492](https://github.com/markbang/cohub-mobile/commit/b695492b22eefa33f00d0a9db0c9c7b28134eec5))
+* **works:** manage custom domains for published Works ([ed03334](https://github.com/markbang/cohub-mobile/commit/ed03334fa59ee8e03139676f0fd864d4148e543b))
+* **works:** manage views, visibility, versions, access, and promotions ([63d6566](https://github.com/markbang/cohub-mobile/commit/63d65667decf0a8ba63d706175348b48b55f46e7))
+
+
+### Fixes
+
+* **chat:** keep the catch-up fade from stalling rows half-transparent ([ecfc93e](https://github.com/markbang/cohub-mobile/commit/ecfc93e4ce10f656908c6778c9b506ad0fd38608))
+* **files:** keep editor line numbers and caret visible ([7bc608f](https://github.com/markbang/cohub-mobile/commit/7bc608ffb94388cfe781ac4086658a0f262b8824))
+* **ios:** explain camera and microphone use by Works ([9618c40](https://github.com/markbang/cohub-mobile/commit/9618c406291369cd99c932c9b5ed49d90dc01873))
+* **model-selector:** keep model rows from overlapping while the picker unfolds ([8fc4916](https://github.com/markbang/cohub-mobile/commit/8fc491623bcd8a8b10b81bbf7f93cf47a297c55e))
+* **realtime:** settle client-initiated socket close on dead links ([8ab0ee4](https://github.com/markbang/cohub-mobile/commit/8ab0ee4c2454e2b35b1fb29181c36932cb1fef54))
+* **rules:** publish user rules from the Home Space ([9934beb](https://github.com/markbang/cohub-mobile/commit/9934bebec99681ce169a710d13323a2c1799bc99))
+* **tabs:** hide the rest icon under the selected tab's accent icon ([056eb0d](https://github.com/markbang/cohub-mobile/commit/056eb0d8311cf12d764b386284571b88fd7c968f))
+* **ui:** forward scroll children through the refresh control ([3625c3d](https://github.com/markbang/cohub-mobile/commit/3625c3da42f098a748ec8e3c4cd4d7b240f49557))
+* **ui:** use one pull-to-refresh indicator everywhere ([487539d](https://github.com/markbang/cohub-mobile/commit/487539d1997db98c3363864e2d6d501fc00cf25c))
+
+
+### Documentation
+
+* list the Space, Save, schedule, media, and Work features ([aa7237b](https://github.com/markbang/cohub-mobile/commit/aa7237b7674415da9694e728cc49680a3c5be4d7))
+
+
+### Build
+
+* **deps:** align Expo SDK 58 patch versions ([6599192](https://github.com/markbang/cohub-mobile/commit/65991922adadbcb8fe90a0c59ea7ddcf24b107a8))
+* **deps:** upgrade @neta-art/cohub to 12.5.0 ([a1ce69f](https://github.com/markbang/cohub-mobile/commit/a1ce69ffddb86b795f7d0994db9152e8fcb9e528))
+* **device-runtime:** build sandboxd from upstream 3886056 ([1196fc4](https://github.com/markbang/cohub-mobile/commit/1196fc438ea19f77d900ae1450a2165511790ad7))
+
+
+### CI
+
+* **audit:** accept the build-only zod advisory and drop the resolved braces entry ([ab118b7](https://github.com/markbang/cohub-mobile/commit/ab118b74c0c6904dd839b3aecffe7f09aaa4fee4))
+
 ## [2.3.1](https://github.com/markbang/cohub-mobile/compare/v2.3.0...v2.3.1) (2026-10-21)
 
 
