@@ -51,6 +51,15 @@ export class StreamRevealController {
   private lastInputAt = 0;
   private arrivalCps = DEFAULT_CPS;
 
+  /** Text given here is the first content: it shows whole, as a first target would, without a commit. */
+  constructor(source?: string) {
+    if (source === undefined) return;
+    this.initialized = true;
+    this.lastInputAt = Date.now();
+    this.source = source;
+    this.displayedLength = source.length;
+  }
+
   readonly subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -105,6 +114,7 @@ export class StreamRevealController {
 
   /** Show the full target immediately (completion, rewrite, teardown). */
   flush(source = this.source) {
+    const shown = this.getDisplayed();
     this.clearTimer();
     this.initialized = true;
     this.source = source;
@@ -113,7 +123,7 @@ export class StreamRevealController {
     this.units = [];
     this.nextUnit = 0;
     this.displayedLength = source.length;
-    this.publish();
+    if (source !== shown) this.publish();
   }
 
   /** Stop pacing without discarding state; a later setTarget resumes. */

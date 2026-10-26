@@ -2013,6 +2013,18 @@ try {
   revealed.stop();
   mock.timers.reset();
 }
+for (const streaming of [true, false]) {
+  const updates = [];
+  const layoutEffects = [];
+  const revealText = loadChromeComponent("../src/components/useRevealedStreamText.ts", "useRevealedStreamText", {
+    StreamRevealController,
+    useState: (initial) => [typeof initial === "function" ? initial() : initial, (value) => updates.push(value)],
+    useLayoutEffect: (effect) => layoutEffects.push(effect),
+  });
+  const firstFrame = revealText("你好", streaming);
+  for (const effect of layoutEffects) effect();
+  assert.deepEqual([firstFrame, updates], ["你好", []], `mounting ${streaming ? "streaming" : "finished"} text shows whole and schedules no update; a re-render per mounted block kept list fills synchronous until React's nested-update limit ended the runtime`);
+}
 
 const finalReply = { id: "final", role: "assistant", sequence: 2, meta: { turnId: "turn-1" }, text: "Final reply" };
 const intermediateReply = { id: "step", role: "assistant", sequence: 1, meta: { turnId: "turn-1", messageKind: "assistant_intermediate" }, text: "Working" };
