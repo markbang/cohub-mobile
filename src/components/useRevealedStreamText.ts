@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { useLayoutEffect, useState } from "react";
 import { StreamRevealController } from "@/src/data/stream-reveal";
 
 /**
@@ -6,13 +6,17 @@ import { StreamRevealController } from "@/src/data/stream-reveal";
  * text appears smoothly rather than in server-sized lumps. Non-streaming text passes through
  * untouched, and a rewrite (correction, history reload) shows in full without replaying.
  *
- * The target is synced in a layout effect so the first painted frame already carries the
- * authoritative prefix instead of an empty bubble. Non-streaming text never segments graphemes, so
- * mounting a long history stays cheap.
+ * The controller starts with the mounting text, so the first frame carries it and a mount costs one
+ * render; non-streaming text never segments graphemes, so mounting a long history stays cheap.
+ * Steps are plain state updates: an external store re-rendered every mounting block synchronously,
+ * which kept list fills in synchronous chains until React's nested-update limit ended the runtime.
  */
 export function useRevealedStreamText(source: string, streaming: boolean) {
-  const [controller] = useState(() => new StreamRevealController());
-  const displayed = useSyncExternalStore(controller.subscribe, controller.getDisplayed);
+  const [controller] = useState(() => new StreamRevealController(source));
+  const [displayed, setDisplayed] = useState(controller.getDisplayed);
+
+  // Subscribed before the target syncs below, so a rewrite published there is not missed.
+  useLayoutEffect(() => controller.subscribe(() => setDisplayed(controller.getDisplayed())), [controller]);
 
   useLayoutEffect(() => {
     if (streaming) controller.setTarget(source);
