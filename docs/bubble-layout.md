@@ -5,7 +5,7 @@ Open **Debug > Bubble Layout** (tap the Profile/About version five times to open
 ## Layout Rules
 
 - Prompts are bubbles; replies are not. A reply reads as the page itself, like the web client: full width at a 16 pt inset, with code and table wells on the surface color. The bubble rules below apply to prompts.
-- Under each reply, one 44 pt line holds copy and fork (32 pt buttons, 44 pt touch targets), then `#Turn · model · thinking · ↑input · ↓output`, truncated, with the time at the end. The `#N` divider between Turns is gone; 8 pt above each prompt groups its Turn.
+- Under each reply, one 44 pt line holds copy and fork (32 pt buttons, 44 pt touch targets), then `#Turn · model · thinking · ↑input · ↓output · cached`, with the time at the end. Usage parts that do not fit drop whole, from the end (estimated glyph widths, rounded up), never cut mid-word; tapping the line shows them all. The `#N` divider between Turns is gone; 8 pt above each prompt groups its Turn.
 - A live reply uses the same layout. Its status line (live dot, runtime label, typing dots, or failure, plus the clock) is exactly the meta line's height, so the finished reply replaces it without moving the timeline.
 - Execution steps fold into a capsule that reads 32 pt tall inside a 44 pt row.
 - Ordinary short text is content-sized. Structured blocks (code, tables, lists, quotes, tools, galleries) have bounded widths so their nested rows remain usable.

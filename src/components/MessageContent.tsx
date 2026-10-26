@@ -26,9 +26,10 @@ import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { turnSequenceForMessage } from "@/src/data/session-history";
 import { hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 
+// Past three digits the decimal is noise: 245K, not 245.2K.
 function formatTokenCount(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 100_000_000 ? 0 : 1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
   return String(value);
 }
 
@@ -470,7 +471,10 @@ function BubbleMeta({ clock, local = false, t }: { clock?: string; local?: boole
   </View>;
 }
 
-function replyDetails(message: MessageRecord, t: Translate) {
+const DETAIL_SEPARATOR = " · ";
+
+/** A reply's details by priority: the identity always shows, usage parts drop from the end. */
+function replyDetailParts(message: MessageRecord, t: Translate) {
   const turn = turnSequenceForMessage(message);
   const thinkingLevel = requestedThinkingLevel(message.meta);
   const usage = message.usage;
@@ -478,37 +482,76 @@ function replyDetails(message: MessageRecord, t: Translate) {
   const cachedInputTokens = typeof usage?.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead > 0 ? formatTokenCount(usage.cacheRead) : null;
   const inputTokens = inputTokenValue > 0 ? formatTokenCount(inputTokenValue) : null;
   const outputTokens = typeof usage?.output === "number" && Number.isFinite(usage.output) && usage.output > 0 ? formatTokenCount(usage.output) : null;
-  // Most important first: a line that runs out of room drops the cache count before the token totals.
-  return [
+  const identity = [
     turn !== null ? `#${turn}` : null,
     message.model || (thinkingLevel || inputTokens || outputTokens ? t("chat.model.agent") : null),
     thinkingLevel ? formatThinkingLevel(thinkingLevel) : null,
+  ].filter(Boolean).join(DETAIL_SEPARATOR);
+  const parts = [
     inputTokens ? `↑${inputTokens}` : null,
     outputTokens ? `↓${outputTokens}` : null,
     cachedInputTokens ? t("message.tokens.cached", { count: cachedInputTokens }) : null,
-  ].filter(Boolean).join(" · ");
+  ].filter((part): part is string => part !== null);
+  return { identity, parts };
 }
 
-function ReplyMeta({ message, clock, copyText, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
+/** Glyph widths in em, rounded up for semibold system fonts so an estimate never runs short. */
+function estimateTextWidth(text: string, fontSize: number) {
+  let em = 0;
+  for (const char of text) {
+    if ((char.codePointAt(0) ?? 0) >= 0x2e80) em += 1;
+    else if (char === " ") em += 0.28;
+    else if (".,:·".includes(char)) em += 0.32;
+    else if (/[A-Z#↑↓]/.test(char)) em += 0.72;
+    else em += 0.62;
+  }
+  return em * fontSize;
+}
+
+/** The identity, then each usage part that still fits whole within `width`. */
+function fitReplyDetails(identity: string, parts: readonly string[], width: number, fontSize: number) {
+  let line = identity;
+  for (const part of parts) {
+    const next = line ? `${line}${DETAIL_SEPARATOR}${part}` : part;
+    if (estimateTextWidth(next, fontSize) > width) break;
+    line = next;
+  }
+  return line;
+}
+
+function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; availableWidth: number; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
+  const { fontScale } = useWindowDimensions();
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const timeout = setTimeout(() => setCopied(false), 1600);
     return () => clearTimeout(timeout);
   }, [copied]);
-  const details = replyDetails(message, t);
+  const { identity, parts } = replyDetailParts(message, t);
+  const details = [identity, ...parts].filter(Boolean).join(DETAIL_SEPARATOR);
   const canCopy = Boolean(onCopy && copyText);
   const canFork = Boolean(onFork && typeof message.meta?.turnId === "string");
-  const hasActions = canCopy || canFork;
-  if (!hasActions && !details && !clock) return null;
+  const actions = Number(canCopy) + Number(canFork);
+  if (!actions && !details && !clock) return null;
+  const fontSize = typography.micro.fontSize * fontScale;
+  // The details get the column less the buttons (pulled 9 into the margin, text 3 after them) and the clock.
+  const detailsWidth = getReplyContentWidth(availableWidth) - (actions ? actions * 32 - 6 : 0) - (clock ? 8 + estimateTextWidth(clock, fontSize) : 0);
+  const fitted = fitReplyDetails(identity, parts, detailsWidth, fontSize);
+  const detailsStyle = actions ? { marginLeft: 3 } : undefined;
   // The first glyph lines up with the reply text; its touch target hangs into the margin.
-  return <View className="flex-row items-center" style={{ height: REPLY_META_HEIGHT, marginLeft: hasActions ? -9 : 0 }}>
+  return <View className="flex-row items-center" style={{ minHeight: REPLY_META_HEIGHT, marginLeft: actions ? -9 : 0 }}>
     {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy?.(copyText); setCopied(true); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
     {canFork ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork?.(message)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
     {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. Not selectable: Android lays selectable text out without its line limit, so it wrapped out of the row instead of truncating. */}
-    <Text numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={hasActions ? { marginLeft: 3 } : undefined}>{details}</Text>
+    {fitted === details
+      ? <Text numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={detailsStyle}>{details}</Text>
+      // Parts that did not fit are a tap away; up to three lines still fit the row.
+      : <Pressable accessibilityRole="button" accessibilityLabel={details} accessibilityState={{ expanded }} onPress={() => setExpanded((value) => !value)} className="min-w-0 flex-1 self-stretch justify-center active:opacity-60" style={detailsStyle}>
+        <Text numberOfLines={expanded ? undefined : 1} className="text-micro text-fg-faint">{expanded ? details : fitted}</Text>
+      </Pressable>}
     {clock ? <Text className="ml-2 shrink-0 text-micro text-fg-faint tabular-nums">{clock}</Text> : null}
   </View>;
 }
@@ -551,7 +594,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
         {body}
         {message.errorMessage ? <View className={`${body ? "mt-2 " : ""}rounded-md bg-danger-soft px-3 py-2`} style={{ borderCurve: "continuous" }}><Text selectable className="text-caption text-danger">{message.errorMessage}</Text></View> : null}
       </BubbleContentWidth.Provider></BubbleTraceMessage.Provider>
-      <ReplyMeta message={message} clock={clock} copyText={messageText(message)} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
+      <ReplyMeta message={message} clock={clock} copyText={messageText(message)} availableWidth={rowWidth} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
     </View></BubbleContext.Provider>;
   }
   const textColor = theme.colors.userBubbleText;

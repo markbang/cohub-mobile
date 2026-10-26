@@ -1667,20 +1667,38 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
 // A reply has no bubble; its actions, Turn, model, usage, and time share one line under it.
 {
   const replyT = (key, values) => key === "message.tokens.cached" ? `${values.count} cached` : key;
-  const formatTokenCount = loadChromeComponent("../src/components/MessageContent.tsx", "formatTokenCount", {});
-  const replyDetails = loadChromeComponent("../src/components/MessageContent.tsx", "replyDetails", { turnSequenceForMessage, formatTokenCount, requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level });
+  const mc = "../src/components/MessageContent.tsx";
+  const formatTokenCount = loadChromeComponent(mc, "formatTokenCount", {});
+  assert.deepEqual([245_200, 12_345, 2_100, 1_234_567].map(formatTokenCount), ["245K", "12.3K", "2.1K", "1.2M"], "past three digits the decimal is noise");
+  const replyDetailParts = loadChromeComponent(mc, "replyDetailParts", { turnSequenceForMessage, formatTokenCount, DETAIL_SEPARATOR: " · ", requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level });
+  const estimateTextWidth = loadChromeComponent(mc, "estimateTextWidth", {});
+  const fitReplyDetails = loadChromeComponent(mc, "fitReplyDetails", { estimateTextWidth, DETAIL_SEPARATOR: " · " });
+  // The reported line: #2 · deepseek-flash with 245.2K in (245.0K cached) and 2.1K out, 246pt left for it on a 375pt phone.
+  const reported = { model: "deepseek-flash", usage: { input: 200, cacheRead: 245_000, output: 2_100 }, meta: { turnId: "turn", turnSequence: 2 } };
+  const { identity, parts } = replyDetailParts(reported, replyT);
+  assert.deepEqual([identity, parts], ["#2 · deepseek-flash", ["↑245K", "↓2.1K", "245K cached"]]);
+  assert.equal(fitReplyDetails(identity, parts, 246, 11), "#2 · deepseek-flash · ↑245K · ↓2.1K", "parts that do not fit drop whole, from the least important, never cut mid-word");
+  assert.equal(fitReplyDetails(identity, parts, 400, 11), "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached");
+  assert.equal(fitReplyDetails(identity, parts, 100, 11), identity, "the Turn and model always show");
+  assert.ok(estimateTextWidth("#2 · deepseek-flash · ↑245.2K 245.0K cached", 11) >= 245, "the estimate covers the 245pt the reported line measured on device");
   const reply = { model: "claude-sonnet", usage: { input: 1200, cacheRead: 8000, output: 1500 }, meta: { turnId: "turn", turnSequence: 12, requestedThinkingLevel: "high" } };
-  assert.equal(replyDetails(reply, replyT), "#12 · claude-sonnet · high · ↑9.2K · ↓1.5K · 8.0K cached", "the Turn number leads the reply's line; the cache count is the first thing truncation drops");
-  const ReplyMeta = loadChromeComponent("../src/components/MessageContent.tsx", "ReplyMeta", {
-    ...chromeScope, replyDetails, REPLY_META_HEIGHT: 44, Loader: "Loader",
+  const ReplyMeta = loadChromeComponent(mc, "ReplyMeta", {
+    ...chromeScope, replyDetailParts, fitReplyDetails, estimateTextWidth, formatTokenCount, turnSequenceForMessage, DETAIL_SEPARATOR: " · ", REPLY_META_HEIGHT: 44, Loader: "Loader",
+    requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level,
+    getReplyContentWidth: (width) => width - 32, typography: { micro: { fontSize: 11 } }, useWindowDimensions: () => ({ fontScale: 1 }),
     useAppTheme: () => ({ colors: { textFaint: "faint" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
   });
-  const line = ReplyMeta({ message: reply, clock: "14:32", copyText: "answer", onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
-  const buttons = chromeNodes(line).filter((node) => node.type === "Pressable");
-  assert.deepEqual([line.props.style.height, buttons.length], [44, 2], "copy and fork share the reply's one line");
+  const line = ReplyMeta({ message: { ...reply, usage: null }, clock: "14:32", copyText: "answer", availableWidth: 390, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
+  const buttons = chromeNodes(line).filter((node) => node.type === "Pressable" && classes(node).has("size-8"));
+  assert.deepEqual([line.props.style.minHeight, buttons.length], [44, 2], "copy and fork share the reply's one line");
   for (const button of buttons) assert.ok(classes(button).has("size-8") && button.props.hitSlop === 6, "32pt buttons reach 44pt touch targets inside their 44pt line, since hitSlop never extends past a parent");
   const detailsText = chromeNodes(line).find((node) => node.type === "Text" && classes(node).has("flex-1"));
-  assert.deepEqual([detailsText.props.numberOfLines, detailsText.props.selectable], [1, undefined], "the details truncate on one line; selectable text on Android ignores the line limit and wraps out of the row");
+  assert.deepEqual([detailsText.props.numberOfLines, detailsText.props.selectable], [1, undefined], "the details stay on one line; selectable text on Android ignores the line limit and wraps out of the row");
+  const narrow = ReplyMeta({ message: reported, clock: "12:09", copyText: "answer", availableWidth: 375, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
+  const reveal = chromeNodes(narrow).find((node) => node.type === "Pressable" && node.props.accessibilityState?.expanded === false);
+  assert.ok(reveal && classes(reveal).has("self-stretch"), "dropped parts are a full-height tap away");
+  assert.equal(reveal.props.accessibilityLabel, "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached", "screen readers always get every part");
+  assert.equal(chromeNodes(reveal).find((node) => node.type === "Text").props.children.join(""), "#2 · deepseek-flash · ↑245K · ↓2.1K");
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
     ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: () => "14:32",
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
