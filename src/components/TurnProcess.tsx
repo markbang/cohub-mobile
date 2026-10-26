@@ -1,5 +1,5 @@
 import type { CohubClient, ContentBlock, SessionTurnRecord } from "@neta-art/cohub";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { MessageContent } from "@/src/components/MessageContent";
 import type { StreamView } from "@/src/data/types";
@@ -40,14 +40,20 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
   }, [client, expanded, loadKey, objectKey, spaceId, t, turn.id, turn.sessionId]);
   const summary = turn.intermediateSummary;
   if (!objectKey && !summary?.messageCount && !summary?.toolCallCount) return null;
-  return <View className="mx-4 my-1.5">
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
-      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text className="text-caption text-fg-muted flex-1">{summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}{turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}</Text>
+  const label = `${summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
+  return <ProcessDisclosure label={label} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
+    {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+  </ProcessDisclosure>;
+}
+
+/** The row's padding holds the 32pt capsule's 44pt touch target; hitSlop never reaches past a parent. */
+function ProcessDisclosure({ label, expanded, onToggle, children }: { label: string; expanded: boolean; onToggle: () => void; children: ReactNode }) {
+  return <View className="px-4 py-1.5">
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle} hitSlop={6} className="h-8 max-w-full flex-row items-center gap-1 self-start rounded-full bg-surface-raised pl-2 pr-3 active:bg-surface-pressed">
+      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="muted" />
+      <Text numberOfLines={1} className="shrink text-caption text-fg-muted">{label}</Text>
     </Pressable>
-    {expanded ? <View className="gap-2 border-l border-border pl-3">
-      {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
-    </View> : null}
+    {expanded ? <View className="mt-2 gap-2 border-l border-border pl-3">{children}</View> : null}
   </View>;
 }
 
@@ -66,13 +72,7 @@ export function StreamingTurnProcess({ messages }: { messages: StreamView["inter
     return { content: blocks, toolCount: tools };
   }, [messages]);
   if (messages.length === 0) return null;
-  return <View className="mx-4 my-1.5">
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
-      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text className="text-caption text-fg-muted flex-1">{t("turn.steps", { steps: messages.length, tools: toolCount })}</Text>
-    </Pressable>
-    {expanded ? <View className="gap-2 border-l border-border pl-3">
-      {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
-    </View> : null}
-  </View>;
+  return <ProcessDisclosure label={t("turn.steps", { steps: messages.length, tools: toolCount })} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
+    {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+  </ProcessDisclosure>;
 }

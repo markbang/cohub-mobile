@@ -76,6 +76,8 @@ export type SessionView = {
   loadingNewer: boolean;
   oldestCursor: number | null;
   newestCursor: number | null;
+  /** Bumped when the newest page replaces loaded turns it does not join; the timeline remounts on it. */
+  windowGeneration: number;
   loading: boolean;
   refreshing: boolean;
   /** Earlier history is on screen while the request for what arrived since is in flight. */

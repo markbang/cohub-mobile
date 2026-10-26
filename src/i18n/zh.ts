@@ -650,6 +650,7 @@ export const zh: Record<TranslationKey, string> = {
   "chat.loadOlder": "加载更早的轮次",
   "chat.loadOlder.short": "更早",
   "chat.jumpLatest": "跳到最新",
+  "chat.jumpLatestFailed": "无法加载最新的轮次",
   "chat.followups": "后续消息 · 已排队 {count} 条",
   "chat.steerNow": "立即引导",
   "chat.steerAccessibility": "立即引导：{preview}",

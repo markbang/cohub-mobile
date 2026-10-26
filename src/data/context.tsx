@@ -61,7 +61,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { mergeDisplayMessages, mergeTurns, messagesFromTurns, nextTurnSequence, turnSequenceForMessage, withFallbackUserContent } from "@/src/data/session-history";
+import { mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
@@ -221,6 +221,7 @@ const emptyView = (): SessionView => ({
   loadingNewer: false,
   oldestCursor: null,
   newestCursor: null,
+  windowGeneration: 0,
   loading: false,
   refreshing: false,
   catchingUp: false,
@@ -293,7 +294,8 @@ type Action =
   | { type: "session-page-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMore: boolean; direction: "older" | "newer" }
   | { type: "session-page-error"; sessionId: string; message: string }
   | { type: "session-page-end"; sessionId: string; direction: "older" | "newer" }
-  | { type: "session-window-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMoreOlder: boolean; hasMoreNewer: boolean; oldestCursor?: number | null; newestCursor?: number | null }
+  | { type: "session-window-success"; sessionId: string; session?: SessionRecord | null; turns: SessionTurnRecord[]; hasMoreOlder: boolean; hasMoreNewer: boolean; oldestCursor?: number | null; newestCursor?: number | null; newest?: boolean }
+  | { type: "session-release"; sessionId: string }
   | { type: "turn-upsert"; sessionId: string; session?: SessionRecord | null; turn: SessionTurnRecord }
   | { type: "turn-patch"; sessionId: string; turn: Partial<SessionTurnRecord> }
   | { type: "turn-index-start"; sessionId: string }
@@ -641,12 +643,14 @@ function reducer(state: AppState, action: Action): AppState {
         turns: action.turns ?? current?.turns ?? [],
         messages: action.messages ?? current?.messages ?? [],
       });
+      const replaced = Boolean(action.turns && current && !turnWindowsJoin(current.turns, action.turns));
       return updateView(action.turns ? updateLatestTurn(state, action.sessionId, tail) : state, action.sessionId, {
         ...(action.silent ? {} : { refreshing: false }),
         catchingUp: false,
         ...(session ? { session } : {}),
         ...(action.messages ? { messages: action.messages } : {}),
         ...(action.turns ? { turns: action.turns, historyLoaded: true } : {}),
+        ...(replaced && current ? { windowGeneration: current.windowGeneration + 1 } : {}),
         ...(streamRecovery === "clear" ? { stream: null } : streamRecovery === "pending" && tail ? { stream: pendingStreamForTurn(tail.id) } : {}),
         ...(action.hasMoreOlder !== undefined ? { hasMoreOlder: action.hasMoreOlder } : {}),
         ...(action.hasMoreNewer !== undefined ? { hasMoreNewer: action.hasMoreNewer } : {}),
@@ -681,7 +685,9 @@ function reducer(state: AppState, action: Action): AppState {
       return updateView(state, action.sessionId, action.direction === "older" ? { loadingOlder: false } : { loadingNewer: false });
     case "session-window-success": {
       const current = state.sessionViews[action.sessionId] ?? emptyView();
-      const turns = mergeTurns(current.turns, action.turns);
+      const incoming = { turns: action.turns, hasMoreOlder: action.hasMoreOlder, hasMoreNewer: action.hasMoreNewer };
+      const merged = mergeTurnWindows(current, incoming);
+      const { turns, hasMoreOlder, hasMoreNewer } = merged ?? incoming;
       const session = action.session && current.session ? preferNewerSession(current.session, action.session) : action.session;
       return updateView(updateLatestTurn(state, action.sessionId, latestTurn(turns)), action.sessionId, {
         error: null,
@@ -689,17 +695,50 @@ function reducer(state: AppState, action: Action): AppState {
         turns,
         historyLoaded: true,
         messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
-        hasMoreOlder: action.hasMoreOlder,
-        hasMoreNewer: action.hasMoreNewer,
+        hasMoreOlder,
+        hasMoreNewer,
         loadingOlder: false,
         loadingNewer: false,
         oldestCursor: turns[0]?.sequence ?? action.oldestCursor ?? null,
         newestCursor: turns.at(-1)?.sequence ?? action.newestCursor ?? null,
+        ...(action.newest && !merged ? { windowGeneration: current.windowGeneration + 1 } : {}),
+      });
+    }
+    case "session-release": {
+      const current = state.sessionViews[action.sessionId];
+      // A window paged away from the tail (a turn jump) must not be what the next open lands on.
+      if (!current?.hasMoreNewer) return state;
+      return updateView(state, action.sessionId, {
+        messages: [],
+        turns: [],
+        historyLoaded: false,
+        hasMoreOlder: false,
+        hasMoreNewer: false,
+        loadingOlder: false,
+        loadingNewer: false,
+        oldestCursor: null,
+        newestCursor: null,
       });
     }
     case "turn-upsert": {
       recordDebugEvent("chat.turn.upsert", { sequence: action.turn.sequence, status: action.turn.status, intent: action.turn.intent ?? null, clientMessageIdPresent: typeof turnClientMessageId(action.turn) === "string" });
       const current = state.sessionViews[action.sessionId] ?? emptyView();
+      const session = action.session
+        ? current.session
+          ? preferNewerSession(current.session, action.session)
+          : action.session
+        : current.session;
+      const sessions = action.session
+        ? state.sessions.map((item) => item.id === action.session?.id ? mergeSessionItem(item, { ...action.session, space: item.space }) : item)
+        : state.sessions;
+      const live = {
+        ...(isTerminalTurnStatus(action.turn.status) && (current.stream?.turnId === action.turn.id || !current.stream) ? { stream: null } : {}),
+        ...(isActiveTurnStatus(action.turn.status) && !current.stream ? { stream: pendingStreamForTurn(action.turn.id) } : {}),
+      };
+      // Appending a Turn past a detached window's edge would hide the Turns between; its page brings it.
+      if (!turnFitsWindow(current, action.turn.sequence)) {
+        return updateView(updateLatestTurn({ ...state, sessions: sortByRecent(sessions) }, action.sessionId, action.turn), action.sessionId, { ...(session ? { session } : {}), ...live });
+      }
       const turns = mergeTurnRecords(current.turns, [action.turn]);
       const clientMessageId = turnClientMessageId(action.turn);
       const projected = messagesFromTurns(turns);
@@ -709,14 +748,6 @@ function reducer(state: AppState, action: Action): AppState {
         if (clientMessageId && message.meta?.clientMessageId === clientMessageId && hasProjectedUser) return false;
         return !(hasProjectedUser && message.meta?.optimistic === true && message.role === "user" && turnSequenceForMessage(message) === action.turn.sequence);
       });
-      const session = action.session
-        ? current.session
-          ? preferNewerSession(current.session, action.session)
-          : action.session
-        : current.session;
-      const sessions = action.session
-        ? state.sessions.map((item) => item.id === action.session?.id ? mergeSessionItem(item, { ...action.session, space: item.space }) : item)
-        : state.sessions;
       return updateView(updateLatestTurn(updateLatestTurn({ ...state, sessions: sortByRecent(sessions) }, action.sessionId, action.turn), action.sessionId, latestTurn(turns)), action.sessionId, {
         ...(session ? { session } : {}),
         turns,
@@ -724,8 +755,7 @@ function reducer(state: AppState, action: Action): AppState {
         messages: mergeDisplayMessages(projected, liveMessages),
         oldestCursor: turns[0]?.sequence ?? current.oldestCursor,
         newestCursor: turns.at(-1)?.sequence ?? current.newestCursor,
-        ...(isTerminalTurnStatus(action.turn.status) && (current.stream?.turnId === action.turn.id || !current.stream) ? { stream: null } : {}),
-        ...(isActiveTurnStatus(action.turn.status) && !current.stream ? { stream: pendingStreamForTurn(action.turn.id) } : {}),
+        ...live,
       });
     }
     case "turn-patch": {
@@ -870,6 +900,8 @@ export type AppContextValue = {
   loadNewerTurns: (sessionId: string) => Promise<void>;
   loadTurnIndex: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
   jumpToTurn: (sessionId: string, target: number | { turnId: string }) => Promise<number>;
+  /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
+  loadLatestTurns: (sessionId: string) => Promise<boolean>;
   sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
   sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind }) => Promise<NewChatMessageResult>;
   loadComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<string>;
@@ -1616,9 +1648,11 @@ export function AppProvider({
         const response = await withTimeout(client.space(spaceId).session(sessionId).turns.listPaginated({ limit: 30 }), "Loading Chat");
         if (!isCurrentRequest()) return;
         const current = stateRef.current.sessionViews[sessionId];
-        const turns = mergeTurns(current?.turns ?? [], response.turns);
+        const loaded = { turns: current?.turns ?? [], hasMoreOlder: current?.hasMoreOlder ?? false, hasMoreNewer: current?.hasMoreNewer ?? false };
+        const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
+        // A head that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
+        const { turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, head) ?? (loaded.hasMoreNewer ? loaded : head);
         const messages = mergeDisplayMessages(messagesFromTurns(turns), current?.messages.filter(isLiveMessage) ?? []);
-        const keptOlderWindow = Boolean(current?.turns.some((turn) => turn.sequence < (response.turns[0]?.sequence ?? Number.MAX_SAFE_INTEGER)));
         dispatch({
           type: "session-refresh-end",
           sessionId,
@@ -1626,8 +1660,8 @@ export function AppProvider({
           session: response.session,
           messages,
           turns,
-          hasMoreOlder: keptOlderWindow ? current?.hasMoreOlder ?? true : response.hasMore,
-          hasMoreNewer: current?.hasMoreNewer ?? false,
+          hasMoreOlder,
+          hasMoreNewer,
           oldestCursor: turns[0]?.sequence ?? null,
           newestCursor: turns.at(-1)?.sequence ?? null,
         });
@@ -1782,6 +1816,26 @@ export function AppProvider({
     void saveMessages(userKey, sessionId, messagesFromTurns(mergeTurns(view?.turns ?? [], response.turns))).catch(() => undefined);
     return sequence;
   }, [dispatch, userKey]);
+
+  /** One request for the newest page, instead of paging forward through everything between. */
+  const loadLatestWindow = useCallback(async (sessionId: string): Promise<{ turns: SessionTurnRecord[]; replaced: boolean }> => {
+    const view = stateRef.current.sessionViews[sessionId];
+    if (!view?.hasMoreNewer) return { turns: view?.turns ?? [], replaced: false };
+    const spaceId = view.session?.spaceId ?? stateRef.current.sessions.find((item) => item.id === sessionId)?.spaceId;
+    const activeClient = clientRef.current;
+    if (!activeClient || !spaceId) throw new Error(translate("data.chatContextUnavailable"));
+    const openToken = openTokens.current.get(sessionId);
+    const response = await withTimeout(activeClient.space(spaceId).session(sessionId).turns.listPaginated({ limit: 30 }), "Loading Chat");
+    const current = stateRef.current.sessionViews[sessionId] ?? view;
+    const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
+    const merged = mergeTurnWindows(current, head);
+    if (openTokens.current.get(sessionId) !== openToken) return { turns: (merged ?? head).turns, replaced: merged === null };
+    dispatch({ type: "session-window-success", sessionId, session: response.session, turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false, newest: true });
+    void saveMessages(userKey, sessionId, messagesFromTurns(response.turns)).catch(() => undefined);
+    return { turns: (merged ?? head).turns, replaced: merged === null };
+  }, [dispatch, userKey]);
+
+  const loadLatestTurns = useCallback(async (sessionId: string) => (await loadLatestWindow(sessionId)).replaced, [loadLatestWindow]);
 
   /**
    * (Re)attach realtime subscriptions for an open Chat. `recover: true` seeds the
@@ -2005,7 +2059,8 @@ export function AppProvider({
     sessionSpaces.current.delete(sessionId);
     openTokens.current.set(sessionId, (openTokens.current.get(sessionId) ?? 0) + 1);
     optimisticMessageSequenceRef.current.delete(sessionId);
-  }, []);
+    dispatch({ type: "session-release", sessionId });
+  }, [dispatch]);
 
   useLayoutEffect(() => {
     sessionLoadRef.current = loadSession;
@@ -2060,12 +2115,23 @@ export function AppProvider({
       if (!text && attachments.length === 0) return;
 
       const clientMessageId = newId();
+      // The send lands after the newest Turn, so a detached window comes back to it first.
+      let turns = view?.turns ?? [];
+      if (view?.hasMoreNewer) {
+        dispatch({ type: "send-start", sessionId });
+        try {
+          turns = (await loadLatestWindow(sessionId)).turns;
+        } catch (error) {
+          dispatch({ type: "send-failed", sessionId, clientMessageId, message: errorMessage(error, translate("data.loadNewerFailed")) });
+          throw error;
+        }
+      }
       const optimisticText = text || attachments.map((item) => item.name).join(", ");
-      const turnSequence = nextTurnSequence(view?.turns ?? [], view?.messages ?? []);
+      const turnSequence = nextTurnSequence(turns, view?.messages ?? []);
       const currentMax = Math.max(
         0,
         ...(view?.messages ?? []).map((message) => message.sequence),
-        (view?.turns.at(-1)?.sequence ?? 0) * 2,
+        (turns.at(-1)?.sequence ?? 0) * 2,
         optimisticMessageSequenceRef.current.get(sessionId) ?? 0,
         turnSequence * 2 - 1,
       );
@@ -2090,7 +2156,7 @@ export function AppProvider({
         stopReason: null,
         errorMessage: null,
         usage: null,
-        meta: { optimistic: true, queuedFollowup: shouldQueueFollowup(view?.turns ?? [], view?.stream), clientMessageId, turnSequence, ...(options.harness ? { harness: options.harness } : {}), ...(options.model?.thinkingLevel ? { requestedThinkingLevel: options.model.thinkingLevel } : {}) },
+        meta: { optimistic: true, queuedFollowup: shouldQueueFollowup(turns, view?.stream), clientMessageId, turnSequence, ...(options.harness ? { harness: options.harness } : {}), ...(options.model?.thinkingLevel ? { requestedThinkingLevel: options.model.thinkingLevel } : {}) },
         authorUuid: userUuid,
         authorProfile: null,
         startedAt: null,
@@ -2133,7 +2199,7 @@ export function AppProvider({
         throw error;
       }
     },
-    [client, dispatch, sync, userKey, userUuid],
+    [client, dispatch, loadLatestWindow, sync, userKey, userUuid],
   );
 
   const sendNewMessage = useCallback(
@@ -2446,6 +2512,7 @@ export function AppProvider({
       loadNewerTurns,
       loadTurnIndex,
       jumpToTurn,
+      loadLatestTurns,
       sendMessage,
       sendNewMessage,
       loadComposerDraft: loadComposerDraftForUser,
@@ -2497,6 +2564,7 @@ export function AppProvider({
       toggleSpacePin,
       installationId,
       jumpToTurn,
+      loadLatestTurns,
       loadModelStatus,
       loadModels,
       loadMoreSessions,

@@ -3,7 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
 import Animated, { cubicBezier, useAnimatedRef, useReducedMotion } from "react-native-reanimated";
 import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
@@ -48,7 +48,7 @@ import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
 import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
 import { harnessLabel, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
-import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
+import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
@@ -64,6 +64,9 @@ const NEW_COMPOSER_DRAFT_SCOPE = { kind: "new" } as const;
 const messageViewabilityConfig = { itemVisiblePercentThreshold: 20 };
 /** Only used to estimate the destination of a jump the list cannot resolve on its own. */
 const FALLBACK_ROW_HEIGHT = 140;
+const OPEN_SETTLE_MS = 300;
+/** Cached Chats paint within this; a placeholder before it is only a flash. */
+const OPENING_PLACEHOLDER_DELAY_MS = 300;
 // Rows a catch-up adds settle in from just below; the strong ease-out lands them without a tail.
 const ARRIVAL_STYLE = {
   animationName: { from: { opacity: 0, transform: [{ translateY: 8 }] }, to: { opacity: 1, transform: [{ translateY: 0 }] } },
@@ -71,6 +74,7 @@ const ARRIVAL_STYLE = {
   animationTimingFunction: cubicBezier(0.23, 1, 0.32, 1),
 } as const;
 const ARRIVAL_STYLE_REDUCED = { animationName: { from: { opacity: 0 }, to: { opacity: 1 } }, animationDuration: 200 } as const;
+const TURN_START_STYLE = { paddingTop: 8 } as const;
 
 // Decided once per mount: removing the CSS animation mid-fade leaves the row at its partial opacity.
 function ArrivalRow({ arrival, reducedMotion, children }: { arrival: boolean; reducedMotion: boolean; children: ReactNode }) {
@@ -178,7 +182,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { state, client, connectionUnavailable, refreshHome, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
+  const { state, client, connectionUnavailable, refreshHome, sendMessage, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
   const view = useSession(sessionId);
   const session = view.session ?? state.sessions.find((item) => item.id === sessionId) ?? null;
   const sessionSummary = state.sessions.find((item) => item.id === sessionId) ?? null;
@@ -294,8 +298,21 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const [forkingTurnId, setForkingTurnId] = useState<string | null>(null);
   const [turnNavigatorOpen, setTurnNavigatorOpen] = useState(false);
   const [loadingSequence, setLoadingSequence] = useState<number | null>(null);
-  // Initial layout stays nonanimated; live replies are measured with their owning row.
   const [listLoaded, setListLoaded] = useState(false);
+  // Tail pins snap until opening has settled; animating them was the visible chase to the tail.
+  const [openSettled, setOpenSettled] = useState(false);
+  const [openingDelayElapsed, setOpeningDelayElapsed] = useState(false);
+  // The newest page replacing the loaded turns mounts a fresh list that places itself like an open.
+  const [mountGeneration] = useState(view.windowGeneration);
+  const [listGeneration, setListGeneration] = useState(view.windowGeneration);
+  if (listGeneration !== view.windowGeneration) {
+    setListGeneration(view.windowGeneration);
+    setListLoaded(false);
+    setOpenSettled(false);
+    setOpeningDelayElapsed(false);
+  }
+  const listPlacedRef = useRef(false);
+  const [jumpingToLatest, setJumpingToLatest] = useState(false);
   // Entry timeline for the opt-in diagnostics: markChatEntry is a no-op unless enabled.
   const entryRendersRef = useRef(0);
   const entryHistoryLoadedRef = useRef(false);
@@ -358,6 +375,12 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     followingTailRef.current = next;
     setFollowingTailState(next);
   }, [trace]);
+  useEffect(() => {
+    if (view.hasMoreNewer) setFollowingTail(false);
+  }, [setFollowingTail, view.hasMoreNewer]);
+  useLayoutEffect(() => {
+    listPlacedRef.current = false;
+  }, [listGeneration]);
   const setFollowPinAnimated = useCallback((next: boolean) => {
     if (followPinAnimatedRef.current === next) return;
     followPinAnimatedRef.current = next;
@@ -376,11 +399,12 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [trace]);
   const requestFollowTail = useCallback((animated = false) => {
     trace("tail.request", { animated });
-    if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
+    // A list still placing itself owns the scroll; a command would race it.
+    if (!listPlacedRef.current || !followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
     if (followTailFrameRef.current !== null) cancelAnimationFrame(followTailFrameRef.current);
     followTailFrameRef.current = requestAnimationFrame(() => {
       followTailFrameRef.current = null;
-      if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
+      if (!listPlacedRef.current || !followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
       traceEnd("tail.frame", animated);
       if (animated) return;
       requestAnimationFrame(() => {
@@ -453,15 +477,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   useEffect(() => { recordDebugEvent("chat.queue.state", { count: queuedFollowups.length, ids: queuedFollowups.map((turn) => chatScrollTrace.alias("turn", turn.id)) }); }, [queuedFollowups]);
   const messages = useMemo(() => {
     const history = messagesFromTurns(view.turns);
-    return withTurnSequences(
+    return messagesInWindow(withTurnSequences(
       mergeDisplayMessages(history.length > 0 ? history : view.messages, history.length > 0 ? view.messages : [])
         .filter((message) => !isOptimisticFollowup(message) && !isAssistantIntermediate(message) && hasRenderableMessage(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId))),
       view.turns,
-    );
-  }, [queuedFollowupIds, view.messages, view.turns]);
+    ), { turns: view.turns, hasMoreNewer: view.hasMoreNewer });
+  }, [queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
-  const turnIndexBySequence = useMemo(() => new Map(view.turnIndex.map((entry) => [entry.sequence, entry])), [view.turnIndex]);
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
   const turnsBySequence = useMemo(() => {
     const map = new Map<number, SessionTurnRecord[]>();
@@ -550,12 +573,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   // Mounting LegendList empty then filling it drops `initialScrollAtEnd`, so the first paint
   // would show the oldest rows and jump. Wait until there is a tail to pin to.
   const timelineReady = messages.length > 0 || view.historyLoaded || Boolean(liveStream) || view.sending;
-  const threadPlaceholder = chatThreadPlaceholder({
+  // The list stays invisible until it has settled on the tail, so the opening state covers that too.
+  const placeholder = chatThreadPlaceholder({
     messageCount: messages.length,
     historyLoaded: view.historyLoaded,
     error: view.error,
     hasLiveActivity: Boolean(liveStream || view.sending),
-  });
+  }) ?? (timelineReady && !listLoaded ? "opening" : null);
+  const threadPlaceholder = placeholder === "opening" && !openingDelayElapsed ? null : placeholder;
   const running = state.sessionLatestTurns[sessionId]?.status === "running" || view.sending || (liveStream && isLiveStreamStatus(view.stream?.status ?? ""));
   const appendVoiceText = useCallback((text: string) => {
     const current = inputRef.current.trim();
@@ -564,6 +589,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const voice = useNativeVoiceInput({ getAccessToken, onFinal: appendVoiceText });
 
   const handleListLoad = useCallback(() => {
+    listPlacedRef.current = true;
     setListLoaded(true);
   }, []);
 
@@ -587,6 +613,18 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   useEffect(() => {
     if (listLoaded) markChatEntry("list.loaded", { renders: entryRendersRef.current });
   }, [listLoaded]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setOpeningDelayElapsed(true), OPENING_PLACEHOLDER_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [listGeneration]);
+
+  const openQuiet = listLoaded && view.historyLoaded && !view.catchingUp;
+  useEffect(() => {
+    if (openSettled || !openQuiet) return;
+    const timer = setTimeout(() => setOpenSettled(true), OPEN_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [openQuiet, openSettled]);
 
   useEffect(() => {
     let active = true;
@@ -892,6 +930,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       distanceToBottom: distanceToLatest,
       userInteracting: chatTailScrolledAway({ dragging: userDraggingRef.current, momentum: momentumScrollingRef.current, contentGrew: grew, offsetDelta }),
       pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()),
+      detached: view.hasMoreNewer,
     }));
     // Native animated scrollTo cannot retarget; snap once a burst opens a gap the pin would chase.
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
@@ -900,7 +939,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       requestFollowTail(false);
       return;
     }
-    if (initialScrollDone.current && distanceToOldest < CHAT_PAGE_THRESHOLD && view.hasMoreOlder && !view.loadingOlder) {
+    if (initialScrollDone.current && listPlacedRef.current && distanceToOldest < CHAT_PAGE_THRESHOLD && view.hasMoreOlder && !view.loadingOlder) {
       trace("pagination.request", { direction: "older", distanceToOldest });
       void loadOlderTurns(sessionId);
     }
@@ -964,10 +1003,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     userDraggingRef.current = false;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height);
-    setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null }));
+    setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null, detached: view.hasMoreNewer }));
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
     requestFollowTail();
-  }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, trace]);
+  }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, trace, view.hasMoreNewer]);
 
   const handleMomentumScrollBegin = useCallback(() => {
     traceAction("chat_list_momentum_begin");
@@ -983,10 +1022,30 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     if (pendingScrollSequence.current !== null) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height);
-    setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()) }));
+    setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()), detached: view.hasMoreNewer }));
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
     requestFollowTail();
-  }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, targetIsLatestMessage, trace]);
+  }, [requestFollowTail, setFollowPinAnimated, setFollowingTail, targetIsLatestMessage, trace, view.hasMoreNewer]);
+
+  const jumpToLatest = useCallback(async () => {
+    cancelTurnScroll();
+    if (!view.hasMoreNewer) {
+      setFollowingTail(true);
+      requestFollowTail(true);
+      return;
+    }
+    setJumpingToLatest(true);
+    try {
+      const replaced = await loadLatestTurns(sessionId);
+      setFollowingTail(true);
+      // A replaced window remounts the list, which places itself at the end.
+      if (!replaced) requestFollowTail(true);
+    } catch (error) {
+      showToast({ title: t("chat.jumpLatestFailed"), message: error instanceof Error ? error.message : t("data.loadNewerFailed"), tone: "danger" });
+    } finally {
+      setJumpingToLatest(false);
+    }
+  }, [cancelTurnScroll, loadLatestTurns, requestFollowTail, sessionId, setFollowingTail, showToast, t, view.hasMoreNewer]);
 
   const handleCopyMessage = useCallback((text: string) => {
     recordDebugEvent("chat.message.copy", { session: debugAlias("session", sessionId), length: text.length });
@@ -1096,14 +1155,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   // identity. These are stable across stream batches, so a live turn no longer re-renders every
   // mounted row (the live step list subscribes on its own instead).
   const streamTurnId = view.stream?.turnId ?? null;
-  const replyAnchor = liveStream || (view.sending && !view.messages.some(isOptimisticFollowup)) ? liveReplyAnchor(messages, liveStream ? streamTurnId : null) : null;
+  const replyAnchor = liveStream || (view.sending && !view.messages.some(isOptimisticFollowup)) ? liveReplyAnchor(messages, liveStream ? streamTurnId : null, view.hasMoreNewer) : null;
   // LegendList memoizes each row on [item, extraData]; fork/send-transition state renders
   // inside a row but never changes `messages`, so it must flow through extraData to reach it.
   const rowExtraData = useMemo(
     () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, t, theme }),
     [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, t, theme],
   );
-  const keyExtractor = useCallback((item: MessageRecord) => `${turnSequenceForMessage(item) ?? item.id}:${item.role}`, []);
+  const keyExtractor = useCallback((item: MessageRecord) => messageRowKey(item), []);
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
   // first measured assistant does not poison the estimate used for the next user row.
   const getMessageItemType = useCallback((item: MessageRecord) => item.role, []);
@@ -1114,7 +1173,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const maintainVisiblePosition = useMemo(() => (followingTail ? undefined : { data: true }), [followingTail]);
   // Row growth uses the list's pin, including tool expansion and streaming. Small growth animates;
   // a burst that outruns the pin snaps so the tail cannot run away.
-  const maintainScrollAtEnd = useMemo(() => chatMaintainScrollAtEnd(followingTail, listLoaded && !reducedMotion && followPinAnimated), [followPinAnimated, followingTail, listLoaded, reducedMotion]);
+  const maintainScrollAtEnd = useMemo(() => chatMaintainScrollAtEnd(followingTail, openSettled && !reducedMotion && followPinAnimated), [followPinAnimated, followingTail, openSettled, reducedMotion]);
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
     trace("list.layout", { ...event.nativeEvent.layout });
     setListWidth(event.nativeEvent.layout.width);
@@ -1128,10 +1187,6 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     const chronologicalIndex = index;
     const isTransitionMessage = sendTransition?.destination === "bubble" && !queueTransitionActive && isSendBubbleMessage(item, sendTransition.message);
     const sequence = turnSequenceForMessage(item);
-    const older = messages[index - 1];
-    const olderSequence = older ? turnSequenceForMessage(older) : null;
-    const showTurnMarker = sequence !== null && sequence !== olderSequence;
-    const turn = sequence === null ? null : turnIndexBySequence.get(sequence) ?? null;
     const messageTurn = typeof item.meta?.turnId === "string" ? turnsById.get(item.meta.turnId) ?? null : null;
     const sequenceTurns = item.role === "user" && sequence !== null ? turnsBySequence.get(sequence) : undefined;
     const newer = messages[index + 1];
@@ -1140,8 +1195,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(`${turnSequenceForMessage(item) ?? item.id}:${item.role}`, row)} collapsable={false} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{showTurnMarker ? <TurnMarker sequence={sequence} status={turn?.status} /> : null}{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId === turn?.id} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
-  }, [arrivalBaseline, client, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnIndexBySequence, turnsById, turnsBySequence, windowWidth]);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
+  }, [arrivalBaseline, client, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
 
   if (view.loading && !session && view.messages.length === 0 && view.turns.length === 0) return <Screen edgeToEdge><EdgeHeader onLayout={onHeaderLayout}><TopBar transparent title={t("chat.title")} onBack={() => { traceBackPress(); router.back(); }} /></EdgeHeader><View style={{ flex: 1, paddingTop: headerHeight }}><ChatThreadPlaceholder kind="opening" /></View></Screen>;
   return <Screen keyboard edgeToEdge>
@@ -1156,6 +1211,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
         {timelineReady ? <LegendList
+          key={listGeneration}
           {...traceTouches}
           ref={listRef}
           data={messages}
@@ -1166,7 +1222,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           estimatedItemSize={FALLBACK_ROW_HEIGHT}
           getItemType={getMessageItemType}
           // Deep links still own the first scroll; otherwise open on the tail instead of the oldest row.
-          initialScrollAtEnd={!hasInitialTurnTarget}
+          initialScrollAtEnd={!hasInitialTurnTarget || listGeneration !== mountGeneration}
           // Android scrolls a focused selectable text into view; selecting a message must not
           // move the timeline. Explicit turn/tail scrolling stays enabled.
           scrollsChildToFocus={false}
@@ -1190,15 +1246,17 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           onContentSizeChange={handleContentSizeChange}
           {...listRefreshProps({ refreshing: view.refreshing, onRefresh: handleListRefresh, progressViewOffset: headerHeight })}
           ListHeaderComponent={view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}
-          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}{catchUpLoader && !view.hasMoreNewer && !liveStream ? <ListEdgeLoader label={t("chat.catchingUp")} /> : null}</View>}
+          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /> : null}
         {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}
 
-        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} onPress={() => { cancelTurnScroll(); setFollowingTail(true); requestFollowTail(true); }} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} /><AppIcon name="arrow-down" size={18} tone="accent" /></Pressable> : null}
+        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}
         {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 5 }} /> : null}
         {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 6 }} /> : null}
         </View>
         <EdgeFooter onLayout={onFooterLayout}>
+        {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
+        {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
         {queueItems.length > 0 ? <View className="px-3 pt-2 pb-1.5 gap-1.5">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
@@ -1280,12 +1338,6 @@ function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
       <Text className="text-body text-fg-muted text-center mt-1.5 max-w-72">{t("chat.placeholder.empty.body")}</Text>
     </View>
   );
-}
-
-function TurnMarker({ sequence, status }: { sequence: number; status?: string }) {
-  const color = status === "failed" ? "text-danger" : status === "running" || status === "queued" ? "text-warning" : "text-fg-faint";
-  // Layout values are exact: turn markers are measured by the chat's scroll anchoring.
-  return <View onLayout={(event) => recordDebugEvent("chat.turn_marker.layout", { sequence, status: status ?? null, ...event.nativeEvent.layout })} className="flex-row items-center gap-2 px-4" style={{ paddingTop: 13, paddingBottom: 2 }}><View className="h-px flex-1 bg-border" /><Text className={`text-micro tabular-nums ${color}`}>#{sequence}</Text><View className="h-px flex-1 bg-border" /></View>;
 }
 
 function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: (created: { session: SessionRecord; transition: SendBubbleTransition | null }) => void }) {

@@ -19,6 +19,14 @@ export function getBubbleMaxWidth(availableWidth: number): number {
   return Math.max(0, Math.min(availableWidth - 24, Math.round(availableWidth * 0.86) - 24));
 }
 
+export const REPLY_INSET_X = 16;
+/** Holds the 32pt buttons' 44pt touch targets; hitSlop never reaches past a parent. */
+export const REPLY_META_HEIGHT = 44;
+
+export function getReplyContentWidth(availableWidth: number): number {
+  return Math.max(0, availableWidth - REPLY_INSET_X * 2);
+}
+
 /** Only a single-line body may grow for its clock; never narrow/reflow a paragraph for metadata. */
 export function getBubbleMetaLayout(text: BubbleTextMetrics | null, meta: { width: number; height: number } | null, maxWidth: number): { minWidth: number; marginTop: number; inline: boolean } {
   const separate = { minWidth: 0, marginTop: 2, inline: false };

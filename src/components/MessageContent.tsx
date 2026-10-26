@@ -4,7 +4,7 @@ import { Link, useRouter } from "expo-router";
 import { createContext, memo, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
-import { FlatList, Image, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type ViewStyle } from "react-native";
+import { FlatList, Image, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import Reanimated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
@@ -20,7 +20,7 @@ import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { AppIcon, Loader, type IconName } from "@/src/ui";
-import { BUBBLE_PADDING_X, getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
+import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth } from "@/src/ui/message-bubble-layout";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { turnSequenceForMessage } from "@/src/data/session-history";
@@ -62,8 +62,10 @@ function useOpenMessageLink(spaceId: string | null) {
 }
 
 // design-system-begin: react-native-enriched-markdown is a native renderer that takes JS style objects, so it reads tokens through the theme.
-function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false): MarkdownStyle {
+function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false, onSurface = false): MarkdownStyle {
   const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color };
+  // Wells step up from their backdrop: the page under replies, a surface in bubbles and cards.
+  const well = onUserBubble || onSurface ? theme.colors.surfaceRaised : theme.colors.surface;
   // Blocks in a bubble sit closer than in a document: one gap for paragraphs, lists, quotes, and code.
   const gap = Math.round(body.lineHeight * 0.45);
   const heading = (size: number, fontWeight: "700" | "600" = "700"): MarkdownStyle["h1"] => {
@@ -142,14 +144,14 @@ function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme
       borderColor: theme.colors.border,
       borderWidth: 1,
       borderRadius: 12,
-      headerBackgroundColor: theme.colors.surfaceRaised,
+      headerBackgroundColor: well,
       headerTextColor: theme.colors.text,
       rowEvenBackgroundColor: "transparent",
       rowOddBackgroundColor: "transparent",
       cellPaddingHorizontal: 10,
       cellPaddingVertical: 6,
     },
-    codeBlock: { fontFamily: "SpaceMono", fontSize: typography.code.fontSize, lineHeight: typography.code.lineHeight, color: theme.colors.text, backgroundColor: theme.colors.surfaceRaised, borderColor: "transparent", borderWidth: 0, borderRadius: 12, padding: 12, marginBottom: gap, syntaxColors },
+    codeBlock: { fontFamily: "SpaceMono", fontSize: typography.code.fontSize, lineHeight: typography.code.lineHeight, color: theme.colors.text, backgroundColor: well, borderColor: "transparent", borderWidth: 0, borderRadius: 12, padding: 12, marginBottom: gap, syntaxColors },
     code: {
       fontFamily: inlineMono,
       fontSize: Math.max(11, Math.round(typography.chatBody.fontSize * 0.86)),
@@ -297,7 +299,7 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
       </Pressable>
       {expanded && hasSummary ? <View className="border-t border-border" style={{ maxHeight: 320 }}>
         <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}>
-          <EnrichedMarkdownText markdown={info.summary} markdownStyle={enrichedMarkdownStyle(theme, theme.colors.textSecondary)} selectable flavor="github" />
+          <EnrichedMarkdownText markdown={info.summary} markdownStyle={enrichedMarkdownStyle(theme, theme.colors.textSecondary, undefined, false, true)} selectable flavor="github" />
         </ScrollView>
       </View> : null}
     </View>
@@ -401,15 +403,15 @@ export function MessageContent({ content, active = false, color, linkColor, imag
   })}{footer && !textFooter ? <View className="self-end mt-0.5">{footer}</View> : null}</View>;
 }
 
-function chatBubbleStyle(theme: AppTheme, side: "user" | "assistant", maxWidth: number): ViewStyle {
+function userBubbleStyle(theme: AppTheme, maxWidth: number): ViewStyle {
   return {
     maxWidth,
     minWidth: 0,
     position: "relative",
-    alignSelf: side === "user" ? "flex-end" : "flex-start",
+    alignSelf: "flex-end",
     borderRadius: theme.radius.md,
     borderCurve: "continuous",
-    backgroundColor: side === "user" ? theme.colors.userBubble : theme.colors.assistantBubble,
+    backgroundColor: theme.colors.userBubble,
     paddingHorizontal: BUBBLE_PADDING_X,
     paddingTop: 9,
     paddingBottom: 8,
@@ -417,15 +419,13 @@ function chatBubbleStyle(theme: AppTheme, side: "user" | "assistant", maxWidth: 
   };
 }
 
-function ChatBubbleFrame({
-  side,
+function UserBubbleFrame({
   children,
   maxWidth,
   bubbleRef,
   onBubbleLayout,
   surfaceHidden = false,
 }: {
-  side: "user" | "assistant";
   children: ReactNode;
   maxWidth: number;
   bubbleRef?: RefObject<View | null>;
@@ -433,7 +433,7 @@ function ChatBubbleFrame({
   surfaceHidden?: boolean;
 }) {
   const theme = useAppTheme();
-  const style = chatBubbleStyle(theme, side, maxWidth);
+  const style = userBubbleStyle(theme, maxWidth);
   return <BubbleContentWidth.Provider value={Math.max(0, maxWidth - BUBBLE_PADDING_X * 2)}><Reanimated.View ref={bubbleRef} collapsable={false} onLayout={onBubbleLayout} style={[style, surfaceHidden ? { backgroundColor: "transparent" } : null]}>{children}</Reanimated.View></BubbleContentWidth.Provider>;
 }
 
@@ -456,26 +456,68 @@ function TypingIndicator() {
   </View>;
 }
 
-function BubbleMeta({ clock, local = false, side, live = false, t }: { clock?: string; local?: boolean; side: "user" | "assistant"; live?: boolean; t: Translate }) {
+function BubbleMeta({ clock, local = false, t }: { clock?: string; local?: boolean; t: Translate }) {
   const theme = useAppTheme();
-  const color = side === "user" ? theme.colors.userBubbleMeta : theme.colors.textFaint;
-  if (!clock && !local && !live) return null;
+  const color = theme.colors.userBubbleMeta;
+  if (!clock && !local) return null;
   // Never wraps: the bubble shrink-wraps to this row, and fractional text widths can leave it a
   // sub-pixel short of its own content, which wrapped the receipt out under the bubble.
   return <View className="shrink-0 flex-row items-center justify-end" style={{ gap: 3 }}>
-    {live ? <View className="rounded-full bg-accent" style={{ width: 5, height: 5, marginRight: 2 }} /> : null}
     {/* design-system: the bubble meta color depends on the bubble it sits in; its width feeds the inline-meta layout. */}
     {clock ? <Text style={[typography.micro, { color, fontVariant: ["tabular-nums"] }]}>{clock}</Text> : null}
-    {side === "user" && local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View> : null}
-    {side === "user" && !local ? <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} /> : null}
+    {local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View> : <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} />}
   </View>;
+}
+
+function replyDetails(message: MessageRecord, t: Translate) {
+  const turn = turnSequenceForMessage(message);
+  const thinkingLevel = requestedThinkingLevel(message.meta);
+  const usage = message.usage;
+  const inputTokenValue = (usage?.input ?? 0) + (usage?.cacheRead ?? 0);
+  const cachedInputTokens = typeof usage?.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead > 0 ? formatTokenCount(usage.cacheRead) : null;
+  const inputTokens = inputTokenValue > 0 ? formatTokenCount(inputTokenValue) : null;
+  const outputTokens = typeof usage?.output === "number" && Number.isFinite(usage.output) && usage.output > 0 ? formatTokenCount(usage.output) : null;
+  return [
+    turn !== null ? `#${turn}` : null,
+    message.model || (thinkingLevel || inputTokens || outputTokens ? t("chat.model.agent") : null),
+    thinkingLevel ? formatThinkingLevel(thinkingLevel) : null,
+    inputTokens ? `↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : null,
+    outputTokens ? `↓${outputTokens}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function ReplyMeta({ message, clock, copyText, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(timeout);
+  }, [copied]);
+  const details = replyDetails(message, t);
+  const canCopy = Boolean(onCopy && copyText);
+  const canFork = Boolean(onFork && typeof message.meta?.turnId === "string");
+  const hasActions = canCopy || canFork;
+  if (!hasActions && !details && !clock) return null;
+  // The first glyph lines up with the reply text; its touch target hangs into the margin.
+  return <View className="flex-row items-center" style={{ height: REPLY_META_HEIGHT, marginLeft: hasActions ? -9 : 0 }}>
+    {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy?.(copyText); setCopied(true); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
+    {canFork ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork?.(message)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
+    {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. */}
+    <Text selectable numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={hasActions ? { marginLeft: 3 } : undefined}>{details}</Text>
+    {clock ? <Text className="ml-2 shrink-0 text-micro text-fg-faint tabular-nums">{clock}</Text> : null}
+  </View>;
+}
+
+function LiveDot() {
+  return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
 export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
-  const [copied, setCopied] = useState(false);
   const tracing = useSyncExternalStore(chatScrollTrace.subscribe, chatScrollTrace.isRecording, chatScrollTrace.isRecording);
   const traceIdentity = () => ({
     session: chatScrollTrace.alias("session", message.sessionId),
@@ -488,52 +530,46 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
     theme: theme.mode, fontSize: typography.chatBody.fontSize,
   });
   const traceTouches = useTraceTouches("bubble", traceIdentity, tracing);
-  useEffect(() => {
-    if (!copied) return;
-    const timeout = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(timeout);
-  }, [copied]);
   const isUser = message.role === "user";
   const bubbleEnvironment = useMemo(() => ({ onUser: isUser, spaceId }), [isUser, spaceId]);
   const compaction = compactionFromMessage(message);
   if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return <CompactionNotice info={compaction} />;
   if (!hasRenderableMessage(message)) return null;
-  const isSystem = message.role === "system";
-  if (isSystem) return <View className="items-center px-6 py-2"><Text className="text-caption text-fg-faint text-center">{message.text || t("chat.systemUpdate")}</Text></View>;
-  const thinkingLevel = requestedThinkingLevel(message.meta);
-  const inputTokenValue = (message.usage?.input ?? 0) + (message.usage?.cacheRead ?? 0);
-  const cachedInputTokens = typeof message.usage?.cacheRead === "number" && Number.isFinite(message.usage.cacheRead) && message.usage.cacheRead > 0 ? formatTokenCount(message.usage.cacheRead) : null;
-  const inputTokens = inputTokenValue > 0 ? formatTokenCount(inputTokenValue) : null;
-  const outputTokens = typeof message.usage?.output === "number" && Number.isFinite(message.usage.output) && message.usage.output > 0 ? formatTokenCount(message.usage.output) : null;
-  const side = isUser ? "user" : "assistant";
-  const textColor = isUser ? theme.colors.userBubbleText : theme.colors.assistantBubbleText;
-  const copyText = messageText(message);
-  const maxWidth = getBubbleMaxWidth(availableWidth ?? width);
+  if (message.role === "system") return <View className="items-center px-6 py-2"><Text className="text-caption text-fg-faint text-center">{message.text || t("chat.systemUpdate")}</Text></View>;
+  const rowWidth = availableWidth ?? width;
   const clock = formatMessageClock(message.createdAt);
-  const footer = clock || local ? <BubbleMeta clock={clock} local={local} side={side} t={t} /> : undefined;
-  return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={tracing ? (event) => chatScrollTrace.record("bubble.layout", "bubble", { ...traceIdentity(), ...event.nativeEvent.layout }) : undefined} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: 5, alignItems: isUser ? "flex-end" : "flex-start" }}>
-    <BubbleTraceMessage.Provider value={message}><ChatBubbleFrame side={side} maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
-      {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={isUser ? theme.colors.userBubbleLink : undefined} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={message.errorMessage ? undefined : footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={isUser ? theme.colors.userBubbleLink : undefined} footer={message.errorMessage ? undefined : footer} /> : !message.errorMessage ? footer : null}
+  const onRowLayout = tracing ? (event: LayoutChangeEvent) => chatScrollTrace.record("bubble.layout", "bubble", { ...traceIdentity(), ...event.nativeEvent.layout }) : undefined;
+  if (!isUser) {
+    const contentWidth = getReplyContentWidth(rowWidth);
+    const textColor = theme.colors.assistantBubbleText;
+    const body = hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} imageMaxWidth={contentWidth} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} /> : null;
+    return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: "100%", opacity: hidden ? 0 : 1, paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
+      <BubbleTraceMessage.Provider value={message}><BubbleContentWidth.Provider value={contentWidth}>
+        {body}
+        {message.errorMessage ? <View className={`${body ? "mt-2 " : ""}rounded-md bg-danger-soft px-3 py-2`} style={{ borderCurve: "continuous" }}><Text selectable className="text-caption text-danger">{message.errorMessage}</Text></View> : null}
+      </BubbleContentWidth.Provider></BubbleTraceMessage.Provider>
+      <ReplyMeta message={message} clock={clock} copyText={messageText(message)} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
+    </View></BubbleContext.Provider>;
+  }
+  const textColor = theme.colors.userBubbleText;
+  const maxWidth = getBubbleMaxWidth(rowWidth);
+  const footer = clock || local ? <BubbleMeta clock={clock} local={local} t={t} /> : undefined;
+  return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: 5, alignItems: "flex-end" }}>
+    <BubbleTraceMessage.Provider value={message}><UserBubbleFrame maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
+      {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={message.errorMessage ? undefined : footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={message.errorMessage ? undefined : footer} /> : !message.errorMessage ? footer : null}
       {/* design-system: BubbleText measures its lines from this style, so it must stay a JS style. */}
-      {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: isUser ? theme.colors.userBubbleText : theme.colors.danger }]}>{message.errorMessage}</BubbleText> : null}
-    </ChatBubbleFrame></BubbleTraceMessage.Provider>
-    {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. */}
-    {!isUser && (message.model || thinkingLevel || inputTokens || outputTokens) ? <Text selectable className="text-micro font-semibold text-fg-faint mt-1 ml-1 self-stretch">{`${message.model || t("chat.model.agent")}${thinkingLevel ? ` · ${formatThinkingLevel(thinkingLevel)}` : ""}${inputTokens ? ` · ↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : ""}${outputTokens ? ` · ↓${outputTokens}` : ""}`}</Text> : null}
-    {copyText && !isUser ? <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3, marginLeft: side === "assistant" ? 4 : 0, marginRight: side === "user" ? 4 : 0 }}>
-      {onCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy(copyText); setCopied(true); }} hitSlop={6} className="w-9 h-9 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
-      {!isUser && onFork && typeof message.meta?.turnId === "string" ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork(message)} hitSlop={6} className="size-9 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
-    </View> : null}
+      {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: theme.colors.userBubbleText }]}>{message.errorMessage}</BubbleText> : null}
+    </UserBubbleFrame></BubbleTraceMessage.Provider>
   </View></BubbleContext.Provider>;
 });
 
+/** Its status line matches the finished reply's meta line, so the swap at the end of a Turn moves nothing. */
 export function StreamCard({ content, status, runtimePhase = null, runtimeModel = null, availableWidth }: { content: ContentBlock[]; status: string; runtimePhase?: StreamView["runtimePhase"]; runtimeModel?: string | null; availableWidth?: number }) {
-  const theme = useAppTheme();
   const { width } = useWindowDimensions();
-  const maxWidth = getBubbleMaxWidth(availableWidth ?? width);
+  const contentWidth = getReplyContentWidth(availableWidth ?? width);
   const { t } = useTranslation();
-  const liveContent = content;
-  const hasLivePreview = liveContent.some((block) => (block.type === "text" && block.text.trim().length > 0) || (block.type === "thinking" && block.thinking.trim().length > 0) || block.type === "tool_use");
-  const hasRenderableLive = hasRenderableContent(liveContent);
+  const hasLivePreview = content.some((block) => (block.type === "text" && block.text.trim().length > 0) || (block.type === "thinking" && block.thinking.trim().length > 0) || block.type === "tool_use");
+  const hasRenderableLive = hasRenderableContent(content);
   // Mirrors the web turn footer: live content is the status itself; otherwise surface
   // what the runtime is doing so quiet gaps (agent launch, model latency) don't look frozen.
   const runtimeLabel = !hasLivePreview && (status === "pending" || status === "streaming")
@@ -545,26 +581,18 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
         ? t("message.stream.starting")
         : null
     : null;
-  const failed = status === "failed" || status === "interrupted";
   const statusLabel = status === "failed" ? t("message.stream.failed") : status === "interrupted" ? t("message.stream.stopped") : null;
   const live = status === "pending" || status === "streaming";
   const hasContent = hasLivePreview || hasRenderableLive;
-  const footer = live && !failed ? <BubbleMeta clock={formatMessageClock(new Date().toISOString())} side="assistant" live t={t} /> : undefined;
-  return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5, alignItems: "flex-start" }}>
-    <ChatBubbleFrame side="assistant" maxWidth={maxWidth}>
-      {!statusLabel && !hasContent && !runtimeLabel ? <View><TypingIndicator />{footer ? <View className="self-end mt-0.5">{footer}</View> : null}</View> : null}
-      {statusLabel ? <Text className="text-caption text-danger" style={{ marginBottom: hasLivePreview || runtimeLabel ? 6 : 0 }}>{statusLabel}</Text> : null}
-      {runtimeLabel ? <RuntimeStatusLine label={runtimeLabel} footer={hasContent ? undefined : footer} color={theme.colors.textMuted} /> : null}
-      {hasContent ? <MessageContent active={live} content={liveContent} footer={footer} /> : null}
-    </ChatBubbleFrame>
-  </View>;
-}
-
-function RuntimeStatusLine({ label, footer, color }: { label: string; footer?: ReactNode; color: string }) {
-  return <View style={{ flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "100%" }}>
-    {/* design-system: the runtime label color follows the turn state passed in from the stream. */}
-    <Text numberOfLines={1} ellipsizeMode="tail" style={[typography.caption, { color, flexShrink: 1 }]}>{label}</Text>
-    {footer ? <View className="shrink-0">{footer}</View> : null}
+  return <View style={{ width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
+    {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={content} /></BubbleContentWidth.Provider> : null}
+    <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
+      {statusLabel ? <Text className="min-w-0 flex-1 text-caption text-danger">{statusLabel}</Text>
+        : runtimeLabel ? <><LiveDot /><Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{runtimeLabel}</Text></>
+        : hasContent ? <><LiveDot /><View className="flex-1" /></>
+        : <View className="flex-1"><TypingIndicator /></View>}
+      {live ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatMessageClock(new Date().toISOString())}</Text> : null}
+    </View>
   </View>;
 }
 

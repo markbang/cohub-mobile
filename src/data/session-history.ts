@@ -201,6 +201,47 @@ export function mergeTurns(
 	return [...bySequence.values()].sort((a, b) => a.sequence - b.sequence);
 }
 
+export type TurnWindow = {
+	turns: SessionTurnRecord[];
+	hasMoreOlder: boolean;
+	hasMoreNewer: boolean;
+};
+
+type TurnSpan = readonly Pick<SessionTurnRecord, "sequence">[];
+
+/** Joining stretches that neither overlap nor touch would hide the turns between, beyond any cursor. */
+export function turnWindowsJoin(current: TurnSpan, incoming: TurnSpan) {
+	const first = current[0]?.sequence;
+	const last = current.at(-1)?.sequence;
+	const incomingFirst = incoming[0]?.sequence;
+	const incomingLast = incoming.at(-1)?.sequence;
+	if (first === undefined || last === undefined || incomingFirst === undefined || incomingLast === undefined) return true;
+	return incomingFirst <= last + 1 && incomingLast >= first - 1;
+}
+
+export function turnFitsWindow(window: TurnWindow, sequence: number) {
+	const first = window.turns[0]?.sequence;
+	const last = window.turns.at(-1)?.sequence;
+	if (first === undefined || last === undefined) return true;
+	if (window.hasMoreNewer && sequence > last + 1) return false;
+	return !(window.hasMoreOlder && sequence < first - 1);
+}
+
+export function mergeTurnWindows(current: TurnWindow, incoming: TurnWindow): TurnWindow | null {
+	const first = current.turns[0];
+	const last = current.turns.at(-1);
+	const incomingFirst = incoming.turns[0];
+	const incomingLast = incoming.turns.at(-1);
+	if (!first || !last) return incoming;
+	if (!incomingFirst || !incomingLast) return current;
+	if (!turnWindowsJoin(current.turns, incoming.turns)) return null;
+	return {
+		turns: mergeTurns(current.turns, incoming.turns),
+		hasMoreOlder: first.sequence < incomingFirst.sequence ? current.hasMoreOlder : incoming.hasMoreOlder,
+		hasMoreNewer: last.sequence > incomingLast.sequence ? current.hasMoreNewer : incoming.hasMoreNewer,
+	};
+}
+
 export function turnSequenceForMessage(message: Pick<MessageRecord, "meta">) {
 	const value = message.meta?.turnSequence;
 	if (typeof value === "number" && Number.isInteger(value)) return value;
@@ -209,6 +250,18 @@ export function turnSequenceForMessage(message: Pick<MessageRecord, "meta">) {
 		return turn.sequence;
 	}
 	return null;
+}
+
+/** Cached, live, and server copies of one Turn's message carry different ids but are one row. */
+export function messageRowKey(message: Pick<MessageRecord, "id" | "role" | "meta">) {
+	return `${turnSequenceForMessage(message) ?? message.id}:${message.role}`;
+}
+
+/** A detached window shows only its own Turns, not live records from the running tail. */
+export function messagesInWindow<T extends Pick<MessageRecord, "meta">>(messages: T[], window: Pick<TurnWindow, "turns" | "hasMoreNewer">) {
+	const newest = window.turns.at(-1)?.sequence;
+	if (!window.hasMoreNewer || newest === undefined) return messages;
+	return messages.filter((message) => (turnSequenceForMessage(message) ?? Number.POSITIVE_INFINITY) <= newest);
 }
 
 /** Render live records in the same turn/role order as projected history, never by the independent DB message counter. */

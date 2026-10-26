@@ -674,6 +674,7 @@ export const en = {
   "chat.loadOlder": "Load earlier turns",
   "chat.loadOlder.short": "Earlier",
   "chat.jumpLatest": "Jump to latest",
+  "chat.jumpLatestFailed": "Unable to load the latest turns",
   "chat.followups": "Follow-ups · {count} queued",
   "chat.steerNow": "Steer now",
   "chat.steerAccessibility": "Steer now: {preview}",
