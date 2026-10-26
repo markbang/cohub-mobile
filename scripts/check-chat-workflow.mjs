@@ -4343,6 +4343,25 @@ for (const save of [
 }
 assert.equal(schemaRuns, 1, "writes do not repeat schema setup");
 
+{
+  // A fatal error ends the JS runtime; it must reach the log before React Native's handler runs.
+  const order = [];
+  let handler;
+  const flushed = Promise.withResolvers();
+  const fakeGlobal = { ErrorUtils: { getGlobalHandler: () => (_error, fatal) => order.push(`native:${fatal}`), setGlobalHandler: (next) => { handler = next; } } };
+  loadChromeComponent("../src/data/interaction-trace.ts", "installErrorLogging", {
+    globalThis: fakeGlobal, record: (name) => order.push(name), errorFields: () => ({}), FATAL_FLUSH_TIMEOUT_MS: 300,
+    flushDebugEventsNow: () => (order.push("flush"), flushed.promise),
+  })();
+  handler(new Error("boom"), true);
+  assert.deepEqual(order, ["error.uncaught", "flush"], "the fatal error is written before the runtime is torn down");
+  flushed.resolve();
+  await flushSync();
+  assert.equal(order.at(-1), "native:true");
+  handler(new Error("soft"), false);
+  assert.deepEqual(order.slice(-2), ["error.uncaught", "native:false"], "non-fatal errors hand off at once");
+}
+
 // LegendList memoizes each row on [item, extraData], unlike FlatList cells that re-rendered
 // with renderItem identity. Rows that read state outside `data` must forward it through
 // extraData, or in-place updates (thinking options, async counts, turn selection, fork/send
