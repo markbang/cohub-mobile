@@ -55,7 +55,7 @@
     "shiki": "^4.5.0",
     "tailwindcss": "^4.3.3",
     "unicode-segmenter": "^0.17.3",
-    "uniwind": "^1.12.2"
+    "uniwind": "^1.13.0"
   },
   "devDependencies": {
     "@types/culori": "^4.0.1",
