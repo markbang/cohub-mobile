@@ -15,6 +15,8 @@ type ChatTailStateInput = {
   distanceToBottom: number;
   userInteracting: boolean;
   pendingTarget: boolean;
+  /** The loaded turns stop short of the newest one. */
+  detached: boolean;
 };
 
 /**
@@ -34,7 +36,8 @@ export function chatFollowPinAnimated(distanceToBottom: number, currentlyAnimate
 }
 
 export function nextChatTailFollowing(input: ChatTailStateInput) {
-  if (input.pendingTarget) return false;
+  // The end of a detached window is not the Chat's tail; pinning to it chained every newer page in.
+  if (input.pendingTarget || input.detached) return false;
   if (input.userInteracting) return input.distanceToBottom <= CHAT_TAIL_THRESHOLD;
   return input.currentlyFollowing || input.distanceToBottom <= CHAT_TAIL_THRESHOLD;
 }

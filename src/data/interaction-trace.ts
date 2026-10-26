@@ -10,12 +10,14 @@ import {
   type GestureResponderEvent,
   type ViewProps,
 } from "react-native";
-import { debugAlias, redactText, record, setDebugContext } from "@/src/data/debug-session";
+import { debugAlias, flushDebugEventsNow, redactText, record, setDebugContext } from "@/src/data/debug-session";
 
 const ID_SEGMENT = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[A-Za-z0-9_-]{20,}|\d{6,})$/i;
 const SAFE_QUERY = new Set(["limit", "direction", "source", "days", "before", "after", "page", "sort", "status", "order", "offset", "timezone", "locale", "panel", "cursor", "turn", "turnId"]);
 const ALIAS_QUERY = new Set(["cursor", "turn", "turnId", "before", "after"]);
 const NETWORK_LOGGING_EXCLUDED = /\/api\/v1\/feedback(?:\?|$)/;
+/** How long a fatal error may hold React Native's teardown while its log entry is written. */
+const FATAL_FLUSH_TIMEOUT_MS = 300;
 
 function decode(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }
@@ -201,7 +203,12 @@ function installErrorLogging() {
     const previous = utils.getGlobalHandler?.();
     utils.setGlobalHandler((error, isFatal) => {
       record("error.uncaught", { fatal: Boolean(isFatal), ...errorFields(error) });
-      previous?.(error, isFatal);
+      if (!isFatal) {
+        previous?.(error, isFatal);
+        return;
+      }
+      // React Native's fatal handling ends the runtime; the error would die with the unwritten batch.
+      void flushDebugEventsNow(FATAL_FLUSH_TIMEOUT_MS).then(() => previous?.(error, isFatal));
     });
   }
   target.addEventListener?.("unhandledrejection", (event) => record("error.unhandled_rejection", errorFields(event.reason)));

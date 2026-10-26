@@ -242,12 +242,13 @@ The bar hugs its 76 pt slots instead of spanning the screen. Height 62.
 - Follow-up queue header: icon + count.
 - Message bubbles, Markdown, and the composer keep their measured layout logic; only styling
   moves to tokens.
-- Markdown in a bubble (`enrichedMarkdownStyle`) spaces blocks closer than a document: one gap
+- Markdown in a message (`enrichedMarkdownStyle`) spaces blocks closer than a document: one gap
   (0.45 of a chat line) after paragraphs, lists, quotes, code, tables, and images; headings scale
-  from the chat size. List markers hang just inside the bubble padding in a 14 pt column. Inline code
+  from the chat size. List markers hang just inside the text column in a 14 pt column. Inline code
   is a narrow platform monospace on a faint wash of the text color, because the renderer paints its
-  background to the full line height; fenced code is a borderless `surface-raised` block with syntax
-  colors per mode. `app/debug/markdown.tsx` shows every supported element. This screen is migrated last and profiled on a release build.
+  background to the full line height; fenced code is a borderless block one surface step above what
+  it sits on (`surface` under a reply on the page, `surface-raised` in a prompt bubble or a card),
+  with syntax colors per mode. `app/debug/markdown.tsx` shows every supported element. This screen is migrated last and profiled on a release build.
 
 ### Everything else
 Settings subpages, sheets, menus, toasts, auth, Works, tasks, and files adopt the same

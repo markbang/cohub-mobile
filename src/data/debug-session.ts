@@ -196,6 +196,19 @@ function scheduleFlush(session: ActiveSession) {
   }
 }
 
+/**
+ * A fatal error tears the JS runtime down before the next batched write, so it never reached the
+ * log. Writes what is pending now, past the batch interval; settles within `timeoutMs`.
+ */
+export function flushDebugEventsNow(timeoutMs: number): Promise<void> {
+  if (pendingWrites.length === 0) return Promise.resolve();
+  const batch = pendingWrites.splice(0);
+  const written = (async () => {
+    for (const event of batch) await saveDebugEvent(event);
+  })().catch(() => undefined);
+  return Promise.race([written, new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))]);
+}
+
 export function record(name: string, fields: DebugFields = {}) {
   const session = beginSession();
   const now = new Date();

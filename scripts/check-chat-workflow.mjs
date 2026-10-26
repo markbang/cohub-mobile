@@ -6,7 +6,7 @@ import ts from "typescript";
 import { latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
-import { MessageMeasurements, createStreamBatch, liveReplyAnchor, rowHeightMeasurement } from "../src/data/chat-rendering.ts";
+import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
@@ -21,10 +21,10 @@ import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
-import { hasFinalAssistantForTurn, liveStreamStatusFromPatch, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
+import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
-import { chatThreadPlaceholder, mergeDisplayMessages, messageIndexForTurn, messagesFromTurns, nextTurnSequence, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
+import { chatThreadPlaceholder, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
 import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
@@ -1074,7 +1074,7 @@ for (const [tab, component, expectedRequests] of [
 {
   const renderMeta = loadChromeComponent("../src/components/MessageContent.tsx", "BubbleMeta", { ...formScope, useAppTheme: () => ({ colors: { userBubbleMeta: "meta", textFaint: "faint" } }) });
   for (const local of [false, true]) {
-    const row = renderMeta({ clock: "00:40", local, side: "user", t: (key) => key });
+    const row = renderMeta({ clock: "00:40", local, t: (key) => key });
     assert.equal(row.props.style?.flexWrap, undefined, "the meta row never wraps");
     assert.ok(classes(row).has("flex-row") && classes(row).has("shrink-0") && !classes(row).has("flex-wrap"), "clock and receipt stay on one row the bubble must fit");
   }
@@ -1664,6 +1664,80 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
 assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "tool_use", id: "tool", name: "read", input: {} }, { type: "tool_result", tool_use_id: "tool", content: "result" }], footer: footerMarker }), footerMarker), ["timestamp"]);
 assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text: "No footer" }] }), footerMarker), []);
 
+// A reply has no bubble; its actions, Turn, model, usage, and time share one line under it.
+{
+  const replyT = (key, values) => key === "message.tokens.cached" ? `${values.count} cached` : key;
+  const mc = "../src/components/MessageContent.tsx";
+  const formatTokenCount = loadChromeComponent(mc, "formatTokenCount", {});
+  assert.deepEqual([245_200, 12_345, 2_100, 1_234_567].map(formatTokenCount), ["245K", "12.3K", "2.1K", "1.2M"], "past three digits the decimal is noise");
+  const replyDetailParts = loadChromeComponent(mc, "replyDetailParts", { turnSequenceForMessage, formatTokenCount, DETAIL_SEPARATOR: " · ", requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level });
+  const estimateTextWidth = loadChromeComponent(mc, "estimateTextWidth", {});
+  const fitReplyDetails = loadChromeComponent(mc, "fitReplyDetails", { estimateTextWidth, DETAIL_SEPARATOR: " · " });
+  // The reported line: #2 · deepseek-flash with 245.2K in (245.0K cached) and 2.1K out, 246pt left for it on a 375pt phone.
+  const reported = { model: "deepseek-flash", usage: { input: 200, cacheRead: 245_000, output: 2_100 }, meta: { turnId: "turn", turnSequence: 2 } };
+  const { identity, parts } = replyDetailParts(reported, replyT);
+  assert.deepEqual([identity, parts], ["#2 · deepseek-flash", ["↑245K", "↓2.1K", "245K cached"]]);
+  assert.equal(fitReplyDetails(identity, parts, 246, 11), "#2 · deepseek-flash · ↑245K · ↓2.1K", "parts that do not fit drop whole, from the least important, never cut mid-word");
+  assert.equal(fitReplyDetails(identity, parts, 400, 11), "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached");
+  assert.equal(fitReplyDetails(identity, parts, 100, 11), identity, "the Turn and model always show");
+  assert.ok(estimateTextWidth("#2 · deepseek-flash · ↑245.2K 245.0K cached", 11) >= 245, "the estimate covers the 245pt the reported line measured on device");
+  const reply = { model: "claude-sonnet", usage: { input: 1200, cacheRead: 8000, output: 1500 }, meta: { turnId: "turn", turnSequence: 12, requestedThinkingLevel: "high" } };
+  const ReplyMeta = loadChromeComponent(mc, "ReplyMeta", {
+    ...chromeScope, replyDetailParts, fitReplyDetails, estimateTextWidth, formatTokenCount, turnSequenceForMessage, DETAIL_SEPARATOR: " · ", REPLY_META_HEIGHT: 44, Loader: "Loader",
+    requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level,
+    getReplyContentWidth: (width) => width - 32, typography: { micro: { fontSize: 11 } }, useWindowDimensions: () => ({ fontScale: 1 }),
+    useAppTheme: () => ({ colors: { textFaint: "faint" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
+  });
+  const line = ReplyMeta({ message: { ...reply, usage: null }, clock: "14:32", copyText: "answer", availableWidth: 390, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
+  const buttons = chromeNodes(line).filter((node) => node.type === "Pressable" && classes(node).has("size-8"));
+  assert.deepEqual([line.props.style.minHeight, buttons.length], [44, 2], "copy and fork share the reply's one line");
+  for (const button of buttons) assert.ok(classes(button).has("size-8") && button.props.hitSlop === 6, "32pt buttons reach 44pt touch targets inside their 44pt line, since hitSlop never extends past a parent");
+  const detailsText = chromeNodes(line).find((node) => node.type === "Text" && classes(node).has("flex-1"));
+  assert.deepEqual([detailsText.props.numberOfLines, detailsText.props.selectable], [1, undefined], "the details stay on one line; selectable text on Android ignores the line limit and wraps out of the row");
+  const narrow = ReplyMeta({ message: reported, clock: "12:09", copyText: "answer", availableWidth: 375, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
+  const reveal = chromeNodes(narrow).find((node) => node.type === "Pressable" && node.props.accessibilityState?.expanded === false);
+  assert.ok(reveal && classes(reveal).has("self-stretch"), "dropped parts are a full-height tap away");
+  assert.equal(reveal.props.accessibilityLabel, "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached", "screen readers always get every part");
+  assert.equal(chromeNodes(reveal).find((node) => node.type === "Text").props.children.join(""), "#2 · deepseek-flash · ↑245K · ↓2.1K");
+  const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
+    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: () => "14:32",
+    useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
+    BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
+  });
+  for (const [content, status] of [[[{ type: "text", text: "partial" }], "streaming"], [[], "pending"], [[], "failed"]]) {
+    const card = StreamCard({ content, status });
+    assert.equal(chromeNodes(card).find((node) => node.props?.style?.height !== undefined)?.props.style.height, 44, `the ${status} reply's status line matches the finished reply's line, so the swap at the end of a Turn moves nothing`);
+  }
+  // Only the answer is the reply; the thinking belongs to the Turn's steps, live and finished alike.
+  const thought = { type: "thinking", thinking: "Weighing options" };
+  const answer = { type: "text", text: "Done." };
+  const thinkingOnly = chromeNodes(StreamCard({ content: [thought], status: "streaming" }));
+  assert.deepEqual([thinkingOnly.some((node) => node.type === "MessageContent"), thinkingOnly.some((node) => node.type === "Text" && node.props.children.join("") === "message.stream.thinking")], [false, true], "while only thinking streams, the status line says so instead of showing it");
+  assert.deepEqual(chromeNodes(StreamCard({ content: [thought, answer], status: "streaming" })).find((node) => node.type === "MessageContent").props.content, [answer]);
+  const MessageBubble = loadChromeComponent("../src/components/MessageContent.tsx", "MessageBubble", {
+    ...chromeScope, memo: (component) => component, useMemo: (factory) => factory(), useSyncExternalStore: () => false, useTraceTouches: () => ({}),
+    chatScrollTrace: { subscribe: () => () => {}, isRecording: () => false }, useAppTheme: () => ({ mode: "dark", colors: { assistantBubbleText: "text" } }), useTranslation: () => ({ t: replyT }),
+    useWindowDimensions: () => ({ width: 390 }), compactionFromMessage: () => null, hasRenderableMessage: () => true, hasRenderableContent: (content) => content.some((block) => block.type !== "shell_command"), formatMessageClock: () => "14:32",
+    getReplyContentWidth: (width) => width - 32, REPLY_INSET_X: 16, answerBlocks, thinkingBlocks, typography: { chatBody: { fontSize: 17 } },
+    contentText: (content) => content.map((block) => block.text ?? block.thinking).join("\n\n"), messageText: (message) => message.text ?? "",
+    BubbleContext: { Provider: "BubbleContext" }, BubbleTraceMessage: { Provider: "BubbleTraceMessage" }, BubbleContentWidth: { Provider: "BubbleContentWidth" },
+    MessageContent: "MessageContent", TextBlock: "TextBlock", ReplyMeta: "ReplyMeta",
+  });
+  const finished = chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: null, content: [thought, answer], meta: {} }, onCopy: () => {} }));
+  assert.deepEqual([finished.find((node) => node.type === "MessageContent").props.content, finished.find((node) => node.type === "ReplyMeta").props.copyText], [[answer], "Done."], "a finished reply shows and copies only its answer");
+  const thoughtOnly = chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "Weighing options", content: [thought], meta: {} }, onCopy: () => {} }));
+  assert.deepEqual([thoughtOnly.some((node) => node.type === "TextBlock" || node.type === "MessageContent"), thoughtOnly.find((node) => node.type === "ReplyMeta").props.copyText], [false, ""], "a history row's text derived from the thinking does not bring it back");
+  assert.equal(chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "$ ls", content: [{ type: "shell_command", command: "ls" }], meta: {} } })).find((node) => node.type === "TextBlock")?.props.value, "$ ls", "a reply that did not think keeps its text fallback");
+  const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
+    ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {}, useMemo: (factory) => factory(),
+    thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
+  });
+  const thoughtTurn = { id: "turn", sessionId: "session", intermediateIndex: null, intermediateSummary: null, durationMs: 12_000, assistantContent: [thought, answer] };
+  const capsule = TurnProcess({ turn: thoughtTurn, client: null, spaceId: "space" });
+  assert.deepEqual([capsule?.type, capsule?.props.label, chromeNodes(capsule).find((node) => node.type === "MessageContent").props.content], ["ProcessDisclosure", "turn.thinking · 12s", [thought]], "a Turn that only thought still folds its thinking into a capsule");
+  assert.equal(TurnProcess({ turn: { ...thoughtTurn, assistantContent: [answer] }, client: null, spaceId: "space" }), null, "no steps and no thinking, no capsule");
+}
+
 // Configuration guard, not a native gesture test: the timeline is chronological (no inversion).
 const focusPolicySource = ts.createSourceFile("chat.tsx", readFileSync(new URL("../app/chat/[sessionId].tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let timelineElement;
@@ -1681,7 +1755,9 @@ assert.equal(timelineProp("inverted"), undefined, "the timeline must not be inve
 assert.equal(timelineProp("experimental_hideItemsUntilMeasured"), undefined, "hiding rows until measured makes the timeline jitter on open");
 const initialScrollAtEndProp = timelineProp("initialScrollAtEnd");
 assert.ok(initialScrollAtEndProp && ts.isJsxExpression(initialScrollAtEndProp.initializer), "the timeline must start at the tail");
-assert.equal(initialScrollAtEndProp.initializer.expression?.getText(focusPolicySource), "!hasInitialTurnTarget");
+assert.equal(initialScrollAtEndProp.initializer.expression?.getText(focusPolicySource), "!hasInitialTurnTarget || listGeneration !== mountGeneration", "deep links own the first scroll; a fresh newest window lands at the tail");
+const listKeyProp = timelineProp("key");
+assert.equal(listKeyProp?.initializer.expression?.getText(focusPolicySource), "listGeneration", "the newest page replacing the loaded turns mounts a fresh list that places itself like an open");
 const itemTypeProp = timelineProp("getItemType");
 assert.ok(itemTypeProp && ts.isJsxExpression(itemTypeProp.initializer), "user and assistant rows need separate size averages");
 assert.equal(itemTypeProp.initializer.expression?.getText(focusPolicySource), "getMessageItemType");
@@ -2144,7 +2220,7 @@ let stateSyncHook;
 let timeoutSource;
 const sessionCallbacks = {};
 function inspectPagination(node) {
-  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage"].includes(node.name.getText(contextSource))) {
+  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage", "refreshSession", "loadLatestWindow"].includes(node.name.getText(contextSource))) {
     const callback = node.initializer;
     if (ts.isCallExpression(callback) && callback.expression.getText(contextSource) === "useCallback") sessionCallbacks[node.name.getText(contextSource)] = callback.arguments[0].getText(contextSource);
   }
@@ -2429,6 +2505,66 @@ assert.equal(reopenCacheReads, 0, "warm opens must not rehydrate the entire SQLi
 assert.equal(reopenActions.some((action) => action.type === "session-start"), false, "warm opens keep historyLoaded and pagination available");
 assert.equal(reopenAttachments, 1, "after subscription release, warm opens still recover the authoritative stream");
 assert.equal(reopenRefreshes, 1, "memory reuse still reconciles the server tail");
+
+// The loaded turns stay one contiguous window: a gap would never be paged in by either cursor.
+const turnRange = (from, to) => Array.from({ length: to - from + 1 }, (_, index) => ({ id: `turn-${from + index}`, sessionId: "session", sequence: from + index, status: "completed", userText: `ask ${from + index}`, userContent: [], assistantText: null, assistantContent: null, meta: null }));
+const windowSequences = (window) => window.turns.map((turn) => turn.sequence);
+const windowOf = (from, to, hasMoreOlder, hasMoreNewer) => ({ turns: turnRange(from, to), hasMoreOlder, hasMoreNewer });
+{
+  const overlapping = mergeTurnWindows(windowOf(1, 40, false, false), windowOf(21, 50, true, false));
+  assert.deepEqual([windowSequences(overlapping).length, overlapping.hasMoreOlder], [50, false], "a head the loaded turns reach keeps the older pages");
+  assert.equal(mergeTurnWindows(windowOf(1, 30, false, false), windowOf(51, 80, true, false)), null, "windows with turns missing between them never join");
+  const detached = windowOf(1, 25, true, true);
+  assert.deepEqual([26, 27, 0].map((sequence) => turnFitsWindow(detached, sequence)), [true, false, true], "only Turns inside or next to a detached window join it");
+  const live = [{ id: "in", meta: { turnSequence: 25 } }, { id: "past", meta: { turnSequence: 101 } }, { id: "unknown", meta: {} }];
+  assert.deepEqual(messagesInWindow(live, detached).map((message) => message.id), ["in"], "a detached window shows only its own Turns, not records from the running tail");
+}
+async function refreshWith(view, head) {
+  const actions = [];
+  const refreshScope = {
+    client: { space: () => ({ session: () => ({ turns: { listPaginated: async () => ({ session: view.session, turns: head.turns, hasMore: head.hasMoreOlder }) } }) }) },
+    stateRef: { current: { sessionViews: { session: view } } },
+    sessionLoadRef: { current: async () => {} },
+    openTokens: { current: new Map() },
+    paginationRequestsRef: { current: new Map() },
+    markChatEntry: () => {},
+    dispatch: (action) => actions.push(action),
+    withTimeout: pageTimeout,
+    mergeTurnWindows, mergeDisplayMessages, messagesFromTurns,
+    isLiveMessage: () => false,
+    saveMessages: async () => {},
+    userKey: "test-user",
+    translate: (key) => key,
+  };
+  const refresh = new Function(...Object.keys(refreshScope), ts.transpileModule(`return (${sessionCallbacks.refreshSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(refreshScope));
+  await refresh("session", { silent: true, catchUp: true });
+  return actions.find((action) => action.type === "session-refresh-end");
+}
+{
+  const loadedView = (window) => ({ ...window, messages: [], session: { id: "session", spaceId: "space" }, space: { id: "space" } });
+  const outrun = await refreshWith(loadedView(windowOf(1, 30, false, false)), windowOf(51, 80, true, false));
+  assert.deepEqual([outrun.turns[0].sequence, outrun.turns.length, outrun.hasMoreOlder, outrun.hasMoreNewer], [51, 30, true, false], "a head that outran the loaded tail replaces it instead of leaving a gap");
+  const pagedAway = await refreshWith(loadedView(windowOf(1, 25, false, true)), windowOf(71, 100, true, false));
+  assert.deepEqual([pagedAway.turns.at(-1).sequence, pagedAway.hasMoreNewer], [25, true], "a reader paged away from the tail keeps their window");
+  const paged = await refreshWith(loadedView(windowOf(1, 40, false, false)), windowOf(21, 50, true, false));
+  assert.deepEqual([paged.turns.length, paged.hasMoreOlder], [50, false], "the tail refresh keeps pages loaded above it");
+}
+{
+  const actions = [];
+  const requests = [];
+  const view = { ...windowOf(1, 25, false, true), session: { id: "session", spaceId: "space" } };
+  const latestScope = {
+    stateRef: { current: { sessions: [], sessionViews: { session: view } } },
+    clientRef: { current: { space: () => ({ session: () => ({ turns: { listPaginated: async (options) => (requests.push(options), { session: view.session, turns: turnRange(71, 100), hasMore: true }) } }) }) } },
+    openTokens: { current: new Map() }, withTimeout: pageTimeout, mergeTurnWindows, messagesFromTurns,
+    dispatch: (action) => actions.push(action), saveMessages: async () => {}, userKey: "test-user", translate: (key) => key,
+  };
+  const loadLatest = new Function(...Object.keys(latestScope), ts.transpileModule(`return (${sessionCallbacks.loadLatestWindow});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(latestScope));
+  const landed = await loadLatest("session");
+  assert.deepEqual([requests, landed.replaced, landed.turns[0].sequence, actions[0].newest, actions[0].hasMoreNewer], [[{ limit: 30 }], true, 71, true, false], "jumping to latest from an old Turn is one request for the newest page, not a walk through every page between");
+  latestScope.stateRef.current.sessionViews.session = { ...windowOf(71, 100, true, false), session: view.session };
+  assert.deepEqual([(await loadLatest("session")).replaced, requests.length], [false, 1], "a window at the tail needs no request");
+}
 
 // A cold open must fail visibly instead of waiting forever on a stalled history request.
 mock.timers.enable({ apis: ["setTimeout"] });
@@ -3419,6 +3555,7 @@ assert.equal(nextChatTailFollowing({ currentlyFollowing: true, distanceToBottom:
 assert.equal(nextChatTailFollowing({ currentlyFollowing: false, distanceToBottom: 20, userInteracting: true, pendingTarget: false }), true);
 assert.equal(nextChatTailFollowing({ currentlyFollowing: true, distanceToBottom: 20, userInteracting: false, pendingTarget: true }), false);
 assert.equal(nextChatTailFollowing({ currentlyFollowing: false, distanceToBottom: 20, userInteracting: false, pendingTarget: true }), false);
+assert.equal(nextChatTailFollowing({ currentlyFollowing: true, distanceToBottom: 0, userInteracting: false, pendingTarget: false, detached: true }), false, "the end of a window paged away from the tail is not the tail; following it chained every newer page in");
 // Growth (or an animated programmatic pin) must not read as the user scrolling away.
 assert.equal(chatTailScrolledAway({ dragging: false, momentum: false, contentGrew: false, offsetDelta: 0 }), false);
 assert.equal(chatTailScrolledAway({ dragging: true, momentum: false, contentGrew: false, offsetDelta: -40 }), true);
@@ -3497,7 +3634,8 @@ const runningRowMessages = [
 assert.equal(liveReplyAnchor(runningRowMessages, "turn-a"), "user-a", "a queued send must not take ownership of the running turn's reply");
 assert.equal(liveReplyAnchor(runningRowMessages, null), "queued-b", "a send without a turn id follows its optimistic user row");
 assert.equal(liveReplyAnchor([], "turn-a"), null);
-assert.equal(liveReplyAnchor(runningRowMessages, "not-yet-loaded"), "queued-b", "unloaded history retains the live reply at the loaded tail");
+assert.equal(liveReplyAnchor(runningRowMessages, "not-yet-loaded", false), "queued-b", "unloaded history retains the live reply at the loaded tail");
+assert.equal(liveReplyAnchor(runningRowMessages, "not-yet-loaded", true), null, "a window paged away from the tail does not show the tail's running reply under its last Turn");
 
 // Execute the production renderItem: the reply must be a normal-flow sibling of
 // the user bubble inside the SAME measured row, including after tool expansion.
@@ -3513,10 +3651,10 @@ const liveRowScope = {
   turnSequenceForMessage: (message) => message.meta?.turnSequence ?? null,
   turnIndexBySequence: new Map(), turnsById: new Map(), turnsBySequence: new Map(),
   chatScrollTrace: { isRecording: () => false }, trackRow: () => {},
-  MessageBubble: "MessageBubble", TurnMarker: "TurnMarker", LiveReply: "LiveReply",
+  MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
-  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false,
+  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -3535,11 +3673,19 @@ assert.equal(ownerRow.type, "View");
 assert.equal(typeof ownerRow.props.onLayout, "function");
 assert.equal(ownerRow.props.children.length, 1, "the measured row has one content wrapper, so the catch-up fade never remounts its children");
 assert.deepEqual(ownerRow.props.children[0].props.children.filter((child) => child?.type === "MessageBubble" || child?.type === "LiveReply").map((child) => child.type), ["MessageBubble", "LiveReply"]);
+assert.equal(ownerRow.props.style?.paddingTop, 8, "a prompt opens its Turn with space above it, in place of the #N divider");
+{
+  const reply = { id: "reply-a", role: "assistant", meta: { turnId: "turn-a", turnSequence: 1 } };
+  const renderReply = (scope) => compileRenderMessage({ ...liveRowScope, messages: [...runningRowMessages, reply], replyAnchor: null, ...scope })({ item: reply, index: 2 });
+  assert.equal(renderReply({}).props.style, undefined, "a reply continues its Turn without the opening space");
+  const replyBubble = (scope) => chromeNodes(renderReply(scope)).find((node) => node.type === "MessageBubble").props;
+  assert.equal(replyBubble({ forkingTurnId: "turn-a" }).forking, true, "the fork spinner follows the forked Turn, not the lazily loaded Turn index");
+}
 assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 })).filter((node) => node.type === "LiveReply").length, 0);
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
   ...chromeScope, useApp: () => ({ state: { sessionViews: { fixture: liveView } } }),
-  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup,
+  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
 });
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: true, availableWidth: 390 }), null, "completed replies leave no stale live duplicate");
@@ -3548,7 +3694,7 @@ assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processI
 const renderLiveProcess = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveTurnProcess", {
   ...chromeScope,
   useApp: () => ({ state: { sessionViews: { fixture: { stream: { turnId: "turn", intermediateMessages: [] } } } } }),
-  StreamingTurnProcess: "StreamingTurnProcess", TurnProcess: "TurnProcess",
+  StreamingTurnProcess: "StreamingTurnProcess", TurnProcess: "TurnProcess", thinkingBlocks,
 });
 const pendingProcess = renderLiveProcess({ sessionId: "fixture", turn: { id: "turn", intermediateSummary: { messageCount: 4, toolCallCount: 4 } }, client: null, spaceId: "space" });
 assert.equal(pendingProcess.type, "TurnProcess", "reconnecting with an empty stream must not remove the cached execution summary and collapse its row");
@@ -3556,6 +3702,8 @@ assert.ok(!chatSource.includes('traceEnd("initial.latest"'), "Legend initialScro
 assert.ok(!chatSource.includes("transition_cleanup_scheduled"), "animation completion, not a click-time timer, owns handoff");
 assert.ok(!chatSource.includes("Keyboard.dismiss()"), "sending keeps the keyboard open");
 assert.ok(chatSource.includes("hidden={isTransitionMessage}"), "the list reserves geometry without displaying a duplicate bubble");
+assert.ok(!/ListFooterComponent=\{[^\n]*ListEdgeLoader/.test(chatSource), "the catch-up loader must not resize the list under a followed tail");
+assert.ok(chatSource.includes("chatMaintainScrollAtEnd(followingTail, openSettled && "), "opening snaps the tail pin; only a settled timeline animates it");
 assert.deepEqual(chatListDistances(0, 4000, 700), { distanceToLatest: 3300, distanceToOldest: 0 });
 assert.deepEqual(chatListDistances(3280, 4000, 700), { distanceToLatest: 20, distanceToOldest: 3280 });
 
@@ -3859,6 +4007,33 @@ for (const busy of [false, true]) {
     }
   }
 }
+{
+  // A send lands after the newest Turn: a window paged away from it comes back to the tail first.
+  for (const fails of [false, true]) {
+    const actions = [];
+    let optimistic;
+    const sendScope = {
+      stateRef: { current: { sessionViews: { fixture: { ...windowOf(1, 25, false, true), session: { spaceId: "space" }, messages: [], stream: null } } } },
+      client: { space: () => ({ prompt: async () => ({ mode: "immediate", turn: queuedFollowup("accepted", 101, { status: "running", meta: { clientMessageId: "client" } }) }) }) },
+      loadLatestWindow: async () => { if (fails) throw new Error("offline"); return { turns: turnRange(71, 100), replaced: true }; },
+      errorMessage: (error, fallback) => error instanceof Error ? error.message : fallback,
+      translate: (key) => key, newId: () => "client", nextTurnSequence,
+      optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
+      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {},
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
+    };
+    const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
+    const request = send("fixture", "Next", [], { onOptimistic: (message) => { optimistic = message; } });
+    if (fails) {
+      await assert.rejects(request, /offline/);
+      assert.deepEqual([actions.map((action) => action.type), optimistic], [["send-start", "send-failed"], undefined], "a send that cannot reach the tail shows progress, then fails visibly and keeps the draft");
+    } else {
+      await request;
+      assert.equal(optimistic.meta.turnSequence, 101, "the optimistic send takes the Turn after the newest one, not after the old window");
+    }
+  }
+}
 const reducerFunction = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
 const reduceQueueFailure = new Function("isOptimisticFollowup", "recordDebugEvent", "updateView", ts.transpileModule(`${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(isOptimisticFollowup, () => {}, (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }));
 const failedQueuedMessage = { id: "upload", role: "user", meta: { optimistic: true, queuedFollowup: true, clientMessageId: "failed" } };
@@ -3871,6 +4046,40 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: false }
 assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: false } } }, { type: "session-refresh-start", sessionId: "fixture", silent: true }).sessionViews.fixture.catchingUp, false, "the periodic tail poll must not flash the catch-up loader");
 assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } } }, { type: "session-error", sessionId: "fixture", message: "x" }).sessionViews.fixture.catchingUp, false);
 {
+  const pagedAway = { ...windowOf(1, 25, false, true), messages: [{ id: "old" }], historyLoaded: true, oldestCursor: 1, newestCursor: 25, session: { id: "fixture" } };
+  const released = reduceQueueFailure({ sessionViews: { fixture: pagedAway } }, { type: "session-release", sessionId: "fixture" }).sessionViews.fixture;
+  assert.deepEqual([released.turns.length, released.messages.length, released.historyLoaded, released.hasMoreNewer, released.newestCursor], [0, 0, false, false, null], "leaving a Chat paged away from the tail reopens it on the latest turns");
+  assert.equal(released.session, pagedAway.session);
+  const atTail = { sessionViews: { fixture: { ...windowOf(1, 25, false, false), messages: [], historyLoaded: true } } };
+  assert.equal(reduceQueueFailure(atTail, { type: "session-release", sessionId: "fixture" }), atTail, "a window at the tail stays warm for the next open");
+  const contextFunction = (name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource);
+  const viewScope = {
+    emptyView: () => ({ messages: [], turns: [], hasMoreOlder: false, hasMoreNewer: false, windowGeneration: 0, stream: null }),
+    mergeTurnWindows, turnWindowsJoin, turnFitsWindow, latestTurn, mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage,
+    isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, streamRecoveryFromTail,
+    preferNewerSession: (_current, incoming) => incoming,
+    updateView: (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }),
+    updateLatestTurn: (state, id, turn) => ({ ...state, sessionLatestTurns: { ...state.sessionLatestTurns, [id]: turn ?? state.sessionLatestTurns?.[id] } }),
+    isLiveMessage: (message) => message.meta?.optimistic === true || message.meta?._mobileLive === true,
+    recordDebugEvent: () => {}, sortByRecent: (rows) => rows,
+  };
+  const reduceView = new Function(...Object.keys(viewScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(viewScope));
+  const viewOf = (window) => ({ sessionViews: { fixture: { ...window, messages: [], windowGeneration: 0, stream: null } }, sessionLatestTurns: {} });
+  const tailView = viewOf(windowOf(71, 100, true, false));
+  const jumped = reduceView(tailView, { type: "session-window-success", sessionId: "fixture", turns: turnRange(1, 25), hasMoreOlder: false, hasMoreNewer: true }).sessionViews.fixture;
+  assert.deepEqual([jumped.turns[0].sequence, jumped.turns.at(-1).sequence, jumped.hasMoreNewer, jumped.newestCursor, jumped.windowGeneration], [1, 25, true, 25, 0], "a jump far from the loaded turns pages forward from its own window, not across a gap; the turn jump places it itself");
+  const latest = reduceView(viewOf(windowOf(1, 25, false, true)), { type: "session-window-success", sessionId: "fixture", turns: turnRange(71, 100), hasMoreOlder: true, hasMoreNewer: false, newest: true }).sessionViews.fixture;
+  assert.deepEqual([latest.turns[0].sequence, latest.turns.length, latest.hasMoreOlder, latest.hasMoreNewer, latest.windowGeneration], [71, 30, true, false, 1], "jumping to latest loads the newest page in one request and lays it out fresh");
+  const reattached = reduceView(viewOf(windowOf(60, 80, true, true)), { type: "session-window-success", sessionId: "fixture", turns: turnRange(71, 100), hasMoreOlder: true, hasMoreNewer: false, newest: true }).sessionViews.fixture;
+  assert.deepEqual([reattached.turns.length, reattached.hasMoreNewer, reattached.windowGeneration], [41, false, 0], "a newest page that reaches the window extends it in place");
+  const outrun = reduceView(viewOf(windowOf(1, 30, false, false)), { type: "session-refresh-end", sessionId: "fixture", silent: true, turns: turnRange(51, 80), messages: [], hasMoreOlder: true, hasMoreNewer: false }).sessionViews.fixture;
+  assert.equal(outrun.windowGeneration, 1, "a tail refresh that replaced an outrun window lays the new one out fresh");
+  const running = { ...turnRange(101, 101)[0], status: "running" };
+  const detachedUpsert = reduceView(viewOf(windowOf(1, 25, false, true)), { type: "turn-upsert", sessionId: "fixture", turn: running });
+  assert.deepEqual([detachedUpsert.sessionViews.fixture.turns.length, detachedUpsert.sessionViews.fixture.turns.at(-1).sequence, detachedUpsert.sessionViews.fixture.stream?.turnId, detachedUpsert.sessionLatestTurns.fixture.sequence], [25, 25, running.id, 101], "a Turn past a window paged away from the tail waits for the page that reaches it; status and the live reply still follow it");
+  assert.equal(reduceView(tailView, { type: "turn-upsert", sessionId: "fixture", turn: running }).sessionViews.fixture.turns.at(-1).sequence, 101, "a window at the tail grows with new Turns");
+}
+{
   // The response replaces messages and clears catchingUp in one commit, so the baseline must
   // already exist in that render or the new rows paint once before they could fade in.
   const slots = [];
@@ -3880,8 +4089,8 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
     useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; pendingRender = true; }]; },
     useEffect: () => {},
   };
-  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800 });
-  const isCatchUpArrival = loadChromeComponent("../src/components/use-chat-catch-up.ts", "isCatchUpArrival", {});
+  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800, messageRowKey });
+  const isCatchUpArrival = loadChromeComponent("../src/components/use-chat-catch-up.ts", "isCatchUpArrival", { messageRowKey });
   const render = (catchingUp, messages) => { let result; do { pendingRender = false; cursor = 0; result = catchUpHook(catchingUp, messages); } while (pendingRender); return result; };
   const cached = [{ id: "a" }, { id: "b" }];
   assert.equal(render(true, cached).showLoader, false, "a catch-up shows its loader only after the delay");
@@ -3889,11 +4098,17 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   assert.ok(landed.arrivalBaseline, "the arrival baseline survives the commit that ends the catch-up");
   assert.deepEqual([...cached, { id: "c" }, { id: "local", meta: { optimistic: true } }].filter((message) => isCatchUpArrival(landed.arrivalBaseline, message)).map((message) => message.id), ["c"], "only rows the response added fade in; local sends keep their own entrance");
   slots.length = 0;
+  const cachedTurn = { id: "cached-row", role: "assistant", meta: { turnId: "turn", turnSequence: 4 } };
+  render(true, [cachedTurn]);
+  const reconciled = render(false, [{ ...cachedTurn, id: "turn:assistant" }, { id: "turn-5:user", role: "user", meta: { turnSequence: 5 } }]);
+  assert.deepEqual([{ ...cachedTurn, id: "turn:assistant" }, { id: "turn-5:user", role: "user", meta: { turnSequence: 5 } }].filter((message) => isCatchUpArrival(reconciled.arrivalBaseline, message)).map((message) => message.id), ["turn-5:user"], "the server copy of a cached row is the same row, not an arrival that fades in again");
+  slots.length = 0;
   assert.equal(render(true, []).arrivalBaseline, null, "a cold open with nothing on screen has nothing to arrive after");
 }
 const cachedSends = [];
 const saveQueueMessages = loadChromeComponent("../src/data/local-db.ts", "saveMessages", {
   isOptimisticFollowup,
+  cachedMessageRow: loadChromeComponent("../src/data/local-db.ts", "cachedMessageRow", { turnSequenceForMessage }),
   database: async () => ({
     withTransactionAsync: async (action) => action(),
     prepareAsync: async () => ({ executeAsync: async (...args) => cachedSends.push(args), finalizeAsync: async () => {} }),
@@ -4103,11 +4318,12 @@ const localDbSource = ts.transpileModule(readFileSync(new URL("../src/data/local
 const cacheModule = {};
 let databaseOpens = 0;
 let schemaRuns = 0;
+let messageCacheResets = 0;
 let failCacheWrite = false;
 const preparedWrites = [];
 const cacheDatabase = {
-  execAsync: async () => { schemaRuns += 1; },
-  getFirstAsync: async () => ({ sequence: 4 }),
+  execAsync: async (sql) => { if (sql.includes("DELETE FROM messages")) messageCacheResets += 1; else schemaRuns += 1; },
+  getFirstAsync: async (sql) => sql.startsWith("PRAGMA") ? { user_version: 0 } : { sequence: 4 },
   withTransactionAsync: async (task) => task(),
   prepareAsync: async (sql) => {
     const write = { sql, rows: [], finalized: false };
@@ -4123,6 +4339,7 @@ const cacheDatabase = {
 };
 new Function("require", "exports", localDbSource)((name) => {
   if (name === "./followup-queue") return { isOptimisticFollowup };
+  if (name === "./session-history") return { turnSequenceForMessage };
   assert.equal(name, "expo-sqlite");
   return { openDatabaseAsync: async () => { databaseOpens += 1; return cacheDatabase; } };
 }, cacheModule);
@@ -4132,14 +4349,22 @@ assert.deepEqual(await Promise.all([
 ]), [4, 4]);
 assert.equal(databaseOpens, 1);
 assert.equal(schemaRuns, 1, "concurrent cache readers share completed schema initialization");
+assert.equal(messageCacheResets, 1, "rows written under the per-step ordering are dropped once");
+{
+  const pageLimits = [...readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8").matchAll(/turns\.listPaginated\(\{ limit: (\d+) \}\)/g)].map((match) => Number(match[1]));
+  assert.ok(pageLimits.length >= 2);
+  assert.ok(cacheModule.MESSAGE_CACHE_LIMIT >= 2 * Math.max(...pageLimits), "the cached tail covers the first server page, so that page does not prepend rows above an opened Chat");
+}
 await cacheModule.saveHome("user-a", {
   spaces: [{ id: "space-a" }, { id: "space-b" }],
   sessions: [{ id: "chat-a", spaceId: "space-a" }, { id: "chat-b", spaceId: "space-b" }],
   forks: [],
 });
+// A live record carries the session's per-step sequence; the cache orders it by its Turn instead.
 const cacheMessages = [
-  { id: "message-a", sequence: 2, meta: { _mobileLive: true, turnId: "turn-a" }, text: "answer" },
-  { id: "message-b", sequence: 4, meta: null, text: "next answer" },
+  { id: "step", role: "assistant", sequence: 880, meta: { _mobileLive: true, turnId: "turn-a", turnSequence: 3, messageKind: "assistant_intermediate" }, text: "step" },
+  { id: "message-a", role: "assistant", sequence: 900, meta: { _mobileLive: true, turnId: "turn-a", turnSequence: 3 }, text: "answer" },
+  { id: "message-b", role: "system", sequence: 4, meta: null, text: "next answer" },
 ];
 await cacheModule.saveMessages("user-a", "chat-a", cacheMessages);
 assert.equal(preparedWrites.length, 3, "prepare once per table batch, not once per record");
@@ -4149,9 +4374,9 @@ assert.deepEqual(preparedWrites[0].rows.map((row) => row.slice(0, 3)), [
   ["user-a", "space-b", JSON.stringify({ id: "space-b" })],
 ]);
 assert.deepEqual(preparedWrites[1].rows.map((row) => row.slice(0, 3)), [["user-a", "chat-a", "space-a"], ["user-a", "chat-b", "space-b"]]);
-assert.deepEqual(preparedWrites[2].rows.map((row) => row.slice(0, 4)), [["user-a", "chat-a", "message-a", 2], ["user-a", "chat-a", "message-b", 4]]);
-assert.deepEqual(JSON.parse(preparedWrites[2].rows[0][4]), { ...cacheMessages[0], meta: { turnId: "turn-a" } });
-assert.equal(cacheMessages[0].meta._mobileLive, true, "persistence must not mutate live records");
+assert.deepEqual(preparedWrites[2].rows.map((row) => row.slice(0, 4)), [["user-a", "chat-a", "turn-a:assistant", 6], ["user-a", "chat-a", "message-b", 4]], "agent steps are not cached, and a Turn's message is one row in timeline order");
+assert.deepEqual(JSON.parse(preparedWrites[2].rows[0][4]), { ...cacheMessages[1], meta: { turnId: "turn-a", turnSequence: 3 } });
+assert.equal(cacheMessages[1].meta._mobileLive, true, "persistence must not mutate live records");
 assert.equal(preparedWrites[2].rows[0][5], preparedWrites[2].rows[1][5], "keep one retention timestamp per batch");
 for (const save of [
   () => cacheModule.saveSpaces("user-a", [{ id: "space-a" }]),
@@ -4163,6 +4388,25 @@ for (const save of [
   assert.equal(preparedWrites.at(-1).finalized, true, "failed writes release their prepared statement");
 }
 assert.equal(schemaRuns, 1, "writes do not repeat schema setup");
+
+{
+  // A fatal error ends the JS runtime; it must reach the log before React Native's handler runs.
+  const order = [];
+  let handler;
+  const flushed = Promise.withResolvers();
+  const fakeGlobal = { ErrorUtils: { getGlobalHandler: () => (_error, fatal) => order.push(`native:${fatal}`), setGlobalHandler: (next) => { handler = next; } } };
+  loadChromeComponent("../src/data/interaction-trace.ts", "installErrorLogging", {
+    globalThis: fakeGlobal, record: (name) => order.push(name), errorFields: () => ({}), FATAL_FLUSH_TIMEOUT_MS: 300,
+    flushDebugEventsNow: () => (order.push("flush"), flushed.promise),
+  })();
+  handler(new Error("boom"), true);
+  assert.deepEqual(order, ["error.uncaught", "flush"], "the fatal error is written before the runtime is torn down");
+  flushed.resolve();
+  await flushSync();
+  assert.equal(order.at(-1), "native:true");
+  handler(new Error("soft"), false);
+  assert.deepEqual(order.slice(-2), ["error.uncaught", "native:false"], "non-fatal errors hand off at once");
+}
 
 // LegendList memoizes each row on [item, extraData], unlike FlatList cells that re-rendered
 // with renderItem identity. Rows that read state outside `data` must forward it through

@@ -1,6 +1,7 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
 import type { MessageRecord, SessionListFork, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 import { isOptimisticFollowup } from "./followup-queue";
+import { turnSequenceForMessage } from "./session-history";
 
 export type CachedHome = {
   spaces: SpaceRecord[];
@@ -112,6 +113,9 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS debug_events_session_time
       ON debug_events (session_id, timestamp);
   `);
+  // v0 rows sort by per-step sequence and would keep outranking newer Turns; v1 sorts by timeline.
+  const version = await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version");
+  if ((version?.user_version ?? 0) < 1) await db.execAsync("DELETE FROM messages; PRAGMA user_version = 1;");
   return db;
 }
 
@@ -234,8 +238,8 @@ export async function pruneUserCache(userKey: string, cutoff: number) {
   });
 }
 
-/** Cache-first paint only needs the recent window; older history arrives with the server window. */
-const MESSAGE_CACHE_LIMIT = 30;
+/** Covers the first server page (30 Turns), so landing it never prepends rows above an opened tail. */
+export const MESSAGE_CACHE_LIMIT = 60;
 
 export async function loadMessages(userKey: string, sessionId: string) {
   const db = await database();
@@ -253,6 +257,16 @@ export async function loadMessages(userKey: string, sessionId: string) {
   });
 }
 
+/** One row per Turn and role, in timeline order; a record's own sequence counts every agent step. */
+function cachedMessageRow(message: MessageRecord) {
+  const turnId = message.meta?.turnId;
+  const turnSequence = turnSequenceForMessage(message);
+  return {
+    key: typeof turnId === "string" ? `${turnId}:${message.role}` : message.id,
+    order: turnSequence === null ? message.sequence : turnSequence * 2 - (message.role === "user" ? 1 : 0),
+  };
+}
+
 export async function saveMessages(userKey: string, sessionId: string, messages: MessageRecord[]) {
   const db = await database();
   const now = Date.now();
@@ -263,12 +277,14 @@ export async function saveMessages(userKey: string, sessionId: string, messages:
     );
     try {
       for (const message of messages) {
-        // An unaccepted upload is a transient queue placeholder, not resumable server work.
-        if (isOptimisticFollowup(message)) continue;
+        // An unaccepted upload is a transient queue placeholder, not resumable server work; agent
+        // steps belong to the execution trace.
+        if (isOptimisticFollowup(message) || message.meta?.messageKind === "assistant_intermediate") continue;
         const meta = message.meta ? { ...message.meta } : null;
         if (meta) delete meta._mobileLive;
         const persistable = { ...message, meta };
-        await statement.executeAsync(userKey, sessionId, message.id, message.sequence, JSON.stringify(persistable), now);
+        const row = cachedMessageRow(message);
+        await statement.executeAsync(userKey, sessionId, row.key, row.order, JSON.stringify(persistable), now);
       }
     } finally {
       await statement.finalizeAsync();

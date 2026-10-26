@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MessageRecord } from "@neta-art/cohub";
+import { messageRowKey } from "@/src/data/session-history";
 
 /** Most catch-ups finish before this; showing the loader for them only adds a flicker at the tail. */
 export const CATCH_UP_LOADER_DELAY_MS = 300;
@@ -10,14 +11,15 @@ type CatchUp = { active: boolean; baseline: ReadonlySet<string> | null; loaderDu
 
 /**
  * Tracks one catch-up: earlier history is on screen while the request for what arrived since is in
- * flight. `baseline` holds the ids already shown when it began, so rows the response adds can fade
- * in instead of popping. It is captured during render because the response replaces the messages
- * and clears `catchingUp` in one commit; an effect would run only after the new rows had painted.
+ * flight. `baseline` holds the rows already shown when it began (rows, not ids: the server copy of a
+ * cached message has another id), so rows the response adds can fade in instead of popping. It is
+ * captured during render because the response replaces the messages and clears `catchingUp` in one
+ * commit; an effect would run only after the new rows had painted.
  */
 export function useChatCatchUp(catchingUp: boolean, messages: readonly MessageRecord[]) {
   const [state, setState] = useState<CatchUp>({ active: false, baseline: null, loaderDue: false });
   if (catchingUp !== state.active) {
-    setState({ active: catchingUp, baseline: catchingUp ? new Set(messages.map((message) => message.id)) : state.baseline, loaderDue: false });
+    setState({ active: catchingUp, baseline: catchingUp ? new Set(messages.map(messageRowKey)) : state.baseline, loaderDue: false });
   }
 
   useEffect(() => {
@@ -38,5 +40,5 @@ export function useChatCatchUp(catchingUp: boolean, messages: readonly MessageRe
 
 /** A row the catch-up response added. Local sends own their own entrance (the send bubble). */
 export function isCatchUpArrival(baseline: ReadonlySet<string> | null, message: MessageRecord) {
-  return baseline !== null && !baseline.has(message.id) && message.meta?.optimistic !== true;
+  return baseline !== null && !baseline.has(messageRowKey(message)) && message.meta?.optimistic !== true;
 }

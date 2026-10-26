@@ -1,7 +1,8 @@
 import type { CohubClient, ContentBlock, SessionTurnRecord } from "@neta-art/cohub";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { MessageContent } from "@/src/components/MessageContent";
+import { thinkingBlocks } from "@/src/data/chat-rendering";
 import type { StreamView } from "@/src/data/types";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, Loader } from "@/src/ui";
@@ -38,20 +39,30 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
     })().catch((cause: unknown) => { if (active) setError({ key: loadKey, message: cause instanceof Error ? cause.message : t("turn.loadError") }); });
     return () => { active = false; controller.abort(); };
   }, [client, expanded, loadKey, objectKey, spaceId, t, turn.id, turn.sessionId]);
+  // The reply shows only its answer; the thinking behind it closes the steps.
+  const thinking = useMemo(() => thinkingBlocks(turn.assistantContent), [turn.assistantContent]);
   const summary = turn.intermediateSummary;
-  if (!objectKey && !summary?.messageCount && !summary?.toolCallCount) return null;
-  return <View className="mx-4 my-1.5">
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
-      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text className="text-caption text-fg-muted flex-1">{summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}{turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}</Text>
+  const hasSteps = Boolean(objectKey || summary?.messageCount || summary?.toolCallCount);
+  if (!hasSteps && thinking.length === 0) return null;
+  const label = `${hasSteps ? summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails") : t("turn.thinking")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
+  return <ProcessDisclosure label={label} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
+    {!hasSteps ? null : errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {thinking.length ? <MessageContent content={thinking} /> : null}
+  </ProcessDisclosure>;
+}
+
+/** The row's padding holds the 32pt capsule's 44pt touch target; hitSlop never reaches past a parent. */
+function ProcessDisclosure({ label, expanded, onToggle, children }: { label: string; expanded: boolean; onToggle: () => void; children: ReactNode }) {
+  return <View className="px-4 py-1.5">
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle} hitSlop={6} className="h-8 max-w-full flex-row items-center gap-1 self-start rounded-full bg-surface-raised pl-2 pr-3 active:bg-surface-pressed">
+      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="muted" />
+      <Text numberOfLines={1} className="shrink text-caption text-fg-muted">{label}</Text>
     </Pressable>
-    {expanded ? <View className="gap-2 border-l border-border pl-3">
-      {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
-    </View> : null}
+    {expanded ? <View className="mt-2 gap-2 border-l border-border pl-3">{children}</View> : null}
   </View>;
 }
 
-export function StreamingTurnProcess({ messages }: { messages: StreamView["intermediateMessages"] }) {
+export function StreamingTurnProcess({ messages, thinking }: { messages: StreamView["intermediateMessages"]; thinking: ContentBlock[] }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   // Collapsed rows still run on every dispatch; derive once per snapshot instead.
@@ -65,14 +76,9 @@ export function StreamingTurnProcess({ messages }: { messages: StreamView["inter
     }
     return { content: blocks, toolCount: tools };
   }, [messages]);
-  if (messages.length === 0) return null;
-  return <View className="mx-4 my-1.5">
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
-      <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={16} />
-      <Text className="text-caption text-fg-muted flex-1">{t("turn.steps", { steps: messages.length, tools: toolCount })}</Text>
-    </Pressable>
-    {expanded ? <View className="gap-2 border-l border-border pl-3">
-      {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
-    </View> : null}
-  </View>;
+  if (messages.length === 0 && thinking.length === 0) return null;
+  return <ProcessDisclosure label={messages.length ? t("turn.steps", { steps: messages.length, tools: toolCount }) : t("turn.thinking")} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
+    {!messages.length ? null : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {thinking.length ? <MessageContent active content={thinking} /> : null}
+  </ProcessDisclosure>;
 }
