@@ -1717,13 +1717,17 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const MessageBubble = loadChromeComponent("../src/components/MessageContent.tsx", "MessageBubble", {
     ...chromeScope, memo: (component) => component, useMemo: (factory) => factory(), useSyncExternalStore: () => false, useTraceTouches: () => ({}),
     chatScrollTrace: { subscribe: () => () => {}, isRecording: () => false }, useAppTheme: () => ({ mode: "dark", colors: { assistantBubbleText: "text" } }), useTranslation: () => ({ t: replyT }),
-    useWindowDimensions: () => ({ width: 390 }), compactionFromMessage: () => null, hasRenderableMessage: () => true, hasRenderableContent: (content) => content.length > 0, formatMessageClock: () => "14:32",
-    getReplyContentWidth: (width) => width - 32, REPLY_INSET_X: 16, answerBlocks, typography: { chatBody: { fontSize: 17 } },
+    useWindowDimensions: () => ({ width: 390 }), compactionFromMessage: () => null, hasRenderableMessage: () => true, hasRenderableContent: (content) => content.some((block) => block.type !== "shell_command"), formatMessageClock: () => "14:32",
+    getReplyContentWidth: (width) => width - 32, REPLY_INSET_X: 16, answerBlocks, thinkingBlocks, typography: { chatBody: { fontSize: 17 } },
+    contentText: (content) => content.map((block) => block.text ?? block.thinking).join("\n\n"), messageText: (message) => message.text ?? "",
     BubbleContext: { Provider: "BubbleContext" }, BubbleTraceMessage: { Provider: "BubbleTraceMessage" }, BubbleContentWidth: { Provider: "BubbleContentWidth" },
     MessageContent: "MessageContent", TextBlock: "TextBlock", ReplyMeta: "ReplyMeta",
   });
   const finished = chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: null, content: [thought, answer], meta: {} }, onCopy: () => {} }));
   assert.deepEqual([finished.find((node) => node.type === "MessageContent").props.content, finished.find((node) => node.type === "ReplyMeta").props.copyText], [[answer], "Done."], "a finished reply shows and copies only its answer");
+  const thoughtOnly = chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "Weighing options", content: [thought], meta: {} }, onCopy: () => {} }));
+  assert.deepEqual([thoughtOnly.some((node) => node.type === "TextBlock" || node.type === "MessageContent"), thoughtOnly.find((node) => node.type === "ReplyMeta").props.copyText], [false, ""], "a history row's text derived from the thinking does not bring it back");
+  assert.equal(chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "$ ls", content: [{ type: "shell_command", command: "ls" }], meta: {} } })).find((node) => node.type === "TextBlock")?.props.value, "$ ls", "a reply that did not think keeps its text fallback");
   const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
     ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {}, useMemo: (factory) => factory(),
     thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",

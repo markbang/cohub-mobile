@@ -25,7 +25,7 @@ import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/compon
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { hasRenderableContent, hasRenderableMessage } from "@/src/utils";
+import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
 function formatTokenCount(value: number) {
@@ -589,17 +589,17 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   if (!isUser) {
     const contentWidth = getReplyContentWidth(rowWidth);
     const textColor = theme.colors.assistantBubbleText;
-    // The thinking folds into the Turn's steps; `text` stands in only for records without blocks.
-    const blocks = message.content ?? [];
-    const answer = answerBlocks(blocks);
-    const answerText = blocks.length ? answer.flatMap((block) => block.type === "text" && block.text.trim() ? [block.text.trim()] : []).join("\n\n") : message.text?.trim() ?? "";
-    const body = hasRenderableContent(answer) ? <MessageContent content={answer} color={textColor} imageMaxWidth={contentWidth} /> : !blocks.length && answerText ? <TextBlock value={answerText} color={textColor} /> : null;
+    // The thinking folds into the Turn's steps. A history row's `text` falls back to the
+    // thinking when there was no answer, so it stands in only for replies that did not think.
+    const answer = answerBlocks(message.content);
+    const thought = thinkingBlocks(message.content).length > 0;
+    const body = hasRenderableContent(answer) ? <MessageContent content={answer} color={textColor} imageMaxWidth={contentWidth} /> : !thought && message.text?.trim() ? <TextBlock value={message.text} color={textColor} /> : null;
     return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: "100%", opacity: hidden ? 0 : 1, paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
       <BubbleTraceMessage.Provider value={message}><BubbleContentWidth.Provider value={contentWidth}>
         {body}
         {message.errorMessage ? <View className={`${body ? "mt-2 " : ""}rounded-md bg-danger-soft px-3 py-2`} style={{ borderCurve: "continuous" }}><Text selectable className="text-caption text-danger">{message.errorMessage}</Text></View> : null}
       </BubbleContentWidth.Provider></BubbleTraceMessage.Provider>
-      <ReplyMeta message={message} clock={clock} copyText={answerText} availableWidth={rowWidth} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
+      <ReplyMeta message={message} clock={clock} copyText={thought ? contentText(answer).trim() : messageText(message)} availableWidth={rowWidth} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
     </View></BubbleContext.Provider>;
   }
   const textColor = theme.colors.userBubbleText;
@@ -621,22 +621,24 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   const { t } = useTranslation();
   // Like the finished reply, the body is the answer; the thinking streams into the Turn's steps.
   const answer = answerBlocks(content);
-  const hasContent = hasRenderableContent(answer);
-  const live = status === "pending" || status === "streaming";
+  const hasLivePreview = answer.some((block) => (block.type === "text" && block.text.trim().length > 0) || block.type === "tool_use");
+  const hasRenderableLive = hasRenderableContent(answer);
   // Mirrors the web turn footer: live content is the status itself; otherwise surface
   // what the runtime is doing so quiet gaps (agent launch, model latency) don't look frozen.
-  const runtimeLabel = !hasContent && live
+  const runtimeLabel = !hasLivePreview && (status === "pending" || status === "streaming")
     ? thinkingBlocks(content).length > 0
       ? t("message.stream.thinking")
       : runtimePhase === "llm_call_started"
         ? runtimeModel?.trim()
           ? t("message.stream.waitingModel", { model: runtimeModel.trim() })
           : t("message.stream.waitingGeneric")
-        : status === "pending"
+        : status === "pending" && !hasRenderableLive
           ? t("message.stream.starting")
           : null
     : null;
   const statusLabel = status === "failed" ? t("message.stream.failed") : status === "interrupted" ? t("message.stream.stopped") : null;
+  const live = status === "pending" || status === "streaming";
+  const hasContent = hasLivePreview || hasRenderableLive;
   return <View style={{ width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
     {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} /></BubbleContentWidth.Provider> : null}
     <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
