@@ -1670,7 +1670,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const formatTokenCount = loadChromeComponent("../src/components/MessageContent.tsx", "formatTokenCount", {});
   const replyDetails = loadChromeComponent("../src/components/MessageContent.tsx", "replyDetails", { turnSequenceForMessage, formatTokenCount, requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level });
   const reply = { model: "claude-sonnet", usage: { input: 1200, cacheRead: 8000, output: 1500 }, meta: { turnId: "turn", turnSequence: 12, requestedThinkingLevel: "high" } };
-  assert.equal(replyDetails(reply, replyT), "#12 · claude-sonnet · high · ↑9.2K 8.0K cached · ↓1.5K", "the Turn number moves from its divider into the reply's line");
+  assert.equal(replyDetails(reply, replyT), "#12 · claude-sonnet · high · ↑9.2K · ↓1.5K · 8.0K cached", "the Turn number leads the reply's line; the cache count is the first thing truncation drops");
   const ReplyMeta = loadChromeComponent("../src/components/MessageContent.tsx", "ReplyMeta", {
     ...chromeScope, replyDetails, REPLY_META_HEIGHT: 44, Loader: "Loader",
     useAppTheme: () => ({ colors: { textFaint: "faint" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
@@ -1679,6 +1679,8 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const buttons = chromeNodes(line).filter((node) => node.type === "Pressable");
   assert.deepEqual([line.props.style.height, buttons.length], [44, 2], "copy and fork share the reply's one line");
   for (const button of buttons) assert.ok(classes(button).has("size-8") && button.props.hitSlop === 6, "32pt buttons reach 44pt touch targets inside their 44pt line, since hitSlop never extends past a parent");
+  const detailsText = chromeNodes(line).find((node) => node.type === "Text" && classes(node).has("flex-1"));
+  assert.deepEqual([detailsText.props.numberOfLines, detailsText.props.selectable], [1, undefined], "the details truncate on one line; selectable text on Android ignores the line limit and wraps out of the row");
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
     ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: () => "14:32",
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,

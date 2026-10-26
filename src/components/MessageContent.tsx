@@ -478,12 +478,14 @@ function replyDetails(message: MessageRecord, t: Translate) {
   const cachedInputTokens = typeof usage?.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead > 0 ? formatTokenCount(usage.cacheRead) : null;
   const inputTokens = inputTokenValue > 0 ? formatTokenCount(inputTokenValue) : null;
   const outputTokens = typeof usage?.output === "number" && Number.isFinite(usage.output) && usage.output > 0 ? formatTokenCount(usage.output) : null;
+  // Most important first: a line that runs out of room drops the cache count before the token totals.
   return [
     turn !== null ? `#${turn}` : null,
     message.model || (thinkingLevel || inputTokens || outputTokens ? t("chat.model.agent") : null),
     thinkingLevel ? formatThinkingLevel(thinkingLevel) : null,
-    inputTokens ? `↑${inputTokens}${cachedInputTokens ? ` ${t("message.tokens.cached", { count: cachedInputTokens })}` : ""}` : null,
+    inputTokens ? `↑${inputTokens}` : null,
     outputTokens ? `↓${outputTokens}` : null,
+    cachedInputTokens ? t("message.tokens.cached", { count: cachedInputTokens }) : null,
   ].filter(Boolean).join(" · ");
 }
 
@@ -505,8 +507,8 @@ function ReplyMeta({ message, clock, copyText, onCopy, onFork, forkDisabled, for
   return <View className="flex-row items-center" style={{ height: REPLY_META_HEIGHT, marginLeft: hasActions ? -9 : 0 }}>
     {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy?.(copyText); setCopied(true); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
     {canFork ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork?.(message)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
-    {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. */}
-    <Text selectable numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={hasActions ? { marginLeft: 3 } : undefined}>{details}</Text>
+    {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. Not selectable: Android lays selectable text out without its line limit, so it wrapped out of the row instead of truncating. */}
+    <Text numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={hasActions ? { marginLeft: 3 } : undefined}>{details}</Text>
     {clock ? <Text className="ml-2 shrink-0 text-micro text-fg-faint tabular-nums">{clock}</Text> : null}
   </View>;
 }
