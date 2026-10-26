@@ -411,6 +411,7 @@ function userBubbleStyle(theme: AppTheme, maxWidth: number): ViewStyle {
     alignSelf: "flex-end",
     borderRadius: theme.radius.md,
     borderCurve: "continuous",
+    // design-system: the send overlay hides this surface by overriding it in the same style, then paints its own toward this color.
     backgroundColor: theme.colors.userBubble,
     paddingHorizontal: BUBBLE_PADDING_X,
     paddingTop: 9,
