@@ -2,6 +2,7 @@ import type { CohubClient, ContentBlock, SessionTurnRecord } from "@neta-art/coh
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { MessageContent } from "@/src/components/MessageContent";
+import { thinkingBlocks } from "@/src/data/chat-rendering";
 import type { StreamView } from "@/src/data/types";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, Loader } from "@/src/ui";
@@ -38,11 +39,15 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
     })().catch((cause: unknown) => { if (active) setError({ key: loadKey, message: cause instanceof Error ? cause.message : t("turn.loadError") }); });
     return () => { active = false; controller.abort(); };
   }, [client, expanded, loadKey, objectKey, spaceId, t, turn.id, turn.sessionId]);
+  // The reply shows only its answer; the thinking behind it closes the steps.
+  const thinking = useMemo(() => thinkingBlocks(turn.assistantContent), [turn.assistantContent]);
   const summary = turn.intermediateSummary;
-  if (!objectKey && !summary?.messageCount && !summary?.toolCallCount) return null;
-  const label = `${summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
+  const hasSteps = Boolean(objectKey || summary?.messageCount || summary?.toolCallCount);
+  if (!hasSteps && thinking.length === 0) return null;
+  const label = `${hasSteps ? summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails") : t("turn.thinking")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
   return <ProcessDisclosure label={label} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
-    {errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {!hasSteps ? null : errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {thinking.length ? <MessageContent content={thinking} /> : null}
   </ProcessDisclosure>;
 }
 
@@ -57,7 +62,7 @@ function ProcessDisclosure({ label, expanded, onToggle, children }: { label: str
   </View>;
 }
 
-export function StreamingTurnProcess({ messages }: { messages: StreamView["intermediateMessages"] }) {
+export function StreamingTurnProcess({ messages, thinking }: { messages: StreamView["intermediateMessages"]; thinking: ContentBlock[] }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   // Collapsed rows still run on every dispatch; derive once per snapshot instead.
@@ -71,8 +76,9 @@ export function StreamingTurnProcess({ messages }: { messages: StreamView["inter
     }
     return { content: blocks, toolCount: tools };
   }, [messages]);
-  if (messages.length === 0) return null;
-  return <ProcessDisclosure label={t("turn.steps", { steps: messages.length, tools: toolCount })} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
-    {content.length ? <MessageContent content={content} /> : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+  if (messages.length === 0 && thinking.length === 0) return null;
+  return <ProcessDisclosure label={messages.length ? t("turn.steps", { steps: messages.length, tools: toolCount }) : t("turn.thinking")} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
+    {!messages.length ? null : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {thinking.length ? <MessageContent active content={thinking} /> : null}
   </ProcessDisclosure>;
 }

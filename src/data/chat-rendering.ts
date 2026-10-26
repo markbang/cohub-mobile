@@ -1,6 +1,15 @@
-import type { MessageRecord } from "@neta-art/cohub";
+import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
 
 export type MeasuredMessage = { id: string; revision: string };
+
+/** A reply shows its answer; the thinking behind it folds into the Turn's steps. */
+export function answerBlocks(content: readonly ContentBlock[] | null | undefined): ContentBlock[] {
+  return (content ?? []).filter((block) => block.type !== "thinking");
+}
+
+export function thinkingBlocks(content: readonly ContentBlock[] | null | undefined): ContentBlock[] {
+  return (content ?? []).filter((block) => block.type === "thinking" && block.thinking.trim().length > 0);
+}
 
 /** Keep a growing reply in its user's normal-flow row, not a separately positioned footer.
  * Before that turn's history arrives, the live reply remains after the loaded tail; a window paged

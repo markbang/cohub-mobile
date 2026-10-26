@@ -43,7 +43,7 @@ import { isCatchUpArrival, useChatCatchUp } from "@/src/components/use-chat-catc
 import { markChatEntry } from "@/src/data/chat-entry-trace";
 import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQueueItem, queuedFollowupTurns, steerQueuedFollowup } from "@/src/data/followup-queue";
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
-import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement } from "@/src/data/chat-rendering";
+import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
 import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
@@ -1311,7 +1311,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
 function LiveTurnProcess({ sessionId, turn, client, spaceId }: { sessionId: string; turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
   const { state } = useApp();
   const stream = state.sessionViews[sessionId]?.stream ?? null;
-  if (stream?.turnId === turn.id && stream.intermediateMessages.length > 0) return <StreamingTurnProcess messages={stream.intermediateMessages} />;
+  const thinking = thinkingBlocks(stream?.contentBlocks);
+  if (stream?.turnId === turn.id && (stream.intermediateMessages.length > 0 || thinking.length > 0)) return <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinking} />;
   return <TurnProcess turn={turn} client={client} spaceId={spaceId} />;
 }
 
@@ -1320,7 +1321,7 @@ function LiveReply({ sessionId, showStream, processInRow, availableWidth }: { se
   const view = state.sessionViews[sessionId];
   const stream = view?.stream;
   if (showStream && stream) return <View testID="chat-live-reply">
-    {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} /> : null}
+    {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
     <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} availableWidth={availableWidth} />
   </View>;
   return view?.sending && !view.messages.some(isOptimisticFollowup) ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;

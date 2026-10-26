@@ -739,12 +739,14 @@ export const zh: Record<TranslationKey, string> = {
   "message.stream.waitingModel": "正在等待 {model}…",
   "message.stream.waitingGeneric": "正在等待模型…",
   "message.stream.starting": "正在启动智能体…",
+  "message.stream.thinking": "正在思考…",
   "message.stream.failed": "智能体失败",
   "message.stream.stopped": "生成已停止",
 
   // Turn process / navigator
   "turn.steps": "{steps} 步 · {tools} 个工具",
   "turn.executionDetails": "执行详情",
+  "turn.thinking": "思考过程",
   "turn.notArchived": "执行详情未归档。",
   "turn.none": "没有执行详情。",
   "turn.connect": "连接 Cohub 以加载执行详情。",

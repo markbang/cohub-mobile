@@ -6,7 +6,7 @@ import ts from "typescript";
 import { latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
-import { MessageMeasurements, createStreamBatch, liveReplyAnchor, rowHeightMeasurement } from "../src/data/chat-rendering.ts";
+import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
@@ -1702,12 +1702,36 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
     ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: () => "14:32",
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
-    BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator",
+    BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
   });
   for (const [content, status] of [[[{ type: "text", text: "partial" }], "streaming"], [[], "pending"], [[], "failed"]]) {
     const card = StreamCard({ content, status });
     assert.equal(chromeNodes(card).find((node) => node.props?.style?.height !== undefined)?.props.style.height, 44, `the ${status} reply's status line matches the finished reply's line, so the swap at the end of a Turn moves nothing`);
   }
+  // Only the answer is the reply; the thinking belongs to the Turn's steps, live and finished alike.
+  const thought = { type: "thinking", thinking: "Weighing options" };
+  const answer = { type: "text", text: "Done." };
+  const thinkingOnly = chromeNodes(StreamCard({ content: [thought], status: "streaming" }));
+  assert.deepEqual([thinkingOnly.some((node) => node.type === "MessageContent"), thinkingOnly.some((node) => node.type === "Text" && node.props.children.join("") === "message.stream.thinking")], [false, true], "while only thinking streams, the status line says so instead of showing it");
+  assert.deepEqual(chromeNodes(StreamCard({ content: [thought, answer], status: "streaming" })).find((node) => node.type === "MessageContent").props.content, [answer]);
+  const MessageBubble = loadChromeComponent("../src/components/MessageContent.tsx", "MessageBubble", {
+    ...chromeScope, memo: (component) => component, useMemo: (factory) => factory(), useSyncExternalStore: () => false, useTraceTouches: () => ({}),
+    chatScrollTrace: { subscribe: () => () => {}, isRecording: () => false }, useAppTheme: () => ({ mode: "dark", colors: { assistantBubbleText: "text" } }), useTranslation: () => ({ t: replyT }),
+    useWindowDimensions: () => ({ width: 390 }), compactionFromMessage: () => null, hasRenderableMessage: () => true, hasRenderableContent: (content) => content.length > 0, formatMessageClock: () => "14:32",
+    getReplyContentWidth: (width) => width - 32, REPLY_INSET_X: 16, answerBlocks, typography: { chatBody: { fontSize: 17 } },
+    BubbleContext: { Provider: "BubbleContext" }, BubbleTraceMessage: { Provider: "BubbleTraceMessage" }, BubbleContentWidth: { Provider: "BubbleContentWidth" },
+    MessageContent: "MessageContent", TextBlock: "TextBlock", ReplyMeta: "ReplyMeta",
+  });
+  const finished = chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: null, content: [thought, answer], meta: {} }, onCopy: () => {} }));
+  assert.deepEqual([finished.find((node) => node.type === "MessageContent").props.content, finished.find((node) => node.type === "ReplyMeta").props.copyText], [[answer], "Done."], "a finished reply shows and copies only its answer");
+  const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
+    ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {}, useMemo: (factory) => factory(),
+    thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
+  });
+  const thoughtTurn = { id: "turn", sessionId: "session", intermediateIndex: null, intermediateSummary: null, durationMs: 12_000, assistantContent: [thought, answer] };
+  const capsule = TurnProcess({ turn: thoughtTurn, client: null, spaceId: "space" });
+  assert.deepEqual([capsule?.type, capsule?.props.label, chromeNodes(capsule).find((node) => node.type === "MessageContent").props.content], ["ProcessDisclosure", "turn.thinking · 12s", [thought]], "a Turn that only thought still folds its thinking into a capsule");
+  assert.equal(TurnProcess({ turn: { ...thoughtTurn, assistantContent: [answer] }, client: null, spaceId: "space" }), null, "no steps and no thinking, no capsule");
 }
 
 // Configuration guard, not a native gesture test: the timeline is chronological (no inversion).
@@ -3657,7 +3681,7 @@ assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 }
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
   ...chromeScope, useApp: () => ({ state: { sessionViews: { fixture: liveView } } }),
-  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup,
+  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
 });
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: true, availableWidth: 390 }), null, "completed replies leave no stale live duplicate");
@@ -3666,7 +3690,7 @@ assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processI
 const renderLiveProcess = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveTurnProcess", {
   ...chromeScope,
   useApp: () => ({ state: { sessionViews: { fixture: { stream: { turnId: "turn", intermediateMessages: [] } } } } }),
-  StreamingTurnProcess: "StreamingTurnProcess", TurnProcess: "TurnProcess",
+  StreamingTurnProcess: "StreamingTurnProcess", TurnProcess: "TurnProcess", thinkingBlocks,
 });
 const pendingProcess = renderLiveProcess({ sessionId: "fixture", turn: { id: "turn", intermediateSummary: { messageCount: 4, toolCallCount: 4 } }, client: null, spaceId: "space" });
 assert.equal(pendingProcess.type, "TurnProcess", "reconnecting with an empty stream must not remove the cached execution summary and collapse its row");

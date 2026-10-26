@@ -765,12 +765,14 @@ export const en = {
   "message.stream.waitingModel": "waiting {model}…",
   "message.stream.waitingGeneric": "waiting model…",
   "message.stream.starting": "starting agent…",
+  "message.stream.thinking": "thinking…",
   "message.stream.failed": "Agent failed",
   "message.stream.stopped": "Generation stopped",
 
   // Turn process / navigator
   "turn.steps": "{steps} steps · {tools} tools",
   "turn.executionDetails": "Execution details",
+  "turn.thinking": "Thinking",
   "turn.notArchived": "Execution details were not archived.",
   "turn.none": "No execution details.",
   "turn.connect": "Connect to Cohub to load execution details.",
