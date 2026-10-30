@@ -436,6 +436,7 @@ const chromeScope = {
   traceAction: () => {},
   setDialogOpen: () => {},
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
+  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
@@ -633,9 +634,9 @@ try {
 
 // Data requests triggered by tab focus must not activate the pull-to-refresh control.
 for (const [tab, component, expectedRequests] of [
-  ["activity", "ActivityScreen", ["activity", "subscriptions"]],
-  ["spaces", "SpacesScreen", ["home", "spaces"]],
-  ["index", "ChatsScreen", ["home"]],
+  ["(activity)/activity", "ActivityScreen", ["activity", "subscriptions"]],
+  ["(spaces)/spaces", "SpacesScreen", ["home", "spaces"]],
+  ["(chats)/index", "ChatsScreen", ["home"]],
 ]) {
   let cursor = 0;
   const slots = [];
@@ -682,7 +683,7 @@ for (const [tab, component, expectedRequests] of [
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
-  const surface = () => render().find((node) => node.type === (tab === "activity" ? "ScrollView" : "LegendList"));
+  const surface = () => render().find((node) => node.type === (tab.endsWith("activity") ? "ScrollView" : "LegendList"));
   const refresh = () => surface().props.refreshControl;
   const scrollSurface = surface();
   assert.equal(render().find((node) => node.type === "Screen").props.edgeToEdge, true);
@@ -707,7 +708,7 @@ for (const [tab, component, expectedRequests] of [
     if (failed) assert.ok(render().some((node) => node.type === "DataError"), `${tab}: refresh errors remain actionable`);
   }
   state.error = null;
-  if (tab === "index") {
+  if (tab === "(chats)/index") {
     // Replay the installed list's anchor algorithm with the real screen props.
     // This checks automatic scroll requests, not native navigation/layout itself.
     const legendSource = ts.createSourceFile("legend.js", readFileSync(new URL("../node_modules/@legendapp/list/react-native.js", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
@@ -755,7 +756,7 @@ for (const [tab, component, expectedRequests] of [
       }
     }
   }
-  if (tab === "spaces") {
+  if (tab === "(spaces)/spaces") {
     const list = surface();
     assert.notEqual(list.props.ListEmptyComponent.type, "LoadingRows", "returning to a loaded empty Spaces list must not flash skeletons");
     spaceList.overview = null;
@@ -966,7 +967,7 @@ for (const [tab, component, expectedRequests] of [
   const routes = [];
   let retries = 0;
   const subscriptions = { data: null, loading: true, error: null, load: async () => { retries++; } };
-  const renderActivity = loadChromeComponent("../app/(tabs)/activity.tsx", "ActivityScreen", {
+  const renderActivity = loadChromeComponent("../app/(tabs)/(activity)/activity.tsx", "ActivityScreen", {
     ...formScope, ...runner.hooks,
     useRouter: () => ({ push: (route) => routes.push(route) }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useEdgeChrome: () => ({ headerHeight: 100 }), useApp: () => ({ connectionState: "open" }),
@@ -1385,7 +1386,7 @@ for (const isPinned of [false, true]) {
 
 // Spaces uses the capsule for the create sheet's Cloud / This device choice.
 for (const [path, labels, chips] of [
-  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 2],
+  ["../app/(tabs)/(spaces)/spaces.tsx", ["Recent", "All", "Pinned"], 2],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/);
@@ -1416,7 +1417,7 @@ for (const [path, labels, chips] of [
     { spaceId: "space-gone", root: "/storage/emulated/0/Old", label: "Internal storage/Old", state: "stopped", error: null },
   ];
   const state = { booting: false, spaces: [{ id: "space-a", name: "Field notes", description: null, isPinned: false }, { id: "space-b", name: "Cloud", isPinned: false }], sessions: [], sessionViews: {} };
-  const renderSpaces = loadChromeComponent("../app/(tabs)/spaces.tsx", "SpacesScreen", {
+  const renderSpaces = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "SpacesScreen", {
     ...chromeScope, ...screen.hooks,
     useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useRouter: () => ({ push: (route) => pushes.push(route) }),
@@ -3295,7 +3296,7 @@ const messageContent = readFileSync(new URL("../src/components/MessageContent.ts
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");
 assert.ok(panelsSource.text.includes("prefetchSession"), "opening a Chat from the space panel starts the load on press-in");
-assert.ok(readFileSync(new URL("../app/(tabs)/index.tsx", import.meta.url), "utf8").includes("prefetchSession"), "opening a Chat from Chats starts the load on press-in");
+assert.ok(readFileSync(new URL("../app/(tabs)/(chats)/index.tsx", import.meta.url), "utf8").includes("prefetchSession"), "opening a Chat from Chats starts the load on press-in");
 assert.match(readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8"), /useLayoutEffect\(\(\) => \{\s*void openSession\(sessionId\);/, "Chat open must attach before paint so a prefetch can win the first frame");
 
 // Space Chat counts come from a cached probe of the Space's first page.
@@ -4428,8 +4429,8 @@ for (const path of [
   "../src/components/ModelSelectorMenu.tsx",
   "../src/components/TurnNavigatorSheet.tsx",
   "../src/components/SpacePanels.tsx",
-  "../app/(tabs)/index.tsx",
-  "../app/(tabs)/spaces.tsx",
+  "../app/(tabs)/(chats)/index.tsx",
+  "../app/(tabs)/(spaces)/spaces.tsx",
   "../app/chat/[sessionId].tsx",
   "../app/space/[spaceId]/files.tsx",
 ]) {

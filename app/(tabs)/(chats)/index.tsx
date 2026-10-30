@@ -23,6 +23,7 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
@@ -140,13 +141,21 @@ export default function ChatsScreen() {
   // Android menus have no check mark of their own, so the chosen source trades its glyph for one.
   const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: !nativeMenus && option.value === sourceFilter ? "check" : option.icon, title: option.label, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
   const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
+  useNativeHeader({
+    title: t("tabs.chats"),
+    search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
+    items: [
+      { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
+      { kind: "menu", label: t("chats.source.filter"), icon: "filter", title: sourceLabel, active: sourceFilter !== "all", actions: sourceActions },
+    ],
+  });
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <LoadingState label={t("chats.searching")} />
     : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
     <Screen edgeToEdge>
-      <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <ExpandableSearchBar
         transparent
         title={t("tabs.chats")}
@@ -175,7 +184,7 @@ export default function ChatsScreen() {
       />
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError ? <DataError message={dataError} onRetry={refresh} /> : null}
-      </EdgeHeader>
+      </EdgeHeader>}
       <LegendList
         ref={listRef}
         onScroll={onScroll}
@@ -195,13 +204,13 @@ export default function ChatsScreen() {
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
-        {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: headerHeight })}
+        {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: nativeHeaders ? undefined : headerHeight })}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
-        contentInsetAdjustmentBehavior="never"
-        scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
-        contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
+        {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
+        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View className="px-3">
+          {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         </View>}

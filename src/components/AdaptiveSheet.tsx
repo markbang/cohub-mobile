@@ -29,7 +29,7 @@ const RELEASE_PROJECTION_S = 0.099;
 // A programmatic close has no release velocity to carry, so it eases out on the iOS sheet curve.
 const CLOSE_TIMING = { duration: motion.settle.duration, easing: Easing.bezier(0.32, 0.72, 0, 1) };
 
-type AdaptiveSheetProps = {
+export type AdaptiveSheetProps = {
   visible: boolean;
   title: string;
   subtitle?: string;

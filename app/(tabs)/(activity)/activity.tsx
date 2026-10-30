@@ -12,6 +12,7 @@ import { AppIcon, AppRefreshControl, ConnectionBanner, DataError, Screen, Sectio
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 
 export default function ActivityScreen() {
   const router = useRouter();
@@ -36,10 +37,11 @@ export default function ActivityScreen() {
     }
   };
   return <Screen edgeToEdge>
-    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <ConnectionBanner visible={connectionUnavailable} />
-    </EdgeHeader>
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<AppRefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} />}>
+    </EdgeHeader>}
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={<AppRefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={nativeHeaders ? undefined : headerHeight} />}>
+      {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>

@@ -1,8 +1,7 @@
 import { Button, Host, HStack, Image, Menu, Section, Text } from "@expo/ui/swift-ui";
 import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as disabledModifier, font, foregroundStyle, lineLimit } from "@expo/ui/swift-ui/modifiers";
-import type { SFSymbol } from "sf-symbols-typescript";
-import type { IconName } from "@/src/icons";
 import { traceAction } from "@/src/data/interaction-trace";
+import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { useAppTheme } from "@/src/theme";
 import { liquidGlass } from "@/src/ui/Glass";
 import type { NativeMenuAction, NativeMenuButtonProps } from "./NativeMenu";
@@ -11,34 +10,6 @@ export type { NativeMenuAction, NativeMenuButtonProps, NativeMenuSection } from 
 
 /** iOS menus are UIKit's pull-down menus: Liquid Glass, the spring out of the button, press-and-slide. */
 export const nativeMenus = true;
-
-/** SF Symbols standing in for the app's Lucide glyphs in system menus; an unmapped glyph shows no image. */
-export const SF_SYMBOLS: Partial<Record<IconName, SFSymbol>> = {
-  activity: "waveform.path.ecg",
-  bookmark: "bookmark",
-  camera: "camera",
-  check: "checkmark",
-  clock: "clock",
-  copy: "doc.on.doc",
-  filter: "line.3.horizontal.decrease",
-  "folder-open": "folder",
-  "external-link": "arrow.up.right.square",
-  globe: "globe",
-  images: "photo.on.rectangle",
-  layers: "square.stack.3d.up",
-  messages: "bubble.left.and.bubble.right",
-  more: "ellipsis",
-  paperclip: "paperclip",
-  pin: "pin",
-  "pin-off": "pin.slash",
-  plus: "plus",
-  refresh: "arrow.clockwise",
-  share: "square.and.arrow.up",
-  smartphone: "iphone",
-  "square-pen": "square.and.pencil",
-  tag: "tag",
-  trash: "trash",
-};
 
 export function NativeMenuItems({ actions, menu }: { actions: readonly NativeMenuAction[]; menu: string }) {
   return <>
@@ -57,7 +28,7 @@ export function NativeMenuItems({ actions, menu }: { actions: readonly NativeMen
 
 export function NativeMenuButton({ icon, label, title, actions = [], sections, appearance, active = false, disabled = false, testID }: NativeMenuButtonProps) {
   const theme = useAppTheme();
-  const symbol = SF_SYMBOLS[icon] ?? "ellipsis";
+  const symbol = SF_SYMBOLS[icon];
   const menu = testID ?? label;
   // Bar and composer buttons are glass like the rest of the chrome; a plain one is a bare glyph.
   const shape = appearance === "plain"

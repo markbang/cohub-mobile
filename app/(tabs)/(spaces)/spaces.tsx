@@ -24,6 +24,7 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, EmptyState, ExpandableSearchBar, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, PrimaryButton, Screen } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
@@ -208,8 +209,17 @@ export default function SpacesScreen() {
   const filterLabel = filterOptions.find((option) => option.value === filter)?.label ?? t("spaces.filter.recent");
   // Android menus have no check mark of their own, so the chosen scope trades its glyph for one.
   const filterActions: NativeMenuAction[] = filterOptions.map((option) => ({ icon: !nativeMenus && option.value === filter ? "check" : option.icon, title: option.label, checked: option.value === filter, onPress: () => setFilter(option.value) }));
+  const openCreate = () => { setCreateError(null); setCreateOpen(true); };
+  useNativeHeader({
+    title: t("tabs.spaces"),
+    search: { query, onQueryChange: setQuery, placeholder: t("spaces.search.placeholder") },
+    items: [
+      { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
+      { kind: "menu", label: t("spaces.filter.label"), icon: "filter", title: filterLabel, active: filter !== "recent", actions: filterActions },
+    ],
+  });
   return <Screen edgeToEdge>
-    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
     <ExpandableSearchBar
       transparent
       title={t("tabs.spaces")}
@@ -217,7 +227,7 @@ export default function SpacesScreen() {
       query={query}
       onQueryChange={setQuery}
       placeholder={t("spaces.search.placeholder")}
-      onCreate={() => { setCreateError(null); setCreateOpen(true); }}
+      onCreate={openCreate}
       filters={<View className="flex-row">
         {nativeMenus
           ? <NativeMenuButton appearance="chip" icon="filter" label={t("spaces.filter.label")} title={filterLabel} actions={filterActions} testID="spaces-filter-menu" />
@@ -237,7 +247,7 @@ export default function SpacesScreen() {
       </View>}
     />
     {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
-    </EdgeHeader>
+    </EdgeHeader>}
     <LegendList
       ref={listRef}
       onScroll={onScroll}
@@ -247,14 +257,14 @@ export default function SpacesScreen() {
       estimatedItemSize={80}
       keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
       renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
-      {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: headerHeight })}
+      {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: nativeHeaders ? undefined : headerHeight })}
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       keyboardShouldPersistTaps="handled"
-      contentInsetAdjustmentBehavior="never"
-      scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }}
-      contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
+      {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
+      contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
       ListHeaderComponent={<View className="px-3">
+        {nativeHeaders && dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}

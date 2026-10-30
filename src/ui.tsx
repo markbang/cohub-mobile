@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { createContext, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
   Image,
   Keyboard,
@@ -18,12 +18,13 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { G, Path, Rect } from "react-native-svg";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { icons, type IconName } from "@/src/icons";
+import type { IconName } from "@/src/icons";
+import { Glyph } from "@/src/ui/Glyph";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
 import { getComposerActionState } from "@/src/data/composer-state";
@@ -33,7 +34,9 @@ import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import type { ColorKey } from "@/src/design/tokens";
 import { motion, springs } from "@/src/motion";
+import { BarButtonContext } from "@/src/ui/bar-button-context";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
 import { Loader } from "@/src/ui/Loader";
 import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
@@ -58,11 +61,10 @@ const ICON_TONES: Record<IconTone, ColorKey> = {
   success: "success", warning: "warning", danger: "danger", info: "info",
 };
 
-/** Lucide needs a JS color, so icons take a token `tone`; `color` is for computed values only. */
+/** Glyphs need a JS color, so icons take a token `tone`; `color` is for computed values only. */
 export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; style?: object }) {
   const theme = useAppTheme();
-  const Icon = icons[name];
-  return <Icon size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
+  return <Glyph name={name} size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} fill={fill} style={style} />;
 }
 
 export function CohubLogo({ size = 36 }: { size?: number }) {
@@ -113,17 +115,14 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
   );
 }
 
-/** Icon buttons in a top bar's actions draw filled unless they say otherwise. */
-const BarButtonContext = createContext(false);
-
 /** `filled` draws the glyph on a solid circle, for bar buttons over content; an accent one fills with the accent. */
 export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
-  const inBar = useContext(BarButtonContext);
-  const filled = filledProp ?? inBar;
+  const bar = useContext(BarButtonContext);
+  const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
-  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" ? "accent" : tone === "danger" ? "danger" : filled ? "fg" : "secondary";
+  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
   const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
@@ -190,8 +189,13 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
     <View className="flex-1 bg-background" style={contentStyle}>{children}</View>
   );
   const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView className="flex-1 bg-background" behavior="height">{body}</KeyboardAvoidingView>;
+  // Under an iOS navigation bar the root insets would double the top gap; measure natively instead.
+  if (Platform.OS === "ios" && !edgeToEdge) return <View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView></View>;
   return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
 }
+
+const TOP_EDGE = ["top"] as const;
+const FILL = { flex: 1 } as const;
 
 type TopBarProps = {
   title: string;
@@ -214,10 +218,17 @@ type TopBarProps = {
    * The title stays as the screen reader's header.
    */
   titleHidden?: boolean;
+  /** Keeps the drawn bar on iOS, for bars that move with their content. */
+  drawn?: boolean;
 };
 
-export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false }: TopBarProps) {
+export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false, drawn = false }: TopBarProps) {
   const { t } = useTranslation();
+  // A pushed screen's plain bar is the iOS navigation bar. Its back button pops the route itself, so
+  // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
+  const system = nativeHeaders && !drawn && Boolean(onBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
+  useNativeHeader(system ? { title, subtitle, right: actions } : null);
+  if (system) return null;
   const titleContent = children ?? <>
     <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
     {subtitle ? <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text> : null}
@@ -227,7 +238,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
       <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
         {onBack ? <IconButton filled name="arrow-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
-        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
+        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
       {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
         <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-bold text-fg">{title}</Text>
@@ -249,7 +260,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
       <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1">
         {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
+      {actions ? <View className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
     </View>
   );
 }

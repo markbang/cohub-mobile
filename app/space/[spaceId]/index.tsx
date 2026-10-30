@@ -293,7 +293,7 @@ export default function SpaceScreen() {
   if (!space) {
     const opening = Boolean(spaceId) && (state.booting || !client || spaceLoading);
     return <Screen>
-      <TopBar title={t("space.title")} onBack={() => router.back()} />
+      <TopBar drawn title={t("space.title")} onBack={() => router.back()} />
       <View className="flex-1 items-center justify-center p-6">
         {opening
           ? <Text className="text-body text-fg-muted">{t("space.opening")}</Text>
@@ -352,6 +352,7 @@ export default function SpaceScreen() {
     >
       <View className="flex-1">
     <TopBar
+      drawn
       title={name}
       onBack={() => router.back()}
       actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} actions={spaceActions} testID="space-actions-menu" /> : <View ref={spaceActionsRef} collapsable={false}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View>}</>}
