@@ -491,8 +491,9 @@ export default function SpaceSettingsScreen() {
           )}
         </View>
       </ScrollView>
-      {addModOpen ? <AdaptiveSheet
-        visible
+      <AdaptiveSheet
+        visible={addModOpen}
+        detent="fit"
         title={t("space.settings.addMod")}
         subtitle={t("space.settings.addModPrompt")}
         onClose={() => setAddModOpen(false)}
@@ -517,9 +518,10 @@ export default function SpaceSettingsScreen() {
           />
           {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
         </View>
-      </AdaptiveSheet> : null}
-      {customTtlOpen ? <AdaptiveSheet
-        visible
+      </AdaptiveSheet>
+      <AdaptiveSheet
+        visible={customTtlOpen}
+        detent="fit"
         title={t("space.settings.sleep.customTitle")}
         subtitle={t("space.settings.sleep.customPrompt")}
         onClose={() => setCustomTtlOpen(false)}
@@ -546,7 +548,7 @@ export default function SpaceSettingsScreen() {
           />
           {customTtlError ? <Text accessibilityRole="alert" className="text-caption text-danger">{customTtlError}</Text> : null}
         </View>
-      </AdaptiveSheet> : null}
+      </AdaptiveSheet>
     </Screen>
   );
 }

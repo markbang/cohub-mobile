@@ -46,6 +46,11 @@ export type AdaptiveSheetProps = {
    * opposite the close. Destructive or two-way choices stay in `footer` with their words.
    */
   confirm?: SheetConfirm;
+  /**
+   * `fit` sizes a short sheet to its content on iOS, as a medium-height system sheet; the drawn Android
+   * sheet always wraps its content. Owners keep a `fit` sheet mounted and drive it through `visible`.
+   */
+  detent?: "fit" | "large";
   testID?: string;
 };
 

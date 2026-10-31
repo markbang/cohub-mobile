@@ -549,7 +549,7 @@ const formScope = {
   assert.ok(sheet()?.props.visible, "Android Add opens the cross-platform Mod input instead of the unsupported Alert.prompt");
   assert.equal(submit().props.disabled, true, "an empty Mod ID cannot be submitted");
   sheet().props.onClose();
-  assert.equal(sheet(), undefined, "Cancel dismisses without creating a Mod");
+  assert.equal(sheet().props.visible, false, "Cancel dismisses without creating a Mod");
   assert.equal(requests.length, 0);
   add.props.onPress();
   const modId = "7a316e62-207b-480d-9cb0-7b62564129dc";
@@ -570,7 +570,7 @@ const formScope = {
   const installed = { id: "mod", name: "Project tools", mountSlug: "tools", mountPath: "/mods/tools", modSpaceId: modId, enabled: true };
   requests[1].resolve({ item: installed, sandboxRestarting: true });
   await flushSync();
-  assert.equal(sheet(), undefined, "successful installation closes the input sheet");
+  assert.equal(sheet().props.visible, false, "successful installation closes the input sheet");
   assert.ok(render().some((node) => node.type === "Text" && node.props.children.includes(installed.name)), "the accepted Mod appears without another list request");
   assert.equal(alerts.at(-1).message, "space.settings.modRestarting");
   add.props.onPress();

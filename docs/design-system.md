@@ -174,7 +174,8 @@ Cache retention is picked in place with `SettingsSelectRow` on both. The system 
 tab at launch, where the drawn one mounts a tab on first visit. Tab roots stay React Native rather than
 a SwiftUI `Form`: UIKit has to find the root scroll view for the Large Title to collapse. The Chat and
 Space home bars stay drawn because they slide with the Space panel pager, which a navigation bar
-cannot. Sheets open full height: React Native's `Modal` has no medium detent.
+cannot. Short sheets (add Mod, custom sleep, a Work's device request) pass `detent="fit"` and present as a
+SwiftUI sheet sized to their content (`@expo/ui` `BottomSheet`); longer ones stay full-height page sheets.
 
 ### 2.5 Motion
 
