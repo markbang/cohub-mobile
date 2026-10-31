@@ -11,7 +11,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { useToast } from "@/src/components/Toast";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation, type LocalePreference } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
@@ -36,7 +36,7 @@ export function SettingsHomeScreen() {
   const router = useRouter();
   const { signOut } = useProfileSession();
   const { name, email, avatar } = useCurrentUser();
-  const { clearCache } = useApp();
+  const { clearCache } = useAppActions();
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -7,7 +7,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { cronSummaryText, formatRunTime, ScheduleForm, scheduleProblem, type ScheduleValues } from "@/src/components/ScheduleForm";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
@@ -29,7 +29,7 @@ export default function ScheduleScreen() {
   const insets = useSafeAreaInsets();
   const { t, locale } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [job, setJob] = useState<CronJobRecord | null>(null);
   const [runs, setRuns] = useState<{ items: TaskRunRecord[]; cursor: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);

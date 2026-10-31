@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { SpaceRuntimeStatus } from "@/src/data/runtime";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 
 export function useSpaceRuntime(spaceId: string) {
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [status, setStatus] = useState<SpaceRuntimeStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

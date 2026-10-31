@@ -1,5 +1,5 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
-import { useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
@@ -7,7 +7,7 @@ import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
-import { useApp } from "@/src/data/context";
+import { shallowEqual, useAppSelector } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -39,12 +39,21 @@ function railX(level: number, showSpace: boolean) {
 
 export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {
   const { t } = useTranslation();
-  const { state } = useApp();
+  // Only this Chat's status inputs; token batches keep the live stream's identity and phase.
+  const { status, latestTurn, liveTurnId, liveStatus } = useAppSelector(({ state }) => {
+    const live = state.sessionViews[session.id]?.stream;
+    return { status: sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses), latestTurn: state.sessionLatestTurns[session.id], liveTurnId: live?.turnId ?? null, liveStatus: live?.status ?? null };
+  }, shallowEqual);
+  // The running label shows elapsed minutes, which used to advance only with unrelated app re-renders.
+  const [, tick] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => {
+    if (status !== "running") return;
+    const timer = setInterval(tick, 30_000);
+    return () => clearInterval(timer);
+  }, [status]);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const spaceName = session.space?.name?.trim() || t("space.fallbackName");
-  const status = sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses);
-  const latestTurn = state.sessionLatestTurns[session.id];
-  const activity = sessionActivity(session, { status, latestTurn, live: state.sessionViews[session.id]?.stream ?? null, t });
+  const activity = sessionActivity(session, { status, latestTurn, live: liveStatus ? { turnId: liveTurnId, status: liveStatus } : null, t });
   const glyph = status === "running" || status === "failed" || status === "stopped" ? status : null;
   const depth = tree?.depth ?? 0;
   const branch = depth > 0;

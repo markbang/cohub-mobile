@@ -8,7 +8,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useToast } from "@/src/components/Toast";
 import { promotionUrl } from "@/src/data/app-manage";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -38,7 +38,7 @@ export default function WorkPromotionsScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [data, setData] = useState<{ promotions: AppPromotionRecord[]; providers: AppPromotionProviderStatus[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -90,7 +90,7 @@ export default function WorkPromotionsScreen() {
 function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId: string; providers: AppPromotionProviderStatus[]; onClose: () => void; onCreated: (promotion: AppPromotionRecord) => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [name, setName] = useState("");
   const [provider, setProvider] = useState(() => providers.find((item) => item.configured)?.key ?? "generic");
   const [utm, setUtm] = useState<Record<UtmKey, string>>({ source: "", medium: "", campaign: "", content: "" });
@@ -131,7 +131,7 @@ function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId:
 
 function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appId: string; promotion: AppPromotionRecord; link: string; onCopy: () => void; onClose: () => void }) {
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [stats, setStats] = useState<AppPromotionStatsResponse | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {

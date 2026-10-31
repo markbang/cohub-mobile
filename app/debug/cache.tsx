@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { cacheStats, hydrateHome, type CacheStats } from "@/src/data/local-db";
 import type { SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 import { AppIcon, Loader, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
@@ -9,7 +9,7 @@ import { displaySessionTitle, formatRelativeTime } from "@/src/utils";
 const LIST_LIMIT = 50;
 
 export default function DebugCacheScreen() {
-  const { userUuid, clearCache } = useApp();
+  const { userUuid, clearCache } = useAppActions();
   const [stats, setStats] = useState<CacheStats | null>(null);
   const [spaces, setSpaces] = useState<SpaceRecord[]>([]);
   const [sessions, setSessions] = useState<UserSessionListItem[]>([]);

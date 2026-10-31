@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import { View } from "react-native";
 import { useToast } from "@/src/components/Toast";
 import { saveTitle } from "@/src/data/checkpoint-diff";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
@@ -20,7 +20,7 @@ export default function SavesScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   useSpaceRealtime(spaceId ? [spaceId] : []);
   const [saves, setSaves] = useState<CheckpointRecord[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);

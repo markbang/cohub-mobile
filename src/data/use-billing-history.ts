@@ -1,14 +1,14 @@
 import type { BillingBalanceActivityList, BillingSubscriptionHistoryList, BillingSubscriptionHistoryStatus } from "@neta-art/cohub";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 
 type HistoryData = { kind: "history"; list: BillingBalanceActivityList } | { kind: "subscriptions"; list: BillingSubscriptionHistoryList };
 export type SubscriptionCancellation = { subscription: BillingSubscriptionHistoryStatus; kind: "checkout" | "renewal" };
 
 export function useBillingHistory(kind: HistoryData["kind"]) {
-  const { client } = useApp();
+  const { client } = useAppActions();
   const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<HistoryData | null>(null);

@@ -5,7 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { CodeBlock } from "@/src/components/CodeBlock";
 import { UrlFilePreview } from "@/src/components/MediaViewers";
 import { detectCodeLanguage } from "@/src/data/code-language";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { DataError, IconButton, LoadingDocument, Screen, TopBar } from "@/src/ui";
@@ -16,7 +16,7 @@ export default function SaveFileScreen() {
   const { spaceId = "", checkpointId = "", path = "" } = useLocalSearchParams<Params>();
   const router = useRouter();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [file, setFile] = useState<SpaceFsFileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

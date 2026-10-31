@@ -8,7 +8,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useToast } from "@/src/components/Toast";
 import { DIFF_STATUS, formatDiffCounts, joinSavePath, saveStat, saveTitle } from "@/src/data/checkpoint-diff";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, IconButton, Loader, LoadingSections, Screen, Segmented, TopBar } from "@/src/ui";
 import { Meta } from "@/src/ui/ListRow";
@@ -23,7 +23,7 @@ export default function SaveScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [save, setSave] = useState<CheckpointRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("changes");
@@ -80,7 +80,7 @@ export default function SaveScreen() {
 function ChangesTab({ spaceId, save, base, bottomInset, onCompare }: { spaceId: string; save: CheckpointRecord; base: string | null; bottomInset: number; onCompare: () => void }) {
   const router = useRouter();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [diff, setDiff] = useState<{ key: string; summary: CheckpointDiffSummary } | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -148,7 +148,7 @@ function DiffFileRow({ file, last, onPress }: { file: CheckpointDiffFile; last: 
 function FilesTab({ spaceId, checkpointId, bottomInset }: { spaceId: string; checkpointId: string; bottomInset: number }) {
   const router = useRouter();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [path, setPath] = useState("");
   const [listing, setListing] = useState<{ path: string; entries: SpaceFsEntry[] } | null>(null);
   const [error, setError] = useState<{ path: string; message: string } | null>(null);
@@ -181,7 +181,7 @@ function FilesTab({ spaceId, checkpointId, bottomInset }: { spaceId: string; che
 
 function CompareSheet({ visible, spaceId, save, base, onClose, onPick }: { visible: boolean; spaceId: string; save: CheckpointRecord; base: string | null; onClose: () => void; onPick: (base: string | null) => void }) {
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [options, setOptions] = useState<CheckpointRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requested = useRef(false);

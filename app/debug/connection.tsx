@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { useApp } from "@/src/data/context";
+import { useAppActions, useAppSelector } from "@/src/data/context";
 import type { ConnectionState } from "@/src/data/types";
 import { AppIcon, PrimaryButton, Screen, SectionHeader, StatusPill } from "@/src/ui";
 import type { IconName } from "@/src/icons";
@@ -13,7 +13,10 @@ function connectionTone(state: ConnectionState): "success" | "warning" | "danger
 }
 
 export default function DebugConnectionScreen() {
-  const { state, connectionState, refreshHome, refreshSessionStatuses } = useApp();
+  const { refreshHome, refreshSessionStatuses } = useAppActions();
+  // A live diagnostics view: it intentionally follows every state change while open.
+  const state = useAppSelector((app) => app.state);
+  const connectionState = useAppSelector((app) => app.connectionState);
   const [timeline, setTimeline] = useState<{ at: number; value: ConnectionState }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 

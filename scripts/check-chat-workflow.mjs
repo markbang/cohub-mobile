@@ -415,6 +415,22 @@ function loadChromeComponent(path, name, scope) {
   const code = ts.transpileModule(`${statements.join("\n")}\nreturn ${name};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   return new Function(...Object.keys(scope), code)(...Object.values(scope));
 }
+// The provider's split hooks over one flat fixture: selectors run against it as they would against the store.
+let contextHelpers;
+function appHooks(read) {
+  contextHelpers ??= {
+    shallowEqual: loadChromeComponent("../src/data/context.tsx", "shallowEqual", {}),
+    selectModelCatalog: loadChromeComponent("../src/data/context.tsx", "selectModelCatalog", {}),
+  };
+  return {
+    ...contextHelpers,
+    useAppActions: () => read(),
+    useAppSelector: (select) => select(read()),
+    useAppStateGetter: () => () => read().state,
+    useSessionStream: (id) => read().state?.sessionViews?.[id]?.stream ?? null,
+    usePersonalSpaceActivity: () => new Map(),
+  };
+}
 // className utilities as a set, for asserting the styling contract without a native renderer.
 const classes = (node) => new Set(String(node.props.className ?? "").split(/\s+/).filter(Boolean));
 // theme.ts builds its themes from the token module; evaluated in isolation, they need it in scope.
@@ -531,7 +547,7 @@ const formScope = {
     useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }]; },
     useRef: (current) => { const index = cursor++; if (!(index in slots)) slots[index] = { current }; return slots[index]; },
     useEffect: () => {}, useFocusEffect: () => {}, useCallback: (callback) => callback, useRouter: () => ({}), useLocalSearchParams: () => ({ spaceId: "space" }),
-    useApp: () => ({ client }), useToast: () => (notice) => alerts.push(notice),
+    ...appHooks(() => ({ client })), useToast: () => (notice) => alerts.push(notice),
     SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatWalletUsd, cronSummaryText: (_summary, expression) => expression, summarizeCron,
     useSpaceSettings: () => ({ env: [], config: null, ports: {}, allowedSpec: "standard", members: [], invitations: [], mods, setMods: (next) => { mods = next(mods); }, schedules: [], resources: Object.fromEntries(resourceKeys.map((key) => [key, { loaded: true, loading: false, error: null }])), loadResource: async () => {} }),
     ResourceStatus: "ResourceStatus",
@@ -672,7 +688,7 @@ for (const [tab, component, expectedRequests] of [
     useCallback: (callback) => callback, useMemo: (factory) => factory(), useEffect: () => {}, useFocusEffect: () => {}, useSyncScope: () => {}, useSpaceRealtime: () => {},
     useRouter: () => ({}), useIsFocused: () => true, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useEdgeChrome: () => ({ headerHeight: 103, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
-    useApp: () => ({ state, spaceList, userUuid: "user", client: {}, connectionState: "open", refreshHome: () => request("home") }),
+    ...appHooks(() => ({ state, spaceList, userUuid: "user", client: {}, connectionState: "open", refreshHome: () => request("home") })),
     useActivity: () => activityData, useBillingHistory: () => ({ data: null, loading: true, load: () => request("subscriptions") }),
     useAppTheme: () => ({ colors: {}, spacing: {} }),
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
@@ -836,7 +852,7 @@ for (const [tab, component, expectedRequests] of [
   const renderFile = loadChromeComponent("../app/space/[spaceId]/file.tsx", "FileScreen", {
     ...formScope, ...runner.hooks,
     useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ spaceId: "space", path: "notes.txt" }),
-    firstParam: (value) => value ?? "", useApp: () => ({ client }), useToast: () => () => {},
+    firstParam: (value) => value ?? "", ...appHooks(() => ({ client })), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
     Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict,
     MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
@@ -934,7 +950,7 @@ for (const [tab, component, expectedRequests] of [
   const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } } };
   const renderWork = loadChromeComponent("../app/work/[appId].tsx", "WorkScreen", {
     ...formScope, ...runner.hooks, useFocusEffect: (callback) => { focus = callback; },
-    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), useApp: () => ({ client }), AppHostWebView: "AppHostWebView", LoadingState: "LoadingState",
+    useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), ...appHooks(() => ({ client })), AppHostWebView: "AppHostWebView", LoadingState: "LoadingState",
   });
   const render = () => chromeNodes(runner.render(renderWork));
   const detail = (title) => ({ app: { id: "work", meta: { title } }, space: { name: "Space" }, content: { url: "https://example.com/work" } });
@@ -985,7 +1001,7 @@ for (const [tab, component, expectedRequests] of [
   const renderActivity = loadChromeComponent("../app/(tabs)/(activity)/activity.tsx", "ActivityScreen", {
     ...formScope, ...runner.hooks,
     useRouter: () => ({ push: (route) => routes.push(route) }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
-    useEdgeChrome: () => ({ headerHeight: 100 }), useApp: () => ({ connectionState: "open" }),
+    useEdgeChrome: () => ({ headerHeight: 100 }), ...appHooks(() => ({ connectionState: "open" })),
     useActivity: () => ({ credits: { data: null, error: null }, activity: { data: null, error: null }, refresh: async () => {} }),
     useBillingHistory: () => subscriptions,
     EdgeHeader: "EdgeHeader", AccountAvatar: "AccountAvatar", RefreshControl: "RefreshControl", ConnectionBanner: "ConnectionBanner", PressableScale: "PressableScale", ActivityHeatmapSkeleton: "ActivityHeatmapSkeleton", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow",
@@ -1018,7 +1034,7 @@ for (const [tab, component, expectedRequests] of [
   const renderNewChat = loadChromeComponent("../app/new-chat.tsx", "NewChatScreen", {
     ...formScope, ...runner.hooks, EmptyState: "EmptyState", SearchField: "SearchField", FlatList: "FlatList",
     useLocalSearchParams: () => ({}), useRouter: () => ({ dismissTo: (path) => { destination = path; } }),
-    useApp: () => ({ state, refreshHome: async () => { retries++; }, spaceList: { visits } }), displaySpaceName: (space) => space.name,
+    ...appHooks(() => ({ state, refreshHome: async () => { retries++; }, spaceList: { visits } })), displaySpaceName: (space) => space.name,
     selectSpaceList, normalizeSearchQuery, useSafeAreaInsets: () => ({ bottom: 0 }),
   });
   const render = () => {
@@ -1139,7 +1155,7 @@ for (const [tab, component, expectedRequests] of [
       }
     },
     useSyncScope: (key, run, interval, enabled = true) => { if (enabled) jobs.set(key, { run, interval }); },
-    useApp: () => ({ state: { sessionForks: {} }, sync: { invalidate() {}, invalidatePrefix() {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} }),
+    ...appHooks(() => ({ state: { sessionForks: {} }, sync: { invalidate() {}, invalidatePrefix() {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} })),
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
@@ -1440,7 +1456,7 @@ for (const [path, labels, chips] of [
     useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useRouter: () => ({ push: (route) => pushes.push(route) }),
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
-    useApp: () => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {}, createSpace: async (name) => { created.push(name); return { id: `space-new-${created.length}`, name }; } }),
+    ...appHooks(() => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {}, createSpace: async (name) => { created.push(name); return { id: `space-new-${created.length}`, name }; } })),
     useAppTheme: () => ({ colors: {}, spacing: {} }),
     useRemoteSearch: (_client, _query, options) => ({ query: "", spaces: [], enabled: options.enabled }), useSpaceSessionCounts: () => ({}),
     useToast: () => (toast) => toasts.push(toast),
@@ -1498,7 +1514,7 @@ try {
     ...chromeScope, ...screen.hooks,
     useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSyncScope: () => {}, useSpaceRealtime: () => {},
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
-    useApp: () => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} }),
+    ...appHooks(() => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} })),
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
     useSourceSessions: () => ({ sessions: [], loading: false, loadingMore: false, error: null, initialized: true, loadMore: () => {}, reload: () => {} }),
     useSessionSourcePreference: () => ({ filter: "all", error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
@@ -3727,7 +3743,7 @@ assert.equal(ownerRow.props.style?.paddingTop, 8, "a prompt opens its Turn with 
 assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 })).filter((node) => node.type === "LiveReply").length, 0);
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [], turns: [{ id: "turn", startedAt: "2026-10-31T09:00:00.000Z", createdAt: "2026-10-31T08:59:59.000Z" }] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
-  ...chromeScope, useApp: () => ({ state: { sessionViews: { fixture: liveView } } }),
+  ...chromeScope, ...appHooks(() => ({ state: { sessionViews: { fixture: liveView } } })),
   StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
 });
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
@@ -3737,7 +3753,7 @@ liveView.sending = true;
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: false, availableWidth: 390 }).props.status, "pending");
 const renderLiveProcess = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveTurnProcess", {
   ...chromeScope,
-  useApp: () => ({ state: { sessionViews: { fixture: { stream: { turnId: "turn", intermediateMessages: [] } } } } }),
+  ...appHooks(() => ({ state: { sessionViews: { fixture: { stream: { turnId: "turn", intermediateMessages: [] } } } } })),
   StreamingTurnProcess: "StreamingTurnProcess", TurnProcess: "TurnProcess", thinkingBlocks,
 });
 const pendingProcess = renderLiveProcess({ sessionId: "fixture", turn: { id: "turn", intermediateSummary: { messageCount: 4, toolCallCount: 4 } }, client: null, spaceId: "space" });
@@ -4180,6 +4196,49 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   const detachedUpsert = reduceView(viewOf(windowOf(1, 25, false, true)), { type: "turn-upsert", sessionId: "fixture", turn: running });
   assert.deepEqual([detachedUpsert.sessionViews.fixture.turns.length, detachedUpsert.sessionViews.fixture.turns.at(-1).sequence, detachedUpsert.sessionViews.fixture.stream?.turnId, detachedUpsert.sessionLatestTurns.fixture.sequence], [25, 25, running.id, 101], "a Turn past a window paged away from the tail waits for the page that reaches it; status and the live reply still follow it");
   assert.equal(reduceView(tailView, { type: "turn-upsert", sessionId: "fixture", turn: running }).sessionViews.fixture.turns.at(-1).sequence, 101, "a window at the tail grows with new Turns");
+
+  // Selector subscriptions: a token batch may only reach this Chat's stream subscribers.
+  const storeSource = ["shallowEqual", "sameSessionViewSummary", "summarizeSessionView", "sameViewHistories", "createAppStore", "createSelectionCache"].map((name) => contextFunction(name).replace(/^export /, "")).join("\n");
+  const { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache } = new Function("LOADING_VIEW", ts.transpileModule(`${storeSource}\nreturn { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ loading: true });
+  const streamScope = { ...viewScope, liveStreamStatusFromPatch, hasFinalAssistantForTurn };
+  const reduceStream = new Function(...Object.keys(streamScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(streamScope));
+  const liveStream = { status: "streaming", turnId: "turn-live", messageId: null, contentBlocks: [{ type: "text", text: "Hel" }], intermediateMessages: [], runtimePhase: null, runtimeProvider: null, runtimeModel: null };
+  const before = { ...viewOf(windowOf(1, 25, false, false)), sessions: [{ id: "fixture" }], spaces: [], sessionForks: {}, sessionTurnStatuses: {}, sessionLatestTurns: { fixture: { id: "turn-live", status: "running" } } };
+  before.sessionViews.fixture.stream = liveStream;
+  const batch = reduceStream(before, { type: "stream-state", sessionId: "fixture", stream: { ...liveStream, contentBlocks: [{ type: "text", text: "Hello" }] } });
+  assert.notEqual(batch.sessionViews.fixture.stream, liveStream, "the batch reaches the stream subscribers");
+  for (const key of ["sessions", "spaces", "sessionForks", "sessionLatestTurns", "sessionTurnStatuses"]) assert.equal(batch[key], before[key], `a stream batch keeps state.${key}, so list and tab selectors skip it`);
+  assert.ok(sameSessionViewSummary(summarizeSessionView(before.sessionViews.fixture), summarizeSessionView(batch.sessionViews.fixture)), "the Chat body skips a batch that keeps the stream's turn and phase");
+  assert.ok(sameViewHistories(before.sessionViews, batch.sessionViews), "personal Space activity skips stream-only updates");
+  const settled = reduceStream(batch, { type: "stream-state", sessionId: "fixture", stream: { ...liveStream, status: "failed" } });
+  assert.equal(sameSessionViewSummary(summarizeSessionView(batch.sessionViews.fixture), summarizeSessionView(settled.sessionViews.fixture)), false, "a stream phase change re-renders the Chat body");
+  const cleared = reduceStream(batch, { type: "stream-clear", sessionId: "fixture" });
+  assert.equal(sameSessionViewSummary(summarizeSessionView(batch.sessionViews.fixture), summarizeSessionView(cleared.sessionViews.fixture)), false, "clearing the stream re-renders the Chat body");
+  const grown = reduceStream(batch, { type: "turn-upsert", sessionId: "fixture", turn: { ...turnRange(26, 26)[0], id: "turn-live", status: "running" } });
+  assert.equal(sameSessionViewSummary(summarizeSessionView(batch.sessionViews.fixture), summarizeSessionView(grown.sessionViews.fixture)), false, "turn history changes still re-render the Chat body");
+  assert.equal(sameViewHistories(batch.sessionViews, grown.sessionViews), false);
+  assert.equal(summarizeSessionView(undefined).loading, true, "an unopened Chat renders as loading");
+
+  const store = createAppStore({ state: before });
+  let notified = 0;
+  const unsubscribe = store.subscribe(() => notified++);
+  const cache = createSelectionCache();
+  const selectRow = ({ state }) => ({ latest: state.sessionLatestTurns.fixture, live: state.sessionViews.fixture?.stream?.status ?? null });
+  const read = cache.reader(store, selectRow, shallowEqual);
+  const first = read();
+  cache.commit(first);
+  store.publish({ state: batch });
+  assert.equal(notified, 1);
+  assert.equal(read(), first, "an equal selection keeps its reference, so useSyncExternalStore skips the render");
+  assert.equal(cache.reader(store, (app) => selectRow(app), shallowEqual)(), first, "a re-created inline selector reuses the committed selection");
+  store.publish({ state: settled });
+  assert.notEqual(read(), first, "a changed slice produces a new selection");
+  store.publish(store.getSnapshot());
+  assert.equal(notified, 2, "republishing the same snapshot does not notify");
+  unsubscribe();
+  assert.equal(shallowEqual([1, 2], [1, 2]), true);
+  assert.equal(shallowEqual([1, 2], { 0: 1, 1: 2 }), false);
+  assert.equal(shallowEqual({ a: 1 }, { a: 1, b: undefined }), false);
 }
 {
   // The response replaces messages and clears catchingUp in one commit, so the baseline must

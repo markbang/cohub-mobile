@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Alert, ScrollView, Text, TextInput, View } from "react-native";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { useAppActions, useAppSelector } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { PrimaryButton, Screen, TopBar , FIELD_INPUT_CLASS } from "@/src/ui";
@@ -13,9 +13,9 @@ export default function EditSpaceScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client, state } = useApp();
+  const { client } = useAppActions();
   
-  const space = state.spaces.find((s) => s.id === spaceId);
+  const space = useAppSelector((app) => app.state.spaces.find((s) => s.id === spaceId));
   
   const [name, setName] = useState(space?.name || "");
   const [description, setDescription] = useState(space?.description || "");

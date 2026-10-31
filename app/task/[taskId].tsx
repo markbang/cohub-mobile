@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { GenerationBlock } from "@/src/components/GenerationOutput";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
@@ -14,7 +14,7 @@ export default function TaskScreen() {
   const { taskId } = useLocalSearchParams<{ taskId: string }>();
   const router = useRouter();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [detail, setDetail] = useState<TaskRunDetailResponse | null>(null);
   useSpaceRealtime(detail?.run.spaceId ? [detail.run.spaceId] : []);
   const [error, setError] = useState<string | null>(null);

@@ -1,10 +1,10 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useLayoutEffect, useRef } from "react";
-import { useApp } from "./context";
+import { useAppActions } from "./context";
 
 /** Route focus controls interest; the account scheduler owns foreground and timing. */
 export function useSyncScope(key: string, run: () => Promise<void>, intervalMs: number, enabled = true, minRefreshMs = 2_000): void {
-  const { sync, client } = useApp();
+  const { sync, client } = useAppActions();
   const latest = useRef({ run, intervalMs });
   useLayoutEffect(() => { latest.current = { run, intervalMs }; }, [run, intervalMs]);
   useFocusEffect(useCallback(() => {

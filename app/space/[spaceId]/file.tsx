@@ -12,7 +12,7 @@ import { modelFormat } from "@/src/data/media";
 import { detectCodeLanguage } from "@/src/data/code-language";
 import { classifySaveConflict, isEditableTextFile, isFileConflictError, MAX_EDITABLE_CODE_BYTES } from "@/src/data/code-file";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { typography, useAppTheme } from "@/src/theme";
@@ -32,7 +32,7 @@ export default function FileScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [file, setFile] = useState<SpaceFsFileResponse | null>(null);
   const requestIdRef = useRef(0);
   const [url, setUrl] = useState<string | null>(null);

@@ -4,7 +4,7 @@ import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScheduleForm, scheduleProblem, type ScheduleValues } from "@/src/components/ScheduleForm";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { deviceTimeZone } from "@/src/data/cron";
 import { useTranslation } from "@/src/i18n";
 import { PrimaryButton, Screen, TopBar } from "@/src/ui";
@@ -15,7 +15,7 @@ export default function NewScheduleScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [values, setValues] = useState<ScheduleValues>(() => ({ title: "", prompt: "", cronExpression: "0 9 * * *", timezone: deviceTimeZone() }));
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);

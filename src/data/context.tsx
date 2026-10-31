@@ -13,7 +13,7 @@ import type {
   UnauthorizedContext,
   UserSessionListItem,
 } from "@neta-art/cohub";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
@@ -22,7 +22,7 @@ import { createMobileClient } from "@/src/data/client";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
 import { useSpaceListData } from "@/src/data/use-space-list";
-import { listAllSpaces } from "@/src/data/space-list";
+import { listAllSpaces, personalSpaceActivity } from "@/src/data/space-list";
 import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-scheduler";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionsForCache, type CachedRunningSessions } from "@/src/data/running-sessions";
@@ -874,11 +874,25 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
-export type AppContextValue = {
+/** Everything that changes with data; read it through `useAppSelector` so only affected slices re-render. */
+export type AppSnapshot = {
   state: AppState;
+  connectionState: ConnectionState;
+  connectionUnavailable: boolean;
+  spaceList: ReturnType<typeof useSpaceListData>;
+  models: ChatModelCatalogItem[];
+  modelsLoading: boolean;
+  modelsError: string | null;
+  modelStatus: ModelStatusResponse | null;
+  modelStatusLoading: boolean;
+  modelStatusError: string | null;
+  activityItems: ActivityItem[];
+};
+
+/** Provider operations and session-scoped handles; identities change only with the client or user. */
+export type AppActions = {
   client: CohubClient | null;
   userUuid: string;
-  spaceList: ReturnType<typeof useSpaceListData>;
   sync: SyncScheduler;
   spaceRealtime: SpaceRealtime | null;
   refreshChats: () => Promise<void>;
@@ -887,8 +901,6 @@ export type AppContextValue = {
   requestRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
   /** Stops a scan the filter no longer shows, after a short grace for back-to-back requests. */
   releaseRunningSessions: (source?: SessionSourceFilter) => void;
-  connectionState: ConnectionState;
-  connectionUnavailable: boolean;
   installationId: string | null;
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
   refreshHome: (options?: { silent?: boolean }) => Promise<void>;
@@ -911,12 +923,6 @@ export type AppContextValue = {
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
   clearComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<void>;
   abortSession: (sessionId: string) => Promise<void>;
-  models: ChatModelCatalogItem[];
-  modelsLoading: boolean;
-  modelsError: string | null;
-  modelStatus: ModelStatusResponse | null;
-  modelStatusLoading: boolean;
-  modelStatusError: string | null;
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
   /** `onDevice` creates a Space whose sandbox is a local Runtime, e.g. a folder on this device. */
@@ -931,10 +937,33 @@ export type AppContextValue = {
   applyCacheRetention: () => Promise<void>;
   loadSessionReadSequence: (sessionId: string) => Promise<number | null>;
   saveSessionReadSequence: (sessionId: string, sequence: number) => Promise<void>;
-  activityItems: ActivityItem[];
 };
 
-const AppContext = createContext<AppContextValue | null>(null);
+type AppStore = {
+  getSnapshot: () => AppSnapshot;
+  subscribe: (listener: () => void) => () => void;
+  publish: (snapshot: AppSnapshot) => void;
+};
+
+function createAppStore(initial: AppSnapshot): AppStore {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => current,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    publish: (snapshot) => {
+      if (snapshot === current) return;
+      current = snapshot;
+      for (const listener of [...listeners]) listener();
+    },
+  };
+}
+
+const AppActionsContext = createContext<AppActions | null>(null);
+const AppStoreContext = createContext<AppStore | null>(null);
 
 export function AppProvider({
   userUuid,
@@ -2499,20 +2528,27 @@ export function AppProvider({
     });
   }, [state.sessionLatestTurns, state.sessionTurnStatuses, state.sessions]);
 
-  const value = useMemo<AppContextValue>(
+  const snapshot = useMemo<AppSnapshot>(
+    () => ({ state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, activityItems }),
+    [state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, activityItems],
+  );
+  const [store] = useState(() => createAppStore(snapshot));
+  // Subscribers re-render from this layout phase, before paint, so a commit never shows stale slices;
+  // children's passive effects already read the published snapshot.
+  useLayoutEffect(() => {
+    store.publish(snapshot);
+  }, [snapshot, store]);
+
+  const actions = useMemo<AppActions>(
     () => ({
-      state,
       client,
       userUuid,
-      spaceList,
       sync,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
       requestRunningSessions,
       releaseRunningSessions,
-      connectionState,
-      connectionUnavailable,
       installationId,
       getAccessToken,
       refreshHome,
@@ -2534,12 +2570,6 @@ export function AppProvider({
       saveComposerDraft: saveComposerDraftForUser,
       clearComposerDraft: clearComposerDraftForUser,
       abortSession,
-      models,
-      modelsLoading,
-      modelsError,
-      modelStatus,
-      modelStatusLoading,
-      modelStatusError,
       loadModels,
       loadModelStatus,
       createSpace,
@@ -2553,11 +2583,8 @@ export function AppProvider({
       applyCacheRetention,
       loadSessionReadSequence: loadSessionReadSequenceForUser,
       saveSessionReadSequence: saveSessionReadSequenceForUser,
-      activityItems,
     }),
     [
-      activityItems,
-      spaceList,
       sync,
       spaceRealtime,
       refreshChats,
@@ -2571,8 +2598,6 @@ export function AppProvider({
       loadSessionReadSequenceForUser,
       saveSessionReadSequenceForUser,
       closeSession,
-      connectionState,
-      connectionUnavailable,
       createSpace,
       getAccessToken,
       refreshSpacePin,
@@ -2586,12 +2611,6 @@ export function AppProvider({
       loadNewerTurns,
       loadOlderTurns,
       loadTurnIndex,
-      models,
-      modelsError,
-      modelsLoading,
-      modelStatus,
-      modelStatusError,
-      modelStatusLoading,
       openSession,
       prefetchSession,
       refreshHome,
@@ -2606,27 +2625,129 @@ export function AppProvider({
       loadComposerDraftForUser,
       saveComposerDraftForUser,
       clearComposerDraftForUser,
-      state,
       upsertSpace,
       userUuid,
     ],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppActionsContext.Provider value={actions}><AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider></AppActionsContext.Provider>;
 }
 
-export function useApp() {
-  const value = useContext(AppContext);
-  if (!value) throw new Error(translate("data.useAppProvider"));
+function useAppStore() {
+  const store = useContext(AppStoreContext);
+  if (!store) throw new Error(translate("data.useAppProvider"));
+  return store;
+}
+
+export function useAppActions() {
+  const actions = useContext(AppActionsContext);
+  if (!actions) throw new Error(translate("data.useAppProvider"));
+  return actions;
+}
+
+export function shallowEqual<T>(a: T, b: T) {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => Object.hasOwn(right, key) && Object.is(left[key], right[key]));
+}
+
+/** Holds the last committed selection so a new selector (inline closures change per render) can reuse an equal value. */
+function createSelectionCache<T>() {
+  let committed: { value: T } | null = null;
+  return {
+    reader(store: AppStore, selector: (snapshot: AppSnapshot) => T, isEqual: (a: T, b: T) => boolean) {
+      let memo: { snapshot: AppSnapshot; value: T } | null = null;
+      return () => {
+        const snapshot = store.getSnapshot();
+        if (memo?.snapshot === snapshot) return memo.value;
+        const next = selector(snapshot);
+        const previous = memo ?? committed;
+        const value = previous && isEqual(previous.value, next) ? previous.value : next;
+        memo = { snapshot, value };
+        return value;
+      };
+    },
+    commit(value: T) {
+      committed = { value };
+    },
+  };
+}
+
+/**
+ * Subscribes to one derived slice of the app snapshot. The component re-renders only when
+ * `isEqual` rejects the new selection; an equal selection keeps the previous reference, so
+ * object-returning selectors stay stable with `shallowEqual`. Selectors run on every store
+ * update, so keep them cheap and move heavy derivation into `useMemo` over the selected inputs.
+ */
+export function useAppSelector<T>(selector: (snapshot: AppSnapshot) => T, isEqual: (a: T, b: T) => boolean = Object.is): T {
+  const store = useAppStore();
+  const [cache] = useState(() => createSelectionCache<T>());
+  const getSelection = useMemo(() => cache.reader(store, selector, isEqual), [cache, isEqual, selector, store]);
+  const value = useSyncExternalStore(store.subscribe, getSelection);
+  useLayoutEffect(() => {
+    cache.commit(value);
+  }, [cache, value]);
   return value;
 }
 
+/** Latest committed state for event handlers and callbacks that must not subscribe. */
+export function useAppStateGetter() {
+  const store = useAppStore();
+  return useCallback(() => store.getSnapshot().state, [store]);
+}
+
+/** The main Chat body tracks only the stream's identity and phase; token content stays in `useSessionStream`. */
+export type SessionViewSummary = Omit<SessionView, "stream"> & { stream: Pick<StreamView, "status" | "turnId"> | null };
+
+const LOADING_VIEW: SessionViewSummary = { ...emptyView(), loading: true };
+
+function summarizeSessionView(view: SessionView | undefined): SessionViewSummary {
+  if (!view) return LOADING_VIEW;
+  const { stream, ...rest } = view;
+  return { ...rest, stream: stream ? { status: stream.status, turnId: stream.turnId } : null };
+}
+
+function sameSessionViewSummary(a: SessionViewSummary, b: SessionViewSummary) {
+  if (a === b) return true;
+  const { stream: left, ...leftRest } = a;
+  const { stream: right, ...rightRest } = b;
+  return shallowEqual(leftRest, rightRest) && left?.status === right?.status && left?.turnId === right?.turnId && !left === !right;
+}
+
 export function useSession(sessionId: string) {
-  const { state, openSession, closeSession } = useApp();
+  const { openSession, closeSession } = useAppActions();
   // Layout so a press-in prefetch can land in sessionViews before the first paint.
   useLayoutEffect(() => {
     void openSession(sessionId);
     return () => closeSession(sessionId);
   }, [closeSession, openSession, sessionId]);
-  return state.sessionViews[sessionId] ?? { ...emptyView(), loading: true };
+  return useAppSelector((app) => summarizeSessionView(app.state.sessionViews[sessionId]), sameSessionViewSummary);
+}
+
+/** The open Chat's live stream; changes on every token batch, so subscribe from the smallest component. */
+export function useSessionStream(sessionId: string) {
+  return useAppSelector((app) => app.state.sessionViews[sessionId]?.stream ?? null);
+}
+
+function sameViewHistories(a: Record<string, SessionView>, b: Record<string, SessionView>) {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every((key) => Object.hasOwn(b, key) && a[key]!.session === b[key]!.session && a[key]!.turns === b[key]!.turns);
+}
+
+/** Latest own-Turn time per Space from loaded Chats; ignores stream batches, which never change turn history. */
+export function usePersonalSpaceActivity(userUuid: string) {
+  // Equal selections keep the previous map, whose sessions and turns are the ones read below.
+  const views = useAppSelector((app) => app.state.sessionViews, sameViewHistories);
+  return useMemo(() => personalSpaceActivity(Object.values(views), userUuid), [userUuid, views]);
+}
+
+export function selectModelCatalog(app: AppSnapshot) {
+  return { models: app.models, modelsLoading: app.modelsLoading, modelsError: app.modelsError, modelStatus: app.modelStatus, modelStatusLoading: app.modelStatusLoading, modelStatusError: app.modelStatusError };
 }

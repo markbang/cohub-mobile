@@ -29,7 +29,7 @@ import { channelHealthState } from "@/src/data/channel-settings";
 import { useUserRules } from "@/src/data/use-user-rules";
 import { useReferrals } from "@/src/data/use-referrals";
 import { useProfileSession } from "@/src/auth/profile-session";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { settingsSections, type SettingsSection } from "@/src/data/settings-navigation";
 import {
@@ -52,7 +52,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
-	const { client, installationId, getAccessToken } = useApp();
+	const { client, installationId, getAccessToken } = useAppActions();
 	const [notice, setNotice] = useState<{
 		title: string;
 		message: string;

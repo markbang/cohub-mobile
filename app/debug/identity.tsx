@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useProfileSession } from "@/src/auth/profile-session";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { AppIcon, PrimaryButton, Screen, SectionHeader } from "@/src/ui";
 import type { IconName } from "@/src/icons";
 
@@ -23,7 +23,7 @@ function formatClaim(key: string, value: unknown) {
 }
 
 export default function DebugIdentityScreen() {
-  const { userUuid, installationId, getAccessToken } = useApp();
+  const { userUuid, installationId, getAccessToken } = useAppActions();
   const { getClaims } = useProfileSession();
   const [claims, setClaims] = useState<Record<string, unknown> | null>(null);
   const [token, setToken] = useState<TokenInfo | null>(null);

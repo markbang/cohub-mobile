@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DIFF_STATUS, formatDiffCounts } from "@/src/data/checkpoint-diff";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { DataError, LoadingDocument, Screen, TopBar } from "@/src/ui";
 
@@ -26,7 +26,7 @@ export default function SaveDiffScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [diff, setDiff] = useState<CheckpointDiffFileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

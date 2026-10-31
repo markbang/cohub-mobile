@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionRow } from "@/src/components/SessionRow";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { activityContributorName } from "@/src/data/activity";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -46,7 +46,9 @@ export default function SpaceScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const toast = useToast();
-  const { state, client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession, spaceList: { recordVisit } } = useApp();
+  const { client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession } = useAppActions();
+  const recordVisit = useAppSelector((app) => app.spaceList.recordVisit);
+  const { booting, refreshing, realtimeError } = useAppSelector((app) => ({ booting: app.state.booting, refreshing: app.state.refreshing, realtimeError: app.state.realtimeError }), shallowEqual);
   useFocusEffect(useCallback(() => {
     if (spaceId) recordVisit(spaceId);
   }, [recordVisit, spaceId]));
@@ -82,7 +84,8 @@ export default function SpaceScreen() {
   const sessionsInFlightRef = useRef(false);
   const tasksInFlightRef = useRef(false);
   const tasksRequestRef = useRef(0);
-  const cachedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
+  const cachedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);
+  const cachedSessions = useAppSelector((app) => app.state.sessions.filter((session) => session.spaceId === spaceId), shallowEqual);
   const cachedSpaceRef = useRef<SpaceRecord | null>(cachedSpace);
   useEffect(() => {
     cachedSpaceRef.current = cachedSpace;
@@ -90,16 +93,14 @@ export default function SpaceScreen() {
   const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
   const sessions = useMemo(() => {
     const byId = new Map<string, UserSessionListItem>();
-    for (const session of state.sessions) {
-      if (session.spaceId === spaceId) byId.set(session.id, session);
-    }
+    for (const session of cachedSessions) byId.set(session.id, session);
     // The page fetches its own page of Chats; cached entries still win when newer.
     for (const session of spaceSessions) {
       const previous = byId.get(session.id);
       byId.set(session.id, previous ? preferRecentSession(previous, session) : session);
     }
     return sortByRecent([...byId.values()]);
-  }, [spaceId, spaceSessions, state.sessions]);
+  }, [cachedSessions, spaceSessions]);
 
   const loadSpace = useCallback(async (options: { force?: boolean } = {}) => {
     if (!client || !spaceId) return;
@@ -295,7 +296,7 @@ export default function SpaceScreen() {
   useSyncScope(`space:${spaceId}:tasks`, refreshTasks, resources.tasks.some((task) => task.status === "running" || task.status === "pending") ? 10_000 : 60_000, Boolean(spaceId));
 
   if (!space) {
-    const opening = Boolean(spaceId) && (state.booting || !client || spaceLoading);
+    const opening = Boolean(spaceId) && (booting || !client || spaceLoading);
     return <Screen>
       <TopBar drawn title={t("space.title")} onBack={() => router.back()} />
       <View className="flex-1 items-center justify-center p-6">
@@ -363,12 +364,12 @@ export default function SpaceScreen() {
       onBack={() => router.back()}
       actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} actions={spaceActions} testID="space-actions-menu" /> : <View ref={spaceActionsRef} collapsable={false}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View>}</>}
     />
-    {state.realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{state.realtimeError}</Text> : null}
+    {realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{realtimeError}</Text> : null}
     {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}
     <ScrollView
       className="flex-1 bg-background"
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-      refreshControl={<AppRefreshControl refreshing={state.refreshing || pageRefreshing} onRefresh={() => void refreshPage()} />}
+      refreshControl={<AppRefreshControl refreshing={refreshing || pageRefreshing} onRefresh={() => void refreshPage()} />}
     >
     {/* The bar already names the Space; the header adds what the name cannot: who, what, how busy. */}
     <View className="flex-row items-start gap-4 px-4 pb-2 pt-3">

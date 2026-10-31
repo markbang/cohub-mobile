@@ -32,7 +32,7 @@ import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { fetchSessionLabels, toUserSessionLabels, type SessionLabel } from "@/src/data/session-labels";
 import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
-import { useApp, useSession } from "@/src/data/context";
+import { selectModelCatalog, shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useSession, useSessionStream } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
 import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
@@ -193,10 +193,16 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { state, client, connectionUnavailable, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
+  const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
+  const latestTurnStatus = useAppSelector((app) => app.state.sessionLatestTurns[sessionId]?.status);
+  const parentSessionId = useAppSelector((app) => app.state.sessionForks[sessionId]?.parentSessionId ?? null);
+  const getAppState = useAppStateGetter();
   const view = useSession(sessionId);
-  const session = view.session ?? state.sessions.find((item) => item.id === sessionId) ?? null;
-  const sessionSummary = state.sessions.find((item) => item.id === sessionId) ?? null;
+  const sessionSummary = useAppSelector((app) => app.state.sessions.find((item) => item.id === sessionId) ?? null);
+  const session = view.session ?? sessionSummary;
   const spaceId = view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
   const runtime = useSpaceRuntime(spaceId);
   useSyncScope(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
@@ -494,7 +500,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const { onViewableItemsChanged, measureVisibleRows, trackRow } = useChatVisibleRows({ viewportRef: listContainerRef, topInset: headerHeight, bottomInset: footerHeight, onVisible: onVisibleRows });
   useSpaceRealtime(spaceId ? [spaceId] : []);
   const spaceName = view.space ? displaySpaceName(view.space) : sessionSummary?.space?.name || t("space.fallbackName");
-  const spaceSessions = useMemo(() => state.sessions.filter((item) => item.spaceId === spaceId), [spaceId, state.sessions]);
+  const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
   const queuedFollowupIds = useMemo(() => new Set(queuedFollowups.map((turn) => turn.id)), [queuedFollowups]);
   const queueItems = useMemo(() => followupQueueItems(view.turns, view.stream?.turnId, view.messages), [view.turns, view.stream?.turnId, view.messages]);
@@ -586,7 +592,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     hasLiveActivity: Boolean(liveStream || view.sending),
   }) ?? (timelineReady && !listLoaded ? "opening" : null);
   const threadPlaceholder = placeholder === "opening" && !openingDelayElapsed ? null : placeholder;
-  const running = state.sessionLatestTurns[sessionId]?.status === "running" || view.sending || (liveStream && isLiveStreamStatus(view.stream?.status ?? ""));
+  const running = latestTurnStatus === "running" || view.sending || (liveStream && isLiveStreamStatus(view.stream?.status ?? ""));
   const appendVoiceText = useCallback((text: string) => {
     updateInput(appendDictation(inputRef.current, text));
   }, [updateInput]);
@@ -1097,11 +1103,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     }
   }, [forkSession, forkingTurnId, refreshHome, router, sessionId, showToast, spaceId, t, view.turns]);
 
-  // A ref keeps related-Chat links from re-rendering every row on each dispatch.
-  const appStateRef = useRef(state);
-  useEffect(() => { appStateRef.current = state; }, [state]);
-  const lookupSession = useCallback((id: string): SessionRecord | null => appStateRef.current.sessionViews[id]?.session ?? appStateRef.current.sessions.find((item) => item.id === id) ?? null, []);
-  const parentSessionId = state.sessionForks[sessionId]?.parentSessionId ?? null;
+  // Reading on demand keeps related-Chat links from re-rendering every row on each dispatch.
+  const lookupSession = useCallback((id: string): SessionRecord | null => {
+    const state = getAppState();
+    return state.sessionViews[id]?.session ?? state.sessions.find((item) => item.id === id) ?? null;
+  }, [getAppState]);
   const forkOrigin = useMemo(() => {
     const point = forkPoint(view.turns, sessionId, view.hasMoreNewer);
     if (!point || !spaceId) return null;
@@ -1386,23 +1392,27 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
  * re-rendering every mounted cell. The fallback matches the persisted turn process.
  */
 function LiveTurnProcess({ sessionId, turn, client, spaceId }: { sessionId: string; turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
-  const { state } = useApp();
-  const stream = state.sessionViews[sessionId]?.stream ?? null;
+  const stream = useSessionStream(sessionId);
   const thinking = thinkingBlocks(stream?.contentBlocks);
   if (stream?.turnId === turn.id && (stream.intermediateMessages.length > 0 || thinking.length > 0)) return <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinking} />;
   return <TurnProcess turn={turn} client={client} spaceId={spaceId} />;
 }
 
 function LiveReply({ sessionId, showStream, processInRow, availableWidth }: { sessionId: string; showStream: boolean; processInRow: boolean; availableWidth: number }) {
-  const { state } = useApp();
-  const view = state.sessionViews[sessionId];
-  const stream = view?.stream;
-  const streamTurn = stream?.turnId ? view?.turns.find((turn) => turn.id === stream.turnId) : undefined;
+  const stream = useSessionStream(sessionId);
+  const streamStartedAt = useAppSelector(({ state }) => {
+    const turn = stream?.turnId ? state.sessionViews[sessionId]?.turns.find((item) => item.id === stream.turnId) : undefined;
+    return turn ? turn.startedAt ?? turn.createdAt : null;
+  });
+  const pendingReply = useAppSelector(({ state }) => {
+    const view = state.sessionViews[sessionId];
+    return Boolean(view?.sending && !view.messages.some(isOptimisticFollowup));
+  });
   if (showStream && stream) return <View testID="chat-live-reply">
     {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
-    <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={streamTurn ? streamTurn.startedAt ?? streamTurn.createdAt : null} availableWidth={availableWidth} />
+    <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={streamStartedAt} availableWidth={availableWidth} />
   </View>;
-  return view?.sending && !view.messages.some(isOptimisticFollowup) ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;
+  return pendingReply ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;
 }
 
 function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
@@ -1422,9 +1432,13 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const router = useRouter();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { state, client, connectionUnavailable, sendNewMessage, upsertSpace, getAccessToken, loadModels, loadModelStatus, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useApp();
+  const { client, sendNewMessage, upsertSpace, getAccessToken, loadModels, loadModelStatus, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const runtime = useSpaceRuntime(spaceId);
-  const listedSpace = state.spaces.find((item) => item.id === spaceId) ?? null;
+  const listedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);
+  // `space.id` is always `spaceId` once the screen renders a Space.
+  const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const [fetchedSpace, setFetchedSpace] = useState<SpaceRecord | null>(null);
   const [failedSpaceId, setFailedSpaceId] = useState<string | null>(null);
   const spaceLookupFailed = failedSpaceId === spaceId;
@@ -1560,7 +1574,6 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   if (!space && !spaceLookupFailed) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
   if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
   const spaceName = displaySpaceName(space);
-  const spaceSessions = state.sessions.filter((item) => item.spaceId === space.id);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
   const modelLabel = activeModel?.name || activeModel?.id || (selectedHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
   const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;

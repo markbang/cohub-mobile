@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import * as Updates from "expo-updates";
 import { Platform, Pressable, Text, View } from "react-native";
-import { useApp } from "@/src/data/context";
+import { useAppActions, useAppSelector } from "@/src/data/context";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { useAppTheme, useFontScalePreference } from "@/src/theme";
 import { AppIcon, Screen, SectionHeader, type IconName } from "@/src/ui";
@@ -20,7 +20,8 @@ function updateInfo() {
 export default function DebugMenuScreen() {
   const router = useRouter();
   const theme = useAppTheme();
-  const { connectionState, installationId } = useApp();
+  const { installationId } = useAppActions();
+  const connectionState = useAppSelector((app) => app.connectionState);
   const fontScale = useFontScalePreference();
   const version = getInstalledAppVersion();
   const updates = updateInfo();

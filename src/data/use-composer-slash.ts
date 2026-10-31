@@ -1,7 +1,7 @@
 import type { PromptTemplateCatalogEntry, SkillCatalogEntry } from "@neta-art/cohub";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextInput } from "react-native";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import {
   detectSlashCommandTrigger,
   insertSlashCommand,
@@ -43,7 +43,7 @@ export function useComposerSlashCommands({ value, onChange, spaceId, composer }:
   spaceId: string | null;
   composer: { current: { input: TextInput | null } };
 }) {
-  const { client, userUuid } = useApp();
+  const { client, userUuid } = useAppActions();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);

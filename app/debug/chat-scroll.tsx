@@ -11,7 +11,7 @@ import { MessageBubble } from "@/src/components/MessageContent";
 import { useToast } from "@/src/components/Toast";
 import { useChatScrollTrace, useTraceTouches } from "@/src/components/use-chat-scroll-trace";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
-import { useApp } from "@/src/data/context";
+import { useAppSelector } from "@/src/data/context";
 import { typography, useAppTheme } from "@/src/theme";
 import { TopBar, IconButton, Screen } from "@/src/ui";
 
@@ -28,7 +28,7 @@ export default function ChatScrollDebugScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const toast = useToast();
-  const { state } = useApp();
+  const sessions = useAppSelector((app) => app.state.sessions);
   const dimensions = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
@@ -89,7 +89,7 @@ export default function ChatScrollDebugScreen() {
         }} />
       </View> : null}
       <ScrollFixture key={`${inverted}:${fixture}:${focusScroll}`} inverted={inverted} scrollsChildToFocus={focusScroll} message={messages[fixture]!} />
-    </> : tab === "Chats" ? <FlatList data={state.sessions} keyExtractor={(item) => item.id} ListEmptyComponent={<Text className="text-body text-fg-muted p-4">No loaded chats</Text>} renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => { chatScrollTrace.record("experiment.openChat", "debug", { session: chatScrollTrace.alias("session", item.id) }); router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.id } }); }} className="p-4 border-b border-border"><Text numberOfLines={2} className="text-body text-fg">{item.title || "Chat"}</Text></Pressable>} /> : <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
+    </> : tab === "Chats" ? <FlatList data={sessions} keyExtractor={(item) => item.id} ListEmptyComponent={<Text className="text-body text-fg-muted p-4">No loaded chats</Text>} renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => { chatScrollTrace.record("experiment.openChat", "debug", { session: chatScrollTrace.alias("session", item.id) }); router.push({ pathname: "/chat/[sessionId]", params: { sessionId: item.id } }); }} className="p-4 border-b border-border"><Text numberOfLines={2} className="text-body text-fg">{item.title || "Chat"}</Text></Pressable>} /> : <ScrollView contentContainerStyle={{ padding: 12, gap: 8 }}>
       {snapshot.entries.length === 0 ? <Text className="text-body text-fg-muted">No events</Text> : snapshot.entries.slice(-150).reverse().map((entry) => <View key={entry.sequence} className="border-b border-border pb-2">
         <Text selectable className={`text-caption ${entry.event.startsWith("command.") ? "text-accent" : "text-fg"}`}>{`#${entry.sequence} +${entry.elapsedMs}ms ${entry.source} ${entry.event}`}</Text>
         <Text selectable className="text-micro font-semibold text-fg-muted">{JSON.stringify(entry.fields)}</Text>

@@ -1,9 +1,9 @@
 import type { CohubClient, SessionRecord, SpaceRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextInput } from "react-native";
-import { useApp } from "@/src/data/context";
+import { useAppActions, useAppSelector, usePersonalSpaceActivity } from "@/src/data/context";
 import { normalizeSearchQuery, useRemoteSearch } from "@/src/data/session-search";
-import { personalSpaceActivity, selectSpaceList } from "@/src/data/space-list";
+import { selectSpaceList } from "@/src/data/space-list";
 import {
   applyComposerDisplayEdit,
   cohubLinkKey,
@@ -71,7 +71,11 @@ export function useComposerMentions({ value, onChange, currentSpaceId, composer 
   currentSpaceId: string | null;
   composer: { current: { input: TextInput | null } };
 }) {
-  const { client, state, spaceList, userUuid } = useApp();
+  const { client, userUuid } = useAppActions();
+  const spaces = useAppSelector((app) => app.state.spaces);
+  const sessions = useAppSelector((app) => app.state.sessions);
+  const spaceList = useAppSelector((app) => app.spaceList);
+  const personalActivity = usePersonalSpaceActivity(userUuid);
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [focused, setFocused] = useState(false);
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
@@ -100,13 +104,13 @@ export function useComposerMentions({ value, onChange, currentSpaceId, composer 
     void refreshSpaceList({ silent: true }).catch(() => undefined).finally(() => setNow(Date.now()));
   }, [open, refreshSpaceList]);
 
-  const listInput = useMemo(() => ({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity: personalSpaceActivity(Object.values(state.sessionViews), userUuid), now }), [now, spaceList.overview, spaceList.visits, state.sessionViews, state.sessions, state.spaces, userUuid]);
+  const listInput = useMemo(() => ({ spaces, sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, now }), [now, personalActivity, sessions, spaceList.overview, spaceList.visits, spaces]);
   const knownSpaceNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const space of spaceList.overview?.spaces ?? []) if (space.name?.trim()) names.set(space.id, space.name.trim());
-    for (const space of state.spaces) if ((space.name ?? space.title)?.trim()) names.set(space.id, (space.name ?? space.title)!.trim());
+    for (const space of spaces) if ((space.name ?? space.title)?.trim()) names.set(space.id, (space.name ?? space.title)!.trim());
     return names;
-  }, [spaceList.overview, state.spaces]);
+  }, [spaceList.overview, spaces]);
 
   const menu = useMemo<SpaceMentionMenuState | null>(() => {
     if (!open) return null;

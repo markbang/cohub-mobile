@@ -1,11 +1,11 @@
 import { HttpError, type SpaceRecord, type UserRulesResponse } from "@neta-art/cohub";
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 
 export function useUserRules() {
-  const { client, upsertSpace } = useApp();
+  const { client, upsertSpace } = useAppActions();
   const { t } = useTranslation();
   const [data, setData] = useState<UserRulesResponse | null>(null);
   const [loading, setLoading] = useState(true);

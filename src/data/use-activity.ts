@@ -2,7 +2,7 @@ import type { BillingCreditStatus, UserActivityResponse } from "@neta-art/cohub"
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSyncScope } from "./use-sync-scope";
 import { useFocusEffect } from "expo-router";
-import { useApp } from "./context";
+import { useAppActions } from "./context";
 import { activityRange, tokenDays, type TokenDay } from "./activity";
 
 type Resource<T> = { data: T | null; error: string | null };
@@ -17,7 +17,7 @@ const empty: ActivityData = {
 };
 
 export function useActivity() {
-  const { client, userUuid } = useApp();
+  const { client, userUuid } = useAppActions();
   const [snapshot, setSnapshot] = useState({ client, userUuid, data: empty });
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);

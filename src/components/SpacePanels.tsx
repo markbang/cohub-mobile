@@ -20,7 +20,7 @@ import { FilterChip } from "@/src/components/FilterChip";
 import { edgeChrome, useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
-import { useApp } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import {
@@ -453,7 +453,8 @@ type ChatListFilter =
 function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; sessions: UserSessionListItem[]; client: CohubClient | null; onChipsTouchChange: (touching: boolean) => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string, target?: SessionNavigationTarget) => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { state, sync, prefetchSession, refreshSessionStatuses, rememberSessionForks } = useApp();
+  const { sync, prefetchSession, refreshSessionStatuses, rememberSessionForks } = useAppActions();
+  const state = useAppSelector((app) => ({ sessionForks: app.state.sessionForks, sessionLatestTurns: app.state.sessionLatestTurns, sessionTurnStatuses: app.state.sessionTurnStatuses, sessionStatusError: app.state.sessionStatusError }), shallowEqual);
   const [query, setQuery] = useState("");
   const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
   const [extraSessions, setExtraSessions] = useState<UserSessionListItem[]>([]);
