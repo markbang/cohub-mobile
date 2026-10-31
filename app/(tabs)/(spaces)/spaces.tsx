@@ -223,7 +223,7 @@ export default function SpacesScreen() {
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
       <View ref={filterButtonRef} collapsable={false}>
-        <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "accent" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
+        <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
       </View>
       <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
     </>} />

@@ -100,14 +100,17 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
   );
 }
 
-/** `filled` draws the glyph on a solid circle, for bar buttons over content; an accent one fills with the accent. */
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+/**
+ * `filled` draws the glyph on a solid circle, for bar buttons over content. `accent` fills with the accent and is
+ * kept for a screen's one primary action; `active` marks a control in a non-default state with an accent glyph only.
+ */
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
   const bar = useContext(BarButtonContext);
   const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
-  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
+  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
   const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
@@ -121,7 +124,7 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       onPressOut={onPressOut}
       onTouchCancel={onTouchCancel}
       onPress={(event) => { traceAction("icon", { label, id: testID ?? name }); onPress(event); }}
-      className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
+      className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" || tone === "active" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
       style={{ width: target, height: target }}
     >
       {filled

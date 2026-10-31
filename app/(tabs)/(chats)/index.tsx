@@ -159,7 +159,7 @@ export default function ChatsScreen() {
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
         <View ref={sourceButtonRef} collapsable={false}>
-          <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "accent" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
+          <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </View>
         <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
       </>} />
