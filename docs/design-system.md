@@ -148,7 +148,7 @@ flag from such a file, so call sites stay the same:
 | --- | --- | --- |
 | Tab bar | `NativeTabs` (`app/(tabs)/_layout.ios.tsx`) | `FloatingTabBar` (`_layout.tsx`) |
 | Navigation bar on pushed screens | Native stack header through `TopBar` (`NativeHeader.ios.tsx`); `drawn` opts out for bars that move with content, and transparent or long-press titles stay drawn | drawn `TopBar`: chevron back, centered title balanced against the actions |
-| Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `LargeTitleBar` in `EdgeHeader`, with the `LargeTitle` and a `SearchField` as the list's first row; the small title fades in once the Large Title scrolls under the bar |
+| Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `LargeTitleBar` in `EdgeHeader`: the Large Title and the buttons share one row (App Store Today, a Material top app bar), with a `SearchField` as the list's first row |
 | Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` with the same bar: close leading, title centered |
 | Icons | SF Symbols (`Glyph.ios.tsx`, `src/sf-symbols.ts`) | Lucide |
 | Busy indicator | `ActivityIndicator` | the same eight-spoke spinner, drawn (`Loader`) |

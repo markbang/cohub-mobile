@@ -23,7 +23,7 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitleBar } from "@/src/ui/LargeTitle";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
@@ -157,7 +157,7 @@ export default function ChatsScreen() {
   return (
     <Screen edgeToEdge>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-      <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
+      <LargeTitleBar title={t("tabs.chats")} actions={<>
         <View ref={sourceButtonRef} collapsable={false}>
           <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </View>
@@ -191,7 +191,7 @@ export default function ChatsScreen() {
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View>
-          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")}><View className="px-4"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View></LargeTitle>}
+          {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
           <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}

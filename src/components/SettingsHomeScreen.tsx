@@ -20,7 +20,7 @@ import { useThemePreference } from "@/src/theme";
 import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitleBar } from "@/src/ui/LargeTitle";
 
 export function SettingsHomeScreen() {
   const tabBarInset = useFloatingTabBarInset();
@@ -74,11 +74,10 @@ export function SettingsHomeScreen() {
   };
 
   return <Screen edgeToEdge>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}><LargeTitleBar title={t("tabs.me")} scrollY={scrollY} /></EdgeHeader>}
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}><LargeTitleBar title={t("tabs.me")} /></EdgeHeader>}
     <ScrollView ref={scrollRef} scrollEnabled={!selecting} onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
-      {nativeHeaders ? null : <LargeTitle title={t("tabs.me")} />}
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
-      <View className={`mb-6 px-4 ${nativeHeaders ? "mt-4" : "mt-1"}`}>
+      <View className="mb-6 mt-4 px-4">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("settings.section.profile")}

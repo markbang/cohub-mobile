@@ -438,7 +438,7 @@ const chromeScope = {
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
-  LargeTitle: "LargeTitle", LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
+  LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },

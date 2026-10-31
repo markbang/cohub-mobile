@@ -24,7 +24,7 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, PrimaryButton, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitleBar } from "@/src/ui/LargeTitle";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
@@ -221,7 +221,7 @@ export default function SpacesScreen() {
   });
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-    <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
+    <LargeTitleBar title={t("tabs.spaces")} actions={<>
       <View ref={filterButtonRef} collapsable={false}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
       </View>
@@ -245,7 +245,7 @@ export default function SpacesScreen() {
       {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
       contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
       ListHeaderComponent={<View>
-        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")}><View className="px-4"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View></LargeTitle>}
+        {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
         <View className="px-3">
         {nativeHeaders && dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
