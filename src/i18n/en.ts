@@ -1170,6 +1170,12 @@ export const en = {
   "work.published": "Published Work",
   "work.error": "Unable to open Work",
   "work.noContent": "This Work has no published content yet.",
+  "work.load.offline.title": "Can't reach this Work",
+  "work.load.offline.body": "Check your connection and try again",
+  "work.load.server.title": "This Work isn't responding",
+  "work.load.server.body": "The server returned an error ({status})",
+  "work.load.crashed.title": "This Work stopped",
+  "work.load.crashed.body": "The page closed unexpectedly",
   "app.edit.title": "Edit Work",
   "app.edit.action": "Edit",
   "app.edit.title.label": "Work title",
@@ -1400,6 +1406,10 @@ export const en = {
 
   // Image viewer
   "imageViewer.close": "Close image viewer",
+  "imageViewer.loading": "Loading image",
+  "imageViewer.failed": "Image failed to load",
+  "imageViewer.unavailable": "This image is no longer available",
+  "imageViewer.page": "Image {current} of {total}",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "Unable to open Chat",

@@ -1141,6 +1141,12 @@ export const zh: Record<TranslationKey, string> = {
   "work.published": "已发布作品",
   "work.error": "无法打开作品",
   "work.noContent": "此作品还没有已发布的内容。",
+  "work.load.offline.title": "无法访问此作品",
+  "work.load.offline.body": "请检查网络连接后重试",
+  "work.load.server.title": "此作品暂无响应",
+  "work.load.server.body": "服务器返回了错误（{status}）",
+  "work.load.crashed.title": "此作品已停止运行",
+  "work.load.crashed.body": "页面意外关闭",
   "app.edit.title": "编辑作品",
   "app.edit.action": "编辑",
   "app.edit.title.label": "作品标题",
@@ -1371,6 +1377,10 @@ export const zh: Record<TranslationKey, string> = {
 
   // Image viewer
   "imageViewer.close": "关闭图片查看器",
+  "imageViewer.loading": "正在加载图片",
+  "imageViewer.failed": "图片加载失败",
+  "imageViewer.unavailable": "此图片已无法显示",
+  "imageViewer.page": "第 {current} 张，共 {total} 张",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "无法打开对话",
