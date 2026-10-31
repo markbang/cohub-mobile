@@ -6,6 +6,7 @@ import { PopoverSurface } from "@/src/ui/PopoverSurface";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { RADIUS } from "@/src/design/tokens";
 import type { ContextMenuPreview } from "@/src/components/NativeContextMenu";
+import { ToastViewport } from "@/src/components/Toast";
 
 const MIN_MENU_WIDTH = 180;
 const MAX_MENU_WIDTH = 280;
@@ -86,6 +87,7 @@ export function ContextMenu({
           {previewBlock}
           {items}
         </PopoverSurface>}
+      <ToastViewport />
     </View>
   </Modal>;
 }

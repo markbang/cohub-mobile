@@ -21,6 +21,7 @@ import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
 import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
+import { ToastViewport } from "@/src/components/Toast";
 import { setDialogOpen } from "@/src/data/interaction-trace";
 import { motion, springs } from "@/src/motion";
 
@@ -296,6 +297,7 @@ export function AdaptiveSheet({
             </Freeze>
           </Reanimated.View>
         </KeyboardAvoidingView>
+        <ToastViewport />
       </GestureHandlerRootView>
     </Modal>
   );

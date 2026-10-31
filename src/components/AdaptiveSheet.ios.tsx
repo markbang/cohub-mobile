@@ -9,6 +9,7 @@ import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { IconButton } from "@/src/ui";
 import { SheetConfirmButton } from "@/src/components/SheetConfirmButton";
+import { ToastViewport } from "@/src/components/Toast";
 import type { AdaptiveSheetProps } from "./AdaptiveSheet";
 
 export type { AdaptiveSheetProps, SheetConfirm } from "./AdaptiveSheet";
@@ -71,6 +72,7 @@ function PageSheet({ visible, title, subtitle, onClose, children, footer, scroll
           ? <ScrollView className="flex-1" contentContainerStyle={bodyStyle} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">{children}</ScrollView>
           : <View className="flex-1" style={bodyStyle}>{children}</View>}
         {footer ? <View className="border-border px-4 pt-3" style={{ borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: bottomPadding }}>{footer}</View> : null}
+        <ToastViewport />
       </GestureHandlerRootView>
     </Modal>
   );

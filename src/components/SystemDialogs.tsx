@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
 import type { IconName } from "@/src/icons";
 import { Loader } from "@/src/ui";
+import { ToastViewport } from "@/src/components/Toast";
 
 export type ConfirmSheetProps = {
   visible: boolean;
@@ -54,6 +55,7 @@ export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, 
           <Text className="text-title font-semibold text-accent">{t("common.cancel")}</Text>
         </Pressable>
       </Reanimated.View>
+      <ToastViewport />
     </View>
   </Modal>;
 }
@@ -79,6 +81,7 @@ export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSh
           <Text className="text-body font-semibold text-accent">{t("common.done")}</Text>
         </Pressable>
       </Reanimated.View>
+      <ToastViewport />
     </Reanimated.View>
   </Modal>;
 }
