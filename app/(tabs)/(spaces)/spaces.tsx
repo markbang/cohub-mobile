@@ -21,7 +21,7 @@ import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances }
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
@@ -42,7 +42,7 @@ export default function SpacesScreen() {
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
-  const { state, client, refreshHome, createSpace, toggleSpacePin, spaceList, userUuid } = useApp();
+  const { state, client, connectionUnavailable, refreshHome, createSpace, toggleSpacePin, spaceList, userUuid } = useApp();
   const dataError = state.error ?? state.spacesError ?? spaceList.error;
   const refreshSpaceList = spaceList.refresh;
   const [now, setNow] = useState(Date.now);
@@ -184,18 +184,25 @@ export default function SpacesScreen() {
   const submitCreate = async () => {
     setCreating(true);
     setCreateError(null);
-    try {
-      const space = await createSpace(name, description, { onDevice });
-      if (onDevice && folder) await connectFolder(space.id, folder.path);
-      resetCreate();
-      router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
-    } catch (error) {
+    const space = await createSpace(name, description, { onDevice }).catch((error: unknown) => {
       setCreateError(error instanceof Error ? error.message : t("spaces.create.error"));
-    } finally {
+      return null;
+    });
+    if (!space) {
       setCreating(false);
+      return;
     }
+    // Once the Space exists the sheet must close, since a retry from it would create a duplicate;
+    // `connectFolder` reports a failure without throwing, and the folder can be reconnected in the Space.
+    if (onDevice && folder) await connectFolder(space.id, folder.path);
+    setCreating(false);
+    resetCreate();
+    router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
   };
 
+  const listLoading = state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null);
+  // An empty list shows its error in place; the header banner only covers errors above content.
+  const emptyError = Boolean(dataError) && listItems.length === 0 && !listLoading;
   const searchEmpty = remoteSearch.query === trimmedQuery && remoteSearch.loading && trimmedQuery.length >= 2 && listItems.length === 0
     ? <LoadingState label={t("spaces.searching")} />
     : filter === "device" && !trimmedQuery
@@ -229,7 +236,8 @@ export default function SpacesScreen() {
       </View>
       <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
     </>} />
-    {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
+    <ConnectionBanner visible={connectionUnavailable} />
+    {dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>}
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <LegendList
@@ -252,13 +260,13 @@ export default function SpacesScreen() {
         {pullRefresh.header}
         {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
         <View className="px-3">
-        {nativeHeaders && dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
+        {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
         </View>
       </View>}
-      ListEmptyComponent={state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null) ? <LoadingRows count={4} /> : dataError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} /> : searchEmpty}
+      ListEmptyComponent={listLoading ? <LoadingRows count={4} /> : emptyError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : searchEmpty}
     />
     </BrandRefreshArea>
     {filterMenuOpen ? <AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /> : null}

@@ -1,14 +1,14 @@
 import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { FilterChip } from "@/src/components/FilterChip";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { cronSummaryText } from "@/src/components/ScheduleForm";
-import { summarizeCron } from "@/src/data/cron";
+import { cronSummaryText, formatRunTime } from "@/src/components/ScheduleForm";
+import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useApp } from "@/src/data/context";
@@ -21,7 +21,6 @@ import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
 import { AppSwitch, AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
-import { formatRelativeTime } from "@/src/utils";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
 // Bounds and production default mirror the server's sandbox idle policy (sandbox-controller).
@@ -812,8 +811,10 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
 }
 
 function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord; onPress: () => void; onToggle: (enabled: boolean) => Promise<void> }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [toggling, setToggling] = useState(false);
+  // The record carries no run history, so the row previews the next run from the expression, as the detail screen does.
+  const nextRun = useMemo(() => schedule.enabled ? nextCronRuns(schedule.cronExpression, schedule.timezone, 1)[0] : undefined, [schedule.cronExpression, schedule.enabled, schedule.timezone]);
   
   const handleToggle = async (enabled: boolean) => {
     setToggling(true);
@@ -829,11 +830,11 @@ function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord;
       <Pressable accessibilityRole="button" accessibilityLabel={schedule.title || t("space.settings.schedule.unnamed")} onPress={onPress} className="min-w-0 flex-1 py-3 active:opacity-70">
         <Text numberOfLines={1} className="text-body font-semibold text-fg">{schedule.title || t("space.settings.schedule.unnamed")}</Text>
         <Text className="text-caption text-fg-muted mt-0.5">{cronSummaryText(summarizeCron(schedule.cronExpression), schedule.cronExpression, t)}</Text>
-        {schedule.updatedAt && (
-          <Text className="text-micro font-semibold text-fg-faint mt-1">
-            {t("space.settings.schedule.lastRun")}: {formatRelativeTime(schedule.updatedAt)}
+        {nextRun ? (
+          <Text className="text-micro font-semibold tabular-nums text-fg-faint mt-1">
+            {t("space.settings.schedule.nextRun")}: {formatRunTime(nextRun, schedule.timezone, locale)}
           </Text>
-        )}
+        ) : null}
       </Pressable>
       <AppSwitch
         value={schedule.enabled}

@@ -34,6 +34,8 @@ type ChatListItem =
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit }
   | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean };
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
+/** How long the row order stays held after a drag or fling settles, so a follow-up tap lands on the row it aimed at. */
+const ORDER_SETTLE_MS = 800;
 
 export default function ChatsScreen() {
   const router = useRouter();
@@ -113,6 +115,36 @@ export default function ChatsScreen() {
     ];
   }, [expandedForks, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, state.sessionLatestTurns, state.sessionTurnStatuses, trimmedQuery]);
 
+  // Running Chats move up by recent activity; while the list is moving under a finger the order
+  // holds and only row content updates, so the row being reached for is not swapped out.
+  // Release waits for scroll events to go quiet rather than momentum end, which iOS skips when a touch stops a fling.
+  const orderContext = `${sourceFilter}\n${trimmedQuery}`;
+  const [heldOrder, setHeldOrder] = useState<{ context: string; keys: readonly string[] } | null>(null);
+  const shownKeysRef = useRef<readonly string[]>([]);
+  const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggingRef = useRef(false);
+  const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
+  useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
+  const holdRowOrder = useCallback(() => {
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = null;
+    setHeldOrder((current) => current?.context === orderContext ? current : { context: orderContext, keys: shownKeysRef.current });
+  }, [orderContext]);
+  const releaseRowOrder = useCallback((delay = ORDER_SETTLE_MS) => {
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    releaseTimerRef.current = null;
+    if (delay <= 0) {
+      setHeldOrder(null);
+      return;
+    }
+    releaseTimerRef.current = setTimeout(() => {
+      releaseTimerRef.current = null;
+      setHeldOrder(null);
+    }, delay);
+  }, []);
+  useEffect(() => () => { if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current); }, []);
+  const emptyError = Boolean(dataError) && shownItems.length === 0;
+
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(
@@ -137,7 +169,7 @@ export default function ChatsScreen() {
   const sourceOptions = [
     { value: "all", label: t("chats.source.all"), icon: "messages" },
     { value: "web", label: t("chats.source.web"), icon: "globe" },
-    { value: "other", label: t("chats.source.other"), icon: "globe" },
+    { value: "other", label: t("chats.source.other"), icon: "link" },
   ] as const satisfies readonly { value: SessionSourceFilter; label: string; icon: NativeMenuAction["icon"] }[];
   const sourceLabel = sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
   // Android menus have no check mark of their own, so the chosen source trades its glyph for one.
@@ -166,25 +198,26 @@ export default function ChatsScreen() {
         <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
       </>} />
       <ConnectionBanner visible={connectionUnavailable} />
-      {dataError ? <DataError message={dataError} onRetry={refresh} /> : null}
+      {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>}
       <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
       <LegendList
         ref={listRef}
-        onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
-        onScrollBeginDrag={pullRefresh.onScrollBeginDrag}
+        onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
+        onScrollBeginDrag={(event) => { draggingRef.current = true; holdRowOrder(); pullRefresh.onScrollBeginDrag(event); }}
+        onScrollEndDrag={() => { draggingRef.current = false; releaseRowOrder(); }}
         scrollEventThrottle={16}
-        data={listItems}
+        data={shownItems}
         extraData={rowExtraData}
         estimatedItemSize={80}
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
-        keyExtractor={(item) => item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`}
+        keyExtractor={chatItemKey}
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
-          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => setExpandedForks((current) => toggleSetMember(current, item.rootId))} />;
+          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { releaseRowOrder(0); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
@@ -193,18 +226,18 @@ export default function ChatsScreen() {
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
-        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
+        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: shownItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View>
           {pullRefresh.header}
           {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
           <View className="px-3">
-          {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
+          {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
           </View>
         </View>}
-        ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
-        ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingStatuses")} /> : null}
+        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
+        ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
       </BrandRefreshArea>
       {sourceMenuOpen ? <AnchoredActionMenu
@@ -216,6 +249,22 @@ export default function ChatsScreen() {
       /> : null}
     </Screen>
   );
+}
+
+function chatItemKey(item: ChatListItem) {
+  return item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`;
+}
+
+/** Held rows keep their slots with fresh content; rows that arrived meanwhile append, so nothing above them shifts. */
+function holdOrder(items: ChatListItem[], keys: readonly string[]): ChatListItem[] {
+  const byKey = new Map(items.map((item) => [chatItemKey(item), item] as const));
+  const held = keys.flatMap((key) => {
+    const item = byKey.get(key);
+    if (!item) return [];
+    byKey.delete(key);
+    return [item];
+  });
+  return [...held, ...byKey.values()];
 }
 
 function toggleSetMember(current: ReadonlySet<string>, id: string): ReadonlySet<string> {

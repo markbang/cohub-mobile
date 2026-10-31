@@ -1,6 +1,6 @@
 import type { ContentBlock, MessageRecord, SessionListFork, SessionRecord, SpaceRecord } from "@neta-art/cohub";
 import * as Crypto from "expo-crypto";
-import { translate, getActiveLocale } from "@/src/i18n/core";
+import { translate, getActiveLocale, type TranslationKey } from "@/src/i18n/core";
 import { mentionDisplayText } from "@/src/data/space-mentions";
 
 export function newId() {
@@ -46,6 +46,30 @@ export function formatRelativeTime(value: string | null | undefined) {
 export function formatNumber(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "0";
   return new Intl.NumberFormat(getActiveLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+const BILLING_STATUS_KEYS = new Map<string, TranslationKey>([
+  ["active", "settings.billing.status.active"],
+  ["trialing", "settings.billing.status.trialing"],
+  ["pending_checkout", "settings.billing.status.pendingCheckout"],
+  ["past_due", "settings.billing.status.pastDue"],
+  ["unpaid", "settings.billing.status.unpaid"],
+  ["payment_conflicted", "settings.billing.status.paymentConflicted"],
+  ["incomplete", "settings.billing.status.incomplete"],
+  ["canceled", "settings.billing.status.canceled"],
+  ["cancelled", "settings.billing.status.canceled"],
+  ["expired", "settings.billing.status.expired"],
+  ["ended", "settings.billing.status.ended"],
+  ["overage", "settings.billing.status.overage"],
+  ["partial", "settings.billing.status.partial"],
+]);
+
+/** Billing statuses are open-ended server strings; unknown ones still read as words, not identifiers. */
+export function billingStatusLabel(status: string) {
+  const key = BILLING_STATUS_KEYS.get(status.trim().toLowerCase());
+  if (key) return translate(key);
+  const words = status.replace(/[._-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function contentBlockText(block: ContentBlock | Record<string, unknown>) {
