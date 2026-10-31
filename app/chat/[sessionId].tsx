@@ -6,7 +6,9 @@ import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationConta
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
 import Animated, { cubicBezier, useAnimatedRef, useReducedMotion } from "react-native-reanimated";
-import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
+import type { LegendListRef } from "@legendapp/list/react-native";
+import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
+import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-controller";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
@@ -57,7 +59,7 @@ import { GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { EdgeFooter, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
 type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
@@ -76,6 +78,8 @@ const ARRIVAL_STYLE = {
 } as const;
 const ARRIVAL_STYLE_REDUCED = { animationName: { from: { opacity: 0 }, to: { opacity: 1 } }, animationDuration: 200 } as const;
 const TURN_START_STYLE = { paddingTop: 8 } as const;
+const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
+const ABOVE_FOOTER_MENU = { position: "absolute", left: 12, right: 12, bottom: "100%", marginBottom: 4 } as const;
 
 // Decided once per mount: removing the CSS animation mid-fade leaves the row at its partial opacity.
 function ArrivalRow({ arrival, reducedMotion, children }: { arrival: boolean; reducedMotion: boolean; children: ReactNode }) {
@@ -340,6 +344,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const turnScrollRetriesRef = useRef(new Map<number, number>());
   const turnScrollRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollRef = useRef({ y: 0, height: 0, viewport: 0 });
+  const keyboardCoveredInset = useKeyboardCoveredInset();
+  const keyboardInsetRef = useRef(0);
+  useEffect(() => {
+    // Only the settled inset counts; see `chatListDistances`.
+    const shown = KeyboardEvents.addListener("keyboardDidShow", (event) => { keyboardInsetRef.current = Math.max(0, event.height - keyboardCoveredInset); });
+    const hiding = KeyboardEvents.addListener("keyboardWillHide", () => { keyboardInsetRef.current = 0; });
+    return () => { shown.remove(); hiding.remove(); };
+  }, [keyboardCoveredInset]);
   const alwaysScrollLogRef = useRef({ at: 0, y: 0 });
   const traceRequestId = useRef(0);
   const traceCancelGeneration = useRef(0);
@@ -925,7 +937,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     const grew = contentSize.height > lastScrollRef.current.height;
     lastScrollRef.current = { y: contentOffset.y, height: contentSize.height, viewport: layoutMeasurement.height };
     measureVisibleRows();
-    const { distanceToLatest, distanceToOldest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height);
+    const { distanceToLatest, distanceToOldest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
     setFollowingTail(nextChatTailFollowing({
       currentlyFollowing: followingTailRef.current,
       distanceToBottom: distanceToLatest,
@@ -970,7 +982,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       followTailFrameRef.current = requestAnimationFrame(() => {
         followTailFrameRef.current = null;
         if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current) return;
-        const { distanceToLatest } = chatListDistances(lastScrollRef.current.y, height, lastScrollRef.current.viewport);
+        const { distanceToLatest } = chatListDistances(lastScrollRef.current.y, height, lastScrollRef.current.viewport, keyboardInsetRef.current);
         if (!chatTailStalled(distanceToLatest, lastScrollRef.current.y === yAtSchedule)) return;
         trace("tail.stalled", { distanceToLatest });
         setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
@@ -1003,7 +1015,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     }
     userDraggingRef.current = false;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height);
+    const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
     setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null, detached: view.hasMoreNewer }));
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
     requestFollowTail();
@@ -1022,7 +1034,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     momentumScrollingRef.current = false;
     if (pendingScrollSequence.current !== null) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height);
+    const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
     setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()), detached: view.hasMoreNewer }));
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
     requestFollowTail();
@@ -1204,7 +1216,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [arrivalBaseline, client, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
 
   if (view.loading && !session && view.messages.length === 0 && view.turns.length === 0) return <Screen edgeToEdge><EdgeHeader onLayout={onHeaderLayout}><TopBar transparent title={t("chat.title")} onBack={() => { traceBackPress(); router.back(); }} /></EdgeHeader><View style={{ flex: 1, paddingTop: headerHeight }}><ChatThreadPlaceholder kind="opening" /></View></Screen>;
-  return <Screen keyboard edgeToEdge>
+  return <Screen edgeToEdge>
     <View className="flex-1" accessibilityElementsHidden={moreOpen || titleMenuOpen} importantForAccessibility={moreOpen || titleMenuOpen ? "no-hide-descendants" : "auto"}>
     <SpacePanels edgeToEdge key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
@@ -1215,13 +1227,15 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
-        {timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><LegendList
+        {timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><KeyboardAwareLegendList
           key={listGeneration}
           {...traceTouches}
           ref={listRef}
           data={messages}
           extraData={rowExtraData}
           alignItemsAtEnd
+          keyboardLiftBehavior="always"
+          keyboardOffset={keyboardCoveredInset}
           maintainScrollAtEnd={maintainScrollAtEnd}
           maintainScrollAtEndThreshold={CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD}
           estimatedItemSize={FALLBACK_ROW_HEIGHT}
@@ -1253,15 +1267,15 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
-        {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}
+        {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
 
-        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}
-        {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 5 }} /> : null}
-        {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ position: "absolute", left: 12, right: 12, bottom: footerHeight + 4, zIndex: 6 }} /> : null}
         </View>
-        <EdgeFooter onLayout={onFooterLayout}>
+        <EdgeFooter keyboard onLayout={onFooterLayout}>
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
+        {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={ABOVE_FOOTER_BUTTON}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}
+        {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 5 }} /> : null}
+        {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 6 }} /> : null}
         {queueItems.length > 0 ? <View className="px-3 pt-2 pb-1.5 gap-1.5">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
@@ -1355,6 +1369,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const runtime = useSpaceRuntime(spaceId);
   const space = state.spaces.find((item) => item.id === spaceId) ?? null;
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
+  const keyboardCoveredInset = useKeyboardCoveredInset();
   const composerRef = useRef<View>(null);
   const composerMeasurementRef = useRef<ComposerInputMeasurement>({ input: null, scrollY: 0 });
   const sendRootRef = useRef<View>(null);
@@ -1472,14 +1487,14 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const modelLabel = activeModel?.name || activeModel?.id || (selectedHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
   const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
   const selectedStatus = selectedHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
-  return <Screen keyboard edgeToEdge>
+  return <Screen edgeToEdge>
     <SpacePanels edgeToEdge key={space.id} spaceId={space.id} spaceName={spaceName} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
       <View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
         <TopBar transparent title={spaceName} onBack={() => router.back()} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} />
         <ConnectionBanner visible={connectionUnavailable} />
         </EdgeHeader>
-        <View style={{ flex: 1, minHeight: 0, paddingTop: headerHeight }}>
+        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={-keyboardCoveredInset} style={{ flex: 1, minHeight: 0, paddingTop: headerHeight }}>
           <View className="flex-1 min-h-0 items-center justify-center px-7 pb-4">
             <Mascot size={84} blink />
             <Text className="mt-4 text-center text-headline font-semibold text-fg">{t("chat.draft.title")}</Text>
@@ -1495,7 +1510,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
         ]} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
-        </View>
+        </KeyboardAvoidingView>
         {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerRef} value={selectedHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
         {modelSelectorOpen ? selectedHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerRef} title={t("model.runtimeTitle", { harness: harnessLabel(selectedHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, selectedHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [selectedHarness]: model })); setModelSelectorOpen(false); }} /> : null}
         {attachmentMenuOpen ? <AttachmentMenu anchorRef={composerRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /> : null}

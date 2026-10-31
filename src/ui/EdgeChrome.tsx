@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
-import { StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from "react-native";
+import { KeyboardStickyView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
@@ -66,9 +67,32 @@ export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNod
   </View>;
 }
 
-export function EdgeFooter({ children, onLayout }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void }) {
-  return <View pointerEvents="box-none" onLayout={onLayout} className="absolute bottom-0 left-0 right-0 z-1">
+/** Android's keyboard height includes the navigation bar, which edge-to-edge chrome already pads for. */
+export function useKeyboardCoveredInset() {
+  const insets = useSafeAreaInsets();
+  return Platform.OS === "android" ? insets.bottom : 0;
+}
+
+/**
+ * With `keyboard`, the footer rides the keyboard instead of the screen resizing: a shrinking viewport
+ * slides the tail under the composer until it settles. Pair it with `KeyboardAwareLegendList`.
+ */
+export function EdgeFooter({ children, onLayout, keyboard = false }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void; keyboard?: boolean }) {
+  const covered = useKeyboardCoveredInset();
+  const content = <>
     <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
     {children}
-  </View>;
+  </>;
+  if (keyboard) return <KeyboardStickyView pointerEvents="box-none" onLayout={onLayout} offset={{ opened: covered }} style={FOOTER_STYLE}>{content}</KeyboardStickyView>;
+  return <View pointerEvents="box-none" onLayout={onLayout} style={FOOTER_STYLE}>{content}</View>;
 }
+
+/** Pads by the same lift as a keyboard `EdgeFooter`. */
+export function KeyboardLiftPadding({ style, children }: { style?: StyleProp<ViewStyle>; children: ReactNode }) {
+  const covered = useKeyboardCoveredInset();
+  const { height, progress } = useReanimatedKeyboardAnimation();
+  const liftStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(0, -height.get() - progress.get() * covered) }), [covered]);
+  return <Animated.View pointerEvents="none" style={[style, liftStyle]}>{children}</Animated.View>;
+}
+
+const FOOTER_STYLE: ViewStyle = { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1 };

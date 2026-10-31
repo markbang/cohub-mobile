@@ -1132,7 +1132,7 @@ for (const [tab, component, expectedRequests] of [
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
-    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader", KeyboardAvoidingView: "KeyboardAvoidingView", PANEL_FILL: {},
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
   const render = () => { cursor = 0; const nodes = chromeNodes(renderPanel(props)); while (effects.length) effects.shift()(); return nodes; };
@@ -1704,11 +1704,11 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
 const focusPolicySource = ts.createSourceFile("chat.tsx", readFileSync(new URL("../app/chat/[sessionId].tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let timelineElement;
 function findTimelineElement(node) {
-  if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(focusPolicySource) === "LegendList" && node.attributes.properties.some((prop) => ts.isJsxAttribute(prop) && prop.name.getText(focusPolicySource) === "data" && ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.getText(focusPolicySource) === "messages")) timelineElement = node;
+  if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(focusPolicySource) === "KeyboardAwareLegendList" && node.attributes.properties.some((prop) => ts.isJsxAttribute(prop) && prop.name.getText(focusPolicySource) === "data" && ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.getText(focusPolicySource) === "messages")) timelineElement = node;
   ts.forEachChild(node, findTimelineElement);
 }
 findTimelineElement(focusPolicySource);
-assert.ok(timelineElement, "the chat timeline renders messages chronologically through LegendList");
+assert.ok(timelineElement, "the chat timeline renders messages chronologically through the keyboard-aware LegendList");
 const timelineProp = (name) => timelineElement.attributes.properties.find((prop) => ts.isJsxAttribute(prop) && prop.name.getText(focusPolicySource) === name);
 assert.ok(focusPolicySource.text.includes("timelineReady"), "the timeline waits for a tail before mounting so initialScrollAtEnd still applies");
 assert.ok(focusPolicySource.text.includes("reserveComposer: true"), "the first paint reserves composer height so the tail does not jump");
@@ -3680,6 +3680,9 @@ assert.ok(!/ListFooterComponent=\{[^\n]*ListEdgeLoader/.test(chatSource), "the c
 assert.ok(chatSource.includes("chatMaintainScrollAtEnd(followingTail, openSettled && "), "opening snaps the tail pin; only a settled timeline animates it");
 assert.deepEqual(chatListDistances(0, 4000, 700), { distanceToLatest: 3300, distanceToOldest: 0 });
 assert.deepEqual(chatListDistances(3280, 4000, 700), { distanceToLatest: 20, distanceToOldest: 3280 });
+assert.equal(chatListDistances(3584, 4000, 700, 284).distanceToLatest, 0, "a list lifted by the settled keyboard inset is at its tail");
+assert.equal(chatListDistances(3384, 4000, 700, 284).distanceToLatest, 200, "scrolling up with the keyboard open counts the inset still below");
+assert.ok(chatSource.includes("<EdgeFooter keyboard "), "the composer rides the keyboard instead");
 
 const messages = [
   { role: "assistant", meta: { turnSequence: 6 } },
@@ -4396,7 +4399,7 @@ for (const path of [
   "../app/space/[spaceId]/files.tsx",
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  assert.ok(/<(?:LegendList|FlatList)[\s\S]*?extraData=/.test(source), `${path} must pass extraData so list rows re-render on external state`);
+  assert.ok(/<(?:KeyboardAwareLegendList|LegendList|FlatList)[\s\S]*?extraData=/.test(source), `${path} must pass extraData so list rows re-render on external state`);
 }
 
 assert.equal(runtimeHarnessFromTurn({ meta: { harness: "claude" } }), "claude");
