@@ -48,7 +48,7 @@ import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { AppSwitch } from "@/src/ui/AppSwitch";
-export { CohubLogo, Mascot } from "@/src/ui/Mascot";
+export { CohubLogo, Mascot, MascotLoader } from "@/src/ui/Mascot";
 export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
 export { Bone, LoadingDocument, LoadingFlatRows, LoadingRows, LoadingSections, Skeleton, type SkeletonSection } from "@/src/ui/Skeleton";

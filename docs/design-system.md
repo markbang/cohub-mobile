@@ -152,6 +152,7 @@ flag from such a file, so call sites stay the same:
 | Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` with the same bar: close leading, title centered |
 | Icons | SF Symbols (`Glyph.ios.tsx`, `src/sf-symbols.ts`) | Lucide |
 | Busy indicator | `ActivityIndicator` | the same eight-spoke spinner, drawn (`Loader`) |
+| A region's only content loading, a reply not started | `MascotLoader`: the mascot bobs and glances around (`LoadingState`, the reply's meta row) | the same |
 | Content lists | Flat full-width rows with inset hairlines (`ListRow`) | the same |
 | Language and Storage settings | SwiftUI `Form` | drawn settings rows |
 | Switches | System thumb with the accent track (`AppSwitch`) | the iOS switch, drawn |

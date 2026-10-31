@@ -2,6 +2,7 @@ import { ActivityIndicator, Platform, Text, View } from "react-native";
 import Reanimated, { steps, useReducedMotion } from "react-native-reanimated";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
+import { MascotLoader } from "@/src/ui/Mascot";
 
 /** UIActivityIndicatorView's two sizes: small for 16–20 pt slots (buttons, rows, list edges), large for a region's only content. */
 const SIZES = { sm: 20, md: 37 } as const;
@@ -34,9 +35,10 @@ export function Loader({ size = "sm", color, accessibilityLabel }: { size?: keyo
 
 /** A region with nothing to show yet: the loader centered in the space the content will fill. */
 export function LoadingState({ label, fill = true }: { label?: string; fill?: boolean }) {
+  const { t } = useTranslation();
   return (
     <View className={`items-center justify-center p-6 ${fill ? "flex-1 min-h-45" : ""}`}>
-      <Loader size="md" accessibilityLabel={label} />
+      <MascotLoader size={72} accessibilityLabel={label ?? t("common.loading")} />
       {label ? <Text className="text-caption text-fg-muted mt-3">{label}</Text> : null}
     </View>
   );
