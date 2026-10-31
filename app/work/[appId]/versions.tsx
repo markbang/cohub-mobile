@@ -43,7 +43,7 @@ export default function WorkVersionsScreen() {
       const result = await client.apps.publishVersion(appId);
       setApp(result.app);
       setVersions((current) => [result.version, ...(current ?? []).filter((item) => item.id !== result.version.id)].sort((a, b) => b.version - a.version));
-      toast({ title: t("app.versions.published", { version: result.version.version }) });
+      toast({ title: t("app.versions.published", { version: result.version.version }), tone: "success" });
     } catch (caught) {
       toast({ title: t("app.versions.publishFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     } finally {

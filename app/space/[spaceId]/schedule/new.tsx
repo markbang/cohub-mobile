@@ -34,7 +34,7 @@ export default function NewScheduleScreen() {
         schedule: { mode: "repeat", cronExpression: values.cronExpression.trim(), timezone: values.timezone.trim() },
       });
       if (result.mode !== "repeat") throw new Error(t("schedule.createFailed"));
-      toast({ title: t("schedule.created") });
+      toast({ title: t("schedule.created"), tone: "success" });
       router.replace({ pathname: "/space/[spaceId]/schedule/[jobId]", params: { spaceId, jobId: result.cronJobId } });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("schedule.createFailed"));

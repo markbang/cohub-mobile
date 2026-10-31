@@ -869,7 +869,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     const title = session ? displaySessionTitle(session) : t("chat.title");
     try {
       await Clipboard.setStringAsync(title);
-      showToast({ title: t("chat.titleCopied") });
+      showToast({ title: t("chat.titleCopied"), tone: "success" });
     } catch (error) {
       showToast({ title: t("chat.copyTitleFailed.title"), message: error instanceof Error ? error.message : t("chat.copyTitleFailed.body"), tone: "danger" });
     }

@@ -54,7 +54,7 @@ export default function ChatScrollDebugScreen() {
     const text = chatScrollTrace.export();
     try {
       if (share) await Share.share({ title: "Chat scroll diagnostics", message: text });
-      else { await Clipboard.setStringAsync(text); toast({ title: "Log copied" }); }
+      else { await Clipboard.setStringAsync(text); toast({ title: "Log copied", tone: "success" }); }
     } catch (error) {
       toast({ title: "Log export failed", message: error instanceof Error ? error.message : "Unable to export the log.", tone: "danger" });
     }

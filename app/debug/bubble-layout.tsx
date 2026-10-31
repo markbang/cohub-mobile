@@ -33,7 +33,7 @@ export default function BubbleLayoutDebugScreen() {
   return <Screen contentStyle={{ paddingBottom: insets.bottom }}>
     <TopBar title="Bubble Layout" onBack={() => router.back()} actions={<>
       <IconButton name="bookmark" label="Mark layout experiment" disabled={!recording} onPress={() => log("experiment.mark")} />
-      <IconButton name="copy" label="Copy layout log" onPress={() => { log("experiment.export"); chatScrollTrace.pause(); run(Clipboard.setStringAsync(chatScrollTrace.export()).then(() => toast({ title: "Layout log copied" }))); }} />
+      <IconButton name="copy" label="Copy layout log" onPress={() => { log("experiment.export"); chatScrollTrace.pause(); run(Clipboard.setStringAsync(chatScrollTrace.export()).then(() => toast({ title: "Layout log copied", tone: "success" }))); }} />
     </>} />
     <View className="px-3 pb-2 border-b border-border gap-1">
       <View className="flex-row flex-wrap items-center gap-3">

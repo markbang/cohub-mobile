@@ -209,7 +209,7 @@ export default function FileScreen() {
   const copyPath = useCallback(async () => {
     try {
       await Clipboard.setStringAsync(path);
-      showToast({ title: t("file.pathCopied") });
+      showToast({ title: t("file.pathCopied"), tone: "success" });
     } catch (caught) {
       showToast({ title: t("file.copyPathFailed.title"), message: caught instanceof Error ? caught.message : t("file.copyPathFailed.body"), tone: "danger" });
     }

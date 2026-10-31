@@ -44,7 +44,7 @@ export default function SaveScreen() {
     if (!save) return;
     try {
       await Clipboard.setStringAsync(save.commitHash);
-      toast({ title: t("save.hashCopied") });
+      toast({ title: t("save.hashCopied"), tone: "success" });
     } catch (caught) {
       toast({ title: t("save.copyFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     }

@@ -35,7 +35,7 @@ export default function WorkAccessScreen() {
     try {
       // Scopes this screen does not list (granted elsewhere) are kept as they are.
       await client.apps.update(appId, { appScopes: [...scopes] });
-      toast({ title: t("app.access.saved") });
+      toast({ title: t("app.access.saved"), tone: "success" });
       router.back();
     } catch (caught) {
       toast({ title: t("app.edit.saveFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });

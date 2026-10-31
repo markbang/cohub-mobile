@@ -55,7 +55,7 @@ export default function ChatsScreen() {
   const toast = useToast();
   const selectSource = (next: SessionSourceFilter) => {
     if (next === sourceFilter) return;
-    void saveSessionSourcePreference(next).catch(() => toast({ title: t("chats.source.saveFailed") }));
+    void saveSessionSourcePreference(next).catch(() => toast({ title: t("chats.source.saveFailed"), tone: "danger" }));
   };
   const sourceSessions = useSourceSessions(client, sourceFilter);
   const sourceSessionList = sourceSessions.sessions;
