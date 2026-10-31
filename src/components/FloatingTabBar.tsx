@@ -5,10 +5,11 @@ import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Keyboard, Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { KeyboardEvents } from "react-native-keyboard-controller";
 import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { springs } from "@/src/motion";
+import { curves, springs } from "@/src/motion";
 import { edgeChrome, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
@@ -39,7 +40,7 @@ const JELLY_ASPECT = 1.4;
 const BAR_SWELL = 0.04;
 const PULL_LIMIT = BAR_HEIGHT * 7 / 32;
 const BAR_BOTTOM_MARGIN = 8;
-const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
+const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
 /** Room around the bar for its glass group, so a lifted lens is not clipped where it overhangs the bar. */
 const GLASS_OUTSET = 16;
 
@@ -160,10 +161,11 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   }, [lens, lensTarget, selected, state.index, touching]);
 
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const show = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    // Android's own events only arrive once the keyboard has finished moving; keyboard-controller's
+    // will-events start with it, as iOS's do, so the bar leaves before the keyboard reaches it.
+    const events = Platform.OS === "ios" ? Keyboard : KeyboardEvents;
+    const show = events.addListener("keyboardWillShow", () => setKeyboardVisible(true));
+    const hide = events.addListener("keyboardWillHide", () => setKeyboardVisible(false));
     return () => {
       show.remove();
       hide.remove();
@@ -259,9 +261,8 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
           index = flung;
           scheduleOnRN(tick);
         }
-      } else if (index !== selected.get()) {
-        scheduleOnRN(tick);
       }
+      // A tap is navigation, which never buzzes; only a drag ticks as it crosses tabs.
       settle(index);
       scheduleOnRN(select, index);
       manager.end();
@@ -284,22 +285,16 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       { scaleY: 1 + BAR_SWELL * swell.get() },
     ],
   }));
+  // The drawn lens rests at one tab's size and is moved and stretched by transform only, so a drag
+  // never re-lays-out the bar; its capsule ends flatten slightly while it stretches.
   const lensStyle = useAnimatedStyle(() => {
-    const growth = LENS_GROWTH * 2 * lift.get();
-    const width = (ITEM_WIDTH + growth) * (1 + jelly.get());
-    const height = (LENS_HEIGHT + growth) * (1 - jelly.get() * JELLY_ASPECT);
-    return {
-      width,
-      height,
-      left: BAR_PADDING + (lens.get() + 0.5) * ITEM_WIDTH - width / 2,
-      top: (BAR_HEIGHT - height) / 2,
-    };
+    const { width, height } = lensSize(lift.get(), jelly.get());
+    return { transform: [{ translateX: lens.get() * ITEM_WIDTH }, { scaleX: width / ITEM_WIDTH }, { scaleY: height / LENS_HEIGHT }] };
   });
-  // The Liquid Glass lens sits in the glass group, which is offset by its outset around the bar.
+  // Liquid Glass keeps a real frame: the glass group merges and refracts by its views' geometry, which
+  // a transform would leave behind. It is one childless, absolutely placed view, so nothing else re-lays-out.
   const glassLensStyle = useAnimatedStyle(() => {
-    const growth = LENS_GROWTH * 2 * lift.get();
-    const width = (ITEM_WIDTH + growth) * (1 + jelly.get());
-    const height = (LENS_HEIGHT + growth) * (1 - jelly.get() * JELLY_ASPECT);
+    const { width, height } = lensSize(lift.get(), jelly.get());
     return {
       position: "absolute",
       borderRadius: height / 2,
@@ -332,7 +327,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
             <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} style={{ top: GLASS_OUTSET, left: GLASS_OUTSET, right: GLASS_OUTSET, bottom: GLASS_OUTSET }} />
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
-          <Animated.View pointerEvents="none" className="absolute" style={lensStyle}>
+          <Animated.View pointerEvents="none" className="absolute" style={[LENS_FRAME, lensStyle]}>
             <Animated.View className="absolute inset-0 rounded-full bg-accent-soft" style={restingLensStyle} />
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
@@ -369,6 +364,14 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
 }
 
 const ICON_SIZE = 24;
+const LENS_FRAME = { left: BAR_PADDING, top: (BAR_HEIGHT - LENS_HEIGHT) / 2, width: ITEM_WIDTH, height: LENS_HEIGHT } as const;
+
+/** The lens grows as it lifts, and stretches along its motion while thinning across it. */
+function lensSize(lifted: number, stretch: number) {
+  "worklet";
+  const growth = LENS_GROWTH * 2 * lifted;
+  return { width: (ITEM_WIDTH + growth) * (1 + stretch), height: (LENS_HEIGHT + growth) * (1 - stretch * JELLY_ASPECT) };
+}
 
 function positionAt(x: number, lastIndex: number) {
   "worklet";

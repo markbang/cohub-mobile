@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import Reanimated, { FadeIn, SlideInDown, ZoomIn } from "react-native-reanimated";
+import Reanimated, { Easing, SlideInDown, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
 import type { IconName } from "@/src/icons";
+import { curves, dialog } from "@/src/motion";
 import { Loader } from "@/src/ui";
 
 export type ConfirmSheetProps = {
@@ -24,7 +26,17 @@ export type ConfirmSheetProps = {
   testID?: string;
 };
 
-const SHEET_SPRING = SlideInDown.springify().duration(420).dampingRatio(1);
+const SHEET_SPRING = SlideInDown.springify().duration(dialog.sheet.duration).dampingRatio(dialog.sheet.dampingRatio);
+const ALERT_TIMING = { duration: dialog.enter.duration, easing: Easing.bezier(...curves.easeOut) };
+
+/** The alert settles in from just under full size; the modal's own fade carries both its entrance and its exit. */
+function alertEntering() {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: dialog.fromScale }] },
+    animations: { opacity: withTiming(1, ALERT_TIMING), transform: [{ scale: withTiming(1, ALERT_TIMING) }] },
+  };
+}
 
 /**
  * A yes-or-no confirmation. iOS presents the system action sheet (`SystemDialogs.ios.tsx`); Android
@@ -68,18 +80,21 @@ export type NoticeSheetProps = {
 /** An informational notice with one way out. iOS shows the system alert; Android draws the same alert. */
 export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSheetProps) {
   const { t } = useTranslation();
-  return <Modal visible={notice !== null} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-    <Reanimated.View entering={FadeIn.duration(150)} className="flex-1 items-center justify-center px-8" style={SCRIM} testID={testID}>
-      <Reanimated.View entering={ZoomIn.springify().duration(320).dampingRatio(1)} accessibilityViewIsModal accessibilityRole="alert" className="w-full max-w-70 overflow-hidden rounded-md bg-surface-float" style={CONTINUOUS}>
+  // The last notice stays drawn while the modal fades out, so its text does not blank mid-exit.
+  const [shown, setShown] = useState(notice);
+  if (notice && notice !== shown) setShown(notice);
+  return <Modal visible={notice !== null} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <View className="flex-1 items-center justify-center px-8" style={SCRIM} testID={testID}>
+      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="w-full max-w-70 overflow-hidden rounded-md bg-surface-float" style={CONTINUOUS}>
         <View className="items-center gap-1 px-4 pb-4 pt-5">
-          <Text accessibilityRole="header" className="text-center text-headline font-semibold text-fg">{notice?.title || fallbackTitle}</Text>
-          <Text className="text-center text-subhead text-fg-secondary">{notice?.message ?? ""}</Text>
+          <Text accessibilityRole="header" className="text-center text-headline font-semibold text-fg">{shown?.title || fallbackTitle}</Text>
+          <Text className="text-center text-subhead text-fg-secondary">{shown?.message ?? ""}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={t("common.done")} onPress={onClose} className="min-h-12 items-center justify-center border-border active:bg-surface-pressed" style={HAIRLINE_TOP}>
           <Text className="text-body font-semibold text-accent">{t("common.done")}</Text>
         </Pressable>
       </Reanimated.View>
-    </Reanimated.View>
+    </View>
   </Modal>;
 }
 

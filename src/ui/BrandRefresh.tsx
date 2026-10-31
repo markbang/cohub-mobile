@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useTranslation } from "@/src/i18n";
 import { springs } from "@/src/motion";
@@ -32,9 +32,10 @@ export function useBrandRefresh({ refreshing, onRefresh, scrollEventThrottle = 1
   const pull = useSharedValue(0);
   const atTop = useSharedValue(true);
   const dragStart = useRef<number | null>(null);
+  const lastDistance = useRef(0);
   // LegendList's types omit `refreshControl` even though it hands the element to its ScrollView.
   const listProps = useMemo(() => Platform.OS === "ios" ? { refreshControl: <AppRefreshControl brand refreshing={refreshing} onRefresh={onRefresh} /> } : {}, [onRefresh, refreshing]);
-  const onScrollBeginDrag = useCallback((event: ScrollEvent) => { dragStart.current = event.nativeEvent.contentOffset.y; }, []);
+  const onScrollBeginDrag = useCallback((event: ScrollEvent) => { dragStart.current = event.nativeEvent.contentOffset.y; lastDistance.current = 0; }, []);
   const onScroll = useCallback((event: ScrollEvent) => {
     const y = event.nativeEvent.contentOffset.y;
     atTop.set(y <= 1);
@@ -42,7 +43,11 @@ export function useBrandRefresh({ refreshing, onRefresh, scrollEventThrottle = 1
     // Measured from where the drag began, so no inset arithmetic: a drag from the top uncovers the
     // mascot, and one from further down leaves it far above the viewport.
     const distance = Math.max(0, dragStart.current - y);
-    pull.set(scrollEventThrottle > 20 ? withTiming(distance, { duration: scrollEventThrottle }) : distance);
+    const step = distance - lastDistance.current;
+    lastDistance.current = distance;
+    // A slow event rate is bridged by heading, at constant speed, to where the pull will be by the next
+    // event, so the reveal keeps pace with the finger instead of trailing it by one interval.
+    pull.set(scrollEventThrottle > 20 ? withTiming(Math.max(0, distance + step), { duration: scrollEventThrottle, easing: Easing.linear }) : distance);
   }, [atTop, pull, scrollEventThrottle]);
   const header = useMemo(() => Platform.OS === "ios" ? <InContentMascot refreshing={refreshing} pull={pull} /> : null, [pull, refreshing]);
   return { listProps, header, onScroll, onScrollBeginDrag, refreshing, onRefresh, pull, atTop };

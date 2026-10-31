@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
+  Dimensions,
   Image,
   Keyboard,
   Platform,
@@ -16,11 +17,11 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-controller";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
-import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { IconName } from "@/src/icons";
 import { Glyph } from "@/src/ui/Glyph";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
@@ -32,7 +33,7 @@ import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import type { ColorKey } from "@/src/design/tokens";
-import { motion, springs } from "@/src/motion";
+import { curves, glyphSwap, motion, springs } from "@/src/motion";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
@@ -216,8 +217,9 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
   const system = nativeHeaders && !drawn && Boolean(onBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
   useNativeHeader(system ? { title, subtitle, right: actions } : null);
-  // A drawn bar centers its title as UIKit does, balancing whichever side is wider.
-  const [trailingWidth, setTrailingWidth] = useState(0);
+  // A drawn bar centers its title as UIKit does, balancing whichever side is wider. Until the trailing
+  // buttons are measured the title is not drawn, so it never lands off-center for a frame and jumps.
+  const [trailingWidth, setTrailingWidth] = useState<number | null>(null);
   if (system) return null;
   const titleContent = children ?? <>
     <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-center text-headline font-semibold text-fg">{title}</Text>
@@ -225,9 +227,9 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   </>;
   // Each bar slot is a 44 pt target; the gap between slots is 4.
   const leadingWidth = onBack || leading ? 48 : 0;
-  const trailing = actions ? trailingWidth + 4 : 0;
+  const trailing = actions ? (trailingWidth ?? 0) + 4 : 0;
   const side = Math.max(leadingWidth, trailing);
-  const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing };
+  const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
@@ -505,11 +507,19 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const inputTrace = useRef({ at: 0, length: value.length, selectionAt: 0 });
   const keyboardVisible = keyboardTop !== null;
   useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    // The iOS resume frame would size the composer against a zero-height window.
-    const show = Keyboard.addListener(showEvent, (event) => { if (isUsableKeyboardFrame(event.endCoordinates)) setKeyboardTop(event.endCoordinates.screenY); });
-    const hide = Keyboard.addListener(hideEvent, () => setKeyboardTop(null));
+    if (Platform.OS === "ios") {
+      // The iOS resume frame would size the composer against a zero-height window.
+      const show = Keyboard.addListener("keyboardWillShow", (event) => { if (isUsableKeyboardFrame(event.endCoordinates)) setKeyboardTop(event.endCoordinates.screenY); });
+      const hide = Keyboard.addListener("keyboardWillHide", () => setKeyboardTop(null));
+      return () => { show.remove(); hide.remove(); };
+    }
+    // Android's own events wait for the keyboard to finish moving; these start with it. Their height is
+    // the full IME inset of the edge-to-edge window, so the keyboard's top is measured from its bottom.
+    const show = KeyboardEvents.addListener("keyboardWillShow", (event) => {
+      const frame = { screenY: Dimensions.get("window").height - event.height, height: event.height };
+      if (isUsableKeyboardFrame(frame)) setKeyboardTop(frame.screenY);
+    });
+    const hide = KeyboardEvents.addListener("keyboardWillHide", () => setKeyboardTop(null));
     return () => { show.remove(); hide.remove(); };
   }, []);
   if (!value) {
@@ -679,12 +689,15 @@ export function useBackButton() {
   return useRouter();
 }
 
-/** A control whose glyph changes (send, stop, sent; add, close) pops the new glyph in instead of swapping it. */
+const GLYPH_IN = { duration: motion.fade.duration, easing: Easing.bezier(...curves.easeOut) };
+const GLYPH_OUT = { duration: motion.fadeOut.duration, easing: Easing.bezier(...curves.easeOut) };
+
+/** A control whose glyph changes (send, stop, sent; add, close) on every send crossfades it in from just under size, without a bounce. */
 function controlIconEntering() {
   "worklet";
   return {
-    initialValues: { opacity: 0, transform: [{ scale: 0.6 }] },
-    animations: { opacity: withTiming(1, { duration: motion.fade.duration }), transform: [{ scale: withSpring(1, springs.pop) }] },
+    initialValues: { opacity: 0, transform: [{ scale: glyphSwap.fromScale }] },
+    animations: { opacity: withTiming(1, GLYPH_IN), transform: [{ scale: withTiming(1, GLYPH_IN) }] },
   };
 }
 
@@ -693,7 +706,7 @@ function controlIconExiting() {
   "worklet";
   return {
     initialValues: { opacity: 1, transform: [{ scale: 1 }] },
-    animations: { opacity: withTiming(0, { duration: motion.fadeOut.duration }), transform: [{ scale: withTiming(0.6, { duration: motion.fadeOut.duration }) }] },
+    animations: { opacity: withTiming(0, GLYPH_OUT), transform: [{ scale: withTiming(glyphSwap.fromScale, GLYPH_OUT) }] },
   };
 }
 
