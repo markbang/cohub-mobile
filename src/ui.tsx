@@ -31,7 +31,8 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
-import { edgeChrome, useAppTheme, typography } from "@/src/theme";
+import { edgeChrome, MAX_FONT_SCALE, useAppTheme, typography } from "@/src/theme";
+import { touchSlop } from "@/src/ui/touch-target";
 import type { ColorKey } from "@/src/design/tokens";
 import { curves, glyphSwap, motion, springs } from "@/src/motion";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
@@ -93,7 +94,7 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
       {uri
         ? <Image source={{ uri }} className="bg-surface-raised" style={shape} />
         : <View className="items-center justify-center bg-accent-soft" style={shape}>
-          <Text className="font-semibold text-accent" style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}>{initials(name)}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.glyph} className="font-semibold text-accent" style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}>{initials(name)}</Text>
         </View>}
       {online ? <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-success" /> : null}
     </View>
@@ -331,9 +332,10 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   // The danger fill is a token pair; its foreground is not one of the icon tones.
   const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 py-2 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
       {loading ? <Loader color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
-      <Text className={`shrink text-body font-semibold ${classes.text}`}>{label}</Text>
+      {/* Uncapped: at large text sizes the label wraps and the button grows with it. */}
+      <Text className={`shrink text-center text-body font-semibold ${classes.text}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -345,15 +347,18 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
     <View className="min-h-11 flex-row items-center gap-3 rounded-sm bg-surface-raised px-4" style={CONTINUOUS}>
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
-      {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={8} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
+      {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={CLEAR_SLOP} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
     </View>
   );
 }
 
+// The field's 16 pt end padding and 44 pt height leave room for the slop inside it.
+const CLEAR_SLOP = touchSlop(18);
+
 export type SegmentOption<T extends string> = { value: T; label: string; icon?: IconName; locked?: boolean };
 
 // A capsule track holding capsule segments: concentric at any height, since both corners are full.
-const SEGMENT_INSET = 3;
+const SEGMENT_INSET = 4;
 const SEGMENT_CORNER = { borderRadius: 999 } as const;
 const SEGMENT_THUMB_STYLE = { ...SEGMENT_CORNER, top: SEGMENT_INSET, bottom: SEGMENT_INSET, left: SEGMENT_INSET } as const;
 
@@ -365,7 +370,9 @@ export function Segmented<T extends string>({ size = "regular", ...props }: Segm
   return size === "compact" ? <CompactDrawnSegmented {...props} /> : <DrawnSegmented {...props} />;
 }
 
-const COMPACT_SEGMENT_HIT_SLOP = { top: 5, bottom: 5 } as const;
+// Segments reach 44 pt (compact, 32 + 2 × 6) and 48 pt (regular) tall targets through the track's inset.
+const COMPACT_SEGMENT_HIT_SLOP = { top: 6, bottom: 6 } as const;
+const SEGMENT_HIT_SLOP = { top: SEGMENT_INSET, bottom: SEGMENT_INSET } as const;
 
 /** Bar-sized: segments fit their labels and the thumb is a tint, so it sits beside bar buttons without outshouting them. */
 function CompactDrawnSegmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: SegmentedProps<T>) {
@@ -415,10 +422,10 @@ function CompactDrawnSegmented<T extends string>({ options, value, onChange, dis
               if (option.locked) { onLocked?.(); return; }
               if (!selected) { haptics.selection(); onChange(option.value); }
             }}
-            className={`min-h-8.5 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            className={`min-h-8 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
           >
-            <Text numberOfLines={1} className={`shrink text-caption ${selected ? "font-semibold text-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`shrink text-caption ${selected ? "font-semibold text-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -455,6 +462,7 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
             accessibilityState={{ selected, checked: selected, disabled: disabled || Boolean(option.locked) }}
             aria-checked={selected}
             disabled={disabled}
+            hitSlop={SEGMENT_HIT_SLOP}
             onPress={() => {
               traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
@@ -464,7 +472,7 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
             style={SEGMENT_CORNER}
           >
             {option.icon ? <AppIcon name={option.icon} size={16} tone={selected ? "onAccent" : "muted"} /> : null}
-            <Text numberOfLines={1} className={`shrink text-subhead ${selected ? "font-semibold text-on-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`shrink text-subhead ${selected ? "font-semibold text-on-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
           </Pressable>
         );
       })}
@@ -626,12 +634,12 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
           {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-2 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
-            <Text numberOfLines={1} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
-            <Text numberOfLines={1} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
@@ -651,12 +659,15 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
 
 export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string; uri?: string; mimeType?: string; onRemove?: () => void }) {
   const { t } = useTranslation();
-  return <View className="max-w-full flex-row items-center gap-1.5 rounded-sm bg-accent-soft px-2 py-1.5" style={{ minHeight: 44, borderCurve: "continuous" }}>
+  return <View className="max-w-full flex-row items-center gap-2 rounded-sm bg-accent-soft px-2 py-1" style={{ minHeight: 44, borderCurve: "continuous" }}>
     {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
-    <Text numberOfLines={1} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={16} tone="muted" /></Pressable>
+    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    {/* A 32 × 44 box flush with the chip's end keeps the glyph where it was; the left slop completes the 44 pt target inside the chip. */}
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={REMOVE_SLOP} className="-my-1 -mr-2 h-11 w-8 items-center justify-center"><AppIcon name="x" size={16} tone="muted" /></Pressable>
   </View>;
 }
+
+const REMOVE_SLOP = { left: 12 } as const;
 
 export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
