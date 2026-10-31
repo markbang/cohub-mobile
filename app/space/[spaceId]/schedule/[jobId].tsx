@@ -150,11 +150,10 @@ export default function ScheduleScreen() {
       </SettingsGroup>
       <PrimaryButton variant="secondary" icon="trash" label={t("schedule.delete")} onPress={() => setConfirmDelete(true)} className="mx-4" />
     </ScrollView>}
-    {editing ? <AdaptiveSheet visible title={t("schedule.edit")} onClose={() => { if (busy !== "save") setEditing(null); }} dismissible={busy !== "save"}>
+    {editing ? <AdaptiveSheet visible title={t("schedule.edit")} onClose={() => { if (busy !== "save") setEditing(null); }} dismissible={busy !== "save"} confirm={{ label: t("common.save"), loading: busy === "save", onPress: () => void save() }}>
       <View className="gap-4">
         <ScheduleForm values={editing} onChange={setEditing} withPrompt={false} disabled={busy === "save"} />
         {editError ? <Text accessibilityRole="alert" selectable className="text-caption text-danger">{editError}</Text> : null}
-        <PrimaryButton label={t("common.save")} loading={busy === "save"} onPress={() => void save()} />
       </View>
     </AdaptiveSheet> : null}
     <ConfirmSheet visible={confirmDelete} title={t("schedule.delete")} subtitle={job?.title} message={t("schedule.deleteConfirm")} confirmLabel={t("schedule.delete")} confirmIcon="trash" busy={busy === "delete"} onConfirm={() => void remove()} onClose={() => setConfirmDelete(false)} />

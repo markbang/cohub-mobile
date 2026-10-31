@@ -20,7 +20,7 @@ import { formatWalletUsd } from "@/src/data/space-wallet";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppSwitch, AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
+import { AppSwitch, AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
@@ -497,6 +497,7 @@ export default function SpaceSettingsScreen() {
         subtitle={t("space.settings.addModPrompt")}
         onClose={() => setAddModOpen(false)}
         dismissible={!addingMod}
+        confirm={{ label: t("space.settings.addMod"), loading: addingMod, disabled: !client || !modSpaceId.trim(), onPress: () => void addMod() }}
         testID="space-add-mod-sheet"
       >
         <View className="gap-3">
@@ -515,7 +516,6 @@ export default function SpaceSettingsScreen() {
             className={FIELD_INPUT_CLASS}
           />
           {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
-          <PrimaryButton label={t("space.settings.addMod")} icon="plus" loading={addingMod} disabled={!client || !modSpaceId.trim()} onPress={() => void addMod()} />
         </View>
       </AdaptiveSheet> : null}
       {customTtlOpen ? <AdaptiveSheet
@@ -523,6 +523,7 @@ export default function SpaceSettingsScreen() {
         title={t("space.settings.sleep.customTitle")}
         subtitle={t("space.settings.sleep.customPrompt")}
         onClose={() => setCustomTtlOpen(false)}
+        confirm={{ label: t("common.save"), disabled: !customTtlValue.trim(), onPress: saveCustomTtl }}
       >
         <View className="gap-3">
           <TextInput
@@ -544,7 +545,6 @@ export default function SpaceSettingsScreen() {
             ]}
           />
           {customTtlError ? <Text accessibilityRole="alert" className="text-caption text-danger">{customTtlError}</Text> : null}
-          <PrimaryButton label={t("common.save")} disabled={!customTtlValue.trim()} onPress={saveCustomTtl} />
         </View>
       </AdaptiveSheet> : null}
     </Screen>

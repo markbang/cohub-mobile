@@ -6,13 +6,14 @@ import { setDialogOpen } from "@/src/data/interaction-trace";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { IconButton } from "@/src/ui";
+import { SheetConfirmButton } from "@/src/components/SheetConfirmButton";
 import type { AdaptiveSheetProps } from "./AdaptiveSheet";
 
-export type { AdaptiveSheetProps } from "./AdaptiveSheet";
+export type { AdaptiveSheetProps, SheetConfirm } from "./AdaptiveSheet";
 
 const COMPACT_BREAKPOINT = 720;
 
-export function AdaptiveSheet({ visible, title, subtitle, onClose, children, footer, scrollable = true, dismissible = true, contentStyle, testID }: AdaptiveSheetProps) {
+export function AdaptiveSheet({ visible, title, subtitle, onClose, children, footer, scrollable = true, dismissible = true, contentStyle, confirm, testID }: AdaptiveSheetProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -57,7 +58,7 @@ export function AdaptiveSheet({ visible, title, subtitle, onClose, children, foo
         <View className="min-h-14 flex-row items-center px-2 pt-2">
           <IconButton filled name="x" label={t("ui.sheet.close", { title })} disabled={!dismissible} onPress={requestClose} />
           <Text accessibilityRole="header" numberOfLines={1} className="flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
-          <View className="size-11" />
+          <SheetConfirmButton confirm={confirm} />
         </View>
         {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
         {scrollable

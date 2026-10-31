@@ -544,7 +544,8 @@ const formScope = {
   add.props.onPress();
   const sheet = () => render().find((node) => node.type === "AdaptiveSheet");
   const input = () => render().find((node) => node.props.testID === "space-add-mod-input");
-  const submit = () => render().find((node) => node.type === "PrimaryButton");
+  // The sheet carries its confirm in the bar; its fields match the button it replaced.
+  const submit = () => ({ props: sheet().props.confirm });
   assert.ok(sheet()?.props.visible, "Android Add opens the cross-platform Mod input instead of the unsupported Alert.prompt");
   assert.equal(submit().props.disabled, true, "an empty Mod ID cannot be submitted");
   sheet().props.onClose();

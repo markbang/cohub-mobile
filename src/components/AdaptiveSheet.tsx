@@ -20,6 +20,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
+import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
 import { setDialogOpen } from "@/src/data/interaction-trace";
 import { motion, springs } from "@/src/motion";
 
@@ -40,8 +41,15 @@ export type AdaptiveSheetProps = {
   dismissible?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   fullHeight?: boolean;
+  /**
+   * The sheet's one confirming action, as iOS 26 sheets carry it: a checkmark at the bar's trailing edge,
+   * opposite the close. Destructive or two-way choices stay in `footer` with their words.
+   */
+  confirm?: SheetConfirm;
   testID?: string;
 };
+
+export type { SheetConfirm } from "@/src/components/SheetConfirmButton";
 
 export function AdaptiveSheet({
   visible,
@@ -54,6 +62,7 @@ export function AdaptiveSheet({
   dismissible = true,
   contentStyle,
   fullHeight = false,
+  confirm,
   testID,
 }: AdaptiveSheetProps) {
   const theme = useAppTheme();
@@ -246,7 +255,7 @@ export function AdaptiveSheet({
                 </View>
               </GestureDetector>
             ) : null}
-            {/* As in UIKit sheets: close leads, the title centers, the trailing slot balances it. */}
+            {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
             <View className="min-h-14 flex-row items-center px-2 pb-2">
               <IconButton
                 filled
@@ -256,7 +265,7 @@ export function AdaptiveSheet({
                 onPress={requestClose}
               />
               <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
-              <View className="size-11" />
+              <SheetConfirmButton confirm={confirm} />
             </View>
             {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (

@@ -21,7 +21,7 @@ import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances }
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, PrimaryButton, Screen, SearchField } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
@@ -268,9 +268,9 @@ export default function SpacesScreen() {
       onClose={closeCreate}
       dismissible={!creating}
       testID="create-space-sheet"
-      footer={pickingFolder
-        ? <PrimaryButton label={t("deviceRuntime.useFolder")} icon="check" disabled={!folderBrowser.listing || folderBrowser.loading || Boolean(folderBrowser.failure)} onPress={() => { if (folderBrowser.listing) selectFolder(folderBrowser.listing); }} />
-        : <PrimaryButton label={t("spaces.create.action")} icon="plus" loading={creating} disabled={!name.trim() || !placementReady} onPress={() => void submitCreate()} />}
+      confirm={pickingFolder
+        ? { label: t("deviceRuntime.useFolder"), disabled: !folderBrowser.listing || folderBrowser.loading || Boolean(folderBrowser.failure), onPress: () => { if (folderBrowser.listing) selectFolder(folderBrowser.listing); } }
+        : { label: t("spaces.create.action"), loading: creating, disabled: !name.trim() || !placementReady, onPress: () => void submitCreate() }}
     >
       {pickingFolder ? <DeviceFolderBrowser browser={folderBrowser} /> : <>
       <View className="gap-4">

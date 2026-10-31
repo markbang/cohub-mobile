@@ -12,7 +12,7 @@ import { useApp } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 
 const UTM_FIELDS = [
@@ -110,7 +110,7 @@ function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId:
       setSaving(false);
     }
   };
-  return <AdaptiveSheet visible title={t("app.promo.new")} onClose={onClose} dismissible={!saving}>
+  return <AdaptiveSheet visible title={t("app.promo.new")} onClose={onClose} dismissible={!saving} confirm={{ label: t("app.promo.create"), loading: saving, disabled: !name.trim(), onPress: () => void create() }}>
     <View className="gap-4">
       <Field label={t("app.promo.name")}>
         <TextInput value={name} onChangeText={setName} maxLength={120} placeholder={t("app.promo.namePlaceholder")} placeholderTextColor={theme.colors.textFaint} accessibilityLabel={t("app.promo.name")} className={FIELD_INPUT_CLASS} />
@@ -125,7 +125,6 @@ function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId:
         <TextInput value={utm[field.key]} onChangeText={(value) => setUtm((current) => ({ ...current, [field.key]: value }))} autoCapitalize="none" autoCorrect={false} placeholder={field.placeholder} placeholderTextColor={theme.colors.textFaint} accessibilityLabel={t(field.label)} className={FIELD_INPUT_CLASS} />
       </Field>)}
       {error ? <Text accessibilityRole="alert" selectable className="text-caption text-danger">{error}</Text> : null}
-      <PrimaryButton label={t("app.promo.create")} icon="plus" loading={saving} disabled={!name.trim()} onPress={() => void create()} />
     </View>
   </AdaptiveSheet>;
 }

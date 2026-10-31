@@ -152,11 +152,16 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
         <NoticeSheet notice={notice} fallbackTitle={t("about.linkError.title")} onClose={() => setNotice(null)} testID="about-link-error-sheet" />
       ) : null}
 
-      <AdaptiveSheet visible={feedbackOpen} title={t("about.feedback.title")} onClose={() => { if (!feedbackSubmitting) setFeedbackOpen(false); }}>
+      <AdaptiveSheet
+        visible={feedbackOpen}
+        title={t("about.feedback.title")}
+        onClose={() => { if (!feedbackSubmitting) setFeedbackOpen(false); }}
+        dismissible={!feedbackSubmitting}
+        confirm={feedbackId ? { label: t("common.done"), onPress: () => setFeedbackOpen(false) } : { label: t("about.feedback.submit"), loading: feedbackSubmitting, disabled: !feedbackText.trim(), onPress: sendFeedback }}
+      >
         {feedbackId ? (
           <View className="gap-3">
             <Text className="text-body text-success">{t("about.feedback.success", { id: feedbackId })}</Text>
-            <PrimaryButton variant="secondary" label={t("common.done")} onPress={() => setFeedbackOpen(false)} />
           </View>
         ) : <View className="gap-3">
           <Field label={t("about.feedback.label")} hint={t("about.feedback.description")} error={feedbackError}>
@@ -193,7 +198,6 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
               }}
             />
           </SettingsRow>
-          <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={sendFeedback} />
         </View>}
       </AdaptiveSheet>
     </View>
