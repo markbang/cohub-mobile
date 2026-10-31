@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { haptics } from "@/src/platform/haptics";
-import { setForegroundSession } from "@/src/platform/notifications";
+import { clearForegroundSession, setForegroundSession } from "@/src/platform/notifications";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, KeyboardAvoidingView as RNKeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
@@ -51,7 +51,7 @@ import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlo
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
 import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
-import { harnessLabel, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
+import { harnessLabel, HttpError, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
 import { appendVoiceText as appendDictation } from "@/src/data/voice-append";
 import { chatThreadPlaceholder, failedSendDraft, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
@@ -60,7 +60,7 @@ import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
-import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
+import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, DataError, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -233,7 +233,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     recordDebugEvent("chat.screen.focus", { session: debugAlias("session", sessionId) });
     setForegroundSession(sessionId);
     return () => {
-      setForegroundSession(null);
+      // Pushing Chat B over A focuses B before A blurs; clearing unconditionally would drop B.
+      clearForegroundSession(sessionId);
       recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
     };
   }, [sessionId]));
@@ -1189,7 +1190,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
 
   const retrySend = useCallback(async (message: MessageRecord) => {
     const draft = failedSendDraft(message);
-    if (!draft || submitLockRef.current || sendingRef.current) return;
+    // Until the server history lands, a cached failed row may be a send it already accepted.
+    if (!draft || submitLockRef.current || sendingRef.current || !getAppState().sessionViews[sessionId]?.historyLoaded) return;
     submitLockRef.current = true;
     haptics.commit();
     let replaced = false;
@@ -1212,7 +1214,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     } finally {
       submitLockRef.current = false;
     }
-  }, [cancelTurnScroll, discardFailedSend, reducedMotion, requestFollowTail, sendMessage, sessionId, setFollowingTail, showToast, t]);
+  }, [cancelTurnScroll, discardFailedSend, getAppState, reducedMotion, requestFollowTail, sendMessage, sessionId, setFollowingTail, showToast, t]);
   const discardSend = useCallback((message: MessageRecord) => discardFailedSend(sessionId, message.id), [discardFailedSend, sessionId]);
 
   // FlatList and its cells are PureComponents: bailing out depends on every prop keeping its
@@ -1223,8 +1225,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   // LegendList memoizes each row on [item, extraData]; fork/send-transition state renders
   // inside a row but never changes `messages`, so it must flow through extraData to reach it.
   const rowExtraData = useMemo(
-    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, t, theme }),
-    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, t, theme],
+    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, historyLoaded: view.historyLoaded, t, theme }),
+    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, view.historyLoaded, t, theme],
   );
   const keyExtractor = useCallback((item: MessageRecord) => messageRowKey(item), []);
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
@@ -1263,8 +1265,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onRetry={retrySend} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
-  }, [arrivalBaseline, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retrySend, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onRetry={retrySend} retryDisabled={!view.historyLoaded} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
+  }, [arrivalBaseline, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retrySend, view.historyLoaded, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
 
   if (view.loading && !session && view.messages.length === 0 && view.turns.length === 0) return <Screen edgeToEdge><EdgeHeader onLayout={onHeaderLayout}><TopBar transparent title={t("chat.title")} onBack={() => { traceBackPress(); router.back(); }} /></EdgeHeader><View style={{ flex: 1, paddingTop: headerHeight }}><ChatThreadPlaceholder kind="opening" /></View></Screen>;
   return <Screen edgeToEdge>
@@ -1440,11 +1442,13 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   // `space.id` is always `spaceId` once the screen renders a Space.
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const [fetchedSpace, setFetchedSpace] = useState<SpaceRecord | null>(null);
-  const [failedSpaceId, setFailedSpaceId] = useState<string | null>(null);
-  const spaceLookupFailed = failedSpaceId === spaceId;
+  const [spaceLookup, setSpaceLookup] = useState<{ spaceId: string; missing: boolean; message: string } | null>(null);
+  const [spaceLookupAttempt, setSpaceLookupAttempt] = useState(0);
+  const spaceLookupError = spaceLookup?.spaceId === spaceId ? spaceLookup : null;
   const space = listedSpace ?? (fetchedSpace?.id === spaceId ? fetchedSpace : null);
   const spaceListed = listedSpace !== null;
-  // A cold start can open this before the Space list arrives; only a failed lookup means it is gone.
+  // A cold start can open this before the Space list arrives. Only the server saying it is gone or
+  // off-limits means unavailable; an offline or failed request can be retried.
   useEffect(() => {
     if (spaceListed || !client) return;
     let active = true;
@@ -1452,11 +1456,13 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
       if (!active) return;
       setFetchedSpace(remote);
       upsertSpace(remote);
-    }, () => {
-      if (active) setFailedSpaceId(spaceId);
+    }, (error: unknown) => {
+      if (!active) return;
+      const missing = error instanceof HttpError && (error.status === 404 || error.status === 403);
+      setSpaceLookup({ spaceId, missing, message: error instanceof Error && error.message.trim() ? error.message : t("chat.draft.loadSpaceFailed") });
     });
     return () => { active = false; };
-  }, [client, spaceId, spaceListed, upsertSpace]);
+  }, [client, spaceId, spaceListed, spaceLookupAttempt, t, upsertSpace]);
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const composerRef = useRef<View>(null);
@@ -1571,7 +1577,8 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
       setSending(false);
     }
   };
-  if (!space && !spaceLookupFailed) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
+  if (!space && !spaceLookupError) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
+  if (!space && !spaceLookupError?.missing) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={spaceLookupError?.message ?? t("chat.draft.loadSpaceFailed")} onRetry={() => { setSpaceLookup(null); setSpaceLookupAttempt((value) => value + 1); }} /></View></Screen>;
   if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
   const spaceName = displaySpaceName(space);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;

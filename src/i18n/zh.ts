@@ -718,6 +718,7 @@ export const zh: Record<TranslationKey, string> = {
   "chat.startFailed.title": "无法开始对话",
   "chat.startFailed.body": "无法开始此对话。",
   "chat.draft.loadingSpace": "正在加载空间",
+  "chat.draft.loadSpaceFailed": "无法加载此空间。",
   "chat.draft.starting": "正在开始对话…",
   "chat.draft.title": "你在做什么？",
   "chat.draft.body": "你的第一条消息会自动成为对话标题。",
