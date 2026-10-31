@@ -80,8 +80,8 @@ export function AppearanceContent() {
   return (
     <View testID="appearance-content">
       <View className="px-4 pb-1 pt-5">
-        <Text className="text-title font-bold text-fg">{t("appearance.intro.title")}</Text>
-        <Text className="mt-1.5 max-w-130 text-subhead text-fg-muted">{t("appearance.intro.body")}</Text>
+        <Text className="text-title font-semibold text-fg">{t("appearance.intro.title")}</Text>
+        <Text className="mt-2 max-w-130 text-subhead text-fg-muted">{t("appearance.intro.body")}</Text>
       </View>
 
       <SectionHeader title={t("appearance.section.theme")} />
@@ -95,7 +95,7 @@ export function AppearanceContent() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerClassName="gap-2.5 px-4 pb-1 pt-4"
+        contentContainerClassName="gap-3 px-4 pb-1 pt-4"
       >
         {THEME_OPTIONS.map((option) => {
           const selected = preference === option.value;
@@ -196,7 +196,7 @@ function AccentSwatch({ id, mode, selected, label, onPress }: { id: AccentId; mo
       >
         {/* design-system: swatch fill, see above. */}
         <View className="size-9 items-center justify-center rounded-full" style={{ backgroundColor: accent }}>
-          {selected ? <AppIcon name="check" size={18} color={accentText} strokeWidth={2.6} /> : null}
+          {selected ? <AppIcon name="check" size={18} color={accentText} strokeWidth={2.1} /> : null}
         </View>
       </Pressable>
     </View>

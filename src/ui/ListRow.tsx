@@ -8,8 +8,8 @@ export type ListRowStatus = "running" | "failed" | "stopped" | null;
 /** Where a row sits in a run of rows that read as one item (a fork tree); only the run's end draws a separator. */
 export type ListRowGroup = "single" | "first" | "middle" | "last";
 
-/** 16 row padding + the leading avatar + its 14 gap. */
-const FLAT_SEPARATOR_INSET = 16 + 46 + 14;
+/** 16 row padding + the leading avatar + its 12 gap. */
+const FLAT_SEPARATOR_INSET = 16 + 46 + 12;
 
 /**
  * The two-line, 72pt row behind every content list (docs/design-system.md §2.2): identity and time
@@ -38,15 +38,15 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   compact?: boolean;
 }) {
   const body = <>
-    {leading ? <View className="justify-center pr-3.5">{leading}</View> : null}
+    {leading ? <View className="justify-center pr-3">{leading}</View> : null}
     <View className="min-w-0 flex-1 flex-row items-center gap-2 py-3 pr-4">
       <View className="min-w-0 flex-1 justify-center gap-1">
-        <View className="flex-row items-center gap-1.5">
+        <View className="flex-row items-center gap-2">
           {titlePrefix}
           <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
           {meta ? <Text className="text-caption tabular-nums text-fg-faint">{meta}</Text> : null}
         </View>
-        {subtitle || trailing ? <View className="flex-row items-center gap-1.5">
+        {subtitle || trailing ? <View className="flex-row items-center gap-2">
           {typeof subtitle === "string"
             ? <Text numberOfLines={1} className="min-w-0 flex-1 text-subhead text-fg-muted">{subtitle}</Text>
             : <View className="min-w-0 flex-1">{subtitle}</View>}
@@ -89,7 +89,7 @@ export function AvatarStatus({ status, size, children }: { status: ListRowStatus
       {status === "running" ? <View pointerEvents="none" className="absolute border-2 border-accent" style={{ top: -3, left: -3, width: size + 6, height: size + 6, borderRadius: (size + 6) * 0.3, borderCurve: "continuous" }} /> : null}
       {status === "failed" || status === "stopped" ? (
         <View pointerEvents="none" className="absolute -bottom-1 -right-1 size-4.5 items-center justify-center rounded-full border-2 border-surface bg-surface">
-          <AppIcon name={status === "failed" ? "alert" : "stop"} size={13} tone={status === "failed" ? "danger" : "muted"} strokeWidth={2.4} />
+          <AppIcon name={status === "failed" ? "alert" : "stop"} size={14} tone={status === "failed" ? "danger" : "muted"} strokeWidth={2.1} />
         </View>
       ) : null}
     </View>
@@ -100,7 +100,7 @@ export function AvatarStatus({ status, size, children }: { status: ListRowStatus
 export function Meta({ icon, value, label, tone = "muted" }: { icon: IconName; value: string; label: string; tone?: "muted" | "faint" | "accent" }) {
   return (
     <View accessible accessibilityLabel={label} className="flex-row items-center gap-1">
-      <AppIcon name={icon} size={13} tone={tone} />
+      <AppIcon name={icon} size={14} tone={tone} />
       <Text className={`text-caption tabular-nums ${tone === "accent" ? "text-accent" : tone === "faint" ? "text-fg-faint" : "text-fg-muted"}`}>{value}</Text>
     </View>
   );

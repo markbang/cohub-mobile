@@ -56,7 +56,7 @@ export default function SpaceWalletScreen() {
       <SettingsGroup>
         <View className="gap-1 p-4">
           <Text className="text-caption text-fg-muted">{t("space.wallet.balance")}</Text>
-          <Text accessibilityRole="header" adjustsFontSizeToFit numberOfLines={1} className="text-display font-bold tabular-nums text-fg">{money(summary.balanceUsd, 4)}</Text>
+          <Text accessibilityRole="header" adjustsFontSizeToFit numberOfLines={1} className="text-display font-semibold tabular-nums text-fg">{money(summary.balanceUsd, 4)}</Text>
           <Text className="mt-1 text-caption text-fg-muted">{t("space.wallet.description")}</Text>
         </View>
       </SettingsGroup>
@@ -93,7 +93,7 @@ export default function SpaceWalletScreen() {
 function ActivityRow({ item, amount, last }: { item: SpaceWalletActivity; amount: string; last: boolean }) {
   const { t } = useTranslation();
   const positive = item.amountUsd > 0;
-  return <View accessible accessibilityLabel={`${t(ACTIVITY_LABELS[item.kind])}, ${amount}`} className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2.5">
+  return <View accessible accessibilityLabel={`${t(ACTIVITY_LABELS[item.kind])}, ${amount}`} className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2">
     <View className="min-w-0 flex-1 gap-0.5">
       <Text className="text-body text-fg">{t(ACTIVITY_LABELS[item.kind])}</Text>
       <Text className="text-caption text-fg-muted">{new Date(item.createdAt).toLocaleString()}</Text>

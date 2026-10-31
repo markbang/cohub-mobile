@@ -15,7 +15,6 @@ import { useToast } from "@/src/components/Toast";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { AppIcon, type IconName } from "@/src/ui";
-import { FILE_TYPE_COLORS } from "@/src/design/tokens";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { formatRelativeTime } from "@/src/utils";
@@ -29,21 +28,21 @@ type SpaceFileRowProps = {
   compact?: boolean;
 };
 
-const FILE_TYPE_ICONS: { extensions: string[]; icon: LucideIcon; color: string }[] = [
-  { extensions: ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rb", "rs", "go", "java", "kt", "swift", "c", "cpp", "h", "cs", "php", "lua", "sh", "bash", "zsh", "html", "css", "scss", "vue", "svelte"], icon: FileCode, color: FILE_TYPE_COLORS.code },
-  { extensions: ["json", "jsonc", "yml", "yaml", "toml", "ini", "env", "cfg", "conf"], icon: Braces, color: FILE_TYPE_COLORS.config },
-  { extensions: ["csv", "tsv", "xls", "xlsx"], icon: FileSpreadsheet, color: FILE_TYPE_COLORS.sheet },
-  { extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic"], icon: FileImage, color: FILE_TYPE_COLORS.image },
-  { extensions: ["mp3", "wav", "aac", "ogg", "flac", "m4a", "opus"], icon: Music, color: FILE_TYPE_COLORS.audio },
-  { extensions: ["mp4", "mov", "webm", "avi", "mkv", "m4v"], icon: Video, color: FILE_TYPE_COLORS.video },
-  { extensions: ["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"], icon: FileArchive, color: FILE_TYPE_COLORS.archive },
-  { extensions: ["sqlite", "db", "sql"], icon: Database, color: FILE_TYPE_COLORS.data },
+const FILE_TYPE_ICONS: { extensions: string[]; icon: LucideIcon }[] = [
+  { extensions: ["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "rb", "rs", "go", "java", "kt", "swift", "c", "cpp", "h", "cs", "php", "lua", "sh", "bash", "zsh", "html", "css", "scss", "vue", "svelte"], icon: FileCode },
+  { extensions: ["json", "jsonc", "yml", "yaml", "toml", "ini", "env", "cfg", "conf"], icon: Braces },
+  { extensions: ["csv", "tsv", "xls", "xlsx"], icon: FileSpreadsheet },
+  { extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif", "heic"], icon: FileImage },
+  { extensions: ["mp3", "wav", "aac", "ogg", "flac", "m4a", "opus"], icon: Music },
+  { extensions: ["mp4", "mov", "webm", "avi", "mkv", "m4v"], icon: Video },
+  { extensions: ["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"], icon: FileArchive },
+  { extensions: ["sqlite", "db", "sql"], icon: Database },
 ];
 
-function fileTypeIcon(name: string): { icon: LucideIcon; color: string } {
+function fileTypeIcon(name: string): { icon: LucideIcon } {
   const extension = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
   const match = FILE_TYPE_ICONS.find((type) => type.extensions.includes(extension));
-  return { icon: match?.icon ?? FileText, color: match?.color ?? FILE_TYPE_COLORS.other };
+  return { icon: match?.icon ?? FileText };
 }
 
 export function formatSpaceFileBytes(value: number) {
@@ -81,11 +80,11 @@ export function SpaceFileRow({ entry, onPress, onLongPress, menuActions, compact
       onPress={onPress}
       onLongPress={handleLongPress}
       className="min-h-16 flex-row items-center border-b border-border active:bg-surface-pressed"
-      style={{ gap: compact ? 10 : 14, paddingHorizontal: compact ? 12 : 16 }}
+      style={{ gap: compact ? 12 : 16, paddingHorizontal: compact ? 12 : 16 }}
     >
-      {/* File types tint a 12% wash of their own hue; folders and unknown files use tokens. */}
-      <View className={`size-9 items-center justify-center rounded-sm ${fileType ? "" : isDirectory ? "bg-accent-soft" : "bg-surface"}`} style={fileType ? { backgroundColor: `${fileType.color}1f` } : null}>
-        {fileType ? <fileType.icon size={17} color={fileType.color} /> : <AppIcon name={icon} size={17} color={iconColor} />}
+      {/* The glyph's shape tells the file type; only folders, the navigable rows, take the accent. */}
+      <View className={`size-9 items-center justify-center rounded-sm ${isDirectory ? "bg-accent-soft" : "bg-surface-raised"}`}>
+        {fileType ? <fileType.icon size={18} color={theme.colors.textMuted} strokeWidth={1.9} /> : <AppIcon name={icon} size={18} color={iconColor} />}
       </View>
       <View className="min-w-0 flex-1">
         <Text numberOfLines={1} className="text-body font-semibold text-fg">{entry.name}</Text>

@@ -37,10 +37,10 @@ function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessio
   const unavailable = view.status === "unavailable";
   const label = title ? t("turn.related.from", { title }) : unavailable ? t("turn.related.fromUnavailable") : t("turn.related.fromChat");
   return <View className="items-end px-4 mt-1">
-    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={{ maxWidth: "86%" }} className="min-h-11 flex-row items-center gap-1.5 active:opacity-55">
+    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(sourceRef)} hitSlop={{ top: 6, bottom: 6 }} style={{ maxWidth: "86%" }} className="min-h-11 flex-row items-center gap-2 active:opacity-55">
       <Dot />
       <Text numberOfLines={1} className={`shrink text-caption ${unavailable ? "text-fg-faint" : "text-fg-muted"}`}>{label}</Text>
-      {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
+      {unavailable ? null : <AppIcon name="chevron-right" size={14} tone="faint" />}
     </Pressable>
   </View>;
 }
@@ -95,10 +95,10 @@ export function ForkedFromDivider({ origin, client, lookupSession, onOpen }: Rel
   const color = unavailable ? theme.colors.textFaint : theme.colors.textMuted;
   return <View className="flex-row items-center gap-2 px-4 pt-2">
     <View className="h-px flex-1 bg-border" />
-    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={{ maxWidth: "78%" }} className="min-h-11 flex-row items-center gap-1.5 active:opacity-55">
-      <AppIcon name="git-fork" size={13} color={color} />
+    <Pressable accessibilityRole="link" accessibilityLabel={label} accessibilityState={{ disabled: unavailable }} disabled={unavailable} onPress={() => onOpen(origin)} style={{ maxWidth: "78%" }} className="min-h-11 flex-row items-center gap-2 active:opacity-55">
+      <AppIcon name="git-fork" size={14} color={color} />
       <Text numberOfLines={1} className={`shrink text-caption ${unavailable ? "text-fg-faint" : "text-fg-muted"}`}>{label}</Text>
-      {unavailable ? null : <AppIcon name="chevron-right" size={13} tone="faint" />}
+      {unavailable ? null : <AppIcon name="chevron-right" size={14} tone="faint" />}
     </Pressable>
     <View className="h-px flex-1 bg-border" />
   </View>;

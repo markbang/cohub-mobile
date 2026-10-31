@@ -109,7 +109,7 @@ function StepRow({ step, open, last, onToggle, onOpenLog }: { step: SetupStep; o
   const logs = sandboxSetupLogPaths(step.logDir);
   const failed = step.status === "failed";
   return <View className="bg-surface">
-    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`${step.path}, ${t(SETUP_STATUS[step.status].label)}`} onPress={onToggle} className="min-h-13 flex-row items-center gap-2 py-2.5 pl-4 pr-3 active:bg-surface-pressed">
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel={`${step.path}, ${t(SETUP_STATUS[step.status].label)}`} onPress={onToggle} className="min-h-13 flex-row items-center gap-2 py-2 pl-4 pr-3 active:bg-surface-pressed">
       <AppIcon name={open ? "chevron-down" : "chevron-right"} size={16} tone="faint" />
       <Text numberOfLines={open ? undefined : 1} ellipsizeMode="middle" className="min-w-0 flex-1 text-subhead text-fg" style={MONO}>{step.path}</Text>
       <Text className={`text-caption tabular-nums ${failed ? "text-danger" : "text-fg-muted"}`}>{[t(SETUP_STATUS[step.status].label), step.duration].filter(Boolean).join(" · ")}</Text>

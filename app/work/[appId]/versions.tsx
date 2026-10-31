@@ -61,7 +61,7 @@ export default function WorkVersionsScreen() {
         {versions.length === 0 ? <Text className="bg-surface p-4 text-subhead text-fg-muted">{t("app.versions.empty")}</Text> : versions.map((version, index) => {
           const current = version.id === app?.currentVersionId;
           return <View key={version.id} className="min-h-14 flex-row items-center gap-3 bg-surface px-4 py-3">
-            <AppIcon name="history" size={17} tone={current ? "accent" : "muted"} />
+            <AppIcon name="history" size={18} tone={current ? "accent" : "muted"} />
             <View className="min-w-0 flex-1 gap-0.5">
               <Text className="text-body font-semibold tabular-nums text-fg">v{version.version}</Text>
               <Text numberOfLines={1} className="text-caption text-fg-muted">{[version.createdAt ? formatRelativeTime(version.createdAt) : null, version.contentKind].filter(Boolean).join(" · ")}</Text>

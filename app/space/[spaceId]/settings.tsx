@@ -343,7 +343,7 @@ export default function SpaceSettingsScreen() {
                 accessibilityLabel={t("space.settings.spec.restartNow")}
                 disabled={restarting || busy}
                 onPress={confirmRestart}
-                className="min-h-11 flex-row items-center gap-1.5 active:opacity-70 disabled:opacity-45"
+                className="min-h-11 flex-row items-center gap-2 active:opacity-70 disabled:opacity-45"
               >
                 {restarting ? <Loader /> : <AppIcon name="refresh" size={14} tone="accent" />}
                 <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
@@ -563,7 +563,7 @@ function ResourceStatus({ state, onRetry }: { state: SpaceSettingsResourceState;
 function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnvironmentItem; visible: boolean; onToggle: () => void; onCopy: () => void }) {
   const { t } = useTranslation();
   return (
-    <View className="py-3 border-b gap-1.5 border-border">
+    <View className="py-3 border-b gap-2 border-border">
       <Text className="text-body font-semibold text-fg">{item.name}</Text>
       <View className="flex-row items-center gap-2">
         <Pressable accessibilityRole="button" accessibilityLabel={t("space.settings.copyValue")} onPress={onCopy} className="flex-1">
@@ -577,7 +577,7 @@ function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnviro
           onPress={onToggle}
           hitSlop={8}
         >
-          <AppIcon name={visible ? "eye-off" : "eye"} size={17} tone="muted" />
+          <AppIcon name={visible ? "eye-off" : "eye"} size={18} tone="muted" />
         </Pressable>
       </View>
     </View>
@@ -609,7 +609,7 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
   return (
     <View>
       <Text className="text-headline font-semibold text-fg">{t("deviceRuntime.thisDevice")}</Text>
-      <Text className="text-caption text-fg-muted mt-1.5">{t("deviceRuntime.hint")}</Text>
+      <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.hint")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
         <AppIcon name="smartphone" size={18} tone={instance?.state === "ready" ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
@@ -669,7 +669,7 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
   return (
     <View className="mt-5">
       <Text className="text-body font-semibold text-fg">{t("deviceRuntime.display.title")}</Text>
-      <Text className="text-caption text-fg-muted mt-1.5">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
+      <Text className="text-caption text-fg-muted mt-2">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
         <AppIcon name="monitor" size={18} tone={sharingHere ? "success" : "muted"} />
         <View className="flex-1 min-w-0">
@@ -701,9 +701,9 @@ function ActionButton({ label, icon, onPress, disabled = false }: { label: strin
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      className="min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-sm bg-surface-raised px-2.5 active:bg-surface-pressed disabled:opacity-45"
+      className="min-h-11 flex-1 flex-row items-center justify-center gap-2 rounded-sm bg-surface-raised px-3 active:bg-surface-pressed disabled:opacity-45"
     >
-      {icon ? <AppIcon name={icon} size={15} tone="accent" /> : null}
+      {icon ? <AppIcon name={icon} size={16} tone="accent" /> : null}
       <Text numberOfLines={1} className="text-caption text-fg shrink">{label}</Text>
     </Pressable>
   );

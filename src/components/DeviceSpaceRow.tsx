@@ -54,7 +54,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       group="first"
       leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space?.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} online={instance.state === "ready"} /></View>}
       title={name}
-      titlePrefix={display && sharingHere ? <AppIcon name="monitor" size={13} tone="info" /> : null}
+      titlePrefix={display && sharingHere ? <AppIcon name="monitor" size={14} tone="info" /> : null}
       // A failure is the one state worth words; otherwise the line shows which folder is served.
       subtitle={failed
         ? <Text numberOfLines={1} className="text-subhead text-danger">{stateLabel}</Text>
@@ -64,7 +64,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       onPress={onPress}
     />
     {/* The actions close the row; they start at its text column: row padding + avatar + its gap. */}
-    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ paddingLeft: 16 + LIST_AVATAR_SIZE + 14, borderBottomWidth: StyleSheet.hairlineWidth }}>
+    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ paddingLeft: 16 + LIST_AVATAR_SIZE + 12, borderBottomWidth: StyleSheet.hairlineWidth }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}
@@ -83,7 +83,7 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
 function RowAction({ label, icon, onPress, disabled }: { label: string; icon: IconName; onPress: () => void; disabled: boolean }) {
   // The compact capsule sits inside a 44pt touch target.
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} hitSlop={6} className="min-h-11 justify-center disabled:opacity-45">
-    {({ pressed }) => <View className={`min-h-8 flex-row items-center gap-1.5 rounded-full px-3 ${pressed ? "bg-surface-pressed" : "bg-surface-raised"}`}>
+    {({ pressed }) => <View className={`min-h-8 flex-row items-center gap-2 rounded-full px-3 ${pressed ? "bg-surface-pressed" : "bg-surface-raised"}`}>
       <AppIcon name={icon} size={14} tone="accent" />
       <Text numberOfLines={1} className="text-caption font-semibold text-fg">{label}</Text>
     </View>}

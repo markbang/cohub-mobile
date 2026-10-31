@@ -67,9 +67,9 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
       : null;
   // Rows without an avatar carry state as a leading title icon instead of the avatar ring; a fork keeps its cue beside it.
   const statusIcon = glyph && (branch || !showSpace)
-    ? <AppIcon name={glyph === "running" ? "sync" : glyph === "failed" ? "alert" : "stop"} size={13} tone={glyph === "running" ? "accent" : glyph === "failed" ? "danger" : "muted"} />
+    ? <AppIcon name={glyph === "running" ? "sync" : glyph === "failed" ? "alert" : "stop"} size={14} tone={glyph === "running" ? "accent" : glyph === "failed" ? "danger" : "muted"} />
     : null;
-  const forkIcon = fork && !branch ? <AppIcon name="git-fork" size={13} tone="faint" /> : null;
+  const forkIcon = fork && !branch ? <AppIcon name="git-fork" size={14} tone="faint" /> : null;
   const titlePrefix = statusIcon || forkIcon ? <>{statusIcon}{forkIcon}</> : null;
   // `latestMessageText` is empty after tool-only or reasoning-only messages even
   // though the Chat has history, so it is never evidence of a Chat without messages.
@@ -117,10 +117,10 @@ export function SessionForkToggle({ hidden, expanded, showSpace = true, onPress 
     accessibilityLabel={label}
     accessibilityState={{ expanded }}
     onPress={() => { traceAction("session_fork_toggle", { expanded: !expanded, hidden }); onPress(); }}
-    className="min-h-11 flex-row items-center gap-1.5 border-border pr-4 active:bg-surface-pressed"
-    style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 14 : 0), borderBottomWidth: StyleSheet.hairlineWidth }}
+    className="min-h-11 flex-row items-center gap-2 border-border pr-4 active:bg-surface-pressed"
+    style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 12 : 0), borderBottomWidth: StyleSheet.hairlineWidth }}
   >
-    <AppIcon name={expanded ? "chevron-up" : "chevron-down"} size={15} tone="accent" />
+    <AppIcon name={expanded ? "chevron-up" : "chevron-down"} size={16} tone="accent" />
     <Text numberOfLines={1} className="text-caption font-semibold text-accent">{label}</Text>
   </Pressable>;
 }

@@ -100,7 +100,7 @@ function ChangesTab({ spaceId, save, base, bottomInset, onCompare }: { spaceId: 
     <View className="flex-row items-center gap-2 px-4 pb-2">
       <Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{compareLabel}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel={t("save.compare")} onPress={onCompare} className="min-h-11 flex-row items-center gap-1 rounded-full px-3 active:bg-surface-pressed">
-        <AppIcon name="git-compare" size={15} tone="accent" />
+        <AppIcon name="git-compare" size={16} tone="accent" />
         <Text className="text-caption font-semibold text-accent">{t("save.compare")}</Text>
       </Pressable>
     </View>
@@ -208,7 +208,7 @@ function CompareSheet({ visible, spaceId, save, base, onClose, onPick }: { visib
 }
 
 function CompareOption({ label, detail, selected, onPress }: { label: string; detail?: string; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={label} onPress={onPress} className="min-h-13 flex-row items-center gap-3 border-b border-border px-4 py-2.5 active:bg-surface-pressed">
+  return <Pressable accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={label} onPress={onPress} className="min-h-13 flex-row items-center gap-3 border-b border-border px-4 py-2 active:bg-surface-pressed">
     <View className="min-w-0 flex-1">
       <Text numberOfLines={1} className="text-body text-fg">{label}</Text>
       {detail ? <Text className="text-caption text-fg-muted">{detail}</Text> : null}

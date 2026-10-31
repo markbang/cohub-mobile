@@ -170,7 +170,7 @@ function renderInline(value: string, linkColor: ColorValue): ReactNode[] {
     } else if (match[4]) {
       nodes.push(<Text key={`code-${key}`} className="text-code" style={{ fontFamily: "SpaceMono" }}>{match[4]}</Text>);
     } else if (match[5] || match[6]) {
-      nodes.push(<Text key={`bold-${key}`} className="font-bold">{match[5] ?? match[6]}</Text>);
+      nodes.push(<Text key={`bold-${key}`} className="font-semibold">{match[5] ?? match[6]}</Text>);
     } else if (match[7]) {
       nodes.push(<Text key={`strike-${key}`} style={{ textDecorationLine: "line-through" }}>{match[7]}</Text>);
     } else if (match[8]) {

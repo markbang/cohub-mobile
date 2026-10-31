@@ -33,7 +33,7 @@ export function SpaceMentionMenu({ menu, onSelect, onDismiss, style }: { menu: S
     </View> : <ScrollView style={styles.list} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       {menu.items.map((item) => {
         const name = item.name ?? displaySpaceName(null);
-        return <Pressable key={item.spaceId} accessibilityRole="button" accessibilityLabel={t("mentions.select", { name })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-1.5 active:bg-surface-pressed">
+        return <Pressable key={item.spaceId} accessibilityRole="button" accessibilityLabel={t("mentions.select", { name })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-2 active:bg-surface-pressed">
           <Avatar name={name} uri={item.avatarUrl} size={36} />
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{name}</Text>

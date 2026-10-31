@@ -116,7 +116,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
     <View testID="about-content">
       <View className="items-center px-4 pb-2 pt-6">
         <Image source={require("../../assets/images/icon.png")} resizeMode="contain" className="size-20 rounded-lg" />
-        <Text style={ROUNDED_TITLE} className="mt-4 text-title font-bold text-fg">{t("about.appName")}</Text>
+        <Text style={ROUNDED_TITLE} className="mt-4 text-title font-semibold text-fg">{t("about.appName")}</Text>
         <Text className="mt-1 text-center text-subhead text-fg-muted">{t("about.tagline")}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel={t("about.versionLabel", { version })} onPress={unlockDebug} hitSlop={8} className="mt-3 rounded-full bg-accent-soft px-2.5 py-1">
           <Text className="text-caption tabular-nums text-accent">{t("about.version", { version })}</Text>

@@ -147,7 +147,7 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
                 className={FIELD_INPUT_CLASS}
               />
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} className={`min-h-12 items-center justify-center rounded-sm px-3.5 ${!newLabelName.trim() || creating ? "bg-surface-raised opacity-60" : "bg-accent active:bg-accent-pressed"}`}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t("labels.create")} disabled={!newLabelName.trim() || creating} onPress={() => void create()} className={`min-h-12 items-center justify-center rounded-sm px-4 ${!newLabelName.trim() || creating ? "bg-surface-raised opacity-60" : "bg-accent active:bg-accent-pressed"}`}>
               {creating ? <Loader color={theme.colors.accentText} /> : <Text className="text-body font-semibold text-on-accent">{t("common.create")}</Text>}
             </Pressable>
           </View>
@@ -168,10 +168,10 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
             accessibilityState={{ checked: assigned }}
             onPress={() => void toggle(item)}
             disabled={busy}
-            className={`min-h-12 flex-row items-center gap-2.5 rounded-sm px-2.5 ${assigned ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
+            className={`min-h-12 flex-row items-center gap-3 rounded-sm px-3 ${assigned ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
           >
             <View className={`size-6 items-center justify-center rounded-xs border-2 ${assigned ? "border-accent bg-accent" : "border-border-strong"}`}>
-              {assigned ? <AppIcon name="check" size={15} tone="onAccent" /> : null}
+              {assigned ? <AppIcon name="check" size={16} tone="onAccent" /> : null}
             </View>
             <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
             {busy ? <Loader /> : null}

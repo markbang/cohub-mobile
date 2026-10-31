@@ -145,7 +145,7 @@ function SettingsRow({
 			>
 				<AppIcon
 					name={icon}
-					size={17}
+					size={18}
 					tone={danger ? "danger" : "muted"}
 				/>
 			</View>
@@ -341,7 +341,7 @@ function ProfileSection({
 						</Pressable>
 						{uploadingAvatar ? (
 							<View
-								className="flex-row items-center gap-1.5 mt-2"
+								className="flex-row items-center gap-2 mt-2"
 							>
 								<Loader />
 								<Text
@@ -362,7 +362,7 @@ function ProfileSection({
 							</Text>
 						) : null}
 						<Text
-							className="text-micro font-semibold text-fg-faint mt-1.5"
+							className="text-micro font-semibold text-fg-faint mt-2"
 						>
 							{t("settings.profile.tapAvatar")}
 						</Text>
@@ -370,7 +370,7 @@ function ProfileSection({
 					<SettingsGroup>
 						<View className="p-4">
 							<Text
-								className="text-caption text-fg-secondary mb-1.5"
+								className="text-caption text-fg-secondary mb-2"
 							>
 								{t("settings.profile.displayName")}
 							</Text>
@@ -383,7 +383,7 @@ function ProfileSection({
 								className={FIELD_INPUT_CLASS}
 							/>
 							<Text
-								className="text-caption text-fg-secondary mt-4 mb-1.5"
+								className="text-caption text-fg-secondary mt-4 mb-2"
 							>
 								{t("settings.profile.username")}
 							</Text>
@@ -695,7 +695,7 @@ function RulesSection() {
 						<View
 							className="flex-row items-center gap-2"
 						>
-							<AppIcon name="file-text" size={17} tone="accent" />
+							<AppIcon name="file-text" size={18} tone="accent" />
 							<Text
 								className="text-body font-semibold text-fg"
 							>
@@ -703,7 +703,7 @@ function RulesSection() {
 							</Text>
 						</View>
 						<Text
-							className="text-caption text-fg-muted mt-1.5"
+							className="text-caption text-fg-muted mt-2"
 						>
 							{data?.updatedAt
 								? t("settings.rules.updated", { time: formatRelativeTime(data.updatedAt) })

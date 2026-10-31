@@ -115,7 +115,7 @@ export function TurnNavigatorSheet({
 				<View style={styles.state}>
 					<AppIcon
 						name={query ? "search" : "messages"}
-						size={25}
+						size={28}
 						tone="muted"
 					/>
 					<Text
@@ -159,7 +159,7 @@ export function TurnNavigatorSheet({
 								accessibilityState={{ selected }}
 								disabled={loadingSequence !== null}
 								onPress={() => void onJump(turn.sequence)}
-								className={`mb-1 min-h-18 flex-row items-center gap-2 rounded-sm px-2.5 py-2 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"} ${loadingSequence !== null && loadingSequence !== turn.sequence ? "opacity-55" : ""}`}
+								className={`mb-1 min-h-18 flex-row items-center gap-2 rounded-sm px-3 py-2 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"} ${loadingSequence !== null && loadingSequence !== turn.sequence ? "opacity-55" : ""}`}
 							>
 								<View style={styles.sequence}>
 									<Text className={`text-caption tabular-nums ${selected ? "text-accent" : "text-fg-faint"}`}>
@@ -191,7 +191,7 @@ export function TurnNavigatorSheet({
 								{loadingSequence === turn.sequence ? (
 									<Loader />
 								) : selected ? (
-									<AppIcon name="check" size={17} tone="accent" />
+									<AppIcon name="check" size={18} tone="accent" />
 								) : (
 									<AppIcon
 										name="chevron-right"

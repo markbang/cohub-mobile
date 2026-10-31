@@ -51,19 +51,19 @@ export default function ActivityScreen() {
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
-        <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>
+        <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}>
           <View className="flex-row items-center gap-2">
-            <View className="size-8 items-center justify-center rounded-xs bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="database" size={16} tone="accent" strokeWidth={2.1} /></View>
+            <View className="size-8 items-center justify-center rounded-xs bg-surface-raised" style={{ borderCurve: "continuous" }}><AppIcon name="wallet" size={18} tone="secondary" /></View>
             <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
             <AppIcon name="chevron-right" size={16} tone="faint" />
           </View>
-          <Text style={ROUNDED_TITLE} className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
+          <Text style={ROUNDED_TITLE} className={`text-display font-semibold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
         </PressableScale>
       </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}
       <SettingsGroup>
         <SettingsRow
-          icon="sparkles"
+          icon="calendar-clock"
           title={t("activity.subscription.title")}
           detail={subscriptions.data ? currentSubscription?.productName ?? t("activity.subscription.none") : t(subscriptions.error ? "settings.billing.error" : "common.loading")}
           value={currentSubscription?.status}

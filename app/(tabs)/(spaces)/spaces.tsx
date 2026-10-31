@@ -295,7 +295,7 @@ export default function SpacesScreen() {
             accessibilityLabel={folder ? `${t("deviceRuntime.changeFolder")}: ${folder.label}` : t("deviceRuntime.chooseFolder")}
             disabled={creating}
             onPress={() => setPickingFolder(true)}
-            className="min-h-12 flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-2.5 active:bg-surface-pressed"
+            className="min-h-12 flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-2 active:bg-surface-pressed"
           >
             <AppIcon name="folder" size={18} tone="muted" />
             <Text numberOfLines={1} className={`min-w-0 flex-1 text-body ${folder ? "text-fg" : "text-fg-faint"}`}>{folder?.label ?? t("deviceRuntime.chooseFolder")}</Text>
@@ -309,7 +309,7 @@ export default function SpacesScreen() {
           </View> : null}
         </> : null}
       </> : null}
-      {createError ? <Text accessibilityRole="alert" className="mt-2.5 text-caption text-danger">{createError}</Text> : null}
+      {createError ? <Text accessibilityRole="alert" className="mt-3 text-caption text-danger">{createError}</Text> : null}
       </>}
     </AdaptiveSheet>
   </Screen>;

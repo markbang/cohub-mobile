@@ -56,7 +56,7 @@ export function HarnessPicker({
   const options = useMemo(() => harnessOptions(status), [status]);
 
   return open ? <ComposerMenu anchorRef={anchorRef} title={t("runtime.harness.title")} onClose={onClose} preferredWidth={300} testID="chat-harness-selector-menu">
-      <View className="px-4 pt-3 pb-1.5">
+      <View className="px-4 pt-3 pb-2">
         <Text className="text-caption text-fg-muted">{t("runtime.harness.title")}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 6 }}>
@@ -67,9 +67,9 @@ export function HarnessPicker({
           return <Fragment key={harness}>
             {index === 1 ? <>
               <View className="h-px bg-border mx-0.5 my-1" />
-              <View className="flex-row items-center justify-between px-2.5 pt-1.5 pb-1">
+              <View className="flex-row items-center justify-between px-3 pt-2 pb-1">
                 <Text className="text-micro font-semibold text-fg-muted">{t("runtime.localExecution")}</Text>
-                {!online ? <View className="flex-row items-center gap-1.5">
+                {!online ? <View className="flex-row items-center gap-2">
                   <View className="size-1.5 rounded-full bg-warning" />
                   <Text className="text-micro font-semibold text-fg-muted">{t("runtime.offline")}</Text>
                 </View> : null}
@@ -82,7 +82,7 @@ export function HarnessPicker({
               accessibilityState={{ checked: selected, disabled: !enabled }}
               disabled={!enabled}
               onPress={() => { onSelect(harness); onClose(); }}
-              className={`${local ? "min-h-11" : "min-h-13"} flex-row items-center gap-2.5 rounded-sm px-2.5 py-2 disabled:opacity-50 ${selected ? "bg-surface-raised" : "active:bg-surface-raised"}`}
+              className={`${local ? "min-h-11" : "min-h-13"} flex-row items-center gap-3 rounded-sm px-3 py-2 disabled:opacity-50 ${selected ? "bg-surface-raised" : "active:bg-surface-raised"}`}
             >
               <HarnessIcon harness={harness} size={20} />
               <View className="flex-1 min-w-0">
@@ -94,7 +94,7 @@ export function HarnessPicker({
             </Pressable>
           </Fragment>;
         })}
-        {!localSpace ? <Text className="text-micro font-semibold px-2 pt-1.5 pb-2 text-fg-faint">{t("runtime.localOnly")}</Text> : null}
+        {!localSpace ? <Text className="text-micro font-semibold px-2 pt-2 pb-2 text-fg-faint">{t("runtime.localOnly")}</Text> : null}
         {localSpace && !online ? <View className="px-2 pt-1"><IconButton name="refresh" label={t("common.retry")} onPress={onRefresh} /></View> : null}
       </ScrollView>
     </ComposerMenu> : null;

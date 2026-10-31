@@ -183,7 +183,7 @@ export default function FilesScreen() {
       ) : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
-        <View className="pt-2.5"><LoadingFlatRows count={8} /></View>
+        <View className="pt-3"><LoadingFlatRows count={8} /></View>
       ) : error && entries.length === 0 ? (
         <FilesError message={error} onRetry={() => setRefreshToken((value) => value + 1)} />
       ) : (
@@ -202,7 +202,7 @@ export default function FilesScreen() {
           )}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center p-6">
-              <AppIcon name="folder-open" size={26} tone="muted" />
+              <AppIcon name="folder-open" size={28} tone="muted" />
               <Text className="text-body text-fg-muted mt-2">
                 {currentPath ? t("files.emptyFolder") : t("files.emptyWorkspace")}
               </Text>
@@ -246,7 +246,7 @@ function FilesError({ message, onRetry }: { message: string; onRetry: () => void
   const { t } = useTranslation();
   return (
     <View className="flex-1 items-center justify-center p-6">
-      <AppIcon name="cloud-off" size={26} tone="danger" />
+      <AppIcon name="cloud-off" size={28} tone="danger" />
       <Text className="text-body text-danger text-center mt-2">
         {message}
       </Text>

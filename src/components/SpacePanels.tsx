@@ -688,7 +688,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <Loader /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
         ListHeaderComponent={remoteQueryMatches && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
-        ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
+        ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={28} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={() => setLabelsReloadToken((value) => value + 1)} onClose={closeLabelSheet} onChanged={() => { setLabelSessionIds(new Set()); setLabelsReloadToken((value) => value + 1); }} /> : null}
     </KeyboardAvoidingView>
@@ -756,12 +756,12 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
   return (
     <View className="flex-1 min-h-0">
       <TopBar title={path ? spacePathName(path) : t("files.title")} subtitle={path ? `${spaceName} / ${path}` : spaceName} actions={<><IconButton name="external-link" label={t("space.panel.openFullFiles")} onPress={onOpenFilesPage} /><IconButton name="x" label={t("ui.sheet.close", { title: t("files.title") })} onPress={onClose} /></>} />
-      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} className="min-h-11 flex-row items-center gap-2 border-b border-border px-3.5 active:bg-surface-pressed"><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
+      {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.backToParent")} onPress={() => setPath(parentSpacePath(path))} className="min-h-11 flex-row items-center gap-2 border-b border-border px-4 active:bg-surface-pressed"><AppIcon name="arrow-left" size={16} tone="muted" /><Text className="text-caption text-fg-secondary">{parentSpacePath(path) ? t("files.backTo", { name: spacePathName(parentSpacePath(path)) }) : t("files.backToFiles")}</Text></Pressable> : null}
       {error && entries.length > 0 ? <Text selectable className="text-caption text-danger p-4">{error}</Text> : null}
       {loading ? (
         <LoadingState label={t("files.loading")} />
       ) : error && entries.length === 0 ? (
-        <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="cloud-off" size={25} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
+        <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="cloud-off" size={28} tone="danger" /><Text className="text-body text-danger text-center mt-2">{error}</Text><PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void load()} className="mt-4 min-h-10" /></View>
       ) : (
         <LegendList
           estimatedItemSize={68}
@@ -771,7 +771,7 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
           keyExtractor={(item) => item.path}
           contentContainerStyle={{ paddingVertical: 8, paddingBottom: 24, flexGrow: entries.length === 0 ? 1 : undefined }}
           renderItem={({ item }) => <SpaceFileRow entry={item} compact onPress={() => openEntry(item)} />}
-          ListEmptyComponent={<View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="folder-open" size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
+          ListEmptyComponent={<View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name="folder-open" size={28} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{path ? t("files.emptyFolder") : t("files.emptyWorkspace")}</Text></View>}
         />
       )}
     </View>

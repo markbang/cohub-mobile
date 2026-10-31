@@ -161,7 +161,7 @@ export function CodeBlock({
     <View className="overflow-hidden rounded-md border border-border bg-surface-raised" style={[{ borderCurve: "continuous" }, style]}>
       {label || streaming ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 11, paddingTop: 8, paddingBottom: 2 }}>
-          <AppIcon name="code" size={13} tone="faint" />
+          <AppIcon name="code" size={14} tone="faint" />
           <Text className="text-micro font-semibold text-fg-faint">
             {label ?? t("code.fallback")}{streaming ? ` · ${t("code.streaming")}` : ""}
           </Text>

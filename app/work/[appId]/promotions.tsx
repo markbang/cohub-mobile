@@ -142,7 +142,7 @@ function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appI
   }, [appId, client, promotion.id]);
   return <AdaptiveSheet visible title={promotion.name} subtitle={promotion.provider} onClose={onClose}>
     <View className="gap-4">
-      <Pressable accessibilityRole="button" accessibilityLabel={t("app.promo.copyLink")} onPress={onCopy} className="flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-2.5 active:bg-surface-pressed" style={{ borderCurve: "continuous" }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t("app.promo.copyLink")} onPress={onCopy} className="flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-3 active:bg-surface-pressed" style={{ borderCurve: "continuous" }}>
         <AppIcon name="link" size={16} tone="accent" />
         <Text numberOfLines={2} selectable className="min-w-0 flex-1 text-caption text-fg-secondary">{link}</Text>
         <AppIcon name="copy" size={16} tone="muted" />

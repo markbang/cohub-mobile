@@ -128,7 +128,7 @@ function Row({ icon, label, value, tone = "default" }: { icon: React.ComponentPr
   return (
     <View className="min-h-14 px-3 py-2 flex-row items-center gap-3 border-b border-border">
       <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
-        <AppIcon name={icon} size={15} tone={tone === "danger" ? "danger" : "muted"} />
+        <AppIcon name={icon} size={16} tone={tone === "danger" ? "danger" : "muted"} />
       </View>
       <Text numberOfLines={1} className={`text-body font-semibold flex-1 ${tone === "danger" ? "text-danger" : "text-fg"}`}>{label}</Text>
       <Text selectable numberOfLines={2} className={`text-right text-micro ${tone === "danger" ? "text-danger" : "text-fg-secondary"}`} style={{ maxWidth: "48%" }}>{value}</Text>

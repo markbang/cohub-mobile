@@ -1276,9 +1276,9 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={ABOVE_FOOTER_BUTTON}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}
         {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 5 }} /> : null}
         {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 6 }} /> : null}
-        {queueItems.length > 0 ? <View className="px-3 pt-2 pb-1.5 gap-1.5">
+        {queueItems.length > 0 ? <View className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
-          <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 6 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
+          <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
             {queueItems.map((item) => {
               const turn = item.turn;
               const inFlight = transitionQueueItem?.key === item.key;
@@ -1351,11 +1351,9 @@ function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
   if (kind === "opening") return <LoadingState label={t("chat.placeholder.opening")} />;
   return (
     <View className="flex-1 items-center justify-center p-7">
-      <View className="size-14 items-center justify-center rounded-full bg-accent-soft">
-        <AppIcon name="sparkles" size={23} tone="accent" />
-      </View>
+      <Mascot size={72} />
       <Text className="text-headline font-semibold text-fg mt-4 text-center">{t("chat.placeholder.empty.title")}</Text>
-      <Text className="text-body text-fg-muted text-center mt-1.5 max-w-72">{t("chat.placeholder.empty.body")}</Text>
+      <Text className="text-body text-fg-muted text-center mt-2 max-w-72">{t("chat.placeholder.empty.body")}</Text>
     </View>
   );
 }
@@ -1498,7 +1496,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
           <View className="flex-1 min-h-0 items-center justify-center px-7 pb-4">
             <Mascot size={84} blink />
             <Text className="mt-4 text-center text-headline font-semibold text-fg">{t("chat.draft.title")}</Text>
-            <Text className="text-body text-fg-muted mt-1.5 max-w-72 text-center">{t("chat.draft.body")}</Text>
+            <Text className="text-body text-fg-muted mt-2 max-w-72 text-center">{t("chat.draft.body")}</Text>
             <Text className="text-caption text-fg-faint mt-4">{t("chat.draft.subtitle")}</Text>
           </View>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
@@ -1538,7 +1536,7 @@ function MissingChat() {
 /** Pagination control at either end of the thread: a short centered capsule, the full action spoken. */
 function LoadMoreCapsule({ icon, label, accessibilityLabel, loading, onPress }: { icon: IconName; label: string; accessibilityLabel: string; loading: boolean; onPress: () => void }) {
   return <View className="items-center py-2">
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onPress} hitSlop={4} className="min-h-10 flex-row items-center gap-1.5 rounded-full bg-surface-raised px-4 active:bg-surface-pressed">
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ busy: loading, disabled: loading }} disabled={loading} onPress={onPress} hitSlop={4} className="min-h-10 flex-row items-center gap-2 rounded-full bg-surface-raised px-4 active:bg-surface-pressed">
       {loading ? <Loader /> : <AppIcon name={icon} size={16} tone="accent" />}
       <Text className="text-caption font-semibold text-accent">{label}</Text>
     </Pressable>

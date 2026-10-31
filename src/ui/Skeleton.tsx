@@ -28,10 +28,10 @@ function Line({ width, lineHeight, height }: { width: DimensionValue; lineHeight
 }
 
 export function LoadingRows({ count = 5 }: { count?: number }) {
-  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3.5 px-4 py-3" style={CONTINUOUS}>
+  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3 px-4 py-3" style={CONTINUOUS}>
     <Bone width={LIST_AVATAR_SIZE} height={LIST_AVATAR_SIZE} radius={LIST_AVATAR_SIZE * 0.3} />
     <View className="flex-1 gap-1">
-      <View className="flex-row items-center gap-1.5">
+      <View className="flex-row items-center gap-2">
         <View className="flex-1"><Line width={cycle(index, ["58%", "68%", "78%"])} lineHeight={22} height={12} /></View>
         <Bone width={28} height={9} />
       </View>
@@ -42,7 +42,7 @@ export function LoadingRows({ count = 5 }: { count?: number }) {
 
 export function LoadingFlatRows({ count = 6, leading = "tile" }: { count?: number; leading?: "tile" | "avatar" }) {
   const avatar = leading === "avatar";
-  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className={`flex-row items-center border-b border-border px-4 ${avatar ? "min-h-18 gap-3.5" : "min-h-16 gap-3.5"}`}>
+  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className={`flex-row items-center border-b border-border px-4 ${avatar ? "min-h-18 gap-3" : "min-h-16 gap-3"}`}>
     {avatar ? <Bone width={LIST_AVATAR_SIZE} height={LIST_AVATAR_SIZE} radius={LIST_AVATAR_SIZE * 0.3} /> : <Bone width={36} height={36} radius={RADIUS.sm} />}
     <View className="flex-1">
       <Line width={cycle(index, ["46%", "62%", "36%", "54%"])} lineHeight={22} height={12} />
@@ -84,7 +84,7 @@ function SectionBones({ section }: { section: SkeletonSection }) {
     case "capsule":
       return <View className="mx-4 mb-3"><Bone width="100%" height={52} /></View>;
     case "field":
-      return <View className="mb-4 gap-1.5 px-4">
+      return <View className="mb-4 gap-2 px-4">
         <Line width={72} lineHeight={18} height={9} />
         <Bone width="100%" height={section.tall ? 96 : 48} radius={RADIUS.sm} />
       </View>;
@@ -98,7 +98,7 @@ function SectionBones({ section }: { section: SkeletonSection }) {
       return <View className="mb-6 px-4">
         {section.label ? <View className="px-4 pb-2"><Line width={88} lineHeight={18} height={9} /></View> : null}
         <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>
-          {Array.from({ length: section.rows }, (_, index) => <View key={index} className="min-h-14 flex-row items-center gap-3 px-4 py-2.5">
+          {Array.from({ length: section.rows }, (_, index) => <View key={index} className="min-h-14 flex-row items-center gap-3 px-4 py-2">
             {section.leading ? <Bone width={30} height={30} radius={RADIUS.xs} /> : null}
             <View className="flex-1">
               <Line width={cycle(index, ["52%", "38%", "64%"])} lineHeight={22} height={11} />

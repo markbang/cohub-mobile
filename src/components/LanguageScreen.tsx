@@ -69,11 +69,11 @@ export function LanguageContent() {
   return (
     <View testID="language-content">
       <View className="px-4 pt-6 pb-1">
-        <Text className="text-title font-bold text-fg">
+        <Text className="text-title font-semibold text-fg">
           {t("language.intro.title")}
         </Text>
         <Text
-          className="text-body text-fg-muted mt-1.5 max-w-130"
+          className="text-body text-fg-muted mt-2 max-w-130"
         >
           {t("language.intro.body")}
         </Text>
@@ -93,7 +93,7 @@ export function LanguageContent() {
                 accessibilityState={{ selected, checked: selected }}
                 aria-checked={selected}
                 onPress={() => void setPreference(option.value)}
-                className={`min-h-14 flex-row items-center gap-3 border-border bg-surface px-4 py-2.5 active:bg-surface-pressed`} style={index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth } : null}
+                className={`min-h-14 flex-row items-center gap-3 border-border bg-surface px-4 py-2 active:bg-surface-pressed`} style={index > 0 ? { borderTopWidth: StyleSheet.hairlineWidth } : null}
               >
                 <View className={`size-9 items-center justify-center rounded-sm ${selected ? "bg-accent" : "bg-surface-raised"}`}>
                   <Text className={`text-caption font-semibold ${selected ? "text-on-accent" : "text-fg-muted"}`}>{option.code}</Text>

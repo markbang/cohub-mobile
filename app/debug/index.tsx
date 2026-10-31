@@ -77,7 +77,7 @@ function DebugRow({ icon, title, detail, onPress }: { icon: IconName; title: str
         <Text className="text-body font-semibold text-fg">{title}</Text>
         <Text numberOfLines={2} className="text-caption text-fg-muted mt-0.5">{detail}</Text>
       </View>
-      {onPress ? <AppIcon name="chevron-right" size={17} tone="faint" /> : null}
+      {onPress ? <AppIcon name="chevron-right" size={18} tone="faint" /> : null}
     </View>
   );
   return onPress ? (

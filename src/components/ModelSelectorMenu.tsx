@@ -69,7 +69,7 @@ function modelIconLookupId(id: string) {
 
 function ModelBrandMark({ entry }: { entry: ModelCatalogEntry }) {
   const model = modelIconModel(entry);
-  return model ? <ModelIcon model={model} type="avatar" size={23} shape="square" /> : <AppIcon name={modelSupportsVision(entry) ? "images" : "sparkles"} size={17} tone="muted" />;
+  return model ? <ModelIcon model={model} type="avatar" size={23} shape="square" /> : <AppIcon name={modelSupportsVision(entry) ? "images" : "sparkles"} size={18} tone="muted" />;
 }
 
 function makeSelection(entry: ModelCatalogEntry, level?: ChatModelSelection["thinkingLevel"]): ChatModelSelection {
@@ -132,7 +132,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
     const summary = [entry.provider, context].filter(Boolean).join(" · ");
     return <View className={`mb-0.5 rounded-sm ${selected ? "bg-surface-raised" : ""}`}>
       <View className="flex-row items-center">
-        <Pressable testID={`model-option-${entry.provider}-${entry.id}`} accessibilityRole="radio" accessibilityLabel={`${t("model.use", { name: modelDisplayName(entry) })}, ${modelAvailabilityLabel(modelAvailabilityLevel(modelStatus?.[entry.id]))}`} accessibilityState={{ checked: selected }} onPress={() => selectEntry(entry, levels.length > 1 ? selectedLevel : undefined)} className="min-h-14 min-w-0 flex-1 flex-row items-center gap-2.5 rounded-sm py-2 pl-2.5 pr-1 active:bg-surface-pressed">
+        <Pressable testID={`model-option-${entry.provider}-${entry.id}`} accessibilityRole="radio" accessibilityLabel={`${t("model.use", { name: modelDisplayName(entry) })}, ${modelAvailabilityLabel(modelAvailabilityLevel(modelStatus?.[entry.id]))}`} accessibilityState={{ checked: selected }} onPress={() => selectEntry(entry, levels.length > 1 ? selectedLevel : undefined)} className="min-h-14 min-w-0 flex-1 flex-row items-center gap-3 rounded-sm py-2 pl-3 pr-1 active:bg-surface-pressed">
           <View className="w-7 h-7 items-center justify-center"><ModelBrandMark entry={entry} /></View>
           <View className="flex-1 min-w-0">
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{modelDisplayName(entry)}</Text>
@@ -151,14 +151,14 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
         {cost ? <Text className="text-caption text-fg-muted">{cost}</Text> : null}
         {levels.length > 1 ? <>
           <Text className="text-caption text-fg-secondary mt-1">{t("model.thinking", { level: formatThinkingLevel(selectedLevel) })}</Text>
-          <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1.5">{levels.map((level) => { const active = level === selectedLevel; return <Pressable key={level} accessibilityRole="radio" accessibilityLabel={t("model.useThinking", { level: formatThinkingLevel(level) })} accessibilityState={{ checked: active }} onPress={() => selectEntry(entry, level)} className={`min-h-11 justify-center rounded-sm px-3 ${active ? "bg-accent-soft" : "active:bg-surface-pressed"}`}><Text className={`text-caption ${active ? "text-accent" : "text-fg-muted"}`}>{formatThinkingLevelShort(level)}</Text></Pressable>; })}</ScrollView>
+          <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">{levels.map((level) => { const active = level === selectedLevel; return <Pressable key={level} accessibilityRole="radio" accessibilityLabel={t("model.useThinking", { level: formatThinkingLevel(level) })} accessibilityState={{ checked: active }} onPress={() => selectEntry(entry, level)} className={`min-h-11 justify-center rounded-sm px-3 ${active ? "bg-accent-soft" : "active:bg-surface-pressed"}`}><Text className={`text-caption ${active ? "text-accent" : "text-fg-muted"}`}>{formatThinkingLevelShort(level)}</Text></Pressable>; })}</ScrollView>
         </> : null}
       </View> : null}
     </View>;
   };
 
   return <ComposerMenu anchorRef={anchorRef} title={title ?? t("model.title")} onClose={onClose} preferredWidth={360} fillHeight testID="chat-model-selector-menu">
-    <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-1.5 border-b border-border">
+    <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-2 border-b border-border">
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} className="text-body flex-1 min-w-0 text-fg py-2" returnKeyType="search" autoCorrect={false} autoCapitalize="none" />
       {loading || modelStatusLoading ? <Loader color={theme.colors.textMuted} /> : null}
@@ -176,7 +176,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
       nestedScrollEnabled
       keyboardShouldPersistTaps="always"
             ListHeaderComponent={<>
-        <Pressable testID="model-option-automatic" accessibilityRole="radio" accessibilityLabel={automaticLabel ?? t("model.automaticA11y")} accessibilityState={{ checked: currentModel === null }} onPress={() => { onSelect(null); setOptionsOpenFor(null); }} className={`mb-0.5 min-h-14 flex-row items-center gap-2.5 rounded-sm px-2.5 py-2 ${currentModel === null ? "bg-surface-raised" : "active:bg-surface-pressed"}`}>
+        <Pressable testID="model-option-automatic" accessibilityRole="radio" accessibilityLabel={automaticLabel ?? t("model.automaticA11y")} accessibilityState={{ checked: currentModel === null }} onPress={() => { onSelect(null); setOptionsOpenFor(null); }} className={`mb-0.5 min-h-14 flex-row items-center gap-3 rounded-sm px-3 py-2 ${currentModel === null ? "bg-surface-raised" : "active:bg-surface-pressed"}`}>
           <View className="w-7 h-7 items-center justify-center"><AppIcon name="sparkles" size={22} tone="secondary" /></View>
           <View className="flex-1 min-w-0"><Text className="text-body font-semibold text-fg">{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} className="text-caption text-fg-muted">{automaticDetail ?? t("model.automaticDetail")}</Text></View>
           <View className="w-5 h-5 items-center justify-center">{currentModel === null ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>

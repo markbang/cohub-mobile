@@ -184,7 +184,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
           <View ref={setAnchor} collapsable={false} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
             <Text numberOfLines={1} className="shrink text-body text-fg-muted">{current?.label}</Text>
-            <AppIcon name="chevrons-up-down" size={15} tone="muted" />
+            <AppIcon name="chevrons-up-down" size={16} tone="muted" />
           </View>
         </SettingsRow>
       </View>
@@ -232,7 +232,7 @@ function SelectMenu<T extends string>({ menu, title, options, value, highlight, 
             style={{ height: ROW_HEIGHT }}
           >
             <Text numberOfLines={1} className={`min-w-0 flex-1 text-body text-fg ${selected ? "font-semibold" : ""}`}>{option.label}</Text>
-            {selected ? <AppIcon name="check" size={18} tone="fg" strokeWidth={2.2} /> : null}
+            {selected ? <AppIcon name="check" size={18} tone="fg" strokeWidth={2.1} /> : null}
           </Pressable>;
         })}
       </PopoverSurface>

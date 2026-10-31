@@ -31,7 +31,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
   const { width, height } = useWindowDimensions();
   const focused = useIsFocused();
   const material = useGlassMaterial();
-  const contentWidth = Math.max(...actions.map((action) => Array.from(action.title).length * 9 + 16 * 2 + 21 + 14), 0);
+  const contentWidth = Math.max(...actions.map((action) => Array.from(action.title).length * 9 + 16 * 2 + 22 + 12), 0);
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
   const measure = useCallback(() => {
@@ -73,7 +73,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
       className={`absolute overflow-hidden rounded-md ${material === "liquid" ? "" : "shadow-float"}`} style={[layout, { borderCurve: "continuous" }]}
     >
       <GlassBackground radius={RADIUS.md} />
-      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-1.5">
+      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-2">
         {actions.map((action) => <Pressable
           key={action.title}
           accessibilityRole="menuitem"
@@ -81,9 +81,9 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
           onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-          className="min-h-12 flex-row items-center gap-3.5 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
+          className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
         >
-          <AppIcon name={action.icon} size={21} tone="secondary" />
+          <AppIcon name={action.icon} size={22} tone="secondary" />
           <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
         </Pressable>)}
       </ScrollView>

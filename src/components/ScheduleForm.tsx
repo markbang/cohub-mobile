@@ -57,7 +57,7 @@ export function ScheduleForm({ values, onChange, withPrompt, disabled = false }:
     <Field label={t("schedule.field.timezone")} error={timezone && !isValidTimeZone(timezone) ? t("schedule.error.timezone") : null}>
       <TextInput value={values.timezone} onChangeText={(next) => set({ timezone: next })} editable={!disabled} autoCapitalize="none" autoCorrect={false} placeholder="Asia/Shanghai" placeholderTextColor={theme.colors.textFaint} accessibilityLabel={t("schedule.field.timezone")} className={FIELD_INPUT_CLASS} />
     </Field>
-    {runs.length ? <View className="gap-1 rounded-sm bg-surface-raised px-3 py-2.5" style={{ borderCurve: "continuous" }}>
+    {runs.length ? <View className="gap-1 rounded-sm bg-surface-raised px-3 py-3" style={{ borderCurve: "continuous" }}>
       <Text className="text-caption font-semibold text-fg-muted">{t("schedule.nextRuns")}</Text>
       {runs.map((run) => <Text key={run.getTime()} className="text-subhead tabular-nums text-fg">{formatRunTime(run, timezone, locale)}</Text>)}
     </View> : null}

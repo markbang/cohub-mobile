@@ -293,8 +293,8 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
   const hasSummary = info.summary.length > 0;
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5 }}>
     <View className="overflow-hidden rounded-lg border border-border bg-surface" style={{ borderCurve: "continuous" }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} className="min-h-11 flex-row items-center gap-2 px-3 py-2.5 active:bg-surface-pressed">
-        <AppIcon name="archive" size={15} tone="muted" />
+      <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} className="min-h-11 flex-row items-center gap-2 px-3 py-2 active:bg-surface-pressed">
+        <AppIcon name="archive" size={16} tone="muted" />
         <Text className="text-caption text-fg-secondary font-semibold">{t("message.compaction.title")}</Text>
         {details.length > 0 ? <Text numberOfLines={1} className="text-micro font-semibold text-fg-muted flex-1 text-right">{details.join(" · ")}</Text> : <View className="flex-1" />}
         {hasSummary ? <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="faint" /> : null}
@@ -339,7 +339,7 @@ function ToolOutput({ block }: { block: Extract<ContentBlock, { type: "tool_resu
   const { t } = useTranslation();
   // Running tools keep appending to `content`; the body must be height-capped
   // (mirroring the web's tail view) or an expanded bubble grows forever.
-  return <View className="gap-1.5"><Text className={`text-micro font-semibold ${block.is_error ? "text-danger" : "text-fg-muted"}`}>{block.is_error ? t("message.tool.outputError") : t("message.tool.output")}</Text>{typeof block.content === "string" ? <CappedCodeText value={block.content} color={theme.colors.text} /> : <MessageContent content={block.content} />}</View>;
+  return <View className="gap-2"><Text className={`text-micro font-semibold ${block.is_error ? "text-danger" : "text-fg-muted"}`}>{block.is_error ? t("message.tool.outputError") : t("message.tool.output")}</Text>{typeof block.content === "string" ? <CappedCodeText value={block.content} color={theme.colors.text} /> : <MessageContent content={block.content} />}</View>;
 }
 
 function ToolCall({ block, result, active = false }: { block: Extract<ContentBlock, { type: "tool_use" }>; result?: Extract<ContentBlock, { type: "tool_result" }>; active?: boolean }) {
@@ -353,7 +353,7 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
   const caption = preview ? `${block.name}: "${preview}"` : block.name;
   const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
   return <View style={{ width: contentWidth }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={8} onPress={() => setExpanded(!expanded)} className="min-h-6 flex-row items-center gap-1.5 py-0.5">
+    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={8} onPress={() => setExpanded(!expanded)} className="min-h-6 flex-row items-center gap-2 py-0.5">
       <AppIcon name={toolIcon(block.name)} size={14} color={iconColor} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>
         <Text className="text-fg font-medium">{block.name}</Text>

@@ -84,7 +84,7 @@ export default function DebugConnectionScreen() {
           ) : streams.map(([sessionId, view]) => (
             <View key={sessionId} className="px-3 py-2 border-b border-border gap-1">
               <View className="flex-row items-center gap-2">
-                <AppIcon name="sync" size={15} tone="accent" />
+                <AppIcon name="sync" size={16} tone="accent" />
                 <Text className="text-body font-semibold text-fg flex-1">{sessionId.slice(0, 8)}</Text>
                 <StatusPill label={view.stream?.status ?? "—"} tone={view.stream?.status === "streaming" || view.stream?.status === "pending" ? "warning" : "neutral"} />
               </View>
@@ -117,7 +117,7 @@ function Row({ icon, label, value, tone = "default" }: { icon: IconName; label: 
   return (
     <View className="min-h-13 px-3 py-2 flex-row items-center gap-3 border-b border-border">
       <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
-        <AppIcon name={icon} size={15} tone={tone === "danger" ? "danger" : "muted"} />
+        <AppIcon name={icon} size={16} tone={tone === "danger" ? "danger" : "muted"} />
       </View>
       <Text className="text-caption text-fg-muted w-32">{label}</Text>
       <Text selectable numberOfLines={3} className={`text-caption flex-1 text-right ${tone === "danger" ? "text-danger" : "text-fg-secondary"}`}>{value}</Text>

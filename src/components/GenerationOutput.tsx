@@ -32,7 +32,7 @@ export function GenerationBlock({ block }: { block: GenerationContentBlock }) {
     const poster = playable ? videoPosterUrl(playable, tileWidth, PixelRatio.get()) : null;
     return <Pressable accessibilityRole="button" accessibilityLabel={t("media.playVideo")} disabled={!playable} onPress={() => { if (playable) router.push({ pathname: "/media-viewer", params: { url: playable, kind: "video", ...(poster ? { poster } : {}) } }); }} className="h-60 items-center justify-center overflow-hidden rounded-md bg-surface-raised active:opacity-80" style={CONTINUOUS}>
       {poster ? <Image source={{ uri: poster }} resizeMode="cover" className="absolute inset-0" /> : null}
-      <View className="size-14 items-center justify-center rounded-full bg-surface-float shadow-float"><AppIcon name="play" size={24} tone="fg" /></View>
+      <View className="size-14 items-center justify-center rounded-full bg-surface-float shadow-float"><AppIcon name="play" size={22} tone="fg" /></View>
     </Pressable>;
   }
   const format = block.type === "3d" && playable ? modelFormat(playable, typeof block.meta?.mimeType === "string" ? block.meta.mimeType : null) : null;

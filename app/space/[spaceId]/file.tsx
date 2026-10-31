@@ -336,7 +336,7 @@ function SaveBanner({
   return (
     <View className="bg-danger-soft border-b border-border px-4 py-2 gap-2">
       <View className="flex-row items-center gap-2">
-        <AppIcon name="alert" size={15} tone="danger" />
+        <AppIcon name="alert" size={16} tone="danger" />
         <Text className="text-caption text-danger flex-1">{message}</Text>
       </View>
       {conflict ? (
@@ -357,12 +357,12 @@ function FileError({ message, onRetry, onBack }: { message: string; onRetry: () 
   return (
     <View className="flex-1 items-center justify-center p-6">
       <View className="w-13 h-13 rounded-md items-center justify-center bg-danger-soft">
-        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={24} tone="danger" />
+        <AppIcon name={isDirectory ? "folder" : "cloud-off"} size={28} tone="danger" />
       </View>
       <Text className="text-headline font-semibold text-fg text-center mt-4">
         {isDirectory ? t("file.folder.title") : t("file.error.title")}
       </Text>
-      <Text selectable className="text-body text-fg-muted text-center mt-1.5 max-w-80">
+      <Text selectable className="text-body text-fg-muted text-center mt-2 max-w-80">
         {isDirectory ? t("file.folder.body") : message}
       </Text>
       <View className="flex-row items-center gap-2 mt-4">

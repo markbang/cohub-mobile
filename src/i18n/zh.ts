@@ -848,7 +848,7 @@ export const zh: Record<TranslationKey, string> = {
   // Space detail
   "space.title": "空间",
   "space.opening": "正在打开空间…",
-  "space.unavailable": "空间不可用。",
+  "space.unavailable": "空间不可用",
   "space.subtitle": "空间",
   "space.unpin": "取消置顶空间",
   "space.pin": "置顶空间",

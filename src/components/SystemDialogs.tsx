@@ -40,7 +40,7 @@ export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, 
       <Pressable accessible={false} style={[StyleSheet.absoluteFill, SCRIM]} onPress={close} />
       <Reanimated.View entering={SHEET_SPRING} accessibilityViewIsModal className="gap-2">
         <View className="overflow-hidden rounded-md bg-surface-float" style={CONTINUOUS}>
-          <View className="items-center gap-1 px-4 py-3.5">
+          <View className="items-center gap-1 px-4 py-4">
             <Text accessibilityRole="header" className="text-center text-caption font-semibold text-fg-muted">{title}</Text>
             {[subtitle, message].filter(Boolean).map((line) => <Text key={line} className="text-center text-caption text-fg-muted">{line}</Text>)}
             {error ? <Text accessibilityRole="alert" className="mt-1 text-center text-caption text-danger">{error}</Text> : null}

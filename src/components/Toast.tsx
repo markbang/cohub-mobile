@@ -138,7 +138,7 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
 
   return (
     <GestureDetector gesture={pan}>
-    <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} className={`absolute bottom-0 left-0 right-0 flex-row items-center gap-2.5 rounded-md bg-surface-float px-3.5 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
+    <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} className={`absolute bottom-0 left-0 right-0 flex-row items-center gap-3 rounded-md bg-surface-float px-4 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
         {danger ? <Mascot size={20} mood="worried" /> : <AppIcon name="check" size={16} tone="success" />}
         <View className="min-w-0 flex-1 gap-px">
           <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>

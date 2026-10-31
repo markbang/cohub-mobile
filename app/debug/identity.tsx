@@ -115,7 +115,7 @@ function Row({ icon, label, value }: { icon: IconName; label: string; value: str
   return (
     <View className="min-h-13 px-3 py-2 flex-row items-center gap-3 border-b border-border">
       <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
-        <AppIcon name={icon} size={15} tone="muted" />
+        <AppIcon name={icon} size={16} tone="muted" />
       </View>
       <Text className="text-caption text-fg-muted w-28">{label}</Text>
       <Text selectable numberOfLines={2} className="text-caption text-fg flex-1 text-right">{value}</Text>

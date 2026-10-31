@@ -216,7 +216,7 @@ export default function DebugBubblesScreen() {
 function ControlChip({ label, icon, onPress, tone = "default" }: { label: string; icon?: IconName; onPress: () => void; tone?: "default" | "accent" | "danger" }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} className="min-h-9 flex-row items-center gap-1.5 rounded-full bg-surface px-3 active:bg-surface-pressed">
-      {icon ? <AppIcon name={icon} size={13} tone={tone === "accent" ? "accent" : tone === "danger" ? "danger" : "secondary"} /> : null}
+      {icon ? <AppIcon name={icon} size={14} tone={tone === "accent" ? "accent" : tone === "danger" ? "danger" : "secondary"} /> : null}
       <Text className={`text-caption ${tone === "accent" ? "text-accent" : tone === "danger" ? "text-danger" : "text-fg-secondary"}`}>{label}</Text>
     </Pressable>
   );

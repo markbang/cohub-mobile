@@ -174,8 +174,8 @@ function RunRow({ run, last, onPress }: { run: TaskRunRecord; last: boolean; onP
   const { t } = useTranslation();
   const running = run.status === "running" || run.status === "pending";
   const time = run.startedAt ?? run.scheduledAt ?? run.createdAt;
-  return <Pressable accessibilityRole="button" accessibilityLabel={`${run.status}, ${formatRelativeTime(time)}`} onPress={onPress} className="min-h-13 flex-row items-center gap-3 bg-surface py-2.5 pl-4 pr-3 active:bg-surface-pressed">
-    <AppIcon name={running ? "sync" : run.status === "failed" ? "alert" : "check-circle"} size={17} tone={running ? "accent" : run.status === "failed" ? "danger" : "success"} />
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${run.status}, ${formatRelativeTime(time)}`} onPress={onPress} className="min-h-13 flex-row items-center gap-3 bg-surface py-2 pl-4 pr-3 active:bg-surface-pressed">
+    <AppIcon name={running ? "sync" : run.status === "failed" ? "alert" : "check-circle"} size={18} tone={running ? "accent" : run.status === "failed" ? "danger" : "success"} />
     <View className="min-w-0 flex-1">
       <Text className="text-body text-fg">{t(`schedule.run.${run.status}`)}</Text>
       {run.errorMessage ? <Text numberOfLines={1} className="text-caption text-danger">{run.errorMessage}</Text> : null}

@@ -236,7 +236,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
         {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
       {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
-        <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-bold text-fg">{title}</Text>
+        <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-semibold text-fg">{title}</Text>
         {subtitle ? <Text numberOfLines={1} className="text-subhead text-fg-muted">{subtitle}</Text> : null}
       </View>}
     </View>
@@ -273,7 +273,7 @@ export function SettingsGroup({ label, children }: { label?: string; children: R
 export function SectionHeader({ title, action }: { title: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   return (
     <View className={`flex-row items-center justify-between pl-4 pt-6 ${action ? "pr-1" : "min-h-12 pb-2 pr-4"}`}>
-      <Text accessibilityRole="header" className="flex-1 text-headline font-bold text-fg">{title}</Text>
+      <Text accessibilityRole="header" className="flex-1 text-headline font-semibold text-fg">{title}</Text>
       {action ? <IconButton name={action.icon} label={action.label} onPress={action.onPress} tone="accent" /> : null}
     </View>
   );
@@ -310,7 +310,7 @@ export function EmptyState({ icon, title, description, action }: { icon: IconNam
         </View>
       </View>
       <Text className="mt-4 text-center text-headline font-semibold text-fg">{title}</Text>
-      {description ? <Text className="mt-1.5 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}
+      {description ? <Text className="mt-2 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}
       {action ? <PrimaryButton label={action.label} icon={action.icon} variant="ghost" onPress={action.onPress} className="mt-3" /> : null}
     </View>
   );
@@ -340,7 +340,7 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
   const theme = useAppTheme();
   const { t } = useTranslation();
   return (
-    <View className="min-h-11 flex-row items-center gap-2.5 rounded-sm bg-surface-raised px-3.5" style={CONTINUOUS}>
+    <View className="min-h-11 flex-row items-center gap-3 rounded-sm bg-surface-raised px-4" style={CONTINUOUS}>
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
       {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={8} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
@@ -458,10 +458,10 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
               if (option.locked) { onLocked?.(); return; }
               if (!selected) { haptics.selection(); onChange(option.value); }
             }}
-            className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            className={`min-h-10 flex-1 flex-row items-center justify-center gap-2 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
           >
-            {option.icon ? <AppIcon name={option.icon} size={15} tone={selected ? "onAccent" : "muted"} /> : null}
+            {option.icon ? <AppIcon name={option.icon} size={16} tone={selected ? "onAccent" : "muted"} /> : null}
             <Text numberOfLines={1} className={`shrink text-subhead ${selected ? "font-semibold text-on-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
           </Pressable>
         );
@@ -473,7 +473,7 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
 /** A labelled input: caption label, filled field, optional hint or inline error. */
 export function Field({ label, hint, error, children }: { label?: string; hint?: string; error?: string | null; children: ReactNode }) {
   return (
-    <View className="gap-1.5">
+    <View className="gap-2">
       {label ? <Text className="text-caption font-semibold text-fg-muted">{label}</Text> : null}
       {children}
       {error ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : hint ? <Text className="text-caption text-fg-faint">{hint}</Text> : null}
@@ -482,7 +482,7 @@ export function Field({ label, hint, error, children }: { label?: string; hint?:
 }
 
 /** Shared classes for a `TextInput` inside `Field`, so every form field matches. */
-export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-2.5 text-body text-fg";
+export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-3 text-body text-fg";
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
@@ -609,27 +609,27 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               accessibilityState={{ expanded: layout.expanded }}
               onPress={() => { traceAction("composer_expand", { expanded: !layout.expanded }); setExpanded(!layout.expanded); }}
               className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"
-            ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={17} tone="muted" /></Pressable> : null}
+            ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={18} tone="muted" /></Pressable> : null}
           </View>
         </View>
-        <View className="h-11 flex-row items-center gap-1.5">
+        <View className="h-11 flex-row items-center gap-2">
           {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full ${attachmentMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
-          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-1.5 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
+          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-2 overflow-hidden rounded-sm px-2 ${harnessMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
-            <AppIcon name="chevron-down" size={13} tone="muted" />
+            <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
-          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-1.5 overflow-hidden rounded-full px-2.5 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
+          {onModelPress ? <Pressable testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 ${modelMenuOpen ? "bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={21} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
+          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={22} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
             <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering} exiting={controlIconExiting}>
-              {canStop ? <AppIcon name="stop" size={17} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+              {canStop ? <AppIcon name="stop" size={18} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
             </Animated.View>
           </Pressable>
         </View>
@@ -644,7 +644,7 @@ export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string
   return <View className="max-w-full flex-row items-center gap-1.5 rounded-sm bg-accent-soft px-2 py-1.5" style={{ minHeight: 44, borderCurve: "continuous" }}>
     {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
     <Text numberOfLines={1} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={15} tone="muted" /></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={8}><AppIcon name="x" size={16} tone="muted" /></Pressable>
   </View>;
 }
 

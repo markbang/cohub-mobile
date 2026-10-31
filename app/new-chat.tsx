@@ -67,7 +67,7 @@ export default function NewChatScreen() {
           accessibilityRole="button"
           accessibilityLabel={displaySpaceName(space)}
           onPress={() => openSpaceDraft(space.id)}
-          className={`min-h-18 flex-row items-center gap-3.5 border-b border-border px-4 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
+          className={`min-h-18 flex-row items-center gap-3 border-b border-border px-4 ${selected ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
         >
           <Avatar name={displaySpaceName(space)} uri={space.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} />
           <View className="flex-1 min-w-0">

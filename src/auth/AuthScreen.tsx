@@ -32,7 +32,7 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
       <LinearGradient colors={BRAND.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ flex: 1, paddingTop: insets.top, paddingBottom: 28 }}>
         <View className="min-h-0 flex-1 items-center justify-center px-6">
           <Mascot size={Math.min(148, height * 0.19)} blink />
-          <Text style={[ROUNDED_TITLE, INK]} className="mt-4 text-display font-bold">Cohub</Text>
+          <Text style={[ROUNDED_TITLE, INK]} className="mt-4 text-display font-semibold">Cohub</Text>
           <Text style={INK} className="mt-1 max-w-72 text-center text-body">{t("auth.tagline")}</Text>
         </View>
       </LinearGradient>
@@ -40,14 +40,14 @@ export function AuthScreen({ onSignIn, loading, error, environment, onSelectEnvi
       <View className="-mt-7 rounded-t-lg bg-surface px-5 pt-6" style={{ paddingBottom: insets.bottom + 12, borderCurve: "continuous" }}>
         <View className="w-full max-w-105 gap-4 self-center">
           <View className="flex-row items-center gap-3">
-            <View className="size-10 items-center justify-center rounded-sm bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="sparkles" size={20} tone="accent" /></View>
+            <View className="size-10 items-center justify-center rounded-sm bg-surface-raised" style={{ borderCurve: "continuous" }}><AppIcon name="layers" size={22} tone="secondary" /></View>
             <View className="flex-1">
               <Text className="text-body font-semibold text-fg">{t("auth.feature.context.title")}</Text>
               <Text className="text-caption text-fg-muted">{t("auth.feature.context.body")}</Text>
             </View>
           </View>
           <View className="flex-row items-center gap-3">
-            <View className="size-10 items-center justify-center rounded-sm bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="sync" size={20} tone="accent" /></View>
+            <View className="size-10 items-center justify-center rounded-sm bg-surface-raised" style={{ borderCurve: "continuous" }}><AppIcon name="sync" size={22} tone="secondary" /></View>
             <View className="flex-1">
               <Text className="text-body font-semibold text-fg">{t("auth.feature.sync.title")}</Text>
               <Text className="text-caption text-fg-muted">{t("auth.feature.sync.body")}</Text>

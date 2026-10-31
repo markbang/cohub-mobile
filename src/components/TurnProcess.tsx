@@ -53,7 +53,7 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
 
 /** The row's padding holds the 32pt capsule's 44pt touch target; hitSlop never reaches past a parent. */
 function ProcessDisclosure({ label, expanded, onToggle, children }: { label: string; expanded: boolean; onToggle: () => void; children: ReactNode }) {
-  return <View className="px-4 py-1.5">
+  return <View className="px-4 py-2">
     <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={onToggle} hitSlop={6} className="h-8 max-w-full flex-row items-center gap-1 self-start rounded-full bg-surface-raised pl-2 pr-3 active:bg-surface-pressed">
       <AppIcon name={expanded ? "chevron-down" : "chevron-right"} size={14} tone="muted" />
       <Text numberOfLines={1} className="shrink text-caption text-fg-muted">{label}</Text>

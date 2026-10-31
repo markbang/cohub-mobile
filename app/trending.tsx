@@ -34,8 +34,8 @@ export default function TrendingRoute() {
     return <ListRow
       key={entry.key}
       accessibilityLabel={`${entry.rank}. ${entry.title}, ${metric} ${metricLabel}, ${subtitle}`}
-      leading={<View className="flex-row items-center gap-2.5">
-        <Text className={`w-6 text-center text-subhead font-bold tabular-nums ${entry.rank <= 3 ? "text-accent" : "text-fg-faint"}`}>{entry.rank}</Text>
+      leading={<View className="flex-row items-center gap-3">
+        <Text className={`w-6 text-center text-subhead font-semibold tabular-nums ${entry.rank <= 3 ? "text-accent" : "text-fg-faint"}`}>{entry.rank}</Text>
         <Avatar name={entry.title} uri={entry.avatarUrl} size={40} />
       </View>}
       title={entry.title}

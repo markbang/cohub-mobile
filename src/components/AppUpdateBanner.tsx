@@ -85,7 +85,7 @@ export function AppUpdateBanner() {
           accessibilityLabel={t("update.banner.accessibility", { version: release.version })}
           onPress={() => setDetailsOpen(true)}
          
-          className="min-h-14 w-full max-w-130 flex-row items-center gap-2.5 rounded-md bg-surface px-3 shadow-float active:bg-surface-pressed"
+          className="min-h-14 w-full max-w-130 flex-row items-center gap-3 rounded-md bg-surface px-3 shadow-float active:bg-surface-pressed"
           style={{ borderCurve: "continuous" }}
         >
           <View className="size-9 items-center justify-center rounded-sm bg-accent-soft">
@@ -95,7 +95,7 @@ export function AppUpdateBanner() {
             <Text numberOfLines={1} className="text-body font-semibold text-fg">{t("update.available", { version: release.version })}</Text>
             <Text numberOfLines={1} className="mt-px text-caption text-fg-muted">{release.title ?? t("update.viewNotes")}</Text>
           </View>
-          <AppIcon name="chevron-right" size={17} tone="faint" />
+          <AppIcon name="chevron-right" size={18} tone="faint" />
         </Pressable>
       </View>
 
@@ -207,7 +207,7 @@ export function AppUpdateDetailsSheet({
       </View>
 
       <View className="flex-row items-start gap-2 p-3 border rounded-md mt-3 bg-accent-soft border-accent-border">
-        <AppIcon name="info" size={17} tone="accent" />
+        <AppIcon name="info" size={18} tone="accent" />
         <Text className="text-body text-fg-secondary flex-1">
           {progress?.phase === "downloading" ? t("update.status.downloading", { percent: Math.round(progress.fraction * 100) })
             : progress?.phase === "verifying" ? t("update.status.verifying")

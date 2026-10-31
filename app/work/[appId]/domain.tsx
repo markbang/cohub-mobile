@@ -155,9 +155,9 @@ function DomainDetail({ domain, list, busy, onCheck, onRemove }: { domain: AppDo
 function DnsRecordRow({ record, last }: { record: AppDomainDnsRecord; last: boolean }) {
   const { t } = useTranslation();
   return <View className="gap-2 bg-surface py-3 pl-4 pr-1">
-    <View className="flex-row items-center gap-1.5">
+    <View className="flex-row items-center gap-2">
       <Text className="text-caption font-semibold text-fg-muted">{record.type}</Text>
-      {record.satisfied ? <AppIcon name="check" size={14} tone="success" strokeWidth={2.4} /> : null}
+      {record.satisfied ? <AppIcon name="check" size={14} tone="success" strokeWidth={2.1} /> : null}
     </View>
     <CopyLine label={t("app.domain.recordName")} value={record.name} />
     <CopyLine label={t("app.domain.recordValue")} value={record.value} />

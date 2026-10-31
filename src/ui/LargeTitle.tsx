@@ -9,7 +9,7 @@ import { BarButtonContext } from "@/src/ui/bar-button-context";
  */
 export function LargeTitleBar({ title, actions }: { title: string; actions?: ReactNode }) {
   return <View className="flex-row items-center gap-2 pl-4 pr-2" style={{ minHeight: edgeChrome.headerMinHeight }}>
-    <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="min-w-0 flex-1 text-display font-bold text-fg">{title}</Text>
+    <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="min-w-0 flex-1 text-display font-semibold text-fg">{title}</Text>
     {actions ? <View className="flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
   </View>;
 }
