@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { LegendList } from "@legendapp/list/react-native";
 import { BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Reanimated, { cancelAnimation, Extrapolation, interpolate, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring, ReduceMotion } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -659,7 +660,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
     {labelsError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.panel.retryLabelsA11y")} onPress={() => setLabelsReloadToken((value) => value + 1)}><Text className="text-caption text-accent">{t("space.panel.retryLabels")}</Text></Pressable> : null}
   </ScrollView>;
   return (
-    <View className="flex-1 min-h-0">
+    <KeyboardAvoidingView behavior="padding" automaticOffset style={PANEL_FILL}>
       <TopBar title={spaceName} subtitle={t("space.panel.chats")} leading={<Avatar name={spaceName} uri={displaySessions.find((session) => session.space?.publicProfile?.avatarUrl)?.space?.publicProfile?.avatarUrl} size={38} />} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("space.panel.chats") })} onPress={onClose} />} />
       <View className="px-4 pt-3 pb-2 gap-2">
         <PrimaryButton label={t("space.newChat")} icon="plus" onPress={onNewChat} className="min-h-11" />
@@ -690,7 +691,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
         ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={26} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={() => setLabelsReloadToken((value) => value + 1)} onClose={closeLabelSheet} onChanged={() => { setLabelSessionIds(new Set()); setLabelsReloadToken((value) => value + 1); }} /> : null}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -786,3 +787,4 @@ const styles = {
   // design-system: scrim, see panelPage.
   backdrop: { position: "absolute" as const, top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "#000000" },
 } satisfies Record<string, object>;
+const PANEL_FILL = { flex: 1, minHeight: 0 } as const;

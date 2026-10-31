@@ -57,9 +57,10 @@ export function chatListViewOffset(viewPosition: number, viewOffset: number, top
   return viewOffset + Math.max(0, Math.round(topInset * (1 - viewPosition)));
 }
 
-export function chatListDistances(offsetY: number, contentHeight: number, layoutHeight: number) {
+/** `endInset` is the settled keyboard inset; 0 while it animates, or the lift's return reads as leaving the tail. */
+export function chatListDistances(offsetY: number, contentHeight: number, layoutHeight: number, endInset = 0) {
   return {
-    distanceToLatest: Math.max(0, contentHeight - layoutHeight - offsetY),
+    distanceToLatest: Math.max(0, contentHeight + endInset - layoutHeight - offsetY),
     distanceToOldest: Math.max(0, offsetY),
   };
 }

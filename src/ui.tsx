@@ -504,7 +504,6 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const inputRef = useRef<TextInput | null>(null);
   const inputTrace = useRef({ at: 0, length: value.length, selectionAt: 0 });
   const keyboardVisible = keyboardTop !== null;
-  // Android keeps its bottom safe-area inset while KeyboardAvoidingView is active.
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
@@ -540,7 +539,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const resolvedModelLabel = modelLabel ?? t("ui.composer.modelAutomatic");
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   return (
-    <View style={[styles.composerWrap, { paddingBottom: (Platform.OS === "android" && keyboardVisible ? 0 : insets.bottom) + 10 }]}>
+    // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`.
+    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 10 }]}>
       {/* Glyphs pop only when they change, not when the composer first appears. */}
       <LayoutAnimationConfig skipEntering skipExiting>
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
