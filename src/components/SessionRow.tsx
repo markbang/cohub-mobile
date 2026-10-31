@@ -1,5 +1,5 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
 import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/utils";
@@ -101,7 +101,7 @@ export function SessionForkToggle({ hidden, expanded, showSpace = true, onPress 
     accessibilityLabel={label}
     accessibilityState={{ expanded }}
     onPress={() => { traceAction("session_fork_toggle", { expanded: !expanded, hidden }); onPress(); }}
-    className="mx-4 mb-2 min-h-11 flex-row items-center gap-1.5 rounded-b-md bg-surface pr-4 active:bg-surface-pressed"
+    className={`min-h-11 flex-row items-center gap-1.5 pr-4 active:bg-surface-pressed ${Platform.OS === "ios" ? "" : "mx-4 mb-2 rounded-b-md bg-surface"}`}
     style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 14 : 0), borderCurve: "continuous" }}
   >
     <AppIcon name={expanded ? "chevron-up" : "chevron-down"} size={15} tone="accent" />

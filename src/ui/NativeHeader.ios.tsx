@@ -37,7 +37,7 @@ export function useNativeHeader(header: NativeHeader | null) {
 }
 
 function headerOptions(header: NativeHeader, theme: AppTheme, searchRef: RefObject<SearchBarCommands | null>): NativeStackNavigationOptions {
-  const { title, subtitle, right, items = [], search } = header;
+  const { title, subtitle, right, items = [], search, close } = header;
   const rightItems: NativeStackHeaderItem[] = [
     ...(right ? [{ type: "custom", element: <BarButtonContext.Provider value="native"><View className="flex-row items-center">{right}</View></BarButtonContext.Provider> } as const] : []),
     ...items.map((item) => barItem(item, theme)),
@@ -50,17 +50,21 @@ function headerOptions(header: NativeHeader, theme: AppTheme, searchRef: RefObje
       <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text>
     </View> : undefined,
     headerBackButtonDisplayMode: "minimal",
+    // design-system-begin: navigator header styles are native props that only take JS colors.
     headerTintColor: theme.colors.text,
     headerTitleStyle: { color: theme.colors.text },
     headerLargeTitleStyle: { color: theme.colors.text },
+    // design-system-end
     headerShadowVisible: false,
     headerLargeTitleShadowVisible: false,
     unstable_headerRightItems: rightItems.length ? () => rightItems : undefined,
+    unstable_headerLeftItems: close ? () => [{ type: "button", label: close.label, accessibilityLabel: close.label, icon: { type: "sfSymbol", name: SF_SYMBOLS.x }, onPress: close.onPress }] : undefined,
     headerSearchBarOptions: search ? {
       ref: searchRef,
       placeholder: search.placeholder,
       autoCapitalize: "none",
       obscureBackground: false,
+      hideWhenScrolling: !search.pinned,
       tintColor: theme.colors.accent,
       textColor: theme.colors.text,
       onChangeText: (event) => search.onQueryChange(event.nativeEvent.text),

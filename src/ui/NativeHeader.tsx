@@ -11,7 +11,8 @@ export type NativeHeader = {
   subtitle?: string;
   right?: ReactNode;
   items?: readonly NativeHeaderItem[];
-  search?: { query: string; onQueryChange: (query: string) => void; placeholder: string };
+  search?: { query: string; onQueryChange: (query: string) => void; placeholder: string; pinned?: boolean };
+  close?: { label: string; onPress: () => void };
 };
 
 export const nativeHeaders = false;

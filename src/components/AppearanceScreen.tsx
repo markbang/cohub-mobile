@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Pressable, ScrollView, Switch, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ACCENTS, ACCENT_IDS, type AccentId } from "@/src/design/accents";
 import {
@@ -18,7 +18,7 @@ import {
   useThemePreference,
 } from "@/src/theme";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
-import { AppIcon, Segmented, SettingsGroup, TopBar, Screen, SectionHeader } from "@/src/ui";
+import { AppSwitch, AppIcon, Segmented, SettingsGroup, TopBar, Screen, SectionHeader } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 
 const THEME_OPTIONS: { value: ThemePreference; labelKey: TranslationKey; icon: "monitor" | "sun" | "moon" }[] = [
@@ -128,13 +128,12 @@ export function AppearanceContent() {
       <View className="mt-4">
         <SettingsGroup>
           <SettingsRow icon="moon" title={t("appearance.pureBlack.title")} value={t("appearance.pureBlack.body")} last>
-            <Switch
+            <AppSwitch
               accessibilityLabel={t("appearance.pureBlack.title")}
               value={pureBlack}
               disabled={preference === "light"}
               onValueChange={(value) => void setPureBlackPreference(value)}
               {...switchColors}
-              thumbColor={pureBlack ? theme.colors.accent : theme.colors.textFaint}
             />
           </SettingsRow>
         </SettingsGroup>

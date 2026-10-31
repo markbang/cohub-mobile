@@ -44,9 +44,10 @@ confusion; the accessibility label is mandatory from day one.
   third line.
 - Row heights: **72 pt** for content lists (46 pt avatar, 12 pt vertical padding, 4 pt between the lines), **52 pt** for settings rows, **56 pt**
   minimum for anything with a 44 pt control.
-- **Content rows are cards on a gray page.** Each `ListRow` is a `rounded-md` card inset 16 from
+- **On Android, content rows are cards on the page.** Each `ListRow` is a `rounded-md` card inset 16 from
   the screen edge with an 8 pt gap; rows that belong together (a fork tree) join into one card
-  through `group`. Settings rows keep hairlines **inset to the text column** inside their group card.
+  through `group`. **On iOS they are flat**, as in Mail: full width, with a hairline inset past the
+  avatar. Settings rows keep hairlines **inset to the text column** inside their group card.
 - No chevrons in content lists: a tappable row with an avatar already reads as navigable.
   Chevrons stay only in grouped settings lists, where rows drill into another settings page.
 - Screen edge padding is 16. Section gap 24. Row internal gap 12. Everything is on the 4 pt grid
@@ -73,8 +74,17 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
 
 ### 2.4 Visual system
 
-- **One accent** (the existing orange). It marks primary action, selection, and running state.
-  Nothing else gets a new hue.
+- **The app icon sets the language** (`src/design/brand.ts`). Its gradient (`#fdba72` → `#fa7b23` →
+  `#dc4b05`), ink, and white face are the logo's and stay fixed across themes and accents: the gradient
+  appears only on the logo tile and the sign-in hero. The mascot (`Mascot`, `CohubLogo`) is the product's
+  face: sign-in, empty states, not-found, and the Cohub harness icon. It never decorates chrome or
+  content, and its cheek mark is never covered.
+- **One accent** (ember, from the icon). It marks primary action, selection, and running state.
+  Nothing else gets a new hue. The icon's orange fails 4.5:1 as text on paper, so the light accent is
+  `#bf3f00`, just past the dark end of the gradient; dark mode uses `#ff8a3d` with ink on it, the icon's
+  own pairing.
+- **One grey family, warm.** Every neutral leans toward the orange: paper and pure white in light mode,
+  warmed ink in dark mode.
 - **Selection is filled.** A selected filter or segment is the accent itself with
   `text-on-accent`, not a tinted wash; unselected ones sit on the surface one level up. The tab
   bar is the exception, as on iOS: its lens is a tint and the selected tab is marked by accent color.
@@ -117,7 +127,10 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
 Weights: 400 body, 500 captions, 600 titles, emphasis, and micro labels, 700 display only. Numbers that count or change use
 `tabular-nums`.
 
-- **Colors** keep their existing values; only names change for `className`:
+- **Rounded display type on iOS.** `ROUNDED_TITLE` (`src/ui/rounded.ts`, SF Pro Rounded) echoes the
+  icon's letterform on brand titles and a screen's one display figure. Everything else, including the
+  system navigation bar, stays SF Pro. Android keeps its system font.
+- **Colors** are named for `className`:
   `text-fg`, `text-fg-secondary`, `text-fg-muted`, `text-fg-faint`, `bg-background`,
   `bg-surface`, `bg-surface-raised`, `bg-surface-pressed`, `bg-surface-float`, `border-border`, `bg-accent`,
   `text-on-accent`, `bg-accent-soft`, `text-success|warning|danger|info` and their `-soft`
@@ -135,6 +148,14 @@ flag from such a file, so call sites stay the same:
 | Job | iOS | Android |
 | --- | --- | --- |
 | Tab bar | `NativeTabs` (`app/(tabs)/_layout.ios.tsx`) | `FloatingTabBar` (`_layout.tsx`) |
+| Navigation bar on pushed screens | Native stack header through `TopBar` (`NativeHeader.ios.tsx`); `drawn` opts out for bars that move with content, and transparent or long-press titles stay drawn | drawn `TopBar` |
+| Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `EdgeHeader`, `ExpandableSearchBar` |
+| Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` |
+| Icons | SF Symbols (`Glyph.ios.tsx`, `src/sf-symbols.ts`) | Lucide |
+| Busy indicator | `ActivityIndicator` | accent dots (`Loader`) |
+| Content lists | Flat full-width rows with inset hairlines | `ListRow` cards |
+| Language and Storage settings | SwiftUI `Form` | drawn settings rows |
+| Switches | System thumb with the accent track (`AppSwitch`) | themed `Switch` |
 | Segmented choice | SwiftUI segmented `Picker` (`NativeSegmented.ios.tsx`) | drawn `Segmented` |
 | Button menus: Chat and Space "more", Chats source filter, composer add | SwiftUI `Menu` (`NativeMenu.ios.tsx`) | `AnchoredActionMenu`, `AttachmentMenu` |
 | A few values picked in a settings row | SwiftUI menu `Picker` (`SettingsSelectRow.ios.tsx`) | drawn `SettingsSelectRow` |
@@ -144,10 +165,9 @@ flag from such a file, so call sites stay the same:
 | Notices with one way out | system alert (`NoticeSheet`) | `NoticeSheet` drawn as a sheet |
 | Long-press menus: Space rows, file rows, the Chat and file titles | SwiftUI `ContextMenu` around the view (`NativeContextMenu.ios.tsx`), which lifts it into a preview | the drawn menu or alert from the view's own long press |
 
-Cache retention is picked in place with `SettingsSelectRow` on both. Sheets that hold forms or
-lists (create Space, add Mod, custom sleep, feedback, folder browser, labels, turn navigator, app
-update) stay drawn on both. The system tab bar mounts every tab at launch, where the drawn one mounts
-a tab on first visit.
+Cache retention is picked in place with `SettingsSelectRow` on both. The system tab bar mounts every
+tab at launch, where the drawn one mounts a tab on first visit. Tab roots stay React Native rather than
+a SwiftUI `Form`: UIKit has to find the root scroll view for the Large Title to collapse.
 
 ### 2.5 Motion
 

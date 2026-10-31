@@ -1,7 +1,7 @@
 import type { AppDetailResponse, AppViewStatsResponse, AppVisibility } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
@@ -10,7 +10,7 @@ import { APP_HIDE_COHUB_BAR_FEATURE, dailyViews, hidesCohubBar, withCohubBar } f
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
+import { AppSwitch, DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
 import { Meta } from "@/src/ui/ListRow";
 import { formatNumber } from "@/src/utils";
 
@@ -145,13 +145,12 @@ export default function ManageWorkScreen() {
 }
 
 function ToggleRow({ title, detail, value, onChange, disabled = false, last = false }: { title: string; detail: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean; last?: boolean }) {
-  const theme = useAppTheme();
   return <View className={`min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3 ${last ? "" : "border-b border-border"}`}>
     <View className={`min-w-0 flex-1 gap-0.5 ${disabled ? "opacity-55" : ""}`}>
       <Text className="text-body text-fg">{title}</Text>
       <Text className="text-caption text-fg-muted">{detail}</Text>
     </View>
-    <Switch value={value} disabled={disabled} onValueChange={onChange} accessibilityLabel={title} trackColor={{ false: theme.colors.border, true: theme.colors.accent }} thumbColor={theme.colors.surface} />
+    <AppSwitch value={value} disabled={disabled} onValueChange={onChange} accessibilityLabel={title} />
   </View>;
 }
 

@@ -13,6 +13,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
+import { ROUNDED_TITLE } from "@/src/ui/rounded";
 
 export default function ActivityScreen() {
   const router = useRouter();
@@ -50,7 +51,7 @@ export default function ActivityScreen() {
             <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
             <AppIcon name="chevron-right" size={16} tone="faint" />
           </View>
-          <Text className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
+          <Text style={ROUNDED_TITLE} className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
         </PressableScale>
       </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}

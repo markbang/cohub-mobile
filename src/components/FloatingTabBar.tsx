@@ -90,9 +90,9 @@ function barBottomOffset(bottomInset: number) {
 /** Space the tab bar occupies at the bottom of a tab screen. */
 export function useFloatingTabBarInset() {
   const insets = useSafeAreaInsets();
-  // iOS uses the system tab bar (`app/(tabs)/_layout.ios.tsx`); each tab's own safe area already
-  // ends above it, so only the breathing room is added. Android draws this bar over the screen.
-  if (Platform.OS === "ios") return insets.bottom + 16;
+  // iOS tab roots scroll with automatic insets, which already clear the system tab bar, so only the
+  // breathing room is added. Android draws this bar over the screen.
+  if (Platform.OS === "ios") return 16;
   return BAR_HEIGHT + barBottomOffset(insets.bottom) + 16;
 }
 

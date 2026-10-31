@@ -1,7 +1,7 @@
 import type { CronJobRecord, TaskRunRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { cronSummaryText, formatRunTime, ScheduleForm, scheduleProblem, type ScheduleValues } from "@/src/components/ScheduleForm";
@@ -11,8 +11,7 @@ import { useApp } from "@/src/data/context";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppSwitch, AppIcon, DataError, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const RUN_PAGE = 20;
@@ -28,7 +27,6 @@ export default function ScheduleScreen() {
   const { jobId = "" } = useLocalSearchParams<{ spaceId: string; jobId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const theme = useAppTheme();
   const { t, locale } = useTranslation();
   const toast = useToast();
   const { client } = useApp();
@@ -132,7 +130,7 @@ export default function ScheduleScreen() {
         <View className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2">
           <AppIcon name="calendar-clock" size={18} tone={job.enabled ? "accent" : "muted"} />
           <Text className="min-w-0 flex-1 text-body text-fg">{t(job.enabled ? "schedule.active" : "schedule.paused")}</Text>
-          <Switch value={job.enabled} disabled={busy !== null} onValueChange={(enabled) => void toggle(enabled)} trackColor={{ false: theme.colors.border, true: theme.colors.accent }} thumbColor={theme.colors.surface} accessibilityLabel={t("schedule.enabledLabel")} />
+          <AppSwitch value={job.enabled} disabled={busy !== null} onValueChange={(enabled) => void toggle(enabled)} accessibilityLabel={t("schedule.enabledLabel")} />
         </View>
         <Detail label={t("schedule.field.repeat")} value={job.cronExpression} mono />
         <Detail label={t("schedule.field.timezone")} value={job.timezone} />

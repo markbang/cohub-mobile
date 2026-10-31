@@ -19,7 +19,6 @@ import {
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { G, Path, Rect } from "react-native-svg";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
@@ -39,6 +38,7 @@ import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
 import { Loader } from "@/src/ui/Loader";
+import { CohubLogo, Mascot } from "@/src/ui/Mascot";
 import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
@@ -46,7 +46,9 @@ import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
+export { AppSwitch } from "@/src/ui/AppSwitch";
 export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
+export { CohubLogo, Mascot } from "@/src/ui/Mascot";
 export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
 export { Bone, LoadingDocument, LoadingFlatRows, LoadingRows, LoadingSections, Skeleton, type SkeletonSection } from "@/src/ui/Skeleton";
@@ -65,23 +67,6 @@ const ICON_TONES: Record<IconTone, ColorKey> = {
 export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; style?: object }) {
   const theme = useAppTheme();
   return <Glyph name={name} size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} fill={fill} style={style} />;
-}
-
-export function CohubLogo({ size = 36 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 192 192">
-      {/* design-system: the Cohub logo keeps its brand colors in every theme. */}
-      <Rect width={192} height={192} rx={32} fill="#ff4500" />
-      {/* design-system: logo glyph */}
-      <G transform="translate(0,192) scale(0.1,-0.1)" fill="#ffffff">
-        <Path d="M853 1314 c-63 -23 -128 -86 -164 -160 -27 -54 -33 -79 -37 -157 -10 -196 63 -332 205 -383 53 -18 160 -17 219 3 92 31 184 151 184 240 0 21 -5 23 -45 23 -43 0 -45 -1 -55 -38 -13 -52 -48 -101 -89 -129 -27 -18 -48 -23 -98 -23 -77 0 -120 16 -156 60 -50 59 -61 96 -61 210 -1 89 3 113 22 155 28 61 47 82 95 107 48 24 152 26 195 4 36 -19 80 -69 88 -102 5 -21 12 -24 55 -24 27 0 49 4 49 8 0 5 -7 29 -16 55 -18 54 -74 115 -129 142 -54 25 -203 31 -262 9z" />
-      </G>
-    </Svg>
-  );
-}
-
-export function BrandMark({ size = 36 }: { size?: number }) {
-  return <CohubLogo size={size} />;
 }
 
 const LOCAL_HARNESS_ICONS: Record<LocalHarness, ComponentType<{ size?: number; color?: string }>> = {
@@ -307,8 +292,12 @@ export function StatusPill({ label, tone = "neutral", dot = true }: { label: str
 export function EmptyState({ icon, title, description, action }: { icon: IconName; title: string; description?: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   return (
     <View className="min-h-64 flex-1 items-center justify-center px-6">
-      <View className="size-18 items-center justify-center rounded-full bg-accent-soft">
-        <AppIcon name={icon} size={30} tone="accent" strokeWidth={1.8} />
+      {/* The mascot is the brand; the sticker says which kind of empty this is, clear of its cheek mark. */}
+      <View>
+        <Mascot size={92} mood={icon === "alert" || icon === "circle-x" || icon === "cloud-off" ? "worried" : "idle"} />
+        <View className="absolute -bottom-0.5 -left-1 size-8 items-center justify-center rounded-full bg-accent">
+          <AppIcon name={icon} size={16} tone="onAccent" strokeWidth={2.1} />
+        </View>
       </View>
       <Text className="mt-4 text-center text-headline font-semibold text-fg">{title}</Text>
       {description ? <Text className="mt-1.5 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}

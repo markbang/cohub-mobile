@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { ActivityIndicator, Platform, Text, View } from "react-native";
 import Reanimated, { useReducedMotion } from "react-native-reanimated";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -19,12 +19,13 @@ const WAVE = { "0%": REST, "28%": PEAK, "56%": REST, "100%": REST };
 // Reduced motion keeps the opacity beat that says "still working" and drops the scaling.
 const WAVE_REDUCED = { "0%": { opacity: 0.3 }, "28%": { opacity: 1 }, "56%": { opacity: 0.3 }, "100%": { opacity: 0.3 } };
 
-/** The app's only busy indicator. Replaces the platform spinner everywhere outside pull-to-refresh. */
+/** The busy indicator: the system spinner on iOS, the accent dots on Android. */
 export function Loader({ size = "sm", color, accessibilityLabel }: { size?: keyof typeof SIZES; color?: string; accessibilityLabel?: string }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const reduced = useReducedMotion();
   const { dot, gap, height } = SIZES[size];
+  if (Platform.OS === "ios") return <ActivityIndicator size={size === "md" ? "large" : "small"} color={color} accessibilityLabel={accessibilityLabel ?? t("common.loading")} style={{ height: size === "md" ? 37 : height }} />;
   return (
     <View accessible accessibilityRole="progressbar" accessibilityLabel={accessibilityLabel ?? t("common.loading")} className="flex-row items-center" style={{ gap, height }}>
       {[0, 1, 2].map((index) => (

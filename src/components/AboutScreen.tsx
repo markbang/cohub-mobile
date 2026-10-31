@@ -2,7 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Image, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
@@ -12,7 +12,8 @@ import { submitFeedback, type FeedbackAttachment } from "@/src/data/debug-sessio
 import { traceAction } from "@/src/data/interaction-trace";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { openWebLink } from "@/src/platform/browser";
-import { AppIcon, Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHeader, PrimaryButton, SettingsGroup } from "@/src/ui";
+import { AppSwitch, AppIcon, Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHeader, PrimaryButton, SettingsGroup } from "@/src/ui";
+import { ROUNDED_TITLE } from "@/src/ui/rounded";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -115,7 +116,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
     <View testID="about-content">
       <View className="items-center px-4 pb-2 pt-6">
         <Image source={require("../../assets/images/icon.png")} resizeMode="contain" className="size-20 rounded-lg" />
-        <Text className="mt-4 text-title font-bold text-fg">{t("about.appName")}</Text>
+        <Text style={ROUNDED_TITLE} className="mt-4 text-title font-bold text-fg">{t("about.appName")}</Text>
         <Text className="mt-1 text-center text-subhead text-fg-muted">{t("about.tagline")}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel={t("about.versionLabel", { version })} onPress={unlockDebug} hitSlop={8} className="mt-3 rounded-full bg-accent-soft px-2.5 py-1">
           <Text className="text-caption tabular-nums text-accent">{t("about.version", { version })}</Text>
@@ -181,7 +182,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
             </View>
           </Field>
           <SettingsRow icon="activity" title={t("about.feedback.log.title")} value={t("about.feedback.log.detail")} disabled={feedbackSubmitting} last>
-            <Switch
+            <AppSwitch
               accessibilityLabel={t("about.feedback.log.title")}
               value={feedbackIncludeLog}
               disabled={feedbackSubmitting}
@@ -190,9 +191,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
                 setFeedbackIncludeLog(value);
                 if (value) setFeedbackAttachments((current) => current.slice(0, MAX_ATTACHMENTS - 1));
               }}
-              trackColor={{ false: theme.colors.borderStrong, true: theme.colors.accentBorder }}
               ios_backgroundColor={theme.colors.borderStrong}
-              thumbColor={feedbackIncludeLog ? theme.colors.accent : theme.colors.textFaint}
             />
           </SettingsRow>
           <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={sendFeedback} />

@@ -11,9 +11,11 @@ export function TabStack({ title }: { title: string }) {
     headerLargeTitle: true,
     headerShadowVisible: false,
     headerLargeTitleShadowVisible: false,
+    // design-system-begin: navigator header styles are native props that only take JS colors.
     headerTintColor: theme.colors.text,
     headerTitleStyle: { color: theme.colors.text },
     headerLargeTitleStyle: { color: theme.colors.text },
+    // design-system-end
     // Before Liquid Glass, a collapsed bar over scrolled content needs its material.
     headerBlurEffect: liquidGlass ? undefined : "systemChromeMaterial",
     // design-system: navigator contentStyle is a native prop
