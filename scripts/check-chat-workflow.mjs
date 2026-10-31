@@ -474,8 +474,10 @@ function chromeNodes(node) {
 }
 const chatsRoute = "../app/(tabs)/(chats)/index.tsx";
 const chatItemKey = loadChromeComponent(chatsRoute, "chatItemKey", {});
-const holdOrder = loadChromeComponent(chatsRoute, "holdOrder", { chatItemKey });
+const chatItemGroups = loadChromeComponent(chatsRoute, "chatItemGroups", { chatItemKey });
+const holdOrder = loadChromeComponent(chatsRoute, "holdOrder", { chatItemKey, chatItemGroups });
 const ORDER_SETTLE_MS = loadChromeComponent(chatsRoute, "ORDER_SETTLE_MS", {});
+const ORDER_HOLD_MAX_MS = loadChromeComponent(chatsRoute, "ORDER_HOLD_MAX_MS", {});
 const chromeScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
@@ -495,7 +497,7 @@ const chromeScope = {
   BrandRefreshArea: "BrandRefreshArea",
   useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key, locale: "en" }),
-  formatWalletUsd, billingStatusLabel: (status) => status, chatItemKey, holdOrder, ORDER_SETTLE_MS, ConnectionBanner: "ConnectionBanner",
+  formatWalletUsd, billingStatusLabel: (status) => status, chatItemKey, holdOrder, ORDER_SETTLE_MS, ORDER_HOLD_MAX_MS, ConnectionBanner: "ConnectionBanner",
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
   AppRefreshControl: "AppRefreshControl",
@@ -1537,14 +1539,17 @@ for (const [path, labels, chips] of [
   screen.unmount();
 }
 // The Chats order holds while the list moves under a finger, then takes the new order once it settles.
+// Gestures whose end event never arrives (Android ACTION_CANCEL) still release, and forks stay under their parent.
 mock.timers.enable({ apis: ["setTimeout"] });
 try {
   const screen = createScreenHooks();
+  let focusEffect = () => undefined;
   const chat = (id) => ({ id, spaceId: "space", title: id });
   const state = { booting: false, spaces: [], sessions: ["a", "b", "c"].map(chat), sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
     useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSyncScope: () => {}, useSpaceRealtime: () => {},
+    useFocusEffect: (callback) => { focusEffect = callback; },
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} })),
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
@@ -1570,6 +1575,34 @@ try {
   assert.deepEqual(order(), ["a", "b", "c", "d"], "the order holds briefly after the list settles");
   mock.timers.tick(1);
   assert.deepEqual(order(), ["c", "a", "b", "d"], "the held order releases to recent activity");
+  const holdFrom = (ids, next) => {
+    state.sessions = ids.map(chat);
+    order();
+    list().props.onScrollBeginDrag({});
+    state.sessions = next.map(chat);
+    assert.deepEqual(order(), ids, "a drag holds the row order");
+  };
+  holdFrom(["a", "b", "c"], ["c", "a", "b"]);
+  mock.timers.tick(ORDER_HOLD_MAX_MS - 1);
+  assert.deepEqual(order(), ["a", "b", "c"], "a cancelled drag holds until the cap");
+  mock.timers.tick(1);
+  assert.deepEqual(order(), ["c", "a", "b"], "a drag whose end never arrives still releases at the cap");
+  holdFrom(["a", "b", "c"], ["b", "c", "a"]);
+  list().props.onMomentumScrollEnd();
+  mock.timers.tick(ORDER_SETTLE_MS - 1);
+  assert.deepEqual(order(), ["a", "b", "c"]);
+  mock.timers.tick(1);
+  assert.deepEqual(order(), ["b", "c", "a"], "momentum end settles a hold without a drag end");
+  holdFrom(["a", "b", "c"], ["c", "b", "a"]);
+  const blur = focusEffect();
+  assert.deepEqual(order(), ["a", "b", "c"]);
+  blur();
+  assert.deepEqual(order(), ["c", "b", "a"], "leaving the tab releases at once");
+  holdFrom(["a", "b"], ["a", "b"]);
+  state.sessions = ["b", "a", "a1"].map(chat);
+  state.sessionForks = { a1: { childSessionId: "a1", parentSessionId: "a", rootSessionId: "a", depth: 1 } };
+  assert.deepEqual(order(), ["a", "a1", "b"], "a fork that arrives during a hold lands under its parent, not at the end");
+  assert.equal(list().props.data[1].tree.depth, 1);
   screen.unmount();
 } finally { mock.timers.reset(); }
 const fadeAnimation = { duration: () => fadeAnimation };

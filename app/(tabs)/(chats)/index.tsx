@@ -1,4 +1,4 @@
-import { useRouter, useScrollToTop } from "expo-router";
+import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { Text, TextInput, View } from "react-native";
@@ -36,6 +36,8 @@ type ChatListItem =
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 /** How long the row order stays held after a drag or fling settles, so a follow-up tap lands on the row it aimed at. */
 const ORDER_SETTLE_MS = 800;
+/** Android drops `onScrollEndDrag` when a gesture is cancelled, so no hold may outlast this. */
+const ORDER_HOLD_MAX_MS = 5000;
 
 export default function ChatsScreen() {
   const router = useRouter();
@@ -120,32 +122,39 @@ export default function ChatsScreen() {
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.
-  // Release waits for scroll events to go quiet rather than momentum end, which iOS skips when a touch stops a fling.
+  // Release follows whichever comes last of drag end, momentum end, or a scroll event (iOS skips momentum end
+  // when a touch stops a fling); blur and a hard cap cover gestures whose end never arrives.
   const orderContext = `${sourceFilter}\n${trimmedQuery}`;
   const [heldOrder, setHeldOrder] = useState<{ context: string; keys: readonly string[] } | null>(null);
   const shownKeysRef = useRef<readonly string[]>([]);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingRef = useRef(false);
   const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
+  const clearOrderTimers = useCallback(() => {
+    if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
+    if (holdLimitTimerRef.current) clearTimeout(holdLimitTimerRef.current);
+    releaseTimerRef.current = null;
+    holdLimitTimerRef.current = null;
+  }, []);
+  const dropHeldOrder = useCallback(() => {
+    clearOrderTimers();
+    draggingRef.current = false;
+    setHeldOrder(null);
+  }, [clearOrderTimers]);
   const holdRowOrder = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
     releaseTimerRef.current = null;
+    holdLimitTimerRef.current ??= setTimeout(dropHeldOrder, ORDER_HOLD_MAX_MS);
     setHeldOrder((current) => current?.context === orderContext ? current : { context: orderContext, keys: shownKeysRef.current });
-  }, [orderContext]);
-  const releaseRowOrder = useCallback((delay = ORDER_SETTLE_MS) => {
+  }, [dropHeldOrder, orderContext]);
+  const releaseRowOrder = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
-    releaseTimerRef.current = null;
-    if (delay <= 0) {
-      setHeldOrder(null);
-      return;
-    }
-    releaseTimerRef.current = setTimeout(() => {
-      releaseTimerRef.current = null;
-      setHeldOrder(null);
-    }, delay);
-  }, []);
-  useEffect(() => () => { if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current); }, []);
+    releaseTimerRef.current = setTimeout(dropHeldOrder, ORDER_SETTLE_MS);
+  }, [dropHeldOrder]);
+  useFocusEffect(useCallback(() => dropHeldOrder, [dropHeldOrder]));
+  useEffect(() => clearOrderTimers, [clearOrderTimers]);
   const emptyError = Boolean(dataError) && shownItems.length === 0;
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
@@ -209,6 +218,7 @@ export default function ChatsScreen() {
         onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
         onScrollBeginDrag={(event) => { draggingRef.current = true; holdRowOrder(); pullRefresh.onScrollBeginDrag(event); }}
         onScrollEndDrag={() => { draggingRef.current = false; releaseRowOrder(); }}
+        onMomentumScrollEnd={() => { draggingRef.current = false; releaseRowOrder(); }}
         scrollEventThrottle={16}
         data={shownItems}
         extraData={rowExtraData}
@@ -220,7 +230,7 @@ export default function ChatsScreen() {
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
-          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { releaseRowOrder(0); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
+          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
@@ -258,16 +268,31 @@ function chatItemKey(item: ChatListItem) {
   return item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`;
 }
 
-/** Held rows keep their slots with fresh content; rows that arrived meanwhile append, so nothing above them shifts. */
+/** A group is a top-level row with the fork rows and toggle drawn under it. */
+function chatItemGroups(items: readonly ChatListItem[]) {
+  const groups: { key: string; items: ChatListItem[] }[] = [];
+  for (const item of items) {
+    const nested = item.kind === "fork-toggle" || (item.kind === "local-session" && (item.tree?.depth ?? 0) > 0);
+    const current = groups.at(-1);
+    if (nested && current) current.items.push(item);
+    else groups.push({ key: chatItemKey(item), items: [item] });
+  }
+  return groups;
+}
+
+/**
+ * Held groups keep their slots with fresh content; groups that arrived meanwhile append, so nothing
+ * above them shifts. Rows inside a group take the fresh order, which keeps fork rows under their parent.
+ */
 function holdOrder(items: ChatListItem[], keys: readonly string[]): ChatListItem[] {
-  const byKey = new Map(items.map((item) => [chatItemKey(item), item] as const));
+  const byKey = new Map(chatItemGroups(items).map((group) => [group.key, group.items] as const));
   const held = keys.flatMap((key) => {
-    const item = byKey.get(key);
-    if (!item) return [];
+    const group = byKey.get(key);
+    if (!group) return [];
     byKey.delete(key);
-    return [item];
+    return group;
   });
-  return [...held, ...byKey.values()];
+  return [...held, ...[...byKey.values()].flat()];
 }
 
 function toggleSetMember(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
