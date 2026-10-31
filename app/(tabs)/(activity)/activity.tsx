@@ -8,12 +8,13 @@ import { useApp } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, AppRefreshControl, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 
 export default function ActivityScreen() {
@@ -38,12 +39,14 @@ export default function ActivityScreen() {
       setPullRefreshing(false);
     }
   };
+  const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <LargeTitleBar title={t("tabs.activity")} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={<AppRefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={nativeHeaders ? undefined : headerHeight} />}>
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
+      {pullRefresh.header}
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">

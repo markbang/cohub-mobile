@@ -54,8 +54,9 @@ import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
-import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, listRefreshProps, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
+import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
+import { useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
@@ -1183,6 +1184,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     measureVisibleRows();
   }, [measureVisibleRows, trace]);
   const handleListRefresh = useCallback(() => { void refreshSession(sessionId); }, [refreshSession, sessionId]);
+  const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh });
+  const { onScroll: trackPull, onScrollBeginDrag: trackPullStart } = pullRefresh;
+  const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
+  const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
   const renderMessage = useCallback(({ item, index }: { item: MessageRecord; index: number }) => {
     const chronologicalIndex = index;
     const isTransitionMessage = sendTransition?.destination === "bubble" && !queueTransitionActive && isSendBubbleMessage(item, sendTransition.message);
@@ -1235,8 +1240,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           viewabilityConfig={messageViewabilityConfig}
           onViewableItemsChanged={onViewableItemsChanged}
           scrollEventThrottle={100}
-          onScroll={handleScroll}
-          onScrollBeginDrag={handleScrollBeginDrag}
+          onScroll={handleListScroll}
+          onScrollBeginDrag={handleListDragBegin}
           onScrollEndDrag={handleScrollEndDrag}
           onMomentumScrollBegin={handleMomentumScrollBegin}
           onMomentumScrollEnd={handleMomentumScrollEnd}
@@ -1244,8 +1249,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           scrollIndicatorInsets={listIndicatorInsets}
           contentContainerStyle={listContentStyle}
           onContentSizeChange={handleContentSizeChange}
-          {...listRefreshProps({ refreshing: view.refreshing, onRefresh: handleListRefresh, progressViewOffset: headerHeight })}
-          ListHeaderComponent={view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}
+          {...pullRefresh.listProps}
+          ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /> : null}
         {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}

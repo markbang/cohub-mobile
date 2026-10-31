@@ -439,6 +439,7 @@ const chromeScope = {
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
+  useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
@@ -691,7 +692,6 @@ for (const [tab, component, expectedRequests] of [
   assert.equal(render().find((node) => node.type === "Screen").props.edgeToEdge, true);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingTop, 103, `${tab}: initial content clears the measured header`);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingBottom, 80, `${tab}: the last item clears the floating tabs`);
-  assert.equal(refresh().props.progressViewOffset, 103, `${tab}: refresh feedback clears the header`);
   assert.equal(refresh().props.refreshing, false, `${tab}: automatic loading must not show the pull-to-refresh spinner`);
   assert.equal(requests.length, 0, `${tab}: rendering the refresh control does not start a request`);
   for (const failed of [false, true]) {

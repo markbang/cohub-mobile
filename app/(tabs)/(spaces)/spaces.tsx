@@ -21,10 +21,11 @@ import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances }
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, PrimaryButton, Screen, SearchField } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, PrimaryButton, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
@@ -211,6 +212,7 @@ export default function SpacesScreen() {
   // Android menus have no check mark of their own, so the chosen scope trades its glyph for one.
   const filterActions: NativeMenuAction[] = filterOptions.map((option) => ({ icon: !nativeMenus && option.value === filter ? "check" : option.icon, title: option.label, checked: option.value === filter, onPress: () => setFilter(option.value) }));
   const openCreate = () => { setCreateError(null); setCreateOpen(true); };
+  const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
     title: t("tabs.spaces"),
     search: { query, onQueryChange: setQuery, placeholder: t("spaces.search.placeholder") },
@@ -231,20 +233,22 @@ export default function SpacesScreen() {
     </EdgeHeader>}
     <LegendList
       ref={listRef}
-      onScroll={onScroll}
+      onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
+      onScrollBeginDrag={pullRefresh.onScrollBeginDrag}
       scrollEventThrottle={16}
       data={listItems}
       extraData={rowExtraData}
       estimatedItemSize={80}
       keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
       renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
-      {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: nativeHeaders ? undefined : headerHeight })}
+      {...pullRefresh.listProps}
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       keyboardShouldPersistTaps="handled"
       {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
       contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
       ListHeaderComponent={<View>
+        {pullRefresh.header}
         {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
         <View className="px-3">
         {nativeHeaders && dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}

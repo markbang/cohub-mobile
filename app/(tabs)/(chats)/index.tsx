@@ -13,7 +13,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, Screen, SearchField } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
@@ -24,6 +24,7 @@ import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/sessi
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
@@ -142,6 +143,7 @@ export default function ChatsScreen() {
   // Android menus have no check mark of their own, so the chosen source trades its glyph for one.
   const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: !nativeMenus && option.value === sourceFilter ? "check" : option.icon, title: option.label, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
   const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
+  const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
     title: t("tabs.chats"),
     search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
@@ -168,7 +170,8 @@ export default function ChatsScreen() {
       </EdgeHeader>}
       <LegendList
         ref={listRef}
-        onScroll={onScroll}
+        onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
+        onScrollBeginDrag={pullRefresh.onScrollBeginDrag}
         scrollEventThrottle={16}
         data={listItems}
         extraData={rowExtraData}
@@ -185,12 +188,13 @@ export default function ChatsScreen() {
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
-        {...listRefreshProps({ refreshing: pullRefreshing, onRefresh: refreshOnPull, progressViewOffset: nativeHeaders ? undefined : headerHeight })}
+        {...pullRefresh.listProps}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
         ListHeaderComponent={<View>
+          {pullRefresh.header}
           {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
           <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
