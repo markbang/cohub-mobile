@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.4](https://github.com/markbang/cohub-mobile/compare/v2.3.3...v2.3.4) (2026-10-31)
+
+
+### Fixes
+
+* **chat:** lift the timeline with the keyboard instead of resizing it ([#148](https://github.com/markbang/cohub-mobile/issues/148)) ([b6270fb](https://github.com/markbang/cohub-mobile/commit/b6270fb2fddb727d638e3bc405af5705cedd4e4c))
+
 ## [2.3.3](https://github.com/markbang/cohub-mobile/compare/v2.3.2...v2.3.3) (2026-10-31)
 
 
