@@ -14,6 +14,7 @@ import { traceAction } from "@/src/data/interaction-trace";
 import { ContextMenu } from "@/src/components/ContextMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import { haptics } from "@/src/platform/haptics";
+import { SwipeActions } from "@/src/ui/SwipeActions";
 
 type SessionRowProps = {
   session: UserSessionListItem;
@@ -100,7 +101,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     onPressIn={onPressIn}
     onLongPress={!peek ? onLongPress : nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
   />;
-  if (!peek) return row;
+  if (!peek) return onLongPress ? <SwipeActions trailing={[{ icon: "tag", label: t("labels.title"), tone: "neutral", onPress: onLongPress }]}>{row}</SwipeActions> : row;
   if (nativeContextMenus) return <NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu>;
   return <>
     {row}

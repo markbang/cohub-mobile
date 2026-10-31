@@ -10,6 +10,7 @@ import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 import { useTranslation } from "@/src/i18n";
 import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
+import { SwipeActions } from "@/src/ui/SwipeActions";
 import { haptics } from "@/src/platform/haptics";
 
 type SpaceRowProps = {
@@ -57,10 +58,12 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
     ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin } as const] : []),
   ] as const;
   const preview = { title: name, body: space.description?.trim() || undefined, footnote: [active ? t("ui.active") : null, countLabel, formatRelativeTime(space.lastActivityAt)].filter(Boolean).join(" · ") };
-  if (nativeContextMenus) return <NativeContextMenu menu="space-row" actions={actions} preview={preview}>{row}</NativeContextMenu>;
+  // Messages pins from the leading edge.
+  const swipe = onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", label: pinned ? t("space.unpin") : t("space.pin"), tone: "accent", disabled: pinning, onPress: onTogglePin } as const] : [];
+  if (nativeContextMenus) return <SwipeActions leading={swipe}><NativeContextMenu menu="space-row" actions={actions} preview={preview}>{row}</NativeContextMenu></SwipeActions>;
   return (
     <>
-      {row}
+      <SwipeActions leading={swipe}>{row}</SwipeActions>
       {menuAt ? <ContextMenu
         visible
         x={menuAt.x}
