@@ -9,6 +9,14 @@ export const motion = {
   sendBubble: { duration: 360, dampingRatio: 1 },
 } as const;
 
+/** Cubic-bezier control points; spread into Reanimated's `Easing.bezier`. Nothing on screen eases in. */
+export const curves = {
+  /** Entering and exiting. */
+  easeOut: [0.23, 1, 0.32, 1],
+  /** Moving between two on-screen positions. */
+  easeInOut: [0.77, 0, 0.175, 1],
+} as const;
+
 // UIKit's sheet spring (mass 3, stiffness 1000), as measured from UISheetPresentationController:
 // critically damped, settles in about 0.5 s. A release thrown toward its target lands with ~0.8 damping.
 const SHEET_MASS = 3;
@@ -22,9 +30,8 @@ export const springs = {
   /** A selection capsule sliding between tabs or segments. */
   indicator: { duration: 380, dampingRatio: 0.82 },
   pressIn: { duration: 140, dampingRatio: 1 },
-  pressOut: { duration: 360, dampingRatio: 0.62 },
-  /** A small selection pop, such as a tab icon becoming active. */
-  pop: { duration: 380, dampingRatio: 0.55 },
+  /** Cards are pressed tens of times a day, so the release settles with only a trace of overshoot. */
+  pressOut: { duration: 320, dampingRatio: 0.86 },
   // The tab bar's lens, after UIKit's tab bar as measured frame by frame (see FloatingTabBar).
   dockLift: { duration: 250, dampingRatio: 1 },
   dockTravel: { duration: 400, dampingRatio: 0.85 },
@@ -41,15 +48,37 @@ export const press = {
   compactScale: 0.92,
 } as const;
 
+/** A control whose glyph swaps (send, stop, add, close) on every use: a short crossfade with a hint of scale, no bounce. */
+export const glyphSwap = {
+  fromScale: 0.9,
+} as const;
+
 /**
- * Menus and popovers, after the ColorOS popup measured frame by frame: the panel unfolds from its anchor
- * without overshoot, mostly downward, and closes by shrinking back while it blurs and fades.
+ * Menus and popovers open many times a day, so the panel only hints at its anchor: a short ease-out
+ * from just under full size, taller growth than wider, and a quicker fade back on close.
  */
 export const popover = {
-  open: { duration: 280 },
-  close: { duration: 200 },
-  /** It grows taller far more than wider, so it reads as unfolding rather than zooming. */
-  from: { x: 0.8, y: 0.5 },
-  /** Blur radius a closing panel reaches; Android only, where `filter: blur` is supported. */
-  closeBlur: 10,
+  open: { duration: 200 },
+  close: { duration: 150 },
+  from: { x: 0.97, y: 0.95 },
+} as const;
+
+/** Drawn Android alerts and action sheets. */
+export const dialog = {
+  enter: { duration: 220 },
+  fromScale: 0.95,
+  sheet: { duration: 300, dampingRatio: 1 },
+} as const;
+
+/** Ambient loops that signal ongoing work; each one stops under Reduce Motion unless noted. */
+export const loops = {
+  /** Eyes stay shut this long per blink. Blinking survives Reduce Motion: it is a crossfade, not movement. */
+  blink: { duration: 130 },
+  /** Uneven gaps between blinks so the loop does not read as a metronome. */
+  blinkGaps: [2900, 4700, 3500],
+  /** How long the mascot holds each glance, and how long its eyes take to move. */
+  glanceHold: { duration: 800 },
+  glanceMove: { duration: 120 },
+  /** One slow breath of a running avatar ring. */
+  runningRing: { duration: 2400 },
 } as const;

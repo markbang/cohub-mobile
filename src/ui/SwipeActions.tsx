@@ -32,7 +32,8 @@ const TONES = {
 export function SwipeActions({ leading = [], trailing = [], children }: { leading?: readonly SwipeAction[]; trailing?: readonly SwipeAction[]; children: ReactNode }) {
   const offset = useSharedValue(0);
   const start = useSharedValue(0);
-  const [open, setOpen] = useState(false);
+  // Which side is open: 1 leading, -1 trailing, 0 closed.
+  const [open, setOpen] = useState(0);
   const leadWidth = leading.length * ACTION_WIDTH;
   const trailWidth = trailing.length * ACTION_WIDTH;
 
@@ -51,27 +52,37 @@ export function SwipeActions({ leading = [], trailing = [], children }: { leadin
       const projected = offset.get() + event.velocityX * RELEASE_PROJECTION_S;
       const target = leadWidth && projected > leadWidth / 2 ? leadWidth : trailWidth && projected < -trailWidth / 2 ? -trailWidth : 0;
       offset.set(withSpring(target, { ...springs.sheet, velocity: event.velocityX, overshootClamping: true }));
-      scheduleOnRN(setOpen, target !== 0);
+      scheduleOnRN(setOpen, Math.sign(target));
       if (target !== 0) scheduleOnRN(haptics.selection);
     }), [leadWidth, offset, start, trailWidth]);
 
-  const close = () => { offset.set(withSpring(0, { ...springs.sheet, overshootClamping: true })); setOpen(false); };
+  const close = () => { offset.set(withSpring(0, { ...springs.sheet, overshootClamping: true })); setOpen(0); };
   const rowStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
-  const leadStyle = useAnimatedStyle(() => ({ opacity: interpolate(offset.get(), [0, leadWidth * 0.5 || 1], [0, 1], "clamp"), width: Math.max(0, offset.get()) }));
-  const trailStyle = useAnimatedStyle(() => ({ opacity: interpolate(-offset.get(), [0, trailWidth * 0.5 || 1], [0, 1], "clamp"), width: Math.max(0, -offset.get()) }));
+  // The actions sit at full width under the opaque row, which uncovers them as it slides, so a swipe
+  // moves only the row's transform and never re-lays-out the actions.
+  const leadStyle = useAnimatedStyle(() => ({ opacity: interpolate(offset.get(), [0, leadWidth * 0.5 || 1], [0, 1], "clamp") }));
+  const trailStyle = useAnimatedStyle(() => ({ opacity: interpolate(-offset.get(), [0, trailWidth * 0.5 || 1], [0, 1], "clamp") }));
 
   if (!leadWidth && !trailWidth) return children;
   return <GestureDetector gesture={gesture}>
     <View collapsable={false}>
-      {leadWidth ? <Animated.View className="absolute bottom-0 left-0 top-0 flex-row overflow-hidden" style={leadStyle}><Actions actions={leading} onDone={close} /></Animated.View> : null}
-      {trailWidth ? <Animated.View className="absolute bottom-0 right-0 top-0 flex-row justify-end overflow-hidden" style={trailStyle}><Actions actions={trailing} onDone={close} /></Animated.View> : null}
+      {leadWidth ? <Animated.View {...coveredUnless(open === 1)} className="absolute bottom-0 left-0 top-0 flex-row" style={[{ width: leadWidth }, leadStyle]}><Actions actions={leading} onDone={close} /></Animated.View> : null}
+      {trailWidth ? <Animated.View {...coveredUnless(open === -1)} className="absolute bottom-0 right-0 top-0 flex-row justify-end" style={[{ width: trailWidth }, trailStyle]}><Actions actions={trailing} onDone={close} /></Animated.View> : null}
       <Animated.View className="bg-background" style={rowStyle}>
         {children}
         {/* An open row closes on the next tap rather than opening what is under the finger. */}
-        {open ? <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={close} /> : null}
+        {open !== 0 ? <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={close} /> : null}
       </Animated.View>
     </View>
   </GestureDetector>;
+}
+
+/**
+ * Covered actions take no touches, since a tap on a non-pressable part of the row would fall through to
+ * them, and stay out of the screen reader, which reaches them through the row's accessibility actions.
+ */
+function coveredUnless(shown: boolean) {
+  return { pointerEvents: shown ? "auto" : "none", accessibilityElementsHidden: !shown, importantForAccessibility: shown ? "auto" : "no-hide-descendants" } as const;
 }
 
 function Actions({ actions, onDone }: { actions: readonly SwipeAction[]; onDone: () => void }) {

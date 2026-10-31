@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardEvents } from "react-native-keyboard-controller";
 import Reanimated, { cancelAnimation, Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
@@ -136,10 +137,11 @@ export function AdaptiveSheet({
 
   useEffect(() => {
     if (!visible) return;
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSubscription = Keyboard.addListener(showEvent, (event) => setKeyboardHeight(event.endCoordinates.height));
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    // Android's own events wait for the keyboard to finish moving; keyboard-controller's start with it, as iOS's do.
+    const showSubscription = Platform.OS === "ios"
+      ? Keyboard.addListener("keyboardWillShow", (event) => setKeyboardHeight(event.endCoordinates.height))
+      : KeyboardEvents.addListener("keyboardWillShow", (event) => setKeyboardHeight(event.height));
+    const hideSubscription = (Platform.OS === "ios" ? Keyboard : KeyboardEvents).addListener("keyboardWillHide", () => setKeyboardHeight(0));
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
