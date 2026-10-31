@@ -743,6 +743,7 @@ export const en = {
   "chat.startFailed.title": "Chat could not start",
   "chat.startFailed.body": "Unable to start this Chat.",
   "chat.draft.loadingSpace": "Loading Space",
+  "chat.draft.loadSpaceFailed": "Unable to load this Space.",
   "chat.draft.starting": "Starting Chat…",
   "chat.draft.title": "What are you working on?",
   "chat.draft.body":

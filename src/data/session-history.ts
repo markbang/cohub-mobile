@@ -208,6 +208,12 @@ export function mergeDisplayMessages(
 		.sort((a, b) => a.sequence - b.sequence);
 }
 
+/** Failed sends a server Turn claimed by `clientMessageId` while merging; their local cache rows are stale. */
+export function claimedFailedSends(before: readonly MessageRecord[], merged: readonly MessageRecord[]) {
+	const kept = new Set(merged.map((message) => message.id));
+	return before.filter((message) => isFailedSend(message) && !kept.has(message.id)).map((message) => message.id);
+}
+
 export function nextTurnSequence(
 	turns: Pick<SessionTurnRecord, "sequence">[],
 	messages: Pick<MessageRecord, "meta">[],

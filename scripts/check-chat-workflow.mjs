@@ -24,7 +24,7 @@ import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, togg
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
-import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, settleInterruptedSends, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
+import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendMessage, isFailedSend, settleInterruptedSends, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
@@ -2573,7 +2573,7 @@ const reopenScope = {
   stateRef: { current: { sessions: [reopenView.session], spaces: [reopenView.space], sessionViews: { session: reopenView } } },
   dispatch: (action) => reopenActions.push(action),
   loadMessages: async () => { reopenCacheReads += 1; return []; },
-  settleInterruptedSends,
+  settleInterruptedSends, claimedFailedSends, deleteMessages: async () => {},
   userKey: "test-user",
   recordSpaceVisit: () => {},
   attachSessionRealtime: () => { reopenAttachments += 1; },
@@ -2609,7 +2609,7 @@ const windowOf = (from, to, hasMoreOlder, hasMoreNewer) => ({ turns: turnRange(f
   const live = [{ id: "in", meta: { turnSequence: 25 } }, { id: "past", meta: { turnSequence: 101 } }, { id: "unknown", meta: {} }];
   assert.deepEqual(messagesInWindow(live, detached).map((message) => message.id), ["in"], "a detached window shows only its own Turns, not records from the running tail");
 }
-async function refreshWith(view, head) {
+async function refreshWith(view, head, overrides = {}) {
   const actions = [];
   const refreshScope = {
     client: { space: () => ({ session: () => ({ turns: { listPaginated: async () => ({ session: view.session, turns: head.turns, hasMore: head.hasMoreOlder }) } }) }) },
@@ -2623,8 +2623,10 @@ async function refreshWith(view, head) {
     mergeTurnWindows, mergeDisplayMessages, messagesFromTurns,
     isLiveMessage: () => false,
     saveMessages: async () => {},
+    claimedFailedSends, deleteMessages: async () => {},
     userKey: "test-user",
     translate: (key) => key,
+    ...overrides,
   };
   const refresh = new Function(...Object.keys(refreshScope), ts.transpileModule(`return (${sessionCallbacks.refreshSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(refreshScope));
   await refresh("session", { silent: true, catchUp: true });
@@ -2666,7 +2668,7 @@ try {
     stateRef: { current: { sessions: [{ id: "session", spaceId: "space" }], spaces: [{ id: "space" }], sessionViews: { session: { messages: [], session: { id: "session", spaceId: "space" }, space: { id: "space" } } } } },
     dispatch: (action) => coldActions.push(action),
     loadMessages: async () => [],
-    settleInterruptedSends,
+    settleInterruptedSends, claimedFailedSends, deleteMessages: async () => {},
     userKey: "test-user",
     recordSpaceVisit: () => {},
     attachSessionRealtime: () => {},
@@ -3744,7 +3746,7 @@ const liveRowScope = {
   chatScrollTrace: { isRecording: () => false }, trackRow: () => {},
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
-  handleCopyMessage: () => {}, retrySend: () => {}, discardSend: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
+  handleCopyMessage: () => {}, retrySend: () => {}, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
@@ -4163,6 +4165,54 @@ assert.deepEqual(
     assert.deepEqual([cachedFailure.id, cachedFailure.meta.optimistic, isFailedSend(cachedFailure), cachedFailure.errorMessage, deleted.length], ["local-client", undefined, true, "Network down", 0], "the cache records the failure, so a restart shows a failed send instead of one stuck sending");
     assert.deepEqual(failedSendDraft(cachedFailure), { text: "Hello", attachments: [photoDraft], model: { provider: "openai", id: "gpt-5" }, harness: "codex" }, "retry resends the original text, attachments, model, and Harness");
   }
+  // Retrying replaces the failed row: the cache upserts, so the send path must not write back the
+  // view snapshot that still holds the row the retry just deleted.
+  for (const fails of [false, true]) {
+    const rowKey = (message) => typeof message.meta?.turnId === "string" ? `${message.meta.turnId}:${message.role}` : message.id;
+    const failedRow = failedSendMessage({ id: "local-old", sessionId: "fixture", role: "user", sequence: 1, text: "Hello", content: [], meta: { optimistic: true, clientMessageId: "old", turnSequence: 1, sendDraft: { text: "Hello", attachments: [], model: null, harness: null } } }, "Network down");
+    const cache = new Map([[rowKey(failedRow), failedRow]]);
+    const write = async (_user, _session, rows) => { await null; for (const row of rows) cache.set(rowKey(row), row); };
+    const remove = async (_user, _session, ids) => { await null; for (const id of ids) cache.delete(id); };
+    let retry;
+    const sendScope = {
+      stateRef: { current: { sessionViews: { fixture: { session: { spaceId: "space" }, turns: [], messages: [failedRow], stream: null } } } },
+      client: { space: () => ({ prompt: async () => { if (fails) throw new Error("Still down"); return { mode: "immediate", turn: queuedFollowup("accepted", 1, { status: "running", meta: { clientMessageId: "new" } }) }; } }) },
+      translate: (key) => key, newId: () => "new", nextTurnSequence,
+      optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
+      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: () => {},
+      saveMessages: write, deleteMessages: remove, failedSendMessage,
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
+    };
+    const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
+    const draft = failedSendDraft(failedRow);
+    retry = send("fixture", draft.text, draft.attachments, { onOptimistic: () => { void remove("user", "fixture", [failedRow.id]); } });
+    if (fails) await assert.rejects(retry); else await retry;
+    await flushSync();
+    assert.equal(cache.has("local-old"), false, "after a retry the cache no longer holds the old failed row, so a cold start cannot resend it");
+    assert.deepEqual([...cache.keys()], fails ? ["local-new"] : [], fails ? "a retry that fails again leaves only its own failed row" : "an accepted retry leaves only the server's rows");
+  }
+  {
+    // Cold open: a send accepted before the process died is claimed by its cached Turn row and leaves the cache.
+    const deleted = [];
+    const accepted = { id: "turn-3:user", role: "user", sequence: 5, meta: { turnId: "turn-3", turnSequence: 3, clientMessageId: "killed" } };
+    const killed = { id: "local-killed", role: "user", sequence: 5, meta: { optimistic: true, clientMessageId: "killed", turnSequence: 3, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } };
+    const actions = [];
+    const scope = {
+      client: { space: () => ({ session: () => ({ turns: { listPaginated: () => new Promise(() => {}) } }) }) },
+      openTokens: { current: new Map() },
+      stateRef: { current: { sessions: [{ id: "session", spaceId: "space" }], spaces: [{ id: "space" }], sessionViews: { session: { messages: [], session: { id: "session", spaceId: "space" }, space: { id: "space" } } } } },
+      dispatch: (action) => actions.push(action), loadMessages: async () => [accepted, killed],
+      settleInterruptedSends, claimedFailedSends, mergeDisplayMessages, deleteMessages: async (_user, _session, ids) => { deleted.push(...ids); },
+      userKey: "test-user", recordSpaceVisit: () => {}, attachSessionRealtime: () => {}, refreshSession: async () => {}, messagesFromTurns: () => [],
+      isLiveMessage: () => false, saveMessages: async () => {}, markChatEntry: () => {}, startChatEntry: () => {}, translate: (key) => key,
+      withTimeout: (promise) => promise, displaySpaceName: (space) => space.name,
+    };
+    const open = new Function(...Object.keys(scope), ts.transpileModule(`return (${sessionCallbacks.loadSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
+    void open("session");
+    await flushSync();
+    assert.deepEqual(deleted, ["local-killed"], "the claimed failed row is removed from the cache, so later cold starts do not flash it");
+  }
   // A process killed mid-send leaves its row marked in flight; the next cold open settles it.
   const inFlight = { id: "local-a", role: "user", sequence: 9, errorMessage: null, meta: { optimistic: true, clientMessageId: "a", turnSequence: 5, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } };
   const legacy = { id: "local-b", role: "user", sequence: 11, meta: { optimistic: true, clientMessageId: "b" } };
@@ -4171,7 +4221,7 @@ assert.deepEqual(
   assert.deepEqual(settled.map((message) => [message.id, isFailedSend(message), message.meta.optimistic]), [["turn:user", false, undefined], ["local-a", true, undefined]], "no cached message stays sending forever: retryable ones fail, ones without a draft drop");
 }
 const reducerFunction = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
-const reduceQueueFailure = new Function("failedSendMessage", "isFailedSend", "recordDebugEvent", "updateView", "emptyView", ts.transpileModule(`${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(failedSendMessage, isFailedSend, () => {}, (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }), () => ({ messages: [] }));
+const reduceQueueFailure = new Function("failedSendMessage", "isFailedSend", "mergeDisplayMessages", "recordDebugEvent", "updateView", "emptyView", ts.transpileModule(`${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(failedSendMessage, isFailedSend, mergeDisplayMessages, () => {}, (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }), () => ({ messages: [] }));
 const failedQueuedMessage = { id: "upload", role: "user", sequence: 5, meta: { optimistic: true, queuedFollowup: true, clientMessageId: "failed", turnSequence: 3 } };
 {
   // A failed send is one bubble that carries its own retry: no banner, no composer refill, no queue item.
@@ -4187,8 +4237,17 @@ const failedQueuedMessage = { id: "upload", role: "user", sequence: 5, meta: { o
   const accepted = { id: "turn-3:user", role: "user", sequence: 5, meta: { turnId: "turn-3", turnSequence: 3, clientMessageId: "failed" } };
   assert.deepEqual(mergeDisplayMessages([accepted], [bubble]).map((message) => message.id), ["turn-3:user"]);
   assert.deepEqual(mergeDisplayMessages([{ ...accepted, meta: { ...accepted.meta, clientMessageId: "other" } }], [bubble]).map((message) => message.id).sort(), ["turn-3:user", "upload"], "an unrelated Turn with the same number keeps the failed bubble");
+  // Failure is matched by clientMessageId alone, never on a row the server already accepted.
+  const cleared = { id: "local-c", role: "user", sequence: 5, meta: { clientMessageId: "c" } };
+  const afterClear = reduceQueueFailure({ sessionViews: { fixture: { messages: [cleared, { ...accepted, meta: { ...accepted.meta, clientMessageId: "c" } }] } } }, { type: "send-failed", sessionId: "fixture", clientMessageId: "c", message: "Network down" }).sessionViews.fixture.messages;
+  assert.deepEqual(afterClear.map((message) => [message.id, isFailedSend(message)]), [["local-c", true], ["turn-3:user", false]], "a send whose in-flight mark was cleared still fails visibly; the server's Turn row is untouched");
+  // A cold open shows the cache before the server answers: an accepted send must not sit beside its settled failed row.
+  const cachedFailed = failedSendMessage({ id: "local-failed", role: "user", sequence: 5, meta: { optimistic: true, clientMessageId: "failed", turnSequence: 3, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } }, "x");
+  const coldCache = reduceQueueFailure({ sessionViews: { fixture: { messages: [] } } }, { type: "session-cache", sessionId: "fixture", messages: [accepted, cachedFailed] }).sessionViews.fixture.messages;
+  assert.deepEqual(coldCache.map((message) => message.id), ["turn-3:user"], "the cached Turn row claims its failed send before the network answers");
+  assert.deepEqual(claimedFailedSends([accepted, cachedFailed], coldCache), ["local-failed"], "a claimed failed row is identified for deletion from the cache");
 }
-const cachedOpen = reduceQueueFailure({ sessionViews: { fixture: { messages: [], catchingUp: false } } }, { type: "session-cache", sessionId: "fixture", messages: [{ id: "cached" }] });
+const cachedOpen = reduceQueueFailure({ sessionViews: { fixture: { messages: [], catchingUp: false } } }, { type: "session-cache", sessionId: "fixture", messages: [{ id: "cached", sequence: 1 }] });
 assert.equal(cachedOpen.sessionViews.fixture.catchingUp, true, "cached history on screen waits visibly for the server tail");
 assert.equal(reduceQueueFailure(cachedOpen, { type: "session-start", sessionId: "fixture" }).sessionViews.fixture.catchingUp, false, "a restarted open does not inherit an abandoned catch-up");
 assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: false } } }, { type: "session-refresh-start", sessionId: "fixture", silent: true, catchUp: true }).sessionViews.fixture.catchingUp, true);

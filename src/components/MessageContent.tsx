@@ -552,7 +552,7 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
+export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
@@ -605,7 +605,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
     </UserBubbleFrame></BubbleTraceMessage.Provider>
     {failed && (onRetry || onDiscard) ? <View className="flex-row items-center" style={{ marginRight: -8 }}>
       {onDiscard ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.delete")} onPress={() => onDiscard(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="trash" size={14} tone="muted" /><Text className="text-caption font-semibold text-fg-muted">{t("chat.sendFailed.delete")}</Text></Pressable> : null}
-      {onRetry ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.retry")} onPress={() => onRetry(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="refresh" size={14} tone="accent" /><Text className="text-caption font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
+      {onRetry ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.retry")} accessibilityState={{ disabled: retryDisabled }} disabled={retryDisabled} onPress={() => onRetry(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55 disabled:opacity-45"><AppIcon name="refresh" size={14} tone="accent" /><Text className="text-caption font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
     </View> : null}
   </View></BubbleContext.Provider>;
 });

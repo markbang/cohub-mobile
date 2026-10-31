@@ -62,7 +62,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { failedSendMessage, isFailedSend, mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
+import { claimedFailedSends, failedSendMessage, isFailedSend, mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
@@ -588,7 +588,9 @@ function reducer(state: AppState, action: Action): AppState {
         session: action.session,
       });
     case "session-cache":
-      return updateView(state, action.sessionId, { messages: action.messages, loading: false, catchingUp: true });
+      // Cached Turn rows carry their clientMessageId, so a send that was accepted before the
+      // process died does not show twice beside its settled failed row.
+      return updateView(state, action.sessionId, { messages: mergeDisplayMessages(action.messages, []), loading: false, catchingUp: true });
     case "session-success": {
       const session = preferNewerSession(
         state.sessionViews[action.sessionId]?.session,
@@ -822,7 +824,9 @@ function reducer(state: AppState, action: Action): AppState {
       recordDebugEvent("chat.send.failed", { clientMessageIdPresent: typeof action.clientMessageId === "string", message: action.message });
       const view = state.sessionViews[action.sessionId] ?? emptyView();
       // The failed bubble carries the feedback and its retry; the view error is for loading.
-      const messages = view.messages.map((message) => message.meta?.optimistic === true && message.meta.clientMessageId === action.clientMessageId ? failedSendMessage(message, action.message) : message);
+      // Matched by clientMessageId alone, so a send whose in-flight mark was already cleared still
+      // fails visibly; a row projected from a server Turn (it has a turnId) was accepted and stays.
+      const messages = view.messages.map((message) => message.role === "user" && message.meta?.clientMessageId === action.clientMessageId && typeof message.meta.turnId !== "string" ? failedSendMessage(message, action.message) : message);
       return updateView(state, action.sessionId, { sending: false, messages });
     }
     case "send-discard": {
@@ -1684,7 +1688,10 @@ export function AppProvider({
         const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
         // A head that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
         const { turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, head) ?? (loaded.hasMoreNewer ? loaded : head);
-        const messages = mergeDisplayMessages(messagesFromTurns(turns), current?.messages.filter(isLiveMessage) ?? []);
+        const liveMessages = current?.messages.filter(isLiveMessage) ?? [];
+        const messages = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
+        const claimed = claimedFailedSends(liveMessages, messages);
+        if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
         dispatch({
           type: "session-refresh-end",
           sessionId,
@@ -1697,7 +1704,8 @@ export function AppProvider({
           oldestCursor: turns[0]?.sequence ?? null,
           newestCursor: turns.at(-1)?.sequence ?? null,
         });
-        void saveMessages(userKey, sessionId, messages).catch(() => undefined);
+        // In-flight sends own their rows; rewriting them here could revive one its send already removed.
+        void saveMessages(userKey, sessionId, messages.filter((message) => message.meta?.optimistic !== true)).catch(() => undefined);
         markChatEntry("refresh.end", { turns: turns.length });
       } catch (error) {
         if (!isCurrentRequest()) return;
@@ -1976,7 +1984,7 @@ export function AppProvider({
         if (!message) return;
         const currentMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
         dispatch({ type: "message-add", sessionId, message });
-        void saveMessages(userKey, sessionId, mergeMessages(currentMessages, message)).catch(() => undefined);
+        void saveMessages(userKey, sessionId, mergeMessages(currentMessages, message).filter((row) => row.meta?.optimistic !== true)).catch(() => undefined);
       },
     });
     const stop = () => {
@@ -2026,6 +2034,8 @@ export function AppProvider({
           markChatEntry("cache.start");
           const cachedMessages = settleInterruptedSends(await loadMessages(userKey, sessionId), translate("data.messageSendFailed"));
           markChatEntry("cache.end", { count: cachedMessages.length });
+          const claimed = claimedFailedSends(cachedMessages, mergeDisplayMessages(cachedMessages, []));
+          if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
           if (openTokens.current.get(sessionId) === token && cachedMessages.length > 0) {
             dispatch({ type: "session-cache", sessionId, messages: cachedMessages });
           }
@@ -2072,7 +2082,10 @@ export function AppProvider({
         const messages = messagesFromTurns(response.turns);
         const cachedMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
         const liveMessages = cachedMessages.filter(isLiveMessage);
-        dispatch({ type: "session-success", sessionId, space, session: response.session ?? session, messages: mergeDisplayMessages(messages, liveMessages), turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false, oldestCursor: response.turns[0]?.sequence ?? null, newestCursor: response.turns.at(-1)?.sequence ?? null });
+        const shown = mergeDisplayMessages(messages, liveMessages);
+        const claimed = claimedFailedSends(liveMessages, shown);
+        if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
+        dispatch({ type: "session-success", sessionId, space, session: response.session ?? session, messages: shown, turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false, oldestCursor: response.turns[0]?.sequence ?? null, newestCursor: response.turns.at(-1)?.sequence ?? null });
         // The turn index only feeds the turn navigator and marker colors; loading it eagerly made
         // every Chat open pay a second slow request plus a full re-render. It loads when opened.
         void saveMessages(userKey, sessionId, messages).catch(() => undefined);
@@ -2199,7 +2212,9 @@ export function AppProvider({
       recordDebugEvent("chat.send.optimistic_created", { sequence: optimistic.sequence, attachmentCount: attachments.length, hasText: Boolean(text), clientMessageIdPresent: true });
       dispatch({ type: "message-optimistic", sessionId, message: optimistic });
       options.onOptimistic?.(optimistic);
-      void saveMessages(userKey, sessionId, [...(view?.messages ?? []), optimistic]).catch(() => undefined);
+      // Only the new row: the table upserts, and the view snapshot can still hold rows removed since,
+      // such as the failed send a retry just discarded.
+      void saveMessages(userKey, sessionId, [optimistic]).catch(() => undefined);
       dispatch({ type: "send-start", sessionId });
 
       let pending = optimistic;
@@ -2208,7 +2223,7 @@ export function AppProvider({
         const optimisticWithContent = { ...optimistic, content, text: text || optimistic.text };
         pending = optimisticWithContent;
         dispatch({ type: "message-optimistic", sessionId, message: optimisticWithContent });
-        void saveMessages(userKey, sessionId, [...(stateRef.current.sessionViews[sessionId]?.messages ?? []), optimisticWithContent]).catch(() => undefined);
+        void saveMessages(userKey, sessionId, [optimisticWithContent]).catch(() => undefined);
         const response = await client.space(session.spaceId).prompt({
           mode: "agent",
           sessionId,
