@@ -39,6 +39,7 @@ Native changes for the release after v2.3.1. Each one changes the fingerprint, s
 - Expo SDK 58 patch versions match `npx expo install --check` (Expo 58.0.19, Expo Router 58.0.26, Expo Updates 58.0.18). React stays on the SDK's 19.3.0, which React Native 0.88's renderer requires.
 - iOS camera and microphone purpose strings also name Works, which can use them after the viewer allows it, and `locales/zh-Hans.json` translates the purpose strings for Chinese devices.
 - New app icon, splash logo, and notification icon. The Android adaptive icon now draws its gradient from `android-icon-background.png` instead of a flat background color.
+- iOS takes the Icon Composer icon `assets/images/cohub.icon` (Liquid Glass, dark, and tinted styles on iOS 26; Xcode 26 flattens it for older iOS). The launch screen shows the mascot on the app background (`#f6f3ee`, dark `#0c0a09`), and the notification accent is the icon's orange. Check the icon on the home screen in each style and the launch screen in both themes.
 - `reference/cohub` moves to upstream `3886056`, so Android builds a newer `sandboxd` (Go 1.27.2): paginated directory listings for large phone folders and listings that stay readable during concurrent writes. The submodule is not a fingerprint input, so this alone does not stop OTA; it reaches users with the next APK. Recheck the device Runtime and screen sharing on a release APK.
 
 ## One-time repository setup
