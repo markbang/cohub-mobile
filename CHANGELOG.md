@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.3.3](https://github.com/markbang/cohub-mobile/compare/v2.3.2...v2.3.3) (2026-10-31)
+
+
+### Features
+
+* **chat:** open on the latest turn and show replies full width ([#136](https://github.com/markbang/cohub-mobile/issues/136)) ([ce912ed](https://github.com/markbang/cohub-mobile/commit/ce912edc7009125dac23b1175150630c60165ea3))
+* **landing:** refresh screenshots and brand with the new icon and UI ([3aae587](https://github.com/markbang/cohub-mobile/commit/3aae587fa2dbfb6981e31c016499db1776fa9ad4))
+* **native:** ship the brand icon, keyboard-controller, and predictive back ([#144](https://github.com/markbang/cohub-mobile/issues/144)) ([c39c10f](https://github.com/markbang/cohub-mobile/commit/c39c10fb7dff07954e46a4a5ce610b8446309142))
+* **ui:** adopt iOS system components and an icon-derived design ([#143](https://github.com/markbang/cohub-mobile/issues/143)) ([902a530](https://github.com/markbang/cohub-mobile/commit/902a530b9dbd099f9d5842600da054342a1cb223))
+* **ui:** shape loading skeletons after the content they replace ([#134](https://github.com/markbang/cohub-mobile/issues/134)) ([565615b](https://github.com/markbang/cohub-mobile/commit/565615ba2c1de831262d1f30443b9d9f2868dbc3))
+
+
+### Fixes
+
+* **chat:** stop stream text from forcing synchronous renders ([#142](https://github.com/markbang/cohub-mobile/issues/142)) ([fa329ef](https://github.com/markbang/cohub-mobile/commit/fa329efb57e20d66e47f9dbf780e0b9acc20935c))
+* **runtime:** allow thinking level selection for local harness models ([b1c4ed6](https://github.com/markbang/cohub-mobile/commit/b1c4ed6d450830a9763447370fc63b17dd18d23f))
+
+
+### Documentation
+
+* **readme:** show the app icon ([85f0f01](https://github.com/markbang/cohub-mobile/commit/85f0f01541ffb5b5aeb51427371ea09d05e48e9c))
+
 ## [2.3.2](https://github.com/markbang/cohub-mobile/compare/v2.3.1...v2.3.2) (2026-10-25)
 
 
