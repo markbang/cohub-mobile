@@ -38,17 +38,37 @@ type PushRegistrationOptions = {
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
 let notificationHandlerConfigured = false;
+let foregroundSessionId: string | null = null;
+
+/**
+ * Registers the Chat currently on screen (`null` when none). Its notifications skip the
+ * foreground banner but still reach the notification list. Call on Chat focus and blur.
+ */
+export function setForegroundSession(sessionId: string | null) {
+  foregroundSessionId = sessionId?.trim() || null;
+}
 
 function isRecord(value: unknown): value is NotificationRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function notificationDeepLink(response: unknown): string | null {
-  if (!isRecord(response) || !isRecord(response.notification)) return null;
-  const request = response.notification.request;
+function notificationData(notification: unknown): NotificationRecord | null {
+  if (!isRecord(notification)) return null;
+  const request = notification.request;
   if (!isRecord(request) || !isRecord(request.content)) return null;
   const data = request.content.data;
-  if (!isRecord(data)) return null;
+  return isRecord(data) ? data : null;
+}
+
+function isForegroundSessionNotification(notification: unknown) {
+  const sessionId = notificationData(notification)?.sessionId;
+  return foregroundSessionId !== null && typeof sessionId === "string" && sessionId.trim() === foregroundSessionId;
+}
+
+function notificationDeepLink(response: unknown): string | null {
+  if (!isRecord(response)) return null;
+  const data = notificationData(response.notification);
+  if (!data) return null;
   if (typeof data.deepLink === "string" && data.deepLink.trim()) return data.deepLink;
   if (typeof data.sessionId === "string" && data.sessionId.trim()) {
     const turnId = typeof data.turnId === "string" && data.turnId.trim() ? data.turnId.trim() : null;
@@ -67,8 +87,8 @@ async function loadNotifications(): Promise<NotificationsModule | null> {
     .then((module) => {
       if (!notificationHandlerConfigured) {
         module.setNotificationHandler({
-          handleNotification: async () => ({
-            shouldShowBanner: true,
+          handleNotification: async (notification) => ({
+            shouldShowBanner: !isForegroundSessionNotification(notification),
             shouldShowList: true,
             shouldPlaySound: false,
             shouldSetBadge: true,
