@@ -68,6 +68,7 @@ import { activityContributorName, activityRange, localDateKey, tokenDays } from 
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
 import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
+import { RELEASE_GRACE_MS, ToastClock } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
@@ -165,6 +166,37 @@ try {
   await flushSync();
   assert.equal(suspendedReads, 0, "backgrounding between timer admission and execution suppresses the read");
   suspended.dispose();
+} finally { mock.timers.reset(); }
+
+mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+try {
+  const expired = [];
+  const clock = new ToastClock((key) => expired.push(key));
+  clock.start("first", 3200);
+  clock.mount("card-a");
+  clock.hold("card-a", true);
+  // iOS remounts the overlay for a new toast mid-press: the old card's unmount runs before its queued hold lands.
+  clock.unmount("card-a");
+  clock.hold("card-a", true);
+  clock.mount("card-b");
+  clock.start("second", 3200);
+  mock.timers.tick(3200);
+  assert.deepEqual(expired, ["first", "second"], "a hold reported after its card unmounted cannot pause toasts forever");
+
+  clock.start("held", 3200);
+  mock.timers.tick(3000);
+  clock.hold("card-b", true);
+  clock.mount("card-c");
+  clock.hold("card-c", true);
+  clock.unmount("card-c");
+  mock.timers.tick(10000);
+  assert.deepEqual(expired, ["first", "second"], "the clock stays paused while any mounted card still holds it");
+  clock.hold("card-b", false);
+  mock.timers.tick(RELEASE_GRACE_MS - 1);
+  assert.deepEqual(expired, ["first", "second"], "a toast nearly out of time when released still gets the grace period");
+  mock.timers.tick(1);
+  assert.deepEqual(expired, ["first", "second", "held"], "releasing the last hold resumes with at least the grace period");
+  clock.stopAll();
 } finally { mock.timers.reset(); }
 
 const runningFixture = { id: "ancient", spaceId: "space", title: "Old running Chat", lastMessageAt: "2020-01-01T00:00:00Z", updatedAt: "2020-01-01T00:00:00Z", activeTurn: { id: "active", status: "running" } };

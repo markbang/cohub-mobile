@@ -38,3 +38,86 @@ export function expireToast(current: readonly ToastEntry[], key: string): ToastE
 export function dismissToast(current: readonly ToastEntry[], key: string): ToastEntry[] {
   return current.filter((entry) => entry.key !== key);
 }
+
+/** A toast released after being held stays at least this long, so it does not vanish as the finger lifts. */
+export const RELEASE_GRACE_MS = 1500;
+
+type Timer = { handle: ReturnType<typeof setTimeout> | null; remaining: number; startedAt: number };
+
+/**
+ * Every toast runs its own time; while any holder presses the stack, all of them pause. A holder is a card
+ * while it is mounted at the front: a hold reported after it unmounted is dropped, since gesture callbacks
+ * arrive asynchronously and can land after the unmount that already released it.
+ */
+export class ToastClock {
+  private readonly timers = new Map<string, Timer>();
+  private readonly mounted = new Set<string>();
+  private readonly holders = new Set<string>();
+  private readonly onExpire: (key: string) => void;
+
+  constructor(onExpire: (key: string) => void) {
+    this.onExpire = onExpire;
+  }
+
+  start(key: string, duration: number) {
+    this.stop(key);
+    const timer: Timer = { handle: null, remaining: duration, startedAt: 0 };
+    this.timers.set(key, timer);
+    if (!this.paused) this.run(key, timer);
+  }
+
+  mount(holder: string) {
+    this.mounted.add(holder);
+  }
+
+  unmount(holder: string) {
+    this.mounted.delete(holder);
+    this.hold(holder, false);
+  }
+
+  hold(holder: string, holding: boolean) {
+    if (holding && !this.mounted.has(holder)) return;
+    const wasPaused = this.paused;
+    if (holding) this.holders.add(holder);
+    else this.holders.delete(holder);
+    if (wasPaused === this.paused) return;
+    for (const [key, timer] of this.timers) {
+      if (this.paused) {
+        if (!timer.handle) continue;
+        clearTimeout(timer.handle);
+        timer.handle = null;
+        timer.remaining -= Date.now() - timer.startedAt;
+      } else {
+        timer.remaining = Math.max(timer.remaining, RELEASE_GRACE_MS);
+        this.run(key, timer);
+      }
+    }
+  }
+
+  get paused() {
+    return this.holders.size > 0;
+  }
+
+  /** Drops the time of every toast no longer queued. */
+  retain(entries: readonly ToastEntry[]) {
+    for (const key of [...this.timers.keys()]) if (!entries.some((entry) => entry.key === key)) this.stop(key);
+  }
+
+  stopAll() {
+    for (const key of [...this.timers.keys()]) this.stop(key);
+  }
+
+  private stop(key: string) {
+    const timer = this.timers.get(key);
+    if (timer?.handle) clearTimeout(timer.handle);
+    this.timers.delete(key);
+  }
+
+  private run(key: string, timer: Timer) {
+    timer.startedAt = Date.now();
+    timer.handle = setTimeout(() => {
+      this.timers.delete(key);
+      this.onExpire(key);
+    }, timer.remaining);
+  }
+}

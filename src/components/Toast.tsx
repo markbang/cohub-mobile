@@ -6,7 +6,7 @@ import Reanimated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 import { scheduleOnRN } from "react-native-worklets";
-import { dismissToast, expireToast, pushToast, TOAST_DURATION_MS, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
+import { dismissToast, expireToast, pushToast, TOAST_DURATION_MS, ToastClock, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
 import { haptics } from "@/src/platform/haptics";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { useTranslation } from "@/src/i18n";
@@ -21,9 +21,17 @@ type ToastLayerState = {
   topViewport: string | null;
   registerViewport: (id: string) => () => void;
   dismiss: (key: string) => void;
-  hold: (holding: boolean) => void;
+  holds: ToastHolds;
   /** Keys whose entrance already played, so a toast moving to another viewport does not enter twice. */
   entered: Set<string>;
+};
+
+/** Pausing is tracked per mounted card, so one card's late or missing release cannot pause or resume the others. */
+type ToastHolds = {
+  next: () => string;
+  mount: (holder: string) => void;
+  unmount: (holder: string) => void;
+  hold: (holder: string, holding: boolean) => void;
 };
 
 const ToastContext = createContext<ShowToast | null>(null);
@@ -33,8 +41,6 @@ const ToastLayerContext = createContext<ToastLayerState | null>(null);
 const STACK_OFFSET = 10;
 /** Clears the tab bar or composer above the bottom inset, or above the keyboard while it is up. */
 const BOTTOM_CLEARANCE = 84;
-/** A toast released after being held stays at least this long, so it does not vanish as the finger lifts. */
-const RELEASE_GRACE_MS = 1500;
 const DISMISS_DISTANCE = 56;
 const DISMISS_VELOCITY = 800;
 
@@ -44,62 +50,6 @@ export function useToast(): ShowToast {
   return show;
 }
 
-type Timer = { handle: ReturnType<typeof setTimeout> | null; remaining: number; startedAt: number };
-
-/** Every toast runs its own time; a finger on the stack pauses all of them, and releasing gives back at least a grace period. */
-class ToastClock {
-  private readonly timers = new Map<string, Timer>();
-  private held = false;
-
-  constructor(private readonly onExpire: (key: string) => void) {}
-
-  start(key: string, duration: number) {
-    this.stop(key);
-    const timer: Timer = { handle: null, remaining: duration, startedAt: 0 };
-    this.timers.set(key, timer);
-    if (!this.held) this.run(key, timer);
-  }
-
-  hold(holding: boolean) {
-    if (this.held === holding) return;
-    this.held = holding;
-    for (const [key, timer] of this.timers) {
-      if (holding) {
-        if (!timer.handle) continue;
-        clearTimeout(timer.handle);
-        timer.handle = null;
-        timer.remaining -= Date.now() - timer.startedAt;
-      } else {
-        timer.remaining = Math.max(timer.remaining, RELEASE_GRACE_MS);
-        this.run(key, timer);
-      }
-    }
-  }
-
-  /** Drops the time of every toast no longer queued. */
-  retain(entries: readonly ToastEntry[]) {
-    for (const key of [...this.timers.keys()]) if (!entries.some((entry) => entry.key === key)) this.stop(key);
-  }
-
-  stopAll() {
-    for (const key of [...this.timers.keys()]) this.stop(key);
-  }
-
-  private stop(key: string) {
-    const timer = this.timers.get(key);
-    if (timer?.handle) clearTimeout(timer.handle);
-    this.timers.delete(key);
-  }
-
-  private run(key: string, timer: Timer) {
-    timer.startedAt = Date.now();
-    timer.handle = setTimeout(() => {
-      this.timers.delete(key);
-      this.onExpire(key);
-    }, timer.remaining);
-  }
-}
-
 /** Queue state lives outside React so timers and repeated calls read the current stack, not a render's snapshot. */
 class ToastStore {
   entries: ToastEntry[] = [];
@@ -107,12 +57,19 @@ class ToastStore {
   readonly entered = new Set<string>();
   readonly clock = new ToastClock((key) => this.commit(expireToast(this.entries, key)));
   private counter = 0;
+  private holderCounter = 0;
 
   constructor(private readonly publish: (entries: ToastEntry[]) => void) {}
 
   nextKey() {
     this.counter += 1;
     return `toast-${this.counter}`;
+  }
+
+  /** Unique per mounted card, so a remount at the same tree position (and the same `useId`) is a new holder. */
+  nextHolder() {
+    this.holderCounter += 1;
+    return `holder-${this.holderCounter}`;
   }
 
   commit(next: ToastEntry[]) {
@@ -141,7 +98,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [store]);
 
   const dismiss = useCallback((key: string) => store.commit(dismissToast(store.entries, key)), [store]);
-  const hold = useCallback((holding: boolean) => store.clock.hold(holding), [store]);
+  const holds = useMemo<ToastHolds>(() => ({
+    next: () => store.nextHolder(),
+    mount: (holder) => store.clock.mount(holder),
+    unmount: (holder) => store.clock.unmount(holder),
+    hold: (holder, holding) => store.clock.hold(holder, holding),
+  }), [store]);
 
   useEffect(() => () => store.clock.stopAll(), [store]);
 
@@ -152,8 +114,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const topViewport = viewports.at(-1) ?? null;
   const layer = useMemo<ToastLayerState>(
-    () => ({ toasts, topViewport, registerViewport, dismiss, hold, entered: store.entered }),
-    [dismiss, hold, registerViewport, store, toasts, topViewport],
+    () => ({ toasts, topViewport, registerViewport, dismiss, holds, entered: store.entered }),
+    [dismiss, holds, registerViewport, store, toasts, topViewport],
   );
 
   return (
@@ -200,7 +162,7 @@ function Overlay({ front, children }: { front: string; children: ReactNode }) {
 }
 
 function ToastLayer() {
-  const { toasts, dismiss, hold, entered } = useToastLayer();
+  const { toasts, dismiss, holds, entered } = useToastLayer();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardContext().reanimated;
   // The keyboard's height is negative while open; the layer rides it on the UI thread and returns as it closes.
@@ -213,7 +175,7 @@ function ToastLayer() {
       <Reanimated.View pointerEvents="box-none" style={[styles.layer, { bottom: insets.bottom + BOTTOM_CLEARANCE }, liftStyle]}>
         {/* An Android modal has no gesture root of its own. This one is sized to the front card, so it never takes the modal's touches. */}
         <GestureHandlerRootView pointerEvents="box-none" style={styles.root}>
-          {ordered.map((toast) => <ToastCard key={toast.key} toast={toast} depth={toasts.indexOf(toast)} entered={entered} onDismiss={dismiss} onHold={hold} />)}
+          {ordered.map((toast) => <ToastCard key={toast.key} toast={toast} depth={toasts.indexOf(toast)} entered={entered} onDismiss={dismiss} holds={holds} />)}
         </GestureHandlerRootView>
       </Reanimated.View>
     </Overlay>
@@ -227,10 +189,10 @@ type ToastCardProps = {
   depth: number;
   entered: Set<string>;
   onDismiss: (key: string) => void;
-  onHold: (holding: boolean) => void;
+  holds: ToastHolds;
 };
 
-function ToastCard({ toast, depth, entered, onDismiss, onHold }: ToastCardProps) {
+function ToastCard({ toast, depth, entered, onDismiss, holds }: ToastCardProps) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const isFront = depth === 0;
@@ -251,9 +213,16 @@ function ToastCard({ toast, depth, entered, onDismiss, onHold }: ToastCardProps)
 
   const finishDismiss = useCallback(() => onDismiss(toast.key), [onDismiss, toast.key]);
 
-  // A card can unmount mid-press (moved to another viewport) without its gesture finalizing.
-  const pressed = useSharedValue(false);
-  useEffect(() => () => { if (pressed.get()) onHold(false); }, [onHold, pressed]);
+  // A card can unmount or fall behind a newer toast mid-press (an iOS overlay remount, a move between
+  // viewports) without its gesture finalizing. Only the front card may hold; leaving the front or unmounting
+  // releases its hold, and holds it reports afterwards are ignored.
+  const [holder] = useState(holds.next);
+  useEffect(() => {
+    if (!isFront) return;
+    holds.mount(holder);
+    return () => holds.unmount(holder);
+  }, [holder, holds, isFront]);
+  const hold = useCallback((holding: boolean) => holds.hold(holder, holding), [holder, holds]);
 
   useEffect(() => {
     if (!toast.expired) return;
@@ -286,12 +255,12 @@ function ToastCard({ toast, depth, entered, onDismiss, onHold }: ToastCardProps)
   // A finger resting on the toast pauses every toast's time, so the one being read cannot slip away.
   const pan = useMemo(
     () => Gesture.Pan().enabled(isFront).activeOffsetX([-10, 10]).failOffsetY([-12, 12])
-      .onBegin(() => { pressed.set(true); scheduleOnRN(onHold, true); })
+      .onBegin(() => scheduleOnRN(hold, true))
       .onUpdate((event) => onPanUpdate(event.translationX))
       .onEnd((event) => onPanEnd(event.translationX, event.velocityX))
-      .onFinalize(() => { pressed.set(false); scheduleOnRN(onHold, false); }),
+      .onFinalize(() => scheduleOnRN(hold, false)),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- worklet callbacks close over stable shared values
-    [isFront, finishDismiss, onHold, width],
+    [isFront, finishDismiss, hold, width],
   );
 
   const animatedStyle = useAnimatedStyle(() => {
