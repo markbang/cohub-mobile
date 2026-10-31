@@ -8,6 +8,9 @@ name: Debug menu entry
     element:
       id: "settings.version"
     direction: DOWN
+# On to the end, where the list's bottom padding lifts the row clear of the floating tab bar;
+# where it first appears, the bar covers it and takes the taps.
+- scroll
 # The unlock needs five taps inside its reset window, so they cannot be spread out.
 - tapOn:
     id: "settings.version"
