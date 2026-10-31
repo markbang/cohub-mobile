@@ -21,7 +21,8 @@
         "NSCameraUsageDescription": "Cohub uses the camera to attach references to a Chat, and lets Works you approve use it.",
         "NSMicrophoneUsageDescription": "Cohub uses the microphone for voice input, and lets Works you approve use it.",
         "NSPhotoLibraryUsageDescription": "Cohub uses your photo library to attach references to a Chat."
-      }
+      },
+      "icon": "./assets/images/cohub.icon"
     },
     "android": {
       "package": "io.github.markbang.cohubmobile",
@@ -62,7 +63,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#f08349"
+          "color": "#fa7b23"
         }
       ],
       [
@@ -82,9 +83,14 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/splash-mascot.png",
+          "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0f1114"
+          "backgroundColor": "#f6f3ee",
+          "dark": {
+            "image": "./assets/images/splash-mascot.png",
+            "backgroundColor": "#0c0a09"
+          }
         }
       ]
     ],
