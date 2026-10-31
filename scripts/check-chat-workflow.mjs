@@ -1467,7 +1467,7 @@ assert.equal(renderConnectionBanner({ visible: false }), null, "routine connecti
 {
   const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
   assert.ok(classes(nodes[0]).has("absolute"), "the banner overlays content instead of resizing the header");
-  assert.ok(nodes.some((node) => node.type === "AppIcon" && node.props.name === "cloud-off"));
+  assert.ok(nodes.some((node) => node.type === "Mascot" && node.props.mood === "worried"), "an outage shows the worried mascot");
   assert.deepEqual(nodes.filter((node) => node.type === "Text").flatMap((node) => node.props.children), ["ui.banner.unavailable"], "actual connection failures remain visible");
 }
 const scrollTrace = new ChatScrollTrace();

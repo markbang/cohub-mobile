@@ -653,7 +653,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
     <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
-      <AppIcon name="cloud-off" size={14} tone="danger" />
+      <Mascot size={20} mood="worried" />
       <Text numberOfLines={1} className="text-caption text-fg">{t("ui.banner.unavailable")}</Text>
     </View>
   </Animated.View>;
@@ -662,7 +662,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
 export function DataError({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return <View className="mx-4 mt-3 flex-row items-center gap-3 rounded-md bg-danger-soft py-2 pl-3 pr-1" style={CONTINUOUS}>
-    <AppIcon name="cloud-off" size={18} tone="danger" />
+    <Mascot size={32} mood="worried" />
     <View className="min-w-0 flex-1">
       <Text className="text-subhead font-semibold text-fg">{t("ui.dataError.title")}</Text>
       <Text selectable className="text-caption text-danger">{message}</Text>
