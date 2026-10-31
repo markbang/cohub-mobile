@@ -2,6 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { haptics } from "@/src/platform/haptics";
+import { setForegroundSession } from "@/src/platform/notifications";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, KeyboardAvoidingView as RNKeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
@@ -13,7 +14,7 @@ import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-cont
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
-import { useToast } from "@/src/components/Toast";
+import { ToastViewport, useToast } from "@/src/components/Toast";
 import { copyMessageText, MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { SendBubbleOverlay } from "@/src/components/SendBubbleOverlay";
 import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
@@ -224,7 +225,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, []));
   useFocusEffect(useCallback(() => {
     recordDebugEvent("chat.screen.focus", { session: debugAlias("session", sessionId) });
-    return () => recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
+    setForegroundSession(sessionId);
+    return () => {
+      setForegroundSession(null);
+      recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
+    };
   }, [sessionId]));
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", () => {
@@ -1353,6 +1358,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
               </View>
             </Pressable>
           </RNKeyboardAvoidingView>
+          <ToastViewport />
         </Modal>
       </Animated.View>
     </SpacePanels>

@@ -1,8 +1,7 @@
 import { Link, usePreventZoomTransitionDismissal, useRouter } from "expo-router";
 // Internal to expo-router: whether this screen was opened by an Apple zoom transition, which owns its own drag-to-dismiss.
-import { ZoomTransitionTargetContext } from "expo-router/build/link/zoom/zoom-transition-context";
 import { StatusBar } from "expo-status-bar";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Platform, Pressable, Text, View, useWindowDimensions, type AccessibilityActionEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDecay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
@@ -55,7 +54,7 @@ export default function ImageViewerScreen() {
   const [index, setIndex] = useState(() => Math.min(Math.max(payload?.index ?? 0, 0), Math.max(count - 1, 0)));
   const [zoomed, setZoomed] = useState(false);
   const [sizes, setSizes] = useState<Record<number, Size>>({});
-  const zoomTransition = use(ZoomTransitionTargetContext).identifier !== null && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
+  const zoomTransition = payload?.zoom === true && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
 
   // One-shot payload: a deep link or restored state must not reopen the last gallery.
   useEffect(() => clearImageViewerPayload, []);

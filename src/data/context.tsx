@@ -2491,7 +2491,7 @@ export function AppProvider({
         sessionId: session.id,
         spaceId: session.spaceId,
         title: displaySessionTitle(session),
-        spaceName: session.space?.name?.trim() || "Space",
+        spaceName: session.space?.name?.trim() || translate("space.fallbackName"),
         preview: activity?.text || previewText(session.latestMessageText) || previewText(latestTurn?.assistantText || latestTurn?.userText) || translate("session.noMessages"),
         status,
         updatedAt: session.lastMessageAt ?? session.updatedAt,

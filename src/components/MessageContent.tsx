@@ -241,7 +241,7 @@ function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number })
 
   const galleryGesture = useMemo(() => Gesture.Native().disallowInterruption(true), []);
 
-  if (uris.length === 1) return <GalleryThumbnail uri={uris[0]!} index={0} total={1} size={thumbnailWidth} onOpen={() => setImageViewerPayload({ uris, index: 0 })} />;
+  if (uris.length === 1) return <GalleryThumbnail uri={uris[0]!} index={0} total={1} size={thumbnailWidth} onOpen={() => setImageViewerPayload({ uris, index: 0, zoom: true })} />;
 
   return (
     <GestureDetector gesture={galleryGesture}>
@@ -255,7 +255,7 @@ function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number })
         style={{ width: galleryWidth, maxWidth: "100%", height: thumbnailWidth, flexGrow: 0, flexShrink: 1 }}
         contentContainerStyle={{ gap: 8, paddingRight: 4 }}
         keyExtractor={(uri, index) => `${uri}-${index}`}
-        renderItem={({ item: uri, index }) => <GalleryThumbnail uri={uri} index={index} total={uris.length} size={thumbnailWidth} onOpen={() => setImageViewerPayload({ uris, index })} />}
+        renderItem={({ item: uri, index }) => <GalleryThumbnail uri={uri} index={index} total={uris.length} size={thumbnailWidth} onOpen={() => setImageViewerPayload({ uris, index, zoom: true })} />}
       />
     </GestureDetector>
   );
@@ -326,8 +326,8 @@ function toolIcon(name: string): IconName {
 // list (scale(-1) cells on Android) a nested scroller measures at its full
 // maxHeight and leaves a blank gap under short content.
 const TOOL_DETAILS_MAX_HEIGHT = 420;
-// The row itself is the 44pt target; vertical slop would overlap the next tool row.
-const TOOL_ROW_HIT_SLOP = { left: 8, right: 8 } as const;
+// A 36pt row plus 4pt slop each way reaches 44 without spacing tool rows out to full list height.
+const TOOL_ROW_HIT_SLOP = { top: 4, bottom: 4, left: 8, right: 8 } as const;
 
 function CappedCodeText({ value, color }: { value: string; color: string }) {
   const { t } = useTranslation();
@@ -355,7 +355,7 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
   const caption = preview ? `${block.name}: "${preview}"` : block.name;
   const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
   return <View style={{ width: contentWidth }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={TOOL_ROW_HIT_SLOP} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
+    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={TOOL_ROW_HIT_SLOP} onPress={() => setExpanded(!expanded)} className="min-h-9 flex-row items-center gap-2">
       <AppIcon name={toolIcon(block.name)} size={14} color={iconColor} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>
         <Text className="text-fg font-medium">{block.name}</Text>

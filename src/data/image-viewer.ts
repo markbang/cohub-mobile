@@ -5,7 +5,8 @@
  * route params (they would bloat the navigation state and deep links). The gallery
  * writes the payload here and the route reads it once on mount.
  */
-export type ImageViewerPayload = { uris: string[]; index: number };
+/** `zoom` marks a viewer opened through the iOS zoom transition, which then owns the dismiss swipe. */
+export type ImageViewerPayload = { uris: string[]; index: number; zoom?: boolean };
 
 let payload: ImageViewerPayload | null = null;
 

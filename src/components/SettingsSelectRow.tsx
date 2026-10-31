@@ -11,6 +11,7 @@ import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
+import { ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
 
@@ -237,5 +238,6 @@ function SelectMenu<T extends string>({ menu, title, options, value, highlight, 
         })}
       </PopoverSurface>
     </View>
+    <ToastViewport />
   </Modal>;
 }
