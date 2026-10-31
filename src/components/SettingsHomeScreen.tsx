@@ -1,5 +1,5 @@
 import { useRouter, useScrollToTop } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useCurrentUser } from "@/src/auth/current-user";
@@ -41,7 +41,7 @@ export function SettingsHomeScreen() {
   // Preview channels are opted into from the debug menu; keep that visible outside it.
   const updateChannel = currentUpdateChannel();
   const openDebug = useCallback(() => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    haptics.success();
     router.push("/debug");
   }, [router]);
   const unlockDebug = useDebugUnlock(openDebug);

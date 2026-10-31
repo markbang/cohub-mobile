@@ -1,8 +1,12 @@
 import type { ReactElement } from "react";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 
+/** What a long press shows above the menu on iOS, read from data already on screen: never a fetch, never the destination screen itself. */
+export type ContextMenuPreview = { title: string; subtitle?: string; body?: string; footnote?: string };
+
 export type NativeContextMenuProps = {
   actions: readonly NativeMenuAction[];
+  preview?: ContextMenuPreview;
   /** Names the menu in traces. */
   menu: string;
   children: ReactElement;

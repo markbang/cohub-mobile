@@ -39,6 +39,7 @@ export const en = {
   "common.done": "Done",
   "common.loading": "Loading",
   "common.notice": "Notice",
+  "common.open": "Open",
   "common.optional": "optional",
   "common.refresh": "Refresh",
   "common.remove": "Remove",

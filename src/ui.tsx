@@ -26,6 +26,7 @@ import type { IconName } from "@/src/icons";
 import { Glyph } from "@/src/ui/Glyph";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
+import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
@@ -401,7 +402,7 @@ function CompactDrawnSegmented<T extends string>({ options, value, onChange, dis
             onPress={() => {
               traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
-              if (!selected) onChange(option.value);
+              if (!selected) { haptics.selection(); onChange(option.value); }
             }}
             className={`min-h-8.5 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
@@ -446,7 +447,7 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
             onPress={() => {
               traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
-              if (!selected) onChange(option.value);
+              if (!selected) { haptics.selection(); onChange(option.value); }
             }}
             className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}

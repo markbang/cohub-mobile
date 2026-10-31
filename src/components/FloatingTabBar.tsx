@@ -1,7 +1,7 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Keyboard, Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -139,7 +139,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const lensTime = useSharedValue(0);
 
   const tick = useCallback(() => {
-    if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => undefined);
+    haptics.selection();
   }, []);
 
   const select = useCallback((index: number) => {

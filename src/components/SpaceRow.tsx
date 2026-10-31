@@ -45,13 +45,20 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
       onPress={() => { traceAction("space_row", { space: debugAlias("space", space.id), active, pinned }); onPress(); }}
       // The handler stays attached while pinning: without one, Pressable would turn the hold into a press and navigate.
       // On iOS the system context menu owns the hold; the no-op still keeps a hold from becoming a press.
-      onLongPress={onTogglePin && nativeContextMenus ? () => undefined : onTogglePin ? (event) => { if (pinning) return; const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+      onLongPress={nativeContextMenus ? () => undefined : onTogglePin ? (event) => { if (pinning) return; const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
       accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
       onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin && !pinning) onTogglePin(); }}
     />
   );
   // iOS lifts the row into the system context menu; Android opens the drawn menu at the touch.
-  if (nativeContextMenus && onTogglePin) return <NativeContextMenu menu="space-row" actions={[{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin }]}>{row}</NativeContextMenu>;
+  if (nativeContextMenus) return <NativeContextMenu
+    menu="space-row"
+    actions={[
+      { icon: "arrow-right", title: t("common.open"), onPress },
+      ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin } as const] : []),
+    ]}
+    preview={{ title: name, body: space.description?.trim() || undefined, footnote: [active ? t("ui.active") : null, countLabel, formatRelativeTime(space.lastActivityAt)].filter(Boolean).join(" · ") }}
+  >{row}</NativeContextMenu>;
   return (
     <>
       {row}

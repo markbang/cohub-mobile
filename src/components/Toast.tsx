@@ -5,6 +5,7 @@ import Reanimated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { dismissToast, pushToast, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
+import { haptics } from "@/src/platform/haptics";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
@@ -36,6 +37,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     counter.current += 1;
     const entry: ToastEntry = { key: `toast-${counter.current}`, title, message, tone };
     setToasts((current) => pushToast(current, entry));
+    // A neutral toast confirms what the user just did and the control already answered; a failure is news.
+    if (tone === "danger") haptics.failure();
     AccessibilityInfo.announceForAccessibility(message ? `${title}. ${message}` : title);
   }, []);
 

@@ -1,6 +1,6 @@
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { useEffect, useRef, useState } from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -92,7 +92,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
     traceAction("select_choose", { title, value: next });
     close();
     if (next !== value) {
-      if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => undefined);
+      haptics.selection();
       onChange(next);
     }
   };
@@ -138,7 +138,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
       if (index !== highlightRef.get()) {
         highlightRef.set(index);
         setHighlight(index);
-        if (index !== null && Platform.OS !== "web") void Haptics.selectionAsync().catch(() => undefined);
+        if (index !== null) haptics.selection();
       }
     })
     .onTouchesUp((event, manager) => {

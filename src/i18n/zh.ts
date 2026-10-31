@@ -37,6 +37,7 @@ export const zh: Record<TranslationKey, string> = {
   "common.dismiss": "忽略",
   "common.done": "完成",
   "common.loading": "加载中",
+  "common.open": "打开",
   "common.notice": "提示",
   "common.optional": "可选",
   "common.refresh": "刷新",

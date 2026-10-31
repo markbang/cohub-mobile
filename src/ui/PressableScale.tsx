@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View, type PressableAndroidRippleConfig, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { press, springs } from "@/src/motion";
 
 type PressableScaleProps = {
@@ -75,7 +75,7 @@ export function PressableScale({
         onPressIn={() => {
           onPressIn?.();
           if (scale) settle(press.scale);
-          if (haptic) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+          if (haptic) haptics.commit();
         }}
         onPressOut={() => {
           if (scale) settle(1);
