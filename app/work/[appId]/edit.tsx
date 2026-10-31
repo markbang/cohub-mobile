@@ -7,7 +7,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { APP_HIDE_COHUB_BAR_FEATURE, dailyViews, hidesCohubBar, withCohubBar } from "@/src/data/app-manage";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppSwitch, DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
@@ -21,7 +21,7 @@ export default function ManageWorkScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [detail, setDetail] = useState<AppDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

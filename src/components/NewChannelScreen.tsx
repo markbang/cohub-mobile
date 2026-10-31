@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { Image, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { channelProviders, isChannelProvider, type ChannelProvider } from "@/src/data/channel-settings";
 import { useNewChannel } from "@/src/data/use-new-channel";
 import { useTranslation } from "@/src/i18n";
@@ -27,7 +27,7 @@ export function NewChannelScreen() {
 
 function ChannelForm({ provider }: { provider: ChannelProvider }) {
   const router = useRouter();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const { t } = useTranslation();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();

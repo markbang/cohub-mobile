@@ -10,7 +10,7 @@ import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
 import { useToast } from "@/src/components/Toast";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type RemoteSpaceSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
-import { useApp } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
@@ -43,7 +43,10 @@ export default function ChatsScreen() {
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
-  const { state, client, connectionUnavailable, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useApp();
+  const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
+  // Stream batches touch only `sessionViews`, which this tab never reads.
+  const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks, sessionLatestTurns: state.sessionLatestTurns, sessionTurnStatuses: state.sessionTurnStatuses }), shallowEqual);
+  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const searchRef = useRef<TextInput>(null);
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);

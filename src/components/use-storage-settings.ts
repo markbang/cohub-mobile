@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { setCacheRetention, useCacheRetention, type CacheRetention } from "@/src/data/cache-retention";
-import { useApp } from "@/src/data/context";
+import { useAppActions, useAppSelector } from "@/src/data/context";
 import { useTranslation, type Translate } from "@/src/i18n";
 
 export function useStorageSettings() {
   const { t } = useTranslation();
-  const { state, clearCache, applyCacheRetention } = useApp();
+  const { clearCache, applyCacheRetention } = useAppActions();
+  const spaceCount = useAppSelector((app) => app.state.spaces.length);
+  const chatCount = useAppSelector((app) => app.state.sessions.length);
   const retention = useCacheRetention();
   const [clearOpen, setClearOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function useStorageSettings() {
     }
   };
   const openClear = () => { setError(null); setClearOpen(true); };
-  return { spaceCount: state.spaces.length, chatCount: state.sessions.length, retention, busy, error, clearOpen, openClear, closeClear: () => setClearOpen(false), confirmClearCache, selectRetention };
+  return { spaceCount, chatCount, retention, busy, error, clearOpen, openClear, closeClear: () => setClearOpen(false), confirmClearCache, selectRetention };
 }
 
 export function retentionLabel(option: CacheRetention, t: Translate): string {

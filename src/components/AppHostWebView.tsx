@@ -8,7 +8,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { config } from "@/src/config";
 import { APP_SCOPES } from "@/src/data/app-manage";
 import { appDevicesRequest, appHostDelivery, appHostGrant, appHostScript, appNavigationRequest, appNavigationResult, appRuntimeSignal, readAppHostMessage } from "@/src/data/app-host";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation, type Translate, type TranslationKey } from "@/src/i18n";
 import { motion } from "@/src/motion";
 import { openWebLink } from "@/src/platform/browser";
@@ -44,7 +44,7 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
   const theme = useAppTheme();
   const reducedMotion = useReducedMotion();
   const { t, locale } = useTranslation();
-  const { userUuid, getAccessToken } = useApp();
+  const { userUuid, getAccessToken } = useAppActions();
   const web = useRef<ComponentRef<typeof WebView>>(null);
   const ready = useRef(false);
   const [dialog, setDialog] = useState<AppBridgeDialogState>(CLOSED_DIALOG);

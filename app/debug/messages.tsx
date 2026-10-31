@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
 import { compactionFromMessage } from "@/src/data/compaction";
-import { useApp } from "@/src/data/context";
+import { useAppSelector } from "@/src/data/context";
 import { mergeDisplayMessages, messagesFromTurns } from "@/src/data/session-history";
 import { hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { Screen, SectionHeader } from "@/src/ui";
@@ -58,7 +58,7 @@ const CONTROL_MESSAGE: MessageRecord = {
  * "usage missing on the message" from "footer failed to render it".
  */
 export default function DebugMessagesScreen() {
-  const { state } = useApp();
+  const state = useAppSelector((app) => app.state);
   const loaded = useMemo(
     () => state.sessions.filter((session) => state.sessionViews[session.id]),
     [state.sessions, state.sessionViews],

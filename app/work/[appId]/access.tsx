@@ -5,7 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "@/src/components/Toast";
 import { APP_SCOPES } from "@/src/data/app-manage";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { AppSwitch, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
@@ -15,7 +15,7 @@ export default function WorkAccessScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [scopes, setScopes] = useState<Set<Permission> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

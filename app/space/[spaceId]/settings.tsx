@@ -11,7 +11,7 @@ import { cronSummaryText, formatRunTime } from "@/src/components/ScheduleForm";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
@@ -37,7 +37,7 @@ export default function SpaceSettingsScreen() {
   const theme = useAppTheme();
   const { t, locale } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const { env, setEnv, config, setConfig, sandbox, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");

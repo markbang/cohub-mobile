@@ -14,8 +14,8 @@ import { SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
-import { personalSpaceActivity, selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
-import { useApp } from "@/src/data/context";
+import { selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
+import { shallowEqual, useAppActions, useAppSelector, usePersonalSpaceActivity } from "@/src/data/context";
 import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSyncScope } from "@/src/data/use-sync-scope";
@@ -42,7 +42,11 @@ export default function SpacesScreen() {
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
-  const { state, client, connectionUnavailable, refreshHome, createSpace, toggleSpacePin, spaceList, userUuid } = useApp();
+  const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
+  const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
+  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
+  const spaceList = useAppSelector((app) => app.spaceList);
+  const personalActivity = usePersonalSpaceActivity(userUuid);
   const dataError = state.error ?? state.spacesError ?? spaceList.error;
   const refreshSpaceList = spaceList.refresh;
   const [now, setNow] = useState(Date.now);
@@ -90,11 +94,10 @@ export default function SpacesScreen() {
   const trimmedQuery = normalizeSearchQuery(query);
   const spaces = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
-    const personalActivity = personalSpaceActivity(Object.values(state.sessionViews), userUuid);
     const listFilter = filter === "device" || (filter === "recent" && trimmedQuery) ? "all" : filter;
     const candidates = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now });
     return candidates.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [filter, now, state.spaces, state.sessions, state.sessionViews, spaceList.overview, spaceList.visits, trimmedQuery, userUuid]);
+  }, [filter, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits, trimmedQuery]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   const visibleSpaceKeyRef = useRef("");
   const onViewableItemsChanged = useCallback((info: { viewableItems: ViewToken<SpaceListItem>[] }) => {

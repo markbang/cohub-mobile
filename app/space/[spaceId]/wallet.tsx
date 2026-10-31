@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { useApp } from "@/src/data/context";
+import { useAppSelector } from "@/src/data/context";
 import { formatWalletUsd, walletProductBalanceUsd } from "@/src/data/space-wallet";
 import { useSpaceWallet } from "@/src/data/use-space-wallet";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
@@ -25,11 +25,10 @@ export default function SpaceWalletScreen() {
   const { spaceId = "" } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
   const { t, locale } = useTranslation();
-  const { state } = useApp();
   const wallet = useSpaceWallet(spaceId);
   const { summary, catalog, activity, errors, payment } = wallet;
   const [refreshing, setRefreshing] = useState(false);
-  const space = state.spaces.find((item) => item.id === spaceId);
+  const space = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId));
   const money = (amount: number, digits?: number) => formatWalletUsd(amount, locale, digits);
   const canRecharge = Boolean(catalog?.supported && catalog.paymentAvailable && summary?.usable !== false && catalog.products.length);
 

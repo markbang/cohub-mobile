@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "@/src/components/Toast";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
@@ -16,7 +16,7 @@ export default function WorkVersionsScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const toast = useToast();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [app, setApp] = useState<AppRecord | null>(null);
   const [versions, setVersions] = useState<AppVersionRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);

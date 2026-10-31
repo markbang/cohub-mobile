@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useApp } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { normalizeSearchQuery } from "@/src/data/session-search";
 import { selectSpaceList } from "@/src/data/space-list";
 import { useTranslation } from "@/src/i18n";
@@ -19,7 +19,9 @@ export default function NewChatScreen() {
   const initialSpaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
-  const { state, refreshHome, spaceList } = useApp();
+  const { refreshHome } = useAppActions();
+  const visits = useAppSelector((app) => app.spaceList.visits);
+  const state = useAppSelector((app) => ({ spaces: app.state.spaces, sessions: app.state.sessions, spacesError: app.state.spacesError, error: app.state.error, booting: app.state.booting, refreshing: app.state.refreshing }), shallowEqual);
   const error = state.spacesError ?? state.error;
   const [selectedSpaceId, setSelectedSpaceId] = useState(initialSpaceId || "");
   const [query, setQuery] = useState("");
@@ -27,10 +29,10 @@ export default function NewChatScreen() {
   const needle = normalizeSearchQuery(query).toLowerCase();
 
   const spaces = useMemo(() => {
-    const ranked = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: null, visits: spaceList.visits, personalActivity: new Map(), filter: "all", now });
+    const ranked = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: null, visits, personalActivity: new Map(), filter: "all", now });
     if (!needle) return ranked;
     return ranked.filter((space) => [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [needle, now, spaceList.visits, state.sessions, state.spaces]);
+  }, [needle, now, visits, state.sessions, state.spaces]);
 
   const openSpaceDraft = (spaceId: string) => {
     setSelectedSpaceId(spaceId);

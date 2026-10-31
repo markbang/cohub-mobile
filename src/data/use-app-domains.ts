@@ -1,7 +1,7 @@
 import { HttpError, normalizeAppDomainHostname, type AppDomainListResponse, type AppDomainRecord, type CohubClient } from "@neta-art/cohub";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { withAppDomainResult } from "./app-domains";
-import { useApp } from "./context";
+import { useAppActions } from "./context";
 import { useSpaceRealtime } from "./use-space-realtime";
 import { useSyncScope } from "./use-sync-scope";
 
@@ -17,7 +17,7 @@ const toProblem = (error: unknown): AppDomainProblem => ({
 const SETTLING = new Set<AppDomainRecord["status"]>(["pending", "provisioning", "removing"]);
 
 export function useAppDomains(appId: string, spaceId: string | undefined) {
-  const { client, sync } = useApp();
+  const { client, sync } = useAppActions();
   const key = `app:${appId}:domains`;
   const [list, setList] = useState<AppDomainListResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);

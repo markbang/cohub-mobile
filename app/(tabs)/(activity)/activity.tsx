@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { ActivityHeatmap, ActivityHeatmapSkeleton } from "@/src/components/ActivityHeatmap";
-import { useApp } from "@/src/data/context";
+import { useAppSelector } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
 import { formatWalletUsd } from "@/src/data/space-wallet";
@@ -24,7 +24,7 @@ export default function ActivityScreen() {
   const { t, locale } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
-  const { connectionUnavailable } = useApp();
+  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const subscriptions = useBillingHistory("subscriptions");

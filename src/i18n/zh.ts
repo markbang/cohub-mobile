@@ -1439,7 +1439,7 @@ export const zh: Record<TranslationKey, string> = {
   "data.messageEmpty": "消息不能为空",
   "data.newChatNotCreated": "新对话未创建",
   "data.spaceNameRequired": "空间名称为必填项",
-  "data.useAppProvider": "useApp 必须在 AppProvider 内使用",
+  "data.useAppProvider": "App hooks 必须在 AppProvider 内使用",
   "data.identityMissing": "你的账户身份信息缺失，请重新登录。",
   "update.verifyFailed": "APK 校验失败。已下载的文件已被移除，请重新下载。",
   "update.installRequiresStandalone": "安装 APK 需要独立的 Android 构建，而不是 Expo Go。",

@@ -1,7 +1,7 @@
 import type { BillingCatalogProduct, SpaceWalletActivity, SpaceWalletSummary } from "@neta-art/cohub";
 import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useApp } from "./context";
+import { useAppActions } from "./context";
 import { appendWalletActivity } from "./space-wallet";
 import { useSyncScope } from "./use-sync-scope";
 
@@ -12,7 +12,7 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 
 /** Checkout runs in the browser, so a pending payment is confirmed on refresh and polled meanwhile. */
 export function useSpaceWallet(spaceId: string) {
-  const { client, sync } = useApp();
+  const { client, sync } = useAppActions();
   const key = `space:${spaceId}:wallet`;
   const [summary, setSummary] = useState<SpaceWalletSummary | null>(null);
   const [catalog, setCatalog] = useState<WalletCatalog | null>(null);

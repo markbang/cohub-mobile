@@ -1468,7 +1468,7 @@ export const en = {
   "data.messageEmpty": "Message cannot be empty",
   "data.newChatNotCreated": "The new Chat was not created",
   "data.spaceNameRequired": "Space name is required",
-  "data.useAppProvider": "useApp must be used inside AppProvider",
+  "data.useAppProvider": "App hooks must be used inside AppProvider",
   "data.identityMissing": "Your account identity is missing. Please sign in again.",
   "update.verifyFailed": "APK verification failed. The downloaded file was removed; retry the download.",
   "update.installRequiresStandalone": "APK installation requires a standalone Android build, not Expo Go.",

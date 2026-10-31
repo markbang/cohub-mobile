@@ -3,7 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { AppHostWebView } from "@/src/components/AppHostWebView";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
 import { DataError, TopBar, IconButton, LoadingState, Screen } from "@/src/ui";
@@ -15,7 +15,7 @@ export default function WorkScreen() {
   const params = useLocalSearchParams<Params>();
   const appId = Array.isArray(params.appId) ? params.appId[0] : params.appId;
   const { t } = useTranslation();
-  const { client } = useApp();
+  const { client } = useAppActions();
   const [detail, setDetail] = useState<AppDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);

@@ -3,13 +3,13 @@ import { Text, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { useApp } from "@/src/data/context";
+import { useAppActions } from "@/src/data/context";
 import { useChannelBinding } from "@/src/data/use-channel-binding";
 import { useTranslation } from "@/src/i18n";
 import { EmptyState, LoadingState, PrimaryButton } from "@/src/ui";
 
 export function ChannelBindingSheet({ channel, onClose, onChanged }: { channel: Channel; onClose: () => void; onChanged: () => void }) {
-  const { client } = useApp();
+  const { client } = useAppActions();
   const { t } = useTranslation();
   const { spaces, loading, saving, error, load, save } = useChannelBinding(client, channel, onChanged);
   // Unbinding is a yes-or-no confirmation; binding picks a Space from a list and stays a sheet.
