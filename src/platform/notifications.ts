@@ -38,19 +38,20 @@ type PushRegistrationOptions = {
 
 let notificationsModulePromise: Promise<NotificationsModule | null> | null = null;
 let notificationHandlerConfigured = false;
-let foregroundSessionId: string | null = null;
+// Focus registrations, newest last. Pushing a Chat (even the same one) focuses the new screen before
+// the old one blurs, so a blur removes only its own entry.
+const foregroundSessions: string[] = [];
 
-/**
- * Registers the Chat currently on screen. Its notifications skip the foreground banner but still
- * reach the notification list. Call on Chat focus.
- */
-export function setForegroundSession(sessionId: string | null) {
-  foregroundSessionId = sessionId?.trim() || null;
+/** Registers the Chat on screen; its notifications skip the foreground banner but still reach the list. Call on Chat focus. */
+export function setForegroundSession(sessionId: string) {
+  const id = sessionId.trim();
+  if (id) foregroundSessions.push(id);
 }
 
-/** Call on Chat blur. Pushing one Chat over another focuses the new one before the old one blurs. */
+/** Call on Chat blur with the id passed to `setForegroundSession`. */
 export function clearForegroundSession(sessionId: string) {
-  if (foregroundSessionId === sessionId.trim()) foregroundSessionId = null;
+  const index = foregroundSessions.lastIndexOf(sessionId.trim());
+  if (index >= 0) foregroundSessions.splice(index, 1);
 }
 
 function isRecord(value: unknown): value is NotificationRecord {
@@ -67,7 +68,7 @@ function notificationData(notification: unknown): NotificationRecord | null {
 
 function isForegroundSessionNotification(notification: unknown) {
   const sessionId = notificationData(notification)?.sessionId;
-  return foregroundSessionId !== null && typeof sessionId === "string" && sessionId.trim() === foregroundSessionId;
+  return typeof sessionId === "string" && sessionId.trim() === foregroundSessions.at(-1);
 }
 
 function notificationDeepLink(response: unknown): string | null {

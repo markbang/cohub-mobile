@@ -86,7 +86,11 @@ export function AdaptiveSheet({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   // The modal outlives `visible` until the close animation lands.
   const [presented, setPresented] = useState(visible);
-  if (visible && !presented) setPresented(true);
+  if (visible && !presented) {
+    setPresented(true);
+    // A sheet closed with the keyboard up never hears it hide; resetting here keeps the close animation at its height.
+    setKeyboardHeight(0);
+  }
 
   const requestClose = useCallback(() => {
     if (dismissible && visible) onClose();
@@ -146,8 +150,6 @@ export function AdaptiveSheet({
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
-      // A sheet closed with the keyboard up never hears it hide; the next open must not start short.
-      setKeyboardHeight(0);
     };
   }, [visible]);
 

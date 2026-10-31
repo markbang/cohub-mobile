@@ -53,12 +53,13 @@ export default function ImageViewerScreen() {
   const [index, setIndex] = useState(() => Math.min(Math.max(payload?.index ?? 0, 0), Math.max(count - 1, 0)));
   const [zoomed, setZoomed] = useState(false);
   const [sizes, setSizes] = useState<Record<number, Size>>({});
-  const zoomTransition = payload?.zoom === true && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
+  // The system zoom-back only lands right from the page it opened on; elsewhere the viewer's own swipe dismisses.
+  const zoomTransition = payload?.zoom === true && index === payload.index && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
 
   // One-shot payload: a deep link or restored state must not reopen the last gallery.
   useEffect(() => clearImageViewerPayload, []);
-  // The zoom transition's own drag would fight panning a zoomed image.
-  usePreventZoomTransitionDismissal(zoomed ? { unstable_dismissalBoundsRect: { maxX: 0, maxY: 0 } } : undefined);
+  // The zoom transition's own drag would fight panning a zoomed image or zoom back to an off-screen page.
+  usePreventZoomTransitionDismissal(zoomed || (payload?.zoom === true && !zoomTransition) ? { unstable_dismissalBoundsRect: { maxX: 0, maxY: 0 } } : undefined);
 
   const close = useCallback(() => {
     if (router.canGoBack()) router.back();

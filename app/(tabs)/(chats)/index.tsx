@@ -146,7 +146,9 @@ export default function ChatsScreen() {
   const holdRowOrder = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
     releaseTimerRef.current = null;
-    holdLimitTimerRef.current ??= setTimeout(dropHeldOrder, ORDER_HOLD_MAX_MS);
+    // The cap restarts with each drag, so a long run of flings is never reordered under the finger.
+    if (holdLimitTimerRef.current) clearTimeout(holdLimitTimerRef.current);
+    holdLimitTimerRef.current = setTimeout(dropHeldOrder, ORDER_HOLD_MAX_MS);
     setHeldOrder((current) => current?.context === orderContext ? current : { context: orderContext, keys: shownKeysRef.current });
   }, [dropHeldOrder, orderContext]);
   const releaseRowOrder = useCallback(() => {
