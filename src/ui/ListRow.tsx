@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
+import Animated, { useReducedMotion } from "react-native-reanimated";
+import { loops } from "@/src/motion";
 import { AppIcon, type IconName } from "@/src/ui";
 export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
@@ -81,12 +83,19 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   );
 }
 
+/** A slow breath rather than a pulse: the ring never fully fades, so a list of running rows stays calm. */
+const RUNNING_BREATH = { "0%": { opacity: 1 }, "50%": { opacity: 0.45 }, "100%": { opacity: 1 } };
+const RUNNING_RING_MOTION = { animationName: RUNNING_BREATH, animationDuration: loops.runningRing.duration, animationIterationCount: "infinite", animationTimingFunction: "ease-in-out" } as const;
+
 /** Running is an accent ring; failed and stopped are corner badges with distinct glyphs, so color is never the only cue. */
 export function AvatarStatus({ status, size, children }: { status: ListRowStatus; size: number; children: ReactNode }) {
+  const reduced = useReducedMotion();
   return (
     <View style={{ width: size, height: size }}>
       {children}
-      {status === "running" ? <View pointerEvents="none" className="absolute border-2 border-accent" style={{ top: -3, left: -3, width: size + 6, height: size + 6, borderRadius: (size + 6) * 0.3, borderCurve: "continuous" }} /> : null}
+      {status === "running" ? <Animated.View pointerEvents="none" style={[{ position: "absolute", top: -3, left: -3, width: size + 6, height: size + 6 }, reduced ? null : RUNNING_RING_MOTION]}>
+        <View className="flex-1 border-2 border-accent" style={{ borderRadius: (size + 6) * 0.3, borderCurve: "continuous" }} />
+      </Animated.View> : null}
       {status === "failed" || status === "stopped" ? (
         <View pointerEvents="none" className="absolute -bottom-1 -right-1 size-4.5 items-center justify-center rounded-full border-2 border-surface bg-surface">
           <AppIcon name={status === "failed" ? "alert" : "stop"} size={14} tone={status === "failed" ? "danger" : "muted"} strokeWidth={2.1} />
