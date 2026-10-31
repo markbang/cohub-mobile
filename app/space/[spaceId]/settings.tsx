@@ -317,7 +317,7 @@ export default function SpaceSettingsScreen() {
           ))}
         </View>
 
-        {deviceRuntimeSupported && spaceId ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
+        {deviceRuntimeSupported && spaceId && sandbox?.provider === "local" ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
 
         <View>
           <Text className="text-headline font-semibold text-fg">{t("space.settings.sandbox")}</Text>
