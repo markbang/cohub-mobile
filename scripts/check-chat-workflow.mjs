@@ -24,8 +24,9 @@ import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, togg
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
-import { chatThreadPlaceholder, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
+import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, settleInterruptedSends, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
+import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
 import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
@@ -1662,7 +1663,8 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(reveal.props.accessibilityLabel, "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached", "screen readers always get every part");
   assert.equal(chromeNodes(reveal).find((node) => node.type === "Text").props.children.join(""), "#2 · deepseek-flash · ↑245K · ↓2.1K");
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
-    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: () => "14:32",
+    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: (value) => value,
+    useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
     BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
   });
@@ -1670,6 +1672,10 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
     const card = StreamCard({ content, status });
     assert.equal(chromeNodes(card).find((node) => node.props?.style?.height !== undefined)?.props.style.height, 44, `the ${status} reply's status line matches the finished reply's line, so the swap at the end of a Turn moves nothing`);
   }
+  const statusText = (status) => chromeNodes(StreamCard({ content: [], status })).find((node) => node.type === "Text" && classes(node).has("text-caption"));
+  assert.deepEqual([classes(statusText("interrupted")).has("text-fg-muted"), classes(statusText("failed")).has("text-danger")], [true, true], "a reply the user stopped is quiet; only a failure is red");
+  const liveClock = (props) => chromeNodes(StreamCard({ content: [], status: "streaming", ...props })).find((node) => node.type === "Text" && classes(node).has("tabular-nums"))?.props.children.join("");
+  assert.equal(liveClock({ startedAt: "2026-10-31T09:00:00.000Z" }), "2026-10-31T09:00:00.000Z", "the live clock shows when the Turn started, not the time of each render");
   // Only the answer is the reply; the thinking belongs to the Turn's steps, live and finished alike.
   const thought = { type: "thinking", thinking: "Weighing options" };
   const answer = { type: "text", text: "Done." };
@@ -2458,6 +2464,7 @@ const reopenScope = {
   stateRef: { current: { sessions: [reopenView.session], spaces: [reopenView.space], sessionViews: { session: reopenView } } },
   dispatch: (action) => reopenActions.push(action),
   loadMessages: async () => { reopenCacheReads += 1; return []; },
+  settleInterruptedSends,
   userKey: "test-user",
   recordSpaceVisit: () => {},
   attachSessionRealtime: () => { reopenAttachments += 1; },
@@ -2550,6 +2557,7 @@ try {
     stateRef: { current: { sessions: [{ id: "session", spaceId: "space" }], spaces: [{ id: "space" }], sessionViews: { session: { messages: [], session: { id: "session", spaceId: "space" }, space: { id: "space" } } } } },
     dispatch: (action) => coldActions.push(action),
     loadMessages: async () => [],
+    settleInterruptedSends,
     userKey: "test-user",
     recordSpaceVisit: () => {},
     attachSessionRealtime: () => {},
@@ -3627,7 +3635,7 @@ const liveRowScope = {
   chatScrollTrace: { isRecording: () => false }, trackRow: () => {},
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
-  handleCopyMessage: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
+  handleCopyMessage: () => {}, retrySend: () => {}, discardSend: () => {}, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
@@ -3656,12 +3664,13 @@ assert.equal(ownerRow.props.style?.paddingTop, 8, "a prompt opens its Turn with 
   assert.equal(replyBubble({ forkingTurnId: "turn-a" }).forking, true, "the fork spinner follows the forked Turn, not the lazily loaded Turn index");
 }
 assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 })).filter((node) => node.type === "LiveReply").length, 0);
-const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [] };
+const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, sending: false, messages: [], turns: [{ id: "turn", startedAt: "2026-10-31T09:00:00.000Z", createdAt: "2026-10-31T08:59:59.000Z" }] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
   ...chromeScope, useApp: () => ({ state: { sessionViews: { fixture: liveView } } }),
   StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
 });
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
+assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).find((node) => node.type === "StreamCard").props.startedAt, "2026-10-31T09:00:00.000Z", "the live reply is stamped with its Turn's start");
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: true, availableWidth: 390 }), null, "completed replies leave no stale live duplicate");
 liveView.sending = true;
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: false, availableWidth: 390 }).props.status, "pending");
@@ -3955,7 +3964,7 @@ for (const busy of [false, true]) {
       client: { space: () => ({ prompt: async (body) => (prompts.push(body), { mode: "immediate", turn: queuedFollowup("accepted", busy ? 2 : 1, { status: busy ? "queued" : "running", meta: { clientMessageId: "client" } }) }) }) },
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
-      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {},
+      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
       buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
@@ -3996,7 +4005,7 @@ for (const busy of [false, true]) {
       errorMessage: (error, fallback) => error instanceof Error ? error.message : fallback,
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
-      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {},
+      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
       buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
@@ -4011,11 +4020,65 @@ for (const busy of [false, true]) {
     }
   }
 }
+assert.deepEqual(
+  [["", "hello"], ["Draft", "more words"], ["First line\n", "second"], ["Ends with space ", "next"], ["今天", "天气不错"], ["你好，", "世界"], ["Use", "中文"], ["中文", "API"], ["keep", "  "]].map(([current, dictated]) => appendVoiceText(current, dictated)),
+  ["hello", "Draft more words", "First line\nsecond", "Ends with space next", "今天天气不错", "你好，世界", "Use 中文", "中文 API", "keep"],
+  "dictation keeps the user's line breaks and joins CJK without a space",
+);
+{
+  // Cache transitions of one send: its in-flight row becomes a failed row on failure and is removed on acceptance.
+  for (const fails of [false, true]) {
+    const actions = [];
+    const saved = [];
+    const deleted = [];
+    const sendScope = {
+      stateRef: { current: { sessionViews: { fixture: { session: { spaceId: "space" }, turns: [], messages: [], stream: null } } } },
+      client: { space: () => ({ prompt: async () => { if (fails) throw new Error("Network down"); return { mode: "immediate", turn: queuedFollowup("accepted", 1, { status: "running", meta: { clientMessageId: "client" } }) }; } }) },
+      translate: (key) => key, newId: () => "client", nextTurnSequence,
+      optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
+      shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action),
+      saveMessages: async (_user, _session, rows) => { saved.push(rows); }, deleteMessages: async (_user, _session, ids) => { deleted.push(...ids); }, failedSendMessage,
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
+    };
+    const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
+    const request = send("fixture", " Hello ", [photoDraft], { model: { provider: "openai", id: "gpt-5" }, harness: "codex" });
+    if (!fails) {
+      await request;
+      assert.deepEqual(deleted, ["local-client"], "an accepted send removes its local cache row; the Turn's row replaces it");
+      continue;
+    }
+    await assert.rejects(request, /Network down/);
+    assert.deepEqual(actions.map((action) => action.type), ["message-optimistic", "send-start", "message-optimistic", "send-failed"]);
+    const cachedFailure = saved.at(-1).at(-1);
+    assert.deepEqual([cachedFailure.id, cachedFailure.meta.optimistic, isFailedSend(cachedFailure), cachedFailure.errorMessage, deleted.length], ["local-client", undefined, true, "Network down", 0], "the cache records the failure, so a restart shows a failed send instead of one stuck sending");
+    assert.deepEqual(failedSendDraft(cachedFailure), { text: "Hello", attachments: [photoDraft], model: { provider: "openai", id: "gpt-5" }, harness: "codex" }, "retry resends the original text, attachments, model, and Harness");
+  }
+  // A process killed mid-send leaves its row marked in flight; the next cold open settles it.
+  const inFlight = { id: "local-a", role: "user", sequence: 9, errorMessage: null, meta: { optimistic: true, clientMessageId: "a", turnSequence: 5, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } };
+  const legacy = { id: "local-b", role: "user", sequence: 11, meta: { optimistic: true, clientMessageId: "b" } };
+  const history = { id: "turn:user", role: "user", sequence: 7, meta: { turnId: "turn" } };
+  const settled = settleInterruptedSends([history, inFlight, legacy], "data.messageSendFailed");
+  assert.deepEqual(settled.map((message) => [message.id, isFailedSend(message), message.meta.optimistic]), [["turn:user", false, undefined], ["local-a", true, undefined]], "no cached message stays sending forever: retryable ones fail, ones without a draft drop");
+}
 const reducerFunction = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
-const reduceQueueFailure = new Function("isOptimisticFollowup", "recordDebugEvent", "updateView", ts.transpileModule(`${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(isOptimisticFollowup, () => {}, (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }));
-const failedQueuedMessage = { id: "upload", role: "user", meta: { optimistic: true, queuedFollowup: true, clientMessageId: "failed" } };
-const queueFailure = reduceQueueFailure({ sessionViews: { fixture: { messages: [failedQueuedMessage] } } }, { type: "send-failed", sessionId: "fixture", clientMessageId: "failed", message: "Upload failed" });
-assert.deepEqual(queueFailure.sessionViews.fixture.messages, [], "failed queued uploads return to the composer, not a failed message bubble");
+const reduceQueueFailure = new Function("failedSendMessage", "isFailedSend", "recordDebugEvent", "updateView", "emptyView", ts.transpileModule(`${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(failedSendMessage, isFailedSend, () => {}, (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }), () => ({ messages: [] }));
+const failedQueuedMessage = { id: "upload", role: "user", sequence: 5, meta: { optimistic: true, queuedFollowup: true, clientMessageId: "failed", turnSequence: 3 } };
+{
+  // A failed send is one bubble that carries its own retry: no banner, no composer refill, no queue item.
+  const failed = reduceQueueFailure({ sessionViews: { fixture: { messages: [failedQueuedMessage], error: null, sending: true } } }, { type: "send-failed", sessionId: "fixture", clientMessageId: "failed", message: "Upload failed" }).sessionViews.fixture;
+  const [bubble] = failed.messages;
+  assert.deepEqual([failed.error, failed.sending, bubble.errorMessage, isFailedSend(bubble), bubble.meta.optimistic, bubble.meta.queuedFollowup, bubble.meta.turnSequence], [null, false, "Upload failed", true, undefined, undefined, undefined], "a failed send leaves the queue and the Turn order as one failed bubble, without a view error");
+  assert.equal(followupQueueItems([], null, failed.messages).length, 0, "a failed follow-up is not still waiting in the queue");
+  assert.equal(nextTurnSequence([], failed.messages), 1, "a failed send does not hold on to the Turn number the next accepted send gets");
+  assert.equal(reduceQueueFailure({ sessionViews: { fixture: { messages: [], error: null } } }, { type: "send-failed", sessionId: "fixture", clientMessageId: "none", message: "offline" }).sessionViews.fixture.error, null, "a send that failed before its bubble existed does not raise the loading banner");
+  assert.deepEqual(reduceQueueFailure({ sessionViews: { fixture: { messages: [bubble, { id: "kept", role: "user", meta: {} }] } } }, { type: "send-discard", sessionId: "fixture", messageId: "upload" }).sessionViews.fixture.messages.map((message) => message.id), ["kept"], "deleting a failed send removes only that bubble");
+  assert.deepEqual(reduceQueueFailure({ sessionViews: { fixture: { messages: [{ id: "kept", role: "user", meta: {} }] } } }, { type: "send-discard", sessionId: "fixture", messageId: "kept" }).sessionViews.fixture.messages.length, 1, "only failed sends can be discarded locally");
+  // A send the server accepted but whose response was lost comes back as a Turn and replaces the failed bubble.
+  const accepted = { id: "turn-3:user", role: "user", sequence: 5, meta: { turnId: "turn-3", turnSequence: 3, clientMessageId: "failed" } };
+  assert.deepEqual(mergeDisplayMessages([accepted], [bubble]).map((message) => message.id), ["turn-3:user"]);
+  assert.deepEqual(mergeDisplayMessages([{ ...accepted, meta: { ...accepted.meta, clientMessageId: "other" } }], [bubble]).map((message) => message.id).sort(), ["turn-3:user", "upload"], "an unrelated Turn with the same number keeps the failed bubble");
+}
 const cachedOpen = reduceQueueFailure({ sessionViews: { fixture: { messages: [], catchingUp: false } } }, { type: "session-cache", sessionId: "fixture", messages: [{ id: "cached" }] });
 assert.equal(cachedOpen.sessionViews.fixture.catchingUp, true, "cached history on screen waits visibly for the server tail");
 assert.equal(reduceQueueFailure(cachedOpen, { type: "session-start", sessionId: "fixture" }).sessionViews.fixture.catchingUp, false, "a restarted open does not inherit an abandoned catch-up");
@@ -4037,7 +4100,8 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
     preferNewerSession: (_current, incoming) => incoming,
     updateView: (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }),
     updateLatestTurn: (state, id, turn) => ({ ...state, sessionLatestTurns: { ...state.sessionLatestTurns, [id]: turn ?? state.sessionLatestTurns?.[id] } }),
-    isLiveMessage: (message) => message.meta?.optimistic === true || message.meta?._mobileLive === true,
+    isLiveMessage: (message) => message.meta?.optimistic === true || message.meta?._mobileLive === true || isFailedSend(message),
+    failedSendMessage, isFailedSend,
     recordDebugEvent: () => {}, sortByRecent: (rows) => rows,
   };
   const reduceView = new Function(...Object.keys(viewScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(viewScope));
