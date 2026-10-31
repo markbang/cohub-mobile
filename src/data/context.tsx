@@ -34,6 +34,7 @@ import { createStreamBatch } from "@/src/data/chat-rendering";
 import {
   clearComposerDraft as clearLocalComposerDraft,
   clearUserCache,
+  deleteMessages,
   hydrateHome,
   loadComposerDraft as loadLocalComposerDraft,
   loadMessages,
@@ -61,12 +62,12 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent } from "@/src/data/session-history";
+import { failedSendMessage, isFailedSend, mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
 import { clearSlashCommandCache } from "@/src/data/use-composer-slash";
-import { isOptimisticFollowup, shouldQueueFollowup } from "@/src/data/followup-queue";
+import { shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
@@ -306,6 +307,7 @@ type Action =
   | { type: "send-start"; sessionId: string }
   | { type: "send-end"; sessionId: string }
   | { type: "send-failed"; sessionId: string; clientMessageId: string; message: string }
+  | { type: "send-discard"; sessionId: string; messageId: string }
   | { type: "stream-state"; sessionId: string; stream: StreamView }
   | { type: "stream-lifecycle"; sessionId: string; provider: string | null; model: string | null }
   | { type: "stream-clear"; sessionId: string }
@@ -314,7 +316,7 @@ type Action =
   | { type: "space-upsert"; space: SpaceRecord };
 
 function isLiveMessage(message: MessageRecord) {
-  return message.meta?.optimistic === true || message.meta?._mobileLive === true;
+  return message.meta?.optimistic === true || message.meta?._mobileLive === true || isFailedSend(message);
 }
 
 function mergeMessages(messages: MessageRecord[], incoming: MessageRecord) {
@@ -819,13 +821,13 @@ function reducer(state: AppState, action: Action): AppState {
     case "send-failed": {
       recordDebugEvent("chat.send.failed", { clientMessageIdPresent: typeof action.clientMessageId === "string", message: action.message });
       const view = state.sessionViews[action.sessionId] ?? emptyView();
-      const messages = view.messages.filter((message) => !(isOptimisticFollowup(message) && message.meta?.clientMessageId === action.clientMessageId)).map((message) => {
-        if (message.meta?.clientMessageId !== action.clientMessageId) return message;
-        const meta = { ...(message.meta ?? {}) };
-        delete meta.optimistic;
-        return { ...message, errorMessage: action.message, meta };
-      });
-      return updateView(state, action.sessionId, { sending: false, error: action.message, messages });
+      // The failed bubble carries the feedback and its retry; the view error is for loading.
+      const messages = view.messages.map((message) => message.meta?.optimistic === true && message.meta.clientMessageId === action.clientMessageId ? failedSendMessage(message, action.message) : message);
+      return updateView(state, action.sessionId, { sending: false, messages });
+    }
+    case "send-discard": {
+      const view = state.sessionViews[action.sessionId] ?? emptyView();
+      return updateView(state, action.sessionId, { messages: view.messages.filter((message) => !(message.id === action.messageId && isFailedSend(message))) });
     }
     case "stream-state": {
       const view = state.sessionViews[action.sessionId] ?? emptyView();
@@ -904,6 +906,7 @@ export type AppContextValue = {
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
   sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
   sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind }) => Promise<NewChatMessageResult>;
+  discardFailedSend: (sessionId: string, messageId: string) => void;
   loadComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<string>;
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
   clearComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<void>;
@@ -1992,7 +1995,7 @@ export function AppProvider({
       if (!view?.messages.length) {
         try {
           markChatEntry("cache.start");
-          const cachedMessages = await loadMessages(userKey, sessionId);
+          const cachedMessages = settleInterruptedSends(await loadMessages(userKey, sessionId), translate("data.messageSendFailed"));
           markChatEntry("cache.end", { count: cachedMessages.length });
           if (openTokens.current.get(sessionId) === token && cachedMessages.length > 0) {
             dispatch({ type: "session-cache", sessionId, messages: cachedMessages });
@@ -2156,7 +2159,7 @@ export function AppProvider({
         stopReason: null,
         errorMessage: null,
         usage: null,
-        meta: { optimistic: true, queuedFollowup: shouldQueueFollowup(turns, view?.stream), clientMessageId, turnSequence, ...(options.harness ? { harness: options.harness } : {}), ...(options.model?.thinkingLevel ? { requestedThinkingLevel: options.model.thinkingLevel } : {}) },
+        meta: { optimistic: true, queuedFollowup: shouldQueueFollowup(turns, view?.stream), clientMessageId, turnSequence, sendDraft: { text, attachments, model: options.model ?? null, harness: options.harness ?? null } satisfies SendDraft, ...(options.harness ? { harness: options.harness } : {}), ...(options.model?.thinkingLevel ? { requestedThinkingLevel: options.model.thinkingLevel } : {}) },
         authorUuid: userUuid,
         authorProfile: null,
         startedAt: null,
@@ -2170,9 +2173,11 @@ export function AppProvider({
       void saveMessages(userKey, sessionId, [...(view?.messages ?? []), optimistic]).catch(() => undefined);
       dispatch({ type: "send-start", sessionId });
 
+      let pending = optimistic;
       try {
         const content = await buildPromptContent(client, session.spaceId, sessionId, text, attachments);
         const optimisticWithContent = { ...optimistic, content, text: text || optimistic.text };
+        pending = optimisticWithContent;
         dispatch({ type: "message-optimistic", sessionId, message: optimisticWithContent });
         void saveMessages(userKey, sessionId, [...(stateRef.current.sessionViews[sessionId]?.messages ?? []), optimisticWithContent]).catch(() => undefined);
         const response = await client.space(session.spaceId).prompt({
@@ -2193,14 +2198,23 @@ export function AppProvider({
         recordDebugEvent("chat.send.server_accepted", { turnSequence: response.turn.sequence, status: response.turn.status });
         dispatch({ type: "turn-upsert", sessionId, session: response.session, turn: withFallbackUserContent(response.turn, content, text) });
         dispatch({ type: "send-end", sessionId });
+        // The accepted Turn owns this message now; a leftover local row would come back as a failed send.
+        void deleteMessages(userKey, sessionId, [optimistic.id]).catch(() => undefined);
         sync.invalidate();
       } catch (error) {
-        dispatch({ type: "send-failed", sessionId, clientMessageId, message: error instanceof Error ? error.message : translate("data.messageSendFailed") });
+        const message = error instanceof Error ? error.message : translate("data.messageSendFailed");
+        dispatch({ type: "send-failed", sessionId, clientMessageId, message });
+        void saveMessages(userKey, sessionId, [failedSendMessage(pending, message)]).catch(() => undefined);
         throw error;
       }
     },
     [client, dispatch, loadLatestWindow, sync, userKey, userUuid],
   );
+
+  const discardFailedSend = useCallback((sessionId: string, messageId: string) => {
+    dispatch({ type: "send-discard", sessionId, messageId });
+    void deleteMessages(userKey, sessionId, [messageId]).catch(() => undefined);
+  }, [dispatch, userKey]);
 
   const sendNewMessage = useCallback(
     async (
@@ -2515,6 +2529,7 @@ export function AppProvider({
       loadLatestTurns,
       sendMessage,
       sendNewMessage,
+      discardFailedSend,
       loadComposerDraft: loadComposerDraftForUser,
       saveComposerDraft: saveComposerDraftForUser,
       clearComposerDraft: clearComposerDraftForUser,
@@ -2587,6 +2602,7 @@ export function AppProvider({
       rememberSessionForks,
       sendMessage,
       sendNewMessage,
+      discardFailedSend,
       loadComposerDraftForUser,
       saveComposerDraftForUser,
       clearComposerDraftForUser,

@@ -1,9 +1,52 @@
 import type {
 	ContentBlock,
+	HarnessKind,
 	MessageRecord,
 	SessionTurnIndexItem,
 	SessionTurnRecord,
 } from "@neta-art/cohub";
+import type { AttachmentDraft, ChatModelSelection } from "./types";
+
+/** Everything needed to send a message again; it rides on the local message so a retry survives a restart. */
+export type SendDraft = {
+	text: string;
+	attachments: AttachmentDraft[];
+	model: ChatModelSelection | null;
+	harness: HarnessKind | null;
+};
+
+export function isFailedSend(message: Pick<MessageRecord, "role" | "meta">) {
+	return message.role === "user" && message.meta?.sendFailed === true;
+}
+
+export function failedSendDraft(message: Pick<MessageRecord, "meta">): SendDraft | null {
+	const draft = message.meta?.sendDraft as Partial<SendDraft> | undefined;
+	if (!draft || typeof draft !== "object" || typeof draft.text !== "string" || !Array.isArray(draft.attachments)) return null;
+	return { text: draft.text, attachments: draft.attachments, model: draft.model ?? null, harness: draft.harness ?? null };
+}
+
+/**
+ * A send the server never accepted. It leaves the Turn order (the server will give that
+ * sequence to the next accepted send) and stays a local row until it is retried or deleted.
+ */
+export function failedSendMessage(message: MessageRecord, error: string): MessageRecord {
+	const meta = { ...(message.meta ?? {}) };
+	delete meta.optimistic;
+	delete meta.queuedFollowup;
+	delete meta.turnSequence;
+	return { ...message, errorMessage: error, meta: { ...meta, sendFailed: true } };
+}
+
+/**
+ * Cached sends still marked in flight belong to a process that can no longer finish them.
+ * Ones carrying a draft become failed sends; older rows without one cannot be retried and drop.
+ */
+export function settleInterruptedSends(messages: MessageRecord[], error: string) {
+	return messages.flatMap((message) => {
+		if (message.meta?.optimistic !== true) return [message];
+		return message.role === "user" && failedSendDraft(message) ? [failedSendMessage(message, error)] : [];
+	});
+}
 
 function messageText(
 	content: ContentBlock[] | null | undefined,
@@ -146,7 +189,7 @@ export function mergeDisplayMessages(
 	const merged = [...byId.values()];
 	const confirmed = new Set<string>();
 	for (const message of merged) {
-		if (message.meta?.optimistic === true) continue;
+		if (message.meta?.optimistic === true || isFailedSend(message)) continue;
 		const clientMessageId = message.meta?.clientMessageId;
 		if (typeof clientMessageId === "string") confirmed.add(`client:${clientMessageId}`);
 		const sequence = turnSequenceForMessage(message);
@@ -154,8 +197,10 @@ export function mergeDisplayMessages(
 	}
 	return merged
 		.filter((message) => {
-			if (message.meta?.optimistic !== true) return true;
 			const clientMessageId = message.meta?.clientMessageId;
+			// The server may have accepted a send whose response was lost; its Turn replaces the failed row.
+			if (isFailedSend(message)) return !(typeof clientMessageId === "string" && confirmed.has(`client:${clientMessageId}`));
+			if (message.meta?.optimistic !== true) return true;
 			if (typeof clientMessageId === "string" && confirmed.has(`client:${clientMessageId}`)) return false;
 			const sequence = turnSequenceForMessage(message);
 			return !(sequence !== null && confirmed.has(`seq:${sequence}:${message.role}`));

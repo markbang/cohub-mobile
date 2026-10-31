@@ -292,6 +292,14 @@ export async function saveMessages(userKey: string, sessionId: string, messages:
   });
 }
 
+/** Only for local rows (unaccepted sends), whose cache key is the message id. */
+export async function deleteMessages(userKey: string, sessionId: string, messageIds: readonly string[]) {
+  const db = await database();
+  for (const messageId of messageIds) {
+    await db.runAsync("DELETE FROM messages WHERE user_key = ? AND session_id = ? AND message_id = ?", userKey, sessionId, messageId);
+  }
+}
+
 export async function loadSessionReadSequence(userKey: string, sessionId: string): Promise<number | null> {
   const db = await database();
   const row = await db.getFirstAsync<{ sequence: number }>(

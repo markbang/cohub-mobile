@@ -23,7 +23,7 @@ import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth } from "@/src/ui/message-bubble-layout";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { turnSequenceForMessage } from "@/src/data/session-history";
+import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 
@@ -292,7 +292,7 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
   if (stats.tokensBefore !== null && stats.tokensAfter !== null) details.push(t("message.compaction.context", { before: formatTokenCount(stats.tokensBefore), after: formatTokenCount(stats.tokensAfter) }));
   const hasSummary = info.summary.length > 0;
   return <View style={{ width: "100%", paddingHorizontal: 12, paddingVertical: 5 }}>
-    <View className="overflow-hidden rounded-lg border border-border bg-surface" style={{ borderCurve: "continuous" }}>
+    <View className="overflow-hidden rounded-md border border-border bg-surface" style={{ borderCurve: "continuous" }}>
       <Pressable accessibilityRole="button" accessibilityLabel={hasSummary ? t(expanded ? "message.compaction.collapse" : "message.compaction.expand") : t("message.compaction.title")} accessibilityState={{ expanded }} disabled={!hasSummary} onPress={() => setExpanded((value) => !value)} className="min-h-11 flex-row items-center gap-2 px-3 py-2 active:bg-surface-pressed">
         <AppIcon name="archive" size={16} tone="muted" />
         <Text className="text-caption text-fg-secondary font-semibold">{t("message.compaction.title")}</Text>
@@ -326,6 +326,8 @@ function toolIcon(name: string): IconName {
 // list (scale(-1) cells on Android) a nested scroller measures at its full
 // maxHeight and leaves a blank gap under short content.
 const TOOL_DETAILS_MAX_HEIGHT = 420;
+// The row itself is the 44pt target; vertical slop would overlap the next tool row.
+const TOOL_ROW_HIT_SLOP = { left: 8, right: 8 } as const;
 
 function CappedCodeText({ value, color }: { value: string; color: string }) {
   const { t } = useTranslation();
@@ -353,7 +355,7 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
   const caption = preview ? `${block.name}: "${preview}"` : block.name;
   const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
   return <View style={{ width: contentWidth }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={8} onPress={() => setExpanded(!expanded)} className="min-h-6 flex-row items-center gap-2 py-0.5">
+    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={TOOL_ROW_HIT_SLOP} onPress={() => setExpanded(!expanded)} className="min-h-11 flex-row items-center gap-2">
       <AppIcon name={toolIcon(block.name)} size={14} color={iconColor} />
       <Text numberOfLines={1} style={{ flex: 1, fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>
         <Text className="text-fg font-medium">{block.name}</Text>
@@ -364,7 +366,7 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
       <BubbleContentWidth.Provider value={contentWidth === undefined ? undefined : Math.max(0, contentWidth - 21)}>
       <Text className="text-micro font-semibold text-fg-muted">{t("message.tool.input")}</Text>
       <CappedCodeText value={JSON.stringify(block.input, null, 2)} color={theme.colors.text} />
-      {edits.map((edit, index) => <View key={index}><Text className="bg-danger-soft text-code text-danger" style={{ fontFamily: "SpaceMono" }}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text className="text-code text-success" style={{ fontFamily: "SpaceMono" }}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
+      {edits.map((edit, index) => <View key={index}><Text className="bg-danger-soft text-code text-danger" style={{ fontFamily: "SpaceMono" }}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text className="bg-success-soft text-code text-success" style={{ fontFamily: "SpaceMono" }}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
       {result ? <ToolOutput block={result} /> : null}
       </BubbleContentWidth.Provider>
     </ScrollView> : null}
@@ -446,16 +448,18 @@ function TypingIndicator() {
   return <View className="flex-row items-center"><MascotLoader size={22} accessibilityLabel={t("message.stream.starting")} /></View>;
 }
 
-function BubbleMeta({ clock, local = false, t }: { clock?: string; local?: boolean; t: Translate }) {
+function BubbleMeta({ clock, local = false, failed = false, t }: { clock?: string; local?: boolean; failed?: boolean; t: Translate }) {
   const theme = useAppTheme();
   const color = theme.colors.userBubbleMeta;
-  if (!clock && !local) return null;
+  if (!clock && !local && !failed) return null;
   // Never wraps: the bubble shrink-wraps to this row, and fractional text widths can leave it a
   // sub-pixel short of its own content, which wrapped the receipt out under the bubble.
   return <View className="shrink-0 flex-row items-center justify-end" style={{ gap: 3 }}>
     {/* design-system: the bubble meta color depends on the bubble it sits in; its width feeds the inline-meta layout. */}
     {clock ? <Text style={[typography.micro, { color, fontVariant: ["tabular-nums"] }]}>{clock}</Text> : null}
-    {local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View> : <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} />}
+    {failed ? <View accessible accessibilityLabel={t("chat.sendFailed")}><AppIcon name="alert" size={11} color={color} strokeWidth={2.4} /></View>
+      : local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View>
+      : <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} />}
   </View>;
 }
 
@@ -507,7 +511,7 @@ function fitReplyDetails(identity: string, parts: readonly string[], width: numb
   return line;
 }
 
-function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; availableWidth: number; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
+function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; availableWidth: number; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { fontScale } = useWindowDimensions();
@@ -531,7 +535,7 @@ function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, f
   const detailsStyle = actions ? { marginLeft: 3 } : undefined;
   // The first glyph lines up with the reply text; its touch target hangs into the margin.
   return <View className="flex-row items-center" style={{ minHeight: REPLY_META_HEIGHT, marginLeft: actions ? -9 : 0 }}>
-    {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { onCopy?.(copyText); setCopied(true); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
+    {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { void Promise.resolve(onCopy?.(copyText)).then(() => setCopied(true), () => setCopied(false)); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
     {canFork ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork?.(message)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
     {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. Not selectable: Android lays selectable text out without its line limit, so it wrapped out of the row instead of truncating. */}
     {fitted === details
@@ -548,7 +552,7 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void; onFork?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
+export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
@@ -591,19 +595,26 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   }
   const textColor = theme.colors.userBubbleText;
   const maxWidth = getBubbleMaxWidth(rowWidth);
-  const footer = clock || local ? <BubbleMeta clock={clock} local={local} t={t} /> : undefined;
+  const failed = isFailedSend(message);
+  const footer = clock || local || failed ? <BubbleMeta clock={clock} local={local} failed={failed} t={t} /> : undefined;
   return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: 5, alignItems: "flex-end" }}>
     <BubbleTraceMessage.Provider value={message}><UserBubbleFrame maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
       {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={message.errorMessage ? undefined : footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={message.errorMessage ? undefined : footer} /> : !message.errorMessage ? footer : null}
       {/* design-system: BubbleText measures its lines from this style, so it must stay a JS style. */}
       {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: theme.colors.userBubbleText }]}>{message.errorMessage}</BubbleText> : null}
     </UserBubbleFrame></BubbleTraceMessage.Provider>
+    {failed && (onRetry || onDiscard) ? <View className="flex-row items-center" style={{ marginRight: -8 }}>
+      {onDiscard ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.delete")} onPress={() => onDiscard(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="trash" size={14} tone="muted" /><Text className="text-caption font-semibold text-fg-muted">{t("chat.sendFailed.delete")}</Text></Pressable> : null}
+      {onRetry ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.retry")} onPress={() => onRetry(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="refresh" size={14} tone="accent" /><Text className="text-caption font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}
+    </View> : null}
   </View></BubbleContext.Provider>;
 });
 
 /** Its status line matches the finished reply's meta line, so the swap at the end of a Turn moves nothing. */
-export function StreamCard({ content, status, runtimePhase = null, runtimeModel = null, availableWidth }: { content: ContentBlock[]; status: string; runtimePhase?: StreamView["runtimePhase"]; runtimeModel?: string | null; availableWidth?: number }) {
+export function StreamCard({ content, status, runtimePhase = null, runtimeModel = null, startedAt = null, availableWidth }: { content: ContentBlock[]; status: string; runtimePhase?: StreamView["runtimePhase"]; runtimeModel?: string | null; startedAt?: string | null; availableWidth?: number }) {
   const { width } = useWindowDimensions();
+  // A clock read during render changed on every batch; the reply's start does not.
+  const [firstSeenAt] = useState(() => new Date().toISOString());
   const contentWidth = getReplyContentWidth(availableWidth ?? width);
   const { t } = useTranslation();
   // Like the finished reply, the body is the answer; the thinking streams into the Turn's steps.
@@ -629,11 +640,11 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   return <View style={{ width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
     {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} /></BubbleContentWidth.Provider> : null}
     <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
-      {statusLabel ? <Text className="min-w-0 flex-1 text-caption text-danger">{statusLabel}</Text>
+      {statusLabel ? <Text className={`min-w-0 flex-1 text-caption ${status === "failed" ? "text-danger" : "text-fg-muted"}`}>{statusLabel}</Text>
         : runtimeLabel ? <><LiveDot /><Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{runtimeLabel}</Text></>
         : hasContent ? <><LiveDot /><View className="flex-1" /></>
         : <View className="flex-1"><TypingIndicator /></View>}
-      {live ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatMessageClock(new Date().toISOString())}</Text> : null}
+      {live ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatMessageClock(startedAt ?? firstSeenAt)}</Text> : null}
     </View>
   </View>;
 }
