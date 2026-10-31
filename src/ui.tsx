@@ -48,7 +48,6 @@ import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { AppSwitch } from "@/src/ui/AppSwitch";
-export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
 export { CohubLogo, Mascot } from "@/src/ui/Mascot";
 export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
@@ -214,15 +213,22 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
   const system = nativeHeaders && !drawn && Boolean(onBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
   useNativeHeader(system ? { title, subtitle, right: actions } : null);
+  // A drawn bar centers its title as UIKit does, balancing whichever side is wider.
+  const [trailingWidth, setTrailingWidth] = useState(0);
   if (system) return null;
   const titleContent = children ?? <>
-    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
-    {subtitle ? <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text> : null}
+    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-center text-headline font-semibold text-fg">{title}</Text>
+    {subtitle ? <Text numberOfLines={1} className="text-center text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
+  // Each bar slot is a 44 pt target; the gap between slots is 4.
+  const leadingWidth = onBack || leading ? 48 : 0;
+  const trailing = actions ? trailingWidth + 4 : 0;
+  const side = Math.max(leadingWidth, trailing);
+  const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="arrow-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {onBack ? <IconButton filled name="chevron-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
         {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
@@ -236,17 +242,17 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1.5 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
         filled
-        name="arrow-left"
+        name="chevron-left"
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
         onPressOut={() => recordDebugEvent("navigation.back.press_out")}
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
       /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
-      <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1">
+      <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1" style={balance}>
         {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
     </View>
   );
 }

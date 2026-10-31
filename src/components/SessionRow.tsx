@@ -1,6 +1,6 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
 import { useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
 import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/utils";
@@ -93,7 +93,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     meta={formatRelativeTime(session.lastMessageAt ?? session.updatedAt)}
     subtitle={subtitleNode}
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
-    // A fork tree draws as one card so its guide lines run unbroken from parent to children.
+    // A fork tree reads as one item: its guide lines run unbroken and only its end draws a separator.
     group={!tree ? "single" : tree.depth === 0 ? (tree.lastInGroup ? "single" : "first") : tree.lastInGroup ? "last" : "middle"}
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
@@ -116,8 +116,8 @@ export function SessionForkToggle({ hidden, expanded, showSpace = true, onPress 
     accessibilityLabel={label}
     accessibilityState={{ expanded }}
     onPress={() => { traceAction("session_fork_toggle", { expanded: !expanded, hidden }); onPress(); }}
-    className={`min-h-11 flex-row items-center gap-1.5 pr-4 active:bg-surface-pressed ${Platform.OS === "ios" ? "" : "mx-4 mb-2 rounded-b-md bg-surface"}`}
-    style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 14 : 0), borderCurve: "continuous" }}
+    className="min-h-11 flex-row items-center gap-1.5 border-border pr-4 active:bg-surface-pressed"
+    style={{ paddingLeft: 16 + (showSpace ? AVATAR_SIZE + 14 : 0), borderBottomWidth: StyleSheet.hairlineWidth }}
   >
     <AppIcon name={expanded ? "chevron-up" : "chevron-down"} size={15} tone="accent" />
     <Text numberOfLines={1} className="text-caption font-semibold text-accent">{label}</Text>

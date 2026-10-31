@@ -44,10 +44,9 @@ confusion; the accessibility label is mandatory from day one.
   third line.
 - Row heights: **72 pt** for content lists (46 pt avatar, 12 pt vertical padding, 4 pt between the lines), **52 pt** for settings rows, **56 pt**
   minimum for anything with a 44 pt control.
-- **On Android, content rows are cards on the page.** Each `ListRow` is a `rounded-md` card inset 16 from
-  the screen edge with an 8 pt gap; rows that belong together (a fork tree) join into one card
-  through `group`. **On iOS they are flat**, as in Mail: full width, with a hairline inset past the
-  avatar. Settings rows keep hairlines **inset to the text column** inside their group card.
+- **Content rows are flat**, as in Mail, on both platforms: full width, with a hairline inset past the
+  avatar; rows that belong together (a fork tree) read as one item through `group`, and only its end
+  draws a separator. Settings rows keep hairlines **inset to the text column** inside their group card.
 - No chevrons in content lists: a tappable row with an avatar already reads as navigable.
   Chevrons stay only in grouped settings lists, where rows drill into another settings page.
 - Screen edge padding is 16. Section gap 24. Row internal gap 12. Everything is on the 4 pt grid
@@ -148,21 +147,21 @@ flag from such a file, so call sites stay the same:
 | Job | iOS | Android |
 | --- | --- | --- |
 | Tab bar | `NativeTabs` (`app/(tabs)/_layout.ios.tsx`) | `FloatingTabBar` (`_layout.tsx`) |
-| Navigation bar on pushed screens | Native stack header through `TopBar` (`NativeHeader.ios.tsx`); `drawn` opts out for bars that move with content, and transparent or long-press titles stay drawn | drawn `TopBar` |
-| Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `EdgeHeader`, `ExpandableSearchBar` |
-| Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` |
+| Navigation bar on pushed screens | Native stack header through `TopBar` (`NativeHeader.ios.tsx`); `drawn` opts out for bars that move with content, and transparent or long-press titles stay drawn | drawn `TopBar`: chevron back, centered title balanced against the actions |
+| Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `LargeTitleBar` in `EdgeHeader`, with the `LargeTitle` and a `SearchField` as the list's first row; the small title fades in once the Large Title scrolls under the bar |
+| Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` with the same bar: close leading, title centered |
 | Icons | SF Symbols (`Glyph.ios.tsx`, `src/sf-symbols.ts`) | Lucide |
-| Busy indicator | `ActivityIndicator` | accent dots (`Loader`) |
-| Content lists | Flat full-width rows with inset hairlines | `ListRow` cards |
+| Busy indicator | `ActivityIndicator` | the same eight-spoke spinner, drawn (`Loader`) |
+| Content lists | Flat full-width rows with inset hairlines (`ListRow`) | the same |
 | Language and Storage settings | SwiftUI `Form` | drawn settings rows |
-| Switches | System thumb with the accent track (`AppSwitch`) | themed `Switch` |
+| Switches | System thumb with the accent track (`AppSwitch`) | the iOS switch, drawn |
 | Segmented choice | SwiftUI segmented `Picker` (`NativeSegmented.ios.tsx`) | drawn `Segmented` |
 | Button menus: Chat and Space "more", Chats source filter, composer add | SwiftUI `Menu` (`NativeMenu.ios.tsx`) | `AnchoredActionMenu`, `AttachmentMenu` |
 | A few values picked in a settings row | SwiftUI menu `Picker` (`SettingsSelectRow.ios.tsx`) | drawn `SettingsSelectRow` |
 | Renaming a Chat | `Alert.prompt` | drawn dialog |
 | Composer harness choice | SwiftUI `Menu` with sections and checks (`harnessMenuSections`) | `HarnessPicker` |
-| Yes-or-no confirmations: sign out, cancel billing, unbind or remove a channel, rotate a referral code, clear the cache | system action sheet (`ConfirmSheet` in `SystemDialogs.ios.tsx`); a failure returns as an alert with Retry | `ConfirmSheet` drawn as a sheet |
-| Notices with one way out | system alert (`NoticeSheet`) | `NoticeSheet` drawn as a sheet |
+| Yes-or-no confirmations: sign out, cancel billing, unbind or remove a channel, rotate a referral code, clear the cache | system action sheet (`ConfirmSheet` in `SystemDialogs.ios.tsx`); a failure returns as an alert with Retry | `ConfirmSheet` drawn as an action sheet: the question and action in one card, Cancel below |
+| Notices with one way out | system alert (`NoticeSheet`) | `NoticeSheet` drawn as an alert |
 | Long-press peek on Chat and Space rows: a preview of the last exchange or the Space's description above Open (and Pin) | SwiftUI `ContextMenu` with `preview` (`NativeContextMenu.ios.tsx`), built from data already on screen | drawn `ContextMenu` with the same `preview` above the actions, opened at the touch |
 | Long-press menus: Space rows, file rows, the Chat and file titles | SwiftUI `ContextMenu` around the view (`NativeContextMenu.ios.tsx`), which lifts it into a preview | the drawn menu or alert from the view's own long press |
 

@@ -23,6 +23,7 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   "circle-x": "xmark.circle",
   clock: "clock",
   "chevron-down": "chevron.down",
+  "chevron-left": "chevron.backward",
   "chevron-right": "chevron.right",
   "chevron-up": "chevron.up",
   "chevrons-up-down": "chevron.up.chevron.down",

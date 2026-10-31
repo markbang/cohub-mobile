@@ -438,6 +438,7 @@ const chromeScope = {
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
+  LargeTitle: "LargeTitle", LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
@@ -678,7 +679,7 @@ for (const [tab, component, expectedRequests] of [
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
     AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
@@ -1174,7 +1175,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1432,13 +1433,13 @@ for (const [path, labels, chips] of [
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
     selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu",
   });
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
-  chromeNodes(render().find((node) => node.type === "ExpandableSearchBar").props.filters).find((node) => node.type === "Pressable").props.onPress();
+  chromeNodes(render().find((node) => node.type === "LargeTitleBar").props.actions).find((node) => node.props?.name === "filter").props.onPress();
   const deviceAction = () => render().find((node) => node.type === "AnchoredActionMenu").props.actions.find((action) => action.title === "deviceRuntime.thisDevice");
   deviceAction().onPress();
   assert.equal(deviceAction().checked, true);
@@ -1447,9 +1448,10 @@ for (const [path, labels, chips] of [
   assert.equal(row.type, "DeviceSpaceRow");
   row.props.onPress();
   assert.deepEqual(pushes.splice(0), [{ pathname: "/space/[spaceId]", params: { spaceId: "space-a" } }]);
-  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("old");
+  const searchField = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "SearchField");
+  searchField().props.onChangeText("old");
   assert.deepEqual(list().props.data.map((item) => item.instance.spaceId), ["space-gone"], "a query also matches the folder");
-  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("");
+  searchField().props.onChangeText("");
   instances = [];
   const empty = list().props.ListEmptyComponent;
   assert.equal(empty.props.title, "spaces.empty.device.title");
@@ -1468,50 +1470,6 @@ assert.equal(renderConnectionBanner({ visible: false }), null, "routine connecti
   assert.ok(nodes.some((node) => node.type === "AppIcon" && node.props.name === "cloud-off"));
   assert.deepEqual(nodes.filter((node) => node.type === "Text").flatMap((node) => node.props.children), ["ui.banner.unavailable"], "actual connection failures remain visible");
 }
-let searchExpanded;
-let searchQuery = "";
-let createdChats = 0;
-let keyboardDismissals = 0;
-let searchFocuses = 0;
-const searchInputRef = { current: { focus: () => searchFocuses++ } };
-const exposedSearchRef = { current: null };
-const searchEffects = [];
-const renderSearchBar = loadChromeComponent("../src/ui/ExpandableSearchBar.tsx", "ExpandableSearchBar", {
-  ...chromeScope,
-  useState: (initial) => { searchExpanded ??= initial; return [searchExpanded, (value) => { searchExpanded = value; }]; },
-  useRef: () => searchInputRef,
-  useEffect: (effect) => { searchEffects.push(effect); },
-  Keyboard: { dismiss: () => keyboardDismissals++ },
-});
-const searchProps = () => ({ title: "Chats", query: searchQuery, onQueryChange: (query) => { searchQuery = query; }, queryRef: exposedSearchRef, onCreate: () => createdChats++, createLabel: "New chat" });
-const searchAction = (tree, name) => chromeNodes(tree.props.actions).find((node) => node.props?.name === name);
-let searchTree = renderSearchBar(searchProps());
-assert.equal(chromeNodes(searchTree).some((node) => node.type === "TextInput"), false);
-searchAction(searchTree, "plus").props.onPress();
-assert.equal(createdChats, 1);
-searchAction(searchTree, "search").props.onPress();
-searchTree = renderSearchBar(searchProps());
-const searchInput = chromeNodes(searchTree).find((node) => node.type === "TextInput");
-assert.equal(searchInput.props.autoFocus, true);
-assert.equal(searchTree.props.actions, undefined, "empty search has no redundant clear/create controls");
-const releaseSearchRef = searchEffects.at(-1)();
-assert.equal(exposedSearchRef.current, searchInputRef.current);
-searchInput.props.onChangeText("project");
-searchTree = renderSearchBar(searchProps());
-assert.equal(chromeNodes(searchTree).find((node) => node.type === "TextInput").props.value, "project");
-searchAction(searchTree, "x").props.onPress();
-assert.equal(searchQuery, "");
-assert.equal(searchFocuses, 1);
-assert.equal(searchExpanded, true, "clearing search retains the editing mode");
-searchInput.props.onChangeText("another query");
-searchTree.props.onBack();
-assert.equal(searchQuery, "");
-assert.equal(searchExpanded, false);
-assert.equal(keyboardDismissals, 1);
-releaseSearchRef();
-assert.equal(exposedSearchRef.current, null);
-assert.ok(searchAction(renderSearchBar(searchProps()), "plus"), "closing search restores creation");
-
 const scrollTrace = new ChatScrollTrace();
 scrollTrace.record("ignored", "test");
 assert.equal(scrollTrace.snapshot().entries.length, 0);

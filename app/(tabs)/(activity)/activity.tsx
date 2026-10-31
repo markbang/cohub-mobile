@@ -13,6 +13,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 
 export default function ActivityScreen() {
@@ -39,12 +40,13 @@ export default function ActivityScreen() {
   };
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+      <LargeTitleBar title={t("tabs.activity")} scrollY={scrollY} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
     <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={<AppRefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={nativeHeaders ? undefined : headerHeight} />}>
-      {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
+      {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : <LargeTitle title={t("tabs.activity")} />}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
-      <View className="mb-6 mt-4 px-4">
+      <View className={`mb-6 px-4 ${nativeHeaders ? "mt-4" : "mt-1"}`}>
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>
           <View className="flex-row items-center gap-2">
             <View className="size-8 items-center justify-center rounded-xs bg-accent-soft" style={{ borderCurve: "continuous" }}><AppIcon name="database" size={16} tone="accent" strokeWidth={2.1} /></View>

@@ -246,23 +246,19 @@ export function AdaptiveSheet({
                 </View>
               </GestureDetector>
             ) : null}
-            <View className="min-h-14 flex-row items-center gap-3 border-border px-4 pb-3 pt-2" style={{ borderBottomWidth: StyleSheet.hairlineWidth }}>
-              <View className="flex-1 min-w-0">
-                <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
-                {subtitle ? (
-                  <Text className="text-body text-fg-secondary mt-1">
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
+            {/* As in UIKit sheets: close leads, the title centers, the trailing slot balances it. */}
+            <View className="min-h-14 flex-row items-center px-2 pb-2">
               <IconButton
+                filled
                 name="x"
                 label={t("ui.sheet.close", { title })}
-                size={36}
                 disabled={!dismissible}
                 onPress={requestClose}
               />
+              <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
+              <View className="size-11" />
             </View>
+            {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (
               <ScrollView
                 style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}

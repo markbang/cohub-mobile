@@ -4,7 +4,7 @@ import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/
 import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
-import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import { nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
@@ -21,9 +21,10 @@ import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances }
 import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, DataError, EmptyState, ExpandableSearchBar, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, PrimaryButton, Screen } from "@/src/ui";
+import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, PrimaryButton, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
@@ -220,32 +221,12 @@ export default function SpacesScreen() {
   });
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-    <ExpandableSearchBar
-      transparent
-      title={t("tabs.spaces")}
-      createLabel={t("spaces.action.create")}
-      query={query}
-      onQueryChange={setQuery}
-      placeholder={t("spaces.search.placeholder")}
-      onCreate={openCreate}
-      filters={<View className="flex-row">
-        {nativeMenus
-          ? <NativeMenuButton appearance="chip" icon="filter" label={t("spaces.filter.label")} title={filterLabel} actions={filterActions} testID="spaces-filter-menu" />
-          : <View ref={filterButtonRef} collapsable={false}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${t("spaces.filter.label")}, ${filterLabel}`}
-              accessibilityState={{ expanded: filterMenuOpen }}
-              hitSlop={{ top: 5, bottom: 5 }}
-              onPress={() => setFilterMenuOpen(true)}
-              className="min-h-8.5 flex-row items-center gap-1.5 rounded-full bg-surface-raised pl-3.5 pr-2.5 active:bg-surface-pressed"
-            >
-              <Text numberOfLines={1} className="text-subhead font-semibold text-fg">{filterLabel}</Text>
-              <AppIcon name="chevron-down" size={14} tone="muted" />
-            </Pressable>
-          </View>}
-      </View>}
-    />
+    <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
+      <View ref={filterButtonRef} collapsable={false}>
+        <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "accent" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
+      </View>
+      <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
+    </>} />
     {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>}
     <LegendList
@@ -263,11 +244,14 @@ export default function SpacesScreen() {
       keyboardShouldPersistTaps="handled"
       {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
       contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
-      ListHeaderComponent={<View className="px-3">
+      ListHeaderComponent={<View>
+        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")}><View className="px-4"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View></LargeTitle>}
+        <View className="px-3">
         {nativeHeaders && dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
+        </View>
       </View>}
       ListEmptyComponent={state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null) ? <LoadingRows count={4} /> : dataError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} /> : searchEmpty}
     />

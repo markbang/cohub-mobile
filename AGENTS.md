@@ -66,7 +66,7 @@ This repository is the native iOS/Android client. There is no web target.
 
 ## Native UI
 
-- iOS follows Apple HIG with system components: native stack headers (`TopBar`, `useNativeHeader`, `TabStack`), UIKit sheets (`AdaptiveSheet.ios.tsx`), SF Symbols, and `@expo/ui` SwiftUI controls. Android renders the drawn components in `src/ui` and `src/components` for one unified look. Split platforms with `.ios.tsx` files that share the Android variant's props; brand color tokens apply on both.
+- iOS follows Apple HIG with system components: native stack headers (`TopBar`, `useNativeHeader`, `TabStack`), UIKit sheets (`AdaptiveSheet.ios.tsx`), SF Symbols, and `@expo/ui` SwiftUI controls. Android draws the same iOS design with the components in `src/ui` and `src/components` (Large Title bars, centered titles, flat lists, action sheets, the iOS switch and spinner), keeping Lucide icons and the system font because SF Symbols and SF Pro are licensed for Apple platforms only. Split platforms with `.ios.tsx` files that share the Android variant's props; brand color tokens apply on both.
 - Follow the existing visual language and concise English UI copy. Use an applicable design skill for interaction or visual changes without redesigning unrelated screens.
 - Preserve safe-area insets, keyboard behavior, touch targets, accessibility labels, and existing navigation gestures.
 - Keep long messages, filenames, loading states, and empty/error states usable without overlap or unintended layout shifts. Check the affected screen in both theme modes when styling changes.

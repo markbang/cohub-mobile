@@ -76,7 +76,6 @@ export function AppearanceContent() {
   const { width } = useWindowDimensions();
   const previewWidth = Math.max(108, Math.min(124, (width - 48) / 3.05));
 
-  const switchColors = { trackColor: { false: theme.colors.borderStrong, true: theme.colors.accentBorder }, ios_backgroundColor: theme.colors.borderStrong };
 
   return (
     <View testID="appearance-content">
@@ -133,7 +132,6 @@ export function AppearanceContent() {
               value={pureBlack}
               disabled={preference === "light"}
               onValueChange={(value) => void setPureBlackPreference(value)}
-              {...switchColors}
             />
           </SettingsRow>
         </SettingsGroup>

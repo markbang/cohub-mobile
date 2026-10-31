@@ -191,7 +191,6 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
                 setFeedbackIncludeLog(value);
                 if (value) setFeedbackAttachments((current) => current.slice(0, MAX_ATTACHMENTS - 1));
               }}
-              ios_backgroundColor={theme.colors.borderStrong}
             />
           </SettingsRow>
           <PrimaryButton label={feedbackSubmitting ? t("common.loading") : t("about.feedback.submit")} disabled={feedbackSubmitting || !feedbackText.trim()} onPress={sendFeedback} />

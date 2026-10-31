@@ -1,52 +1,34 @@
 import { ActivityIndicator, Platform, Text, View } from "react-native";
-import Reanimated, { useReducedMotion } from "react-native-reanimated";
+import Reanimated, { steps, useReducedMotion } from "react-native-reanimated";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 
-const SIZES = {
-  /** Fits a 16–20pt icon slot: buttons, rows, list edges. */
-  sm: { dot: 5, gap: 3, height: 16 },
-  /** A region's only content while it loads. */
-  md: { dot: 7, gap: 4, height: 24 },
-} as const;
+/** UIActivityIndicatorView's two sizes: small for 16–20 pt slots (buttons, rows, list edges), large for a region's only content. */
+const SIZES = { sm: 20, md: 37 } as const;
+const SPOKES = 8;
+const SPIN = { from: { transform: [{ rotate: "0deg" }] }, to: { transform: [{ rotate: "360deg" }] } };
 
-const CYCLE_MS = 1050;
-const STAGGER_MS = 150;
-const REST = { opacity: 0.3, transform: [{ scale: 0.7 }] };
-const PEAK = { opacity: 1, transform: [{ scale: 1 }] };
-// Each dot swells in turn; the rest of the cycle is a pause so the wave reads as a beat, not a blur.
-const WAVE = { "0%": REST, "28%": PEAK, "56%": REST, "100%": REST };
-// Reduced motion keeps the opacity beat that says "still working" and drops the scaling.
-const WAVE_REDUCED = { "0%": { opacity: 0.3 }, "28%": { opacity: 1 }, "56%": { opacity: 0.3 }, "100%": { opacity: 0.3 } };
-
-/** The busy indicator: the system spinner on iOS, the accent dots on Android. */
+/** The busy indicator: the system spinner on iOS, and the same spoked spinner drawn on Android. */
 export function Loader({ size = "sm", color, accessibilityLabel }: { size?: keyof typeof SIZES; color?: string; accessibilityLabel?: string }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const reduced = useReducedMotion();
-  const { dot, gap, height } = SIZES[size];
-  if (Platform.OS === "ios") return <ActivityIndicator size={size === "md" ? "large" : "small"} color={color} accessibilityLabel={accessibilityLabel ?? t("common.loading")} style={{ height: size === "md" ? 37 : height }} />;
+  const label = accessibilityLabel ?? t("common.loading");
+  const box = SIZES[size];
+  if (Platform.OS === "ios") return <ActivityIndicator size={size === "md" ? "large" : "small"} color={color} accessibilityLabel={label} style={{ width: box, height: box }} />;
+  const spoke = { width: box * 0.09, height: box * 0.28 };
   return (
-    <View accessible accessibilityRole="progressbar" accessibilityLabel={accessibilityLabel ?? t("common.loading")} className="flex-row items-center" style={{ gap, height }}>
-      {[0, 1, 2].map((index) => (
-        <Reanimated.View
-          key={index}
-          style={{
-            width: dot,
-            height: dot,
-            borderRadius: dot / 2,
-            backgroundColor: color ?? theme.colors.accent,
-            ...(reduced ? { opacity: 0.3 } : REST),
-            animationName: reduced ? WAVE_REDUCED : WAVE,
-            animationDuration: CYCLE_MS,
-            animationDelay: index * STAGGER_MS,
-            animationIterationCount: "infinite",
-            animationTimingFunction: "ease-in-out",
-            animationFillMode: "backwards",
-          }}
-        />
-      ))}
-    </View>
+    <Reanimated.View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      // The spokes tick a step at a time, as UIKit's do; Reduce Motion holds them still.
+      style={{ width: box, height: box, ...(reduced ? null : { animationName: SPIN, animationDuration: 800, animationIterationCount: "infinite", animationTimingFunction: steps(SPOKES) }) }}
+    >
+      {Array.from({ length: SPOKES }, (_, index) => <View key={index} className="absolute inset-0 items-center" style={{ transform: [{ rotate: `${index * (360 / SPOKES)}deg` }] }}>
+        <View className="rounded-full" style={{ ...spoke, backgroundColor: color ?? theme.colors.textMuted, opacity: 1 - (index / SPOKES) * 0.8 }} />
+      </View>)}
+    </Reanimated.View>
   );
 }
 

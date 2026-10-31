@@ -1,9 +1,9 @@
 import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
-import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import { nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
@@ -13,7 +13,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { useApp } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, ExpandableSearchBar, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, Screen } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, listRefreshProps, Screen, SearchField } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
@@ -23,6 +23,7 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
@@ -156,32 +157,12 @@ export default function ChatsScreen() {
   return (
     <Screen edgeToEdge>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-      <ExpandableSearchBar
-        transparent
-        title={t("tabs.chats")}
-        createLabel={t("chats.action.newChat")}
-        query={query}
-        onQueryChange={setQuery}
-        queryRef={searchRef}
-        filters={<View className="flex-row">
-          {nativeMenus
-            ? <NativeMenuButton appearance="chip" icon="filter" label={t("chats.source.filter")} title={sourceLabel} actions={sourceActions} testID="chats-source-menu" />
-            : <View ref={sourceButtonRef} collapsable={false}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${t("chats.source.filter")}, ${sourceLabel}`}
-                accessibilityState={{ expanded: sourceMenuOpen }}
-                hitSlop={{ top: 5, bottom: 5 }}
-                onPress={() => setSourceMenuOpen(true)}
-                className={`min-h-8.5 flex-row items-center gap-1.5 rounded-full pl-3.5 pr-2.5 ${sourceFilter !== "all" ? "bg-accent-soft active:bg-surface-pressed" : "bg-surface-raised active:bg-surface-pressed"}`}
-              >
-                <Text numberOfLines={1} className={`text-subhead font-semibold ${sourceFilter !== "all" ? "text-accent" : "text-fg"}`}>{sourceLabel}</Text>
-                <AppIcon name="chevron-down" size={14} tone={sourceFilter !== "all" ? "accent" : "muted"} />
-              </Pressable>
-            </View>}
-        </View>}
-        onCreate={() => router.push("/new-chat")}
-      />
+      <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
+        <View ref={sourceButtonRef} collapsable={false}>
+          <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "accent" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
+        </View>
+        <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
+      </>} />
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>}
@@ -209,10 +190,13 @@ export default function ChatsScreen() {
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
-        ListHeaderComponent={<View className="px-3">
+        ListHeaderComponent={<View>
+          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")}><View className="px-4"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View></LargeTitle>}
+          <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
+          </View>
         </View>}
         ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingStatuses")} /> : null}
