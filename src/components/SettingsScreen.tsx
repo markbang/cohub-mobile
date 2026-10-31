@@ -968,7 +968,7 @@ function BillingSection({
 											credits && credits.netUsd < 0
 												? theme.colors.danger
 												: theme.colors.text,
-										marginTop: 5,
+										marginTop: 4,
 									},
 								]}
 							>

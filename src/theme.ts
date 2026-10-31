@@ -306,8 +306,8 @@ const ramp = (token: keyof typeof TEXT_RAMP, fontWeight?: TypographyStyle["fontW
 
 /** Legacy JS styles for screens not yet on className; same ramp as the `text-*` utilities. */
 const BASE_TYPOGRAPHY: Record<TypographyToken, TypographyStyle> = {
-  display: ramp("display", "700"),
-  title: ramp("title", "700"),
+  display: ramp("display", "600"),
+  title: ramp("title", "600"),
   heading: ramp("headline", "600"),
   body: ramp("body"),
   bodyMedium: ramp("body", "600"),
