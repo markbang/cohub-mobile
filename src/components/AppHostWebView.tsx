@@ -2,7 +2,7 @@ import { createAppBridgeCore, type AppAppearance, type AppBridgeCore, type AppBr
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Pressable, Text, View } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { config } from "@/src/config";
@@ -10,12 +10,17 @@ import { APP_SCOPES } from "@/src/data/app-manage";
 import { appDevicesRequest, appHostDelivery, appHostGrant, appHostScript, appNavigationRequest, appNavigationResult, appRuntimeSignal, readAppHostMessage } from "@/src/data/app-host";
 import { useApp } from "@/src/data/context";
 import { useTranslation, type Translate, type TranslationKey } from "@/src/i18n";
+import { motion } from "@/src/motion";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme, type AppTheme } from "@/src/theme";
-import { AppIcon, PrimaryButton } from "@/src/ui";
+import { AppIcon, EmptyState, LoadingState, PrimaryButton } from "@/src/ui";
 
 const CLOSED_DIALOG: AppBridgeDialogState = { authOpen: false, pendingAuth: null, authError: null, authSaving: false, selectedSpaceId: null, canChangeSpace: false };
 const DEVICE_LABELS: Record<AppDevice, TranslationKey> = { camera: "app.host.device.camera", microphone: "app.host.device.microphone", screen: "app.host.device.screen" };
+/** A page that keeps killing its web process is shown as failed instead of being reloaded in a loop. */
+const AUTO_RECOVER_INTERVAL_MS = 30_000;
+
+type LoadFailure = { kind: "offline" } | { kind: "server"; status: number } | { kind: "crashed" };
 
 function appearanceOf(theme: AppTheme, reducedMotion: boolean): AppAppearance {
   const c = theme.colors;
@@ -45,6 +50,11 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
   const [dialog, setDialog] = useState<AppBridgeDialogState>(CLOSED_DIALOG);
   const [deviceRequest, setDeviceRequest] = useState<{ requestId: string; devices: AppDevice[] } | null>(null);
   const [granted, setGranted] = useState<AppDevice[]>([]);
+  // Each attempt mounts a fresh WebView: a dead web process cannot be reused (Android requires the view to go).
+  const [attempt, setAttempt] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [failure, setFailure] = useState<LoadFailure | null>(null);
+  const lastRecovery = useRef(0);
   const appOrigin = useMemo(() => new URL(contentUrl).origin, [contentUrl]);
   const live = useRef({ appearance: appearanceOf(theme, reducedMotion), locale, userUuid, getAccessToken });
   useEffect(() => { live.current = { appearance: appearanceOf(theme, reducedMotion), locale, userUuid, getAccessToken }; }, [getAccessToken, locale, reducedMotion, theme, userUuid]);
@@ -125,6 +135,23 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
     void bridge().handleMessage({ data: message } as MessageEvent);
   };
 
+  const reload = () => {
+    ready.current = false;
+    setFailure(null);
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  };
+  const onProcessGone = () => {
+    ready.current = false;
+    const now = Date.now();
+    if (now - lastRecovery.current > AUTO_RECOVER_INTERVAL_MS) {
+      lastRecovery.current = now;
+      reload();
+    } else {
+      setFailure({ kind: "crashed" });
+    }
+  };
+
   const answerDevices = (allow: boolean) => {
     if (!deviceRequest) return;
     if (allow) {
@@ -137,8 +164,12 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
   };
 
   return <>
-    <WebView
+    <View className="flex-1">
+    {failure?.kind === "crashed" ? null : <WebView
+      key={attempt}
       ref={web}
+      accessibilityElementsHidden={Boolean(failure)}
+      importantForAccessibility={failure ? "no-hide-descendants" : "auto"}
       source={{ uri: contentUrl }}
       // design-system: WebView does not take className.
       style={{ flex: 1, backgroundColor: theme.colors.background }}
@@ -146,7 +177,13 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
       injectedJavaScriptBeforeContentLoaded={appHostScript(appOrigin)}
       onMessage={onMessage}
       onLoadStart={() => { ready.current = false; }}
-      onLoadEnd={() => { if (granted.length) web.current?.injectJavaScript(appHostGrant(granted)); }}
+      onLoadEnd={() => { setLoading(false); if (granted.length) web.current?.injectJavaScript(appHostGrant(granted)); }}
+      // Handled here so the platform's own error page never shows; iOS already drops cancelled and policy-blocked loads.
+      onError={(event) => { event.preventDefault(); setLoading(false); setFailure({ kind: "offline" }); }}
+      // Main frame only. A 4xx page is the Work's own response and stays visible.
+      onHttpError={(event) => { if (event.nativeEvent.statusCode >= 500) { setLoading(false); setFailure({ kind: "server", status: event.nativeEvent.statusCode }); } }}
+      onContentProcessDidTerminate={onProcessGone}
+      onRenderProcessGone={onProcessGone}
       javaScriptEnabled
       domStorageEnabled
       sharedCookiesEnabled={false}
@@ -168,8 +205,14 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
           return false;
         }
       }}
-      startInLoadingState
-    />
+    />}
+    {loading && !failure ? <Animated.View exiting={FadeOut.duration(motion.fadeOut.duration)} pointerEvents="none" className="absolute inset-0 bg-background">
+      <LoadingState />
+    </Animated.View> : null}
+    {failure ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} accessibilityViewIsModal className="absolute inset-0 bg-background">
+      <LoadFailureState failure={failure} onRetry={reload} />
+    </Animated.View> : null}
+    </View>
     {dialog.authOpen && dialog.pendingAuth ? <AuthorizeSheet appTitle={app.meta?.title || app.meta?.name || app.slug} dialog={dialog} onSelect={(spaceId) => bridge().setSelectedSpace(spaceId)} onConfirm={() => void bridge().confirmAuth(dialog.selectedSpaceId ?? undefined)} onCancel={() => bridge().cancelAuth()} /> : null}
     <AdaptiveSheet visible={Boolean(deviceRequest)} detent="fit" title={t("app.host.devicesTitle", { app: app.meta?.title || app.meta?.name || app.slug })} onClose={() => answerDevices(false)} scrollable={false}>
       <View className="gap-3">
@@ -185,6 +228,14 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
       </View>
     </AdaptiveSheet>
   </>;
+}
+
+function LoadFailureState({ failure, onRetry }: { failure: LoadFailure; onRetry: () => void }) {
+  const { t } = useTranslation();
+  const retry = { icon: "refresh" as const, label: t("common.retry"), onPress: onRetry };
+  if (failure.kind === "server") return <EmptyState icon="alert" title={t("work.load.server.title")} description={t("work.load.server.body", { status: failure.status })} action={retry} />;
+  if (failure.kind === "crashed") return <EmptyState icon="alert" title={t("work.load.crashed.title")} description={t("work.load.crashed.body")} action={retry} />;
+  return <EmptyState icon="cloud-off" title={t("work.load.offline.title")} description={t("work.load.offline.body")} action={retry} />;
 }
 
 function scopeLabel(scope: string, t: Translate): string {
