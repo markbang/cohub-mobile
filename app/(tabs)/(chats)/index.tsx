@@ -24,7 +24,7 @@ import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/sessi
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
-import { useBrandRefresh } from "@/src/ui/BrandRefresh";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
@@ -168,6 +168,7 @@ export default function ChatsScreen() {
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>}
+      <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
       <LegendList
         ref={listRef}
         onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
@@ -205,6 +206,7 @@ export default function ChatsScreen() {
         ListEmptyComponent={dataError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingStatuses")} /> : null}
       />
+      </BrandRefreshArea>
       {sourceMenuOpen ? <AnchoredActionMenu
         anchorRef={sourceButtonRef}
         title={t("chats.source.title")}

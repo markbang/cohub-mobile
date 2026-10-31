@@ -439,6 +439,7 @@ const chromeScope = {
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
+  BrandRefreshArea: "BrandRefreshArea",
   useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },

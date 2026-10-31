@@ -56,7 +56,7 @@ import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
-import { useBrandRefresh } from "@/src/ui/BrandRefresh";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
@@ -1184,7 +1184,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     measureVisibleRows();
   }, [measureVisibleRows, trace]);
   const handleListRefresh = useCallback(() => { void refreshSession(sessionId); }, [refreshSession, sessionId]);
-  const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh });
+  const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh, scrollEventThrottle: 100 });
   const { onScroll: trackPull, onScrollBeginDrag: trackPullStart } = pullRefresh;
   const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
   const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
@@ -1215,7 +1215,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
-        {timelineReady ? <LegendList
+        {timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><LegendList
           key={listGeneration}
           {...traceTouches}
           ref={listRef}
@@ -1252,7 +1252,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           {...pullRefresh.listProps}
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
-        /> : null}
+        /></BrandRefreshArea> : null}
         {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}
 
         {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}

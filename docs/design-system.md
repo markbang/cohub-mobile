@@ -154,7 +154,7 @@ flag from such a file, so call sites stay the same:
 | Busy indicator in buttons, rows, and list edges | `Loader`: the icon's cheek "c" spinning, in the color of its surface | the same |
 | A region's only content loading, a reply not started | `MascotLoader` (`Loader size="md"`): the mascot bobs and glances around | the same |
 | Outage banner, inline load errors, danger toasts | the worried mascot in place of the alert glyph | the same |
-| Pull to refresh on Chats, Spaces, Activity, and the Chat thread | `useBrandRefresh`: the system gesture with its spinner hidden; the mascot is revealed in the gap above the content as it is pulled and bobs there while refreshing | the system circle parked off screen; the mascot takes a row at the top while refreshing |
+| Pull to refresh on Chats, Spaces, Activity, and the Chat thread | `useBrandRefresh`: the system gesture with its spinner hidden; the mascot sits above the content, so the pull uncovers it at the content's own pace, and it bobs there while refreshing | `BrandRefreshArea` takes the pull: at the list's top a downward drag moves the list on the UI thread with a rubber band and grows the mascot in the gap; a release past the band refreshes |
 | Content lists | Flat full-width rows with inset hairlines (`ListRow`) | the same |
 | Language and Storage settings | SwiftUI `Form` | drawn settings rows |
 | Switches | System thumb with the accent track (`AppSwitch`) | the iOS switch, drawn |

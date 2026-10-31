@@ -14,7 +14,7 @@ import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
-import { useBrandRefresh } from "@/src/ui/BrandRefresh";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 
 export default function ActivityScreen() {
@@ -45,6 +45,7 @@ export default function ActivityScreen() {
       <LargeTitleBar title={t("tabs.activity")} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
+    <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
       {pullRefresh.header}
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
@@ -77,5 +78,6 @@ export default function ActivityScreen() {
       {activity?.error ? <DataError message={activity.error} onRetry={retry} /> : null}
       {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <ActivityHeatmapSkeleton /> : null}
     </ScrollView>
+    </BrandRefreshArea>
   </Screen>;
 }

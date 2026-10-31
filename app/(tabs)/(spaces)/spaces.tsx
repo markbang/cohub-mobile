@@ -25,7 +25,7 @@ import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, L
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
-import { useBrandRefresh } from "@/src/ui/BrandRefresh";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
@@ -231,6 +231,7 @@ export default function SpacesScreen() {
     </>} />
     {dataError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>}
+    <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <LegendList
       ref={listRef}
       onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
@@ -259,6 +260,7 @@ export default function SpacesScreen() {
       </View>}
       ListEmptyComponent={state.booting || (filter === "recent" && spaceList.loading && spaceList.overview === null) ? <LoadingRows count={4} /> : dataError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} /> : searchEmpty}
     />
+    </BrandRefreshArea>
     {filterMenuOpen ? <AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /> : null}
     <AdaptiveSheet
       visible={createOpen}
