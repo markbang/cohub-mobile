@@ -149,13 +149,15 @@ flag from such a file, so call sites stay the same:
 | Tab bar | `NativeTabs` (`app/(tabs)/_layout.ios.tsx`) | `FloatingTabBar` (`_layout.tsx`) |
 | Navigation bar on pushed screens | Native stack header through `TopBar` (`NativeHeader.ios.tsx`); `drawn` opts out for bars that move with content, and transparent or long-press titles stay drawn | drawn `TopBar`: chevron back, centered title balanced against the actions |
 | Tab roots | Large Title, system search bar, and bar items (`TabStack.ios.tsx`, `useNativeHeader`) | `LargeTitleBar` in `EdgeHeader`: the Large Title and the buttons share one row (App Store Today, a Material top app bar), with a `SearchField` as the list's first row |
-| Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`) | drawn `AdaptiveSheet` with the same bar: close leading, title centered |
+| Sheets | UIKit page sheet (`AdaptiveSheet.ios.tsx`): close leading, title centered, the one confirming action as a trailing checkmark (`confirm`); destructive and two-way choices keep worded buttons in `footer` | the same bar, drawn |
+| Row actions | `SwipeActions`: pin from a Space row's leading edge, labels from a Chat row's trailing edge; each also in the long-press menu and accessibility actions | the same |
 | Icons | SF Symbols (`Glyph.ios.tsx`, `src/sf-symbols.ts`) | Lucide |
 | Busy indicator in buttons, rows, and list edges | `Loader`: the icon's cheek "c" spinning, in the color of its surface | the same |
 | A region's only content loading, a reply not started | `MascotLoader` (`Loader size="md"`): the mascot bobs and glances around | the same |
 | Outage banner, inline load errors, danger toasts | the worried mascot in place of the alert glyph | the same |
 | Pull to refresh on Chats, Spaces, Activity, and the Chat thread | `useBrandRefresh`: the system gesture with its spinner hidden; the mascot sits above the content, so the pull uncovers it at the content's own pace, and it bobs there while refreshing | `BrandRefreshArea` takes the pull: at the list's top a downward drag moves the list on the UI thread with a rubber band and grows the mascot in the gap; a release past the band refreshes |
 | Content lists | Flat full-width rows with inset hairlines (`ListRow`) | the same |
+| Settings rows | Grouped rows with a solid accent tile and white glyph, as in iOS Settings (`SettingsRow`) | the same |
 | Language and Storage settings | SwiftUI `Form` | drawn settings rows |
 | Switches | System thumb with the accent track (`AppSwitch`) | the iOS switch, drawn |
 | Segmented choice | SwiftUI segmented `Picker` (`NativeSegmented.ios.tsx`) | drawn `Segmented` |
@@ -170,7 +172,9 @@ flag from such a file, so call sites stay the same:
 
 Cache retention is picked in place with `SettingsSelectRow` on both. The system tab bar mounts every
 tab at launch, where the drawn one mounts a tab on first visit. Tab roots stay React Native rather than
-a SwiftUI `Form`: UIKit has to find the root scroll view for the Large Title to collapse.
+a SwiftUI `Form`: UIKit has to find the root scroll view for the Large Title to collapse. The Chat and
+Space home bars stay drawn because they slide with the Space panel pager, which a navigation bar
+cannot. Sheets open full height: React Native's `Modal` has no medium detent.
 
 ### 2.5 Motion
 

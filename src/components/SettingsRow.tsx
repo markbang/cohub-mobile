@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 import { traceAction } from "@/src/data/interaction-trace";
+import { useAppTheme } from "@/src/theme";
 
-/** A grouped settings row: 52 pt, the glyph on a tinted tile, separator inset past it, chevron only when it drills in. */
+/** A grouped settings row: 52 pt, the glyph on a solid tile, separator inset past it, chevron only when it drills in. */
 export function SettingsRow({ icon, title, value, detail, children, onPress, disabled = false, danger = false, last = false, external = false }: {
   icon: IconName;
   title: string;
@@ -17,11 +18,13 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   /** Opens outside the app: shows an external-link glyph instead of a chevron and reads as a link. */
   external?: boolean;
 }) {
+  const { colors } = useAppTheme();
   return (
     <PressableOrView onPress={onPress} disabled={disabled} title={title} icon={icon} role={external ? "link" : "button"}>
       <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
-        <View className={`items-center justify-center rounded-xs ${danger ? "bg-danger-soft" : "bg-accent-soft"}`} style={ICON_TILE}>
-          <AppIcon name={icon} size={17} tone={danger ? "danger" : "accent"} strokeWidth={2.1} />
+        {/* As in iOS Settings: a solid tile with a white glyph, in the one accent (or danger for a destructive row). */}
+        <View className={`items-center justify-center rounded-xs ${danger ? "bg-danger" : "bg-accent"}`} style={ICON_TILE}>
+          <AppIcon name={icon} size={17} tone="onAccent" color={danger ? colors.dangerText : undefined} strokeWidth={2.1} />
         </View>
         <View className="min-w-0 flex-1 gap-0.5">
           <Text className={`text-body ${danger ? "text-danger" : "text-fg"}`}>{title}</Text>
