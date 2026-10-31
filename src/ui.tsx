@@ -3,7 +3,6 @@ import { useContext, useEffect, useRef, useState, type ComponentType, type React
 import {
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -14,10 +13,10 @@ import {
   View,
   type ColorValue,
   type GestureResponderEvent,
-  type KeyboardEvent,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
@@ -29,7 +28,7 @@ import { traceAction } from "@/src/data/interaction-trace";
 import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
-import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
+import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import type { ColorKey } from "@/src/design/tokens";
@@ -176,7 +175,8 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
   ) : (
     <View className="flex-1 bg-background" style={contentStyle}>{children}</View>
   );
-  const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView className="flex-1 bg-background" behavior="height">{body}</KeyboardAvoidingView>;
+  // The keyboard is followed frame by frame on the UI thread, with its own curve, on both platforms.
+  const wrapped = !keyboard ? body : <KeyboardAvoidingView behavior="padding" style={FILL}>{body}</KeyboardAvoidingView>;
   // Under an iOS navigation bar the root insets would double the top gap; measure natively instead.
   if (Platform.OS === "ios" && !edgeToEdge) return <View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView></View>;
   return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
@@ -677,46 +677,6 @@ export function getStatusTone(status: ActivityItem["status"]): "success" | "warn
 
 export function useBackButton() {
   return useRouter();
-}
-
-/**
- * iOS padding-mode replacement for KeyboardAvoidingView. RN's version applies the resume
- * keyboard frame (zero origin) as an overlap of the whole screen, which collapses the content
- * to nothing until the keyboard is dismissed. Unusable frames are ignored here, and
- * `keyboardDidShow` re-applies the frame once the scene is active and RN can convert it.
- * Like RN's view, it listens to show/hide only: split and floating keyboards report a frame
- * change before their hide.
- */
-function IOSKeyboardPaddingView({ children }: { children: ReactNode }) {
-  const { height: windowHeight } = useWindowDimensions();
-  const [bottom, setBottom] = useState(0);
-  const bottomRef = useRef(0);
-
-  useEffect(() => {
-    const apply = (name: string, event: KeyboardEvent) => {
-      const frame = event.endCoordinates;
-      if (!isUsableKeyboardFrame(frame)) {
-        recordDebugEvent("keyboard.frame_ignored", { event: name, screenY: frame.screenY, height: frame.height, windowHeight });
-        return;
-      }
-      const next = keyboardOverlap(frame, windowHeight);
-      if (next === bottomRef.current) return;
-      bottomRef.current = next;
-      Keyboard.scheduleLayoutAnimation(event);
-      setBottom(next);
-    };
-    const willShow = Keyboard.addListener("keyboardWillShow", (event) => apply("keyboardWillShow", event));
-    const didShow = Keyboard.addListener("keyboardDidShow", (event) => apply("keyboardDidShow", event));
-    const willHide = Keyboard.addListener("keyboardWillHide", (event) => {
-      if (bottomRef.current === 0) return;
-      bottomRef.current = 0;
-      Keyboard.scheduleLayoutAnimation(event);
-      setBottom(0);
-    });
-    return () => { willShow.remove(); didShow.remove(); willHide.remove(); };
-  }, [windowHeight]);
-
-  return <View className="flex-1 bg-background" style={{ paddingBottom: bottom }}>{children}</View>;
 }
 
 /** A control whose glyph changes (send, stop, sent; add, close) pops the new glyph in instead of swapping it. */

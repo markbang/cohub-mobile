@@ -1,0 +1,31 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "extended-srgb:0.99216,0.72941,0.44706,1.00000",
+      "extended-srgb:0.86275,0.29412,0.01961,1.00000"
+    ]
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name": "mascot.svg",
+          "name": "mascot"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}

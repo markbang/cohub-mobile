@@ -9,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
 import { AppUpdateBanner } from "@/src/components/AppUpdateBanner";
@@ -244,6 +245,8 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
   return <ThemeProvider value={{ ...navigationTheme, colors: { ...navigationTheme.colors, background: theme.colors.background, card: theme.colors.background, text: theme.colors.text, border: theme.colors.border, primary: theme.colors.accent } }}>
     {/* design-system: the root and navigator backgrounds are native props that only take JS colors. */}
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      {/* Edge to edge on Android: the keyboard frame is measured against the whole window. */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <NativeInteractionBridge />
       <ToastProvider>
@@ -285,6 +288,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
           <AppUpdateBanner />
         </View>
       </ToastProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   </ThemeProvider>;
 }
