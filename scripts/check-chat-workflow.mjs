@@ -2342,13 +2342,15 @@ let stateSyncHook;
 let timeoutSource;
 const sessionCallbacks = {};
 function inspectPagination(node) {
-  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage", "refreshSession", "loadLatestWindow"].includes(node.name.getText(contextSource))) {
+  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage", "sendNewMessage", "refreshSession", "loadLatestWindow"].includes(node.name.getText(contextSource))) {
     const callback = node.initializer;
     if (ts.isCallExpression(callback) && callback.expression.getText(contextSource) === "useCallback") sessionCallbacks[node.name.getText(contextSource)] = callback.arguments[0].getText(contextSource);
   }
   if (ts.isVariableDeclaration(node) && node.name.getText(contextSource) === "loadMoreSessions") paginationCallback = node.initializer.arguments[0].getText(contextSource);
   if (ts.isVariableDeclaration(node) && node.name.getText(contextSource) === "refreshChats") refreshChatsCallback = node.initializer.arguments[0].getText(contextSource);
   if (ts.isCallExpression(node) && ["useEffect", "useLayoutEffect"].includes(node.expression.getText(contextSource)) && node.arguments[0]?.getText(contextSource).includes("stateRef.current = state;")) stateSyncHook = node.expression.getText(contextSource);
+  // The provider stages its snapshot during render; `stateRef` reads that staged state.
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "AppProvider" && node.body.statements.some((statement) => statement.getText(contextSource) === "store.stage(snapshot);") && /const \[stateRef\] = useState\(\(\) => \(\{ get current\(\) \{ return store\.getSnapshot\(\)\.state; \} \}\)\);/.test(node.getText(contextSource))) stateSyncHook = "render";
   if (ts.isFunctionDeclaration(node) && node.name?.text === "withTimeout") timeoutSource = node.getText(contextSource);
   ts.forEachChild(node, inspectPagination);
 }
@@ -2513,7 +2515,7 @@ try {
 
 const handoff = paginationHarness(async () => ({ sessions: [], pageInfo: { hasMore: false, nextCursor: null } }));
 const nextPageState = { ...handoff.stateRef.current, sessionsLoadingMore: false, sessionsCursor: "next-page" };
-if (stateSyncHook === "useLayoutEffect") handoff.stateRef.current = nextPageState;
+if (stateSyncHook === "useLayoutEffect" || stateSyncHook === "render") handoff.stateRef.current = nextPageState;
 await handoff.load();
 if (stateSyncHook === "useEffect") handoff.stateRef.current = nextPageState;
 assert.deepEqual(handoff.calls, ["next-page"], "a completed page must request the next page instead of leaving a spinner with no active request");
@@ -4323,9 +4325,9 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
 
   // Selector subscriptions: a token batch may only reach this Chat's stream subscribers.
   const storeSource = ["shallowEqual", "sameSessionViewSummary", "summarizeSessionView", "sameViewHistories", "createAppStore", "createSelectionCache"].map((name) => contextFunction(name).replace(/^export /, "")).join("\n");
-  const { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache } = new Function("LOADING_VIEW", ts.transpileModule(`${storeSource}\nreturn { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ loading: true });
-  const streamScope = { ...viewScope, liveStreamStatusFromPatch, hasFinalAssistantForTurn };
-  const reduceStream = new Function(...Object.keys(streamScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(streamScope));
+  const { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache } = new Function("LOADING_VIEW", "translate", ts.transpileModule(`${storeSource}\nreturn { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ loading: true }, (key) => key);
+  const streamScope = { ...viewScope, liveStreamStatusFromPatch, hasFinalAssistantForTurn, displaySpaceName: (item) => item.name };
+  const reduceStream = new Function(...Object.keys(streamScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${contextFunction("mergeSessionItem")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(streamScope));
   const liveStream = { status: "streaming", turnId: "turn-live", messageId: null, contentBlocks: [{ type: "text", text: "Hel" }], intermediateMessages: [], runtimePhase: null, runtimeProvider: null, runtimeModel: null };
   const before = { ...viewOf(windowOf(1, 25, false, false)), sessions: [{ id: "fixture" }], spaces: [], sessionForks: {}, sessionTurnStatuses: {}, sessionLatestTurns: { fixture: { id: "turn-live", status: "running" } } };
   before.sessionViews.fixture.stream = liveStream;
@@ -4343,7 +4345,10 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   assert.equal(sameViewHistories(batch.sessionViews, grown.sessionViews), false);
   assert.equal(summarizeSessionView(undefined).loading, true, "an unopened Chat renders as loading");
 
-  const store = createAppStore({ state: before });
+  const store = createAppStore();
+  assert.throws(() => store.getSnapshot(), /data\.useAppProvider/, "nothing reads the store before the provider's first render");
+  store.stage({ state: before });
+  store.notify();
   let notified = 0;
   const unsubscribe = store.subscribe(() => notified++);
   const cache = createSelectionCache();
@@ -4351,15 +4356,53 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   const read = cache.reader(store, selectRow, shallowEqual);
   const first = read();
   cache.commit(first);
-  store.publish({ state: batch });
+  store.stage({ state: batch });
+  assert.equal(notified, 0, "staging during render never notifies");
+  store.notify();
   assert.equal(notified, 1);
   assert.equal(read(), first, "an equal selection keeps its reference, so useSyncExternalStore skips the render");
   assert.equal(cache.reader(store, (app) => selectRow(app), shallowEqual)(), first, "a re-created inline selector reuses the committed selection");
-  store.publish({ state: settled });
+  store.stage({ state: settled });
+  store.notify();
   assert.notEqual(read(), first, "a changed slice produces a new selection");
-  store.publish(store.getSnapshot());
-  assert.equal(notified, 2, "republishing the same snapshot does not notify");
+  store.notify();
+  assert.equal(notified, 2, "notifying the same staged snapshot again is a no-op");
   unsubscribe();
+
+  // New Chat hand-off: `sendNewMessage` seeds the view, and the ChatContent mounted in the same
+  // commit opens it from `useSession`'s layout effect, which runs before any provider layout effect.
+  assert.equal(stateSyncHook, "render", "the provider stages its snapshot and `stateRef` during render");
+  const handoffStore = createAppStore();
+  const providerStateRef = { get current() { return handoffStore.getSnapshot().state; } };
+  const space = { id: "space", name: "Space", slug: "space" };
+  const userTurn = { ...turnRange(1, 1)[0], id: "turn-new", status: "running", userText: "hi" };
+  handoffStore.stage({ state: { sessions: [], spaces: [space], sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {}, sessionForks: {} } });
+  handoffStore.notify();
+  const seeded = [];
+  const sendNewScope = {
+    client: { space: () => ({ prompt: async () => ({ mode: "immediate", session: { id: "new-chat", spaceId: "space" }, turn: userTurn }) }) },
+    stateRef: providerStateRef, dispatch: (action) => seeded.push(action), translate: (key) => key, newId: () => "client-message",
+    buildPromptContent: async () => [{ type: "text", text: "hi" }], displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
+    messagesFromTurns: (turns) => turns.map((turn) => ({ id: `${turn.id}:user`, role: "user", sequence: turn.sequence, meta: { turnId: turn.id, turnSequence: turn.sequence } })),
+    saveSessions: async () => {}, saveMessages: async () => {}, sync: { invalidate() {} }, userKey: "test-user",
+  };
+  const sendNew = new Function(...Object.keys(sendNewScope), ts.transpileModule(`return (${sessionCallbacks.sendNewMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendNewScope));
+  await sendNew("space", "hi");
+  // The provider's render: React folds the seeded dispatches and the draft's `setCreatedChat` into one pass.
+  handoffStore.stage({ state: seeded.reduce(reduceStream, handoffStore.getSnapshot().state) });
+  const mountedView = createSelectionCache().reader(handoffStore, (app) => summarizeSessionView(app.state.sessionViews["new-chat"]), sameSessionViewSummary)();
+  assert.deepEqual([mountedView.loading, Boolean(mountedView.session), mountedView.historyLoaded, mountedView.messages.length], [false, true, true, 1], "the Chat mounted with the new id paints the seeded turn, not the opening placeholder");
+  const opened = [];
+  const refreshes = [];
+  const openScope = {
+    client: {}, openTokens: { current: new Map() }, stateRef: providerStateRef, dispatch: (action) => opened.push(action),
+    markChatEntry: () => {}, recordSpaceVisit: () => {}, attachSessionRealtime: () => {}, refreshSession: async (id, options) => { refreshes.push([id, options]); },
+    loadMessages: async () => { throw new Error("memory owns the seeded Chat"); },
+  };
+  const openSeeded = new Function(...Object.keys(openScope), ts.transpileModule(`return (${sessionCallbacks.loadSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(openScope));
+  await openSeeded("new-chat");
+  assert.deepEqual(opened, [], "opening the new Chat in its mount commit keeps the seeded view instead of restarting it as loading");
+  assert.deepEqual(refreshes, [["new-chat", { silent: true, catchUp: true }]], "it continues in place with a silent catch-up");
   assert.equal(shallowEqual([1, 2], [1, 2]), true);
   assert.equal(shallowEqual([1, 2], { 0: 1, 1: 2 }), false);
   assert.equal(shallowEqual({ a: 1 }, { a: 1, b: undefined }), false);

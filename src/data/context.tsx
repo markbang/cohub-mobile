@@ -51,7 +51,6 @@ import {
   type ComposerDraftScope,
 } from "@/src/data/local-db";
 import type {
-  ActivityItem,
   AppState,
   AttachmentDraft,
   ChatModelCatalogItem,
@@ -73,13 +72,10 @@ import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, load
 import { getInstallationId } from "@/src/platform/installation";
 import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
-import { sessionActivity } from "@/src/data/session-activity";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
 import {
-  displaySessionTitle,
   displaySpaceName,
   newId,
-  previewText,
   sortByRecent,
 } from "@/src/utils";
 
@@ -890,7 +886,6 @@ export type AppSnapshot = {
   modelStatus: ModelStatusResponse | null;
   modelStatusLoading: boolean;
   modelStatusError: string | null;
-  activityItems: ActivityItem[];
 };
 
 /** Provider operations and session-scoped handles; identities change only with the client or user. */
@@ -946,21 +941,31 @@ export type AppActions = {
 type AppStore = {
   getSnapshot: () => AppSnapshot;
   subscribe: (listener: () => void) => () => void;
-  publish: (snapshot: AppSnapshot) => void;
+  /** Render phase: makes the snapshot readable before any child renders, without notifying. */
+  stage: (snapshot: AppSnapshot) => void;
+  /** Layout phase: wakes already-mounted subscribers whose slice the staged snapshot changed. */
+  notify: () => void;
 };
 
-function createAppStore(initial: AppSnapshot): AppStore {
-  let current = initial;
+function createAppStore(): AppStore {
+  let current: AppSnapshot | null = null;
+  let notified: AppSnapshot | null = null;
   const listeners = new Set<() => void>();
   return {
-    getSnapshot: () => current,
+    getSnapshot: () => {
+      if (!current) throw new Error(translate("data.useAppProvider"));
+      return current;
+    },
     subscribe: (listener) => {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    publish: (snapshot) => {
-      if (snapshot === current) return;
+    stage: (snapshot) => {
       current = snapshot;
+    },
+    notify: () => {
+      if (current === notified) return;
+      notified = current;
       for (const listener of [...listeners]) listener();
     },
   };
@@ -988,7 +993,10 @@ export function AppProvider({
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const connectionStateRef = useRef<ConnectionState>("idle");
   const [connectionUnavailable, setConnectionUnavailable] = useState(false);
-  const stateRef = useRef(state);
+  const [store] = useState(createAppStore);
+  // Reads the snapshot staged by this render, so a child's layout effect in the same commit
+  // (e.g. `useSession` opening a Chat `sendNewMessage` just seeded) sees the state it rendered.
+  const [stateRef] = useState(() => ({ get current() { return store.getSnapshot().state; } }));
   const subscriptions = useRef(new Map<string, () => void>());
   const sessionSpaces = useRef(new Map<string, string>());
   const openTokens = useRef(new Map<string, number>());
@@ -1038,11 +1046,6 @@ export function AppProvider({
   // deployment never reuses another environment's cached Spaces, Chats, or read state.
   const userKey = config.environment === "prod" ? userUuid : `${config.environment}:${userUuid}`;
   useDeviceRuntimeSession(userKey, getAccessToken);
-
-  // Child pagination effects must see this commit, not the previous page's loading flag.
-  useLayoutEffect(() => {
-    stateRef.current = state;
-  }, [state]);
 
   const dispatch = useCallback((action: Action) => {
     if (action.type === "turn-upsert" || action.type === "turn-patch" || action.type === "session-upsert") {
@@ -1174,7 +1177,7 @@ export function AppProvider({
     } finally {
       if (generation === statusGenerationRef.current) dispatch({ type: "session-status-end", error: statusError, silent: options.silent });
     }
-  }, [dispatch]);
+  }, [dispatch, stateRef]);
 
   const refreshHome = useCallback((options: { silent?: boolean } = {}) => {
     if (homeRefreshRequestRef.current) return homeRefreshRequestRef.current;
@@ -1273,7 +1276,7 @@ export function AppProvider({
       if (homeRefreshRequestRef.current === request) homeRefreshRequestRef.current = null;
     }).catch(() => undefined);
     return request;
-  }, [createClient, dispatch, ensureInstallation, getAccessToken, refreshSessionStatuses, userKey]);
+  }, [createClient, dispatch, ensureInstallation, getAccessToken, refreshSessionStatuses, userKey, stateRef]);
 
   const refreshChats = useCallback((): Promise<void> => {
     if (homeRefreshRequestRef.current) return homeRefreshRequestRef.current;
@@ -1405,7 +1408,7 @@ export function AppProvider({
       if (sessionsMoreRequestRef.current === task) sessionsMoreRequestRef.current = null;
     }).catch(() => undefined);
     return task;
-  }, [client, dispatch, refreshSessionStatuses, userKey]);
+  }, [client, dispatch, refreshSessionStatuses, userKey, stateRef]);
 
   const applyCacheRetention = useCallback(async () => {
     const cutoff = cacheRetentionCutoff(await loadCacheRetention(), Date.now());
@@ -1570,7 +1573,7 @@ export function AppProvider({
       },
     });
     return () => { stopChats(); stopStatuses(); stopSpaces(); };
-  }, [client, dispatch, refreshChats, refreshSessionStatuses, state.booting, sync]);
+  }, [client, dispatch, refreshChats, refreshSessionStatuses, state.booting, sync, stateRef]);
 
   const applyRealtimeChange = useCallback((change: ReturnType<typeof spaceRealtimeChange>) => {
     if (change.sessionId) {
@@ -1587,7 +1590,7 @@ export function AppProvider({
     }
     for (const key of change.exact) sync.invalidate(key);
     for (const prefix of change.prefixes) sync.invalidatePrefix(prefix);
-  }, [dispatch, sync]);
+  }, [dispatch, sync, stateRef]);
 
   const handleSpaceEvent = useCallback((event: SpaceRealtimeEvent) => {
     recordDebugEvent("realtime.space_event", {
@@ -1641,7 +1644,7 @@ export function AppProvider({
       }
     });
     return () => { disposed = true; stop(); };
-  }, [applyRealtimeChange, client, dispatch]);
+  }, [applyRealtimeChange, client, dispatch, stateRef]);
 
   const spaceRealtime = useMemo(() => client ? createSpaceRealtime({
     subscribe: (spaceId, listener) => client.space(spaceId).subscribe(listener),
@@ -1722,7 +1725,7 @@ export function AppProvider({
       try { await request; }
       finally { if (paginationRequestsRef.current.get(key) === request) paginationRequestsRef.current.delete(key); }
     },
-    [client, dispatch, userKey],
+    [client, dispatch, userKey, stateRef],
   );
 
   const loadTurnIndex = useCallback(async (sessionId: string, options: { force?: boolean } = {}) => {
@@ -1763,7 +1766,7 @@ export function AppProvider({
       if (paginationRequestsRef.current.get(key) === task) paginationRequestsRef.current.delete(key);
     }).catch(() => undefined);
     return task;
-  }, [dispatch]);
+  }, [dispatch, stateRef]);
 
   const loadOlderTurns = useCallback(async (sessionId: string) => {
     const key = `${sessionId}:older`;
@@ -1800,7 +1803,7 @@ export function AppProvider({
       if (paginationRequestsRef.current.get(key) === task) paginationRequestsRef.current.delete(key);
     }).catch(() => undefined);
     return task;
-  }, [dispatch, userKey]);
+  }, [dispatch, userKey, stateRef]);
 
   const loadNewerTurns = useCallback(async (sessionId: string) => {
     const key = `${sessionId}:newer`;
@@ -1837,7 +1840,7 @@ export function AppProvider({
       if (paginationRequestsRef.current.get(key) === task) paginationRequestsRef.current.delete(key);
     }).catch(() => undefined);
     return task;
-  }, [dispatch, userKey]);
+  }, [dispatch, userKey, stateRef]);
 
   const jumpToTurn = useCallback(async (sessionId: string, target: number | { turnId: string }) => {
     const view = stateRef.current.sessionViews[sessionId];
@@ -1855,7 +1858,7 @@ export function AppProvider({
     dispatch({ type: "session-window-success", sessionId, session: response.session, turns: response.turns, hasMoreOlder: response.hasMoreOlder, hasMoreNewer: response.hasMoreNewer, oldestCursor: response.oldestCursor, newestCursor: response.newestCursor });
     void saveMessages(userKey, sessionId, messagesFromTurns(mergeTurns(view?.turns ?? [], response.turns))).catch(() => undefined);
     return sequence;
-  }, [dispatch, userKey]);
+  }, [dispatch, userKey, stateRef]);
 
   /** One request for the newest page, instead of paging forward through everything between. */
   const loadLatestWindow = useCallback(async (sessionId: string): Promise<{ turns: SessionTurnRecord[]; replaced: boolean }> => {
@@ -1873,7 +1876,7 @@ export function AppProvider({
     dispatch({ type: "session-window-success", sessionId, session: response.session, turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false, newest: true });
     void saveMessages(userKey, sessionId, messagesFromTurns(response.turns)).catch(() => undefined);
     return { turns: (merged ?? head).turns, replaced: merged === null };
-  }, [dispatch, userKey]);
+  }, [dispatch, userKey, stateRef]);
 
   const loadLatestTurns = useCallback(async (sessionId: string) => (await loadLatestWindow(sessionId)).replaced, [loadLatestWindow]);
 
@@ -1993,7 +1996,7 @@ export function AppProvider({
       stopPersisted();
     };
     subscriptions.current.set(sessionId, stop);
-  }, [dispatch, refreshSession, userKey]);
+  }, [dispatch, refreshSession, userKey, stateRef]);
 
   /**
    * Recover an open Chat after a transport/foreground gap: rebuild the generation
@@ -2094,7 +2097,7 @@ export function AppProvider({
         dispatch({ type: "session-error", sessionId, message: error instanceof Error ? error.message : translate("data.openChatFailed") });
       }
     },
-    [attachSessionRealtime, client, dispatch, recordSpaceVisit, refreshSession, userKey],
+    [attachSessionRealtime, client, dispatch, recordSpaceVisit, refreshSession, userKey, stateRef],
   );
 
   const releaseSession = useCallback((sessionId: string) => {
@@ -2142,7 +2145,7 @@ export function AppProvider({
       await refreshSession(sessionId);
       sync.invalidate();
     },
-    [client, dispatch, refreshSession, sync],
+    [client, dispatch, refreshSession, sync, stateRef],
   );
 
   const sendMessage = useCallback(
@@ -2252,7 +2255,7 @@ export function AppProvider({
         throw error;
       }
     },
-    [client, dispatch, loadLatestWindow, sync, userKey, userUuid],
+    [client, dispatch, loadLatestWindow, sync, userKey, userUuid, stateRef],
   );
 
   const discardFailedSend = useCallback((sessionId: string, messageId: string) => {
@@ -2332,7 +2335,7 @@ export function AppProvider({
       sync.invalidate();
       return { session: result.session, turn, message };
     },
-    [client, dispatch, sync, userKey],
+    [client, dispatch, sync, userKey, stateRef],
   );
 
   const loadComposerDraftForUser = useCallback(
@@ -2387,7 +2390,7 @@ export function AppProvider({
       void saveSpaces(userKey, [next]).catch(() => undefined);
     }
     return pinned;
-  }, [client, dispatch, userKey]);
+  }, [client, dispatch, userKey, stateRef]);
 
   const toggleSpacePin = useCallback(async (spaceId: string) => {
     if (!client) throw new Error(translate("data.stillConnecting"));
@@ -2425,7 +2428,7 @@ export function AppProvider({
         spacePinPendingMutationsRef.current.delete(spaceId);
       }
     }
-  }, [client, dispatch, userKey]);
+  }, [client, dispatch, userKey, stateRef]);
 
   useEffect(() => {
     if (!client) return;
@@ -2444,7 +2447,7 @@ export function AppProvider({
       dispatch({ type: "space-upsert", space: next });
       void saveSpaces(userKey, [next]).catch(() => undefined);
     });
-  }, [client, dispatch, userKey]);
+  }, [client, dispatch, userKey, stateRef]);
 
   const upsertSpace = useCallback((space: SpaceRecord) => {
     dispatch({ type: "space-upsert", space });
@@ -2462,7 +2465,7 @@ export function AppProvider({
     void saveSessions(userKey, [session], [fork]).catch(() => undefined);
     sync.invalidate();
     return result.session;
-  }, [client, dispatch, sync, userKey]);
+  }, [client, dispatch, sync, userKey, stateRef]);
 
   const rememberSessionForks = useCallback((forks: SessionListFork[]) => {
     if (forks.length === 0) return;
@@ -2483,7 +2486,7 @@ export function AppProvider({
       if (currentView) dispatch({ type: "session-meta", sessionId, session: result.session, space: currentView.space });
       sync.invalidate();
     },
-    [client, dispatch, sync],
+    [client, dispatch, sync, stateRef],
   );
 
   const loadSessionReadSequenceForUser = useCallback(
@@ -2517,41 +2520,16 @@ export function AppProvider({
     setState({ ...initialState, booting: false, refreshing: false });
   }, [resetSpaceList, userKey]);
 
-  const activityItems = useMemo<ActivityItem[]>(() => {
-    return state.sessions.slice(0, 30).flatMap((session) => {
-      const normalizedStatus = sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses);
-      if (normalizedStatus === "idle") return [];
-      const status = normalizedStatus === "running"
-        ? "running"
-        : normalizedStatus === "failed"
-          ? "failed"
-          : normalizedStatus === "stopped"
-            ? "stopped"
-            : "complete";
-      const latestTurn = state.sessionLatestTurns[session.id];
-      const activity = sessionActivity(session, { status: normalizedStatus, latestTurn, live: null, t: translate });
-      return {
-        id: session.id,
-        sessionId: session.id,
-        spaceId: session.spaceId,
-        title: displaySessionTitle(session),
-        spaceName: session.space?.name?.trim() || translate("space.fallbackName"),
-        preview: activity?.text || previewText(session.latestMessageText) || previewText(latestTurn?.assistantText || latestTurn?.userText) || translate("session.noMessages"),
-        status,
-        updatedAt: session.lastMessageAt ?? session.updatedAt,
-      };
-    });
-  }, [state.sessionLatestTurns, state.sessionTurnStatuses, state.sessions]);
-
   const snapshot = useMemo<AppSnapshot>(
-    () => ({ state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, activityItems }),
-    [state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError, activityItems],
+    () => ({ state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError }),
+    [state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError],
   );
-  const [store] = useState(() => createAppStore(snapshot));
-  // Subscribers re-render from this layout phase, before paint, so a commit never shows stale slices;
-  // children's passive effects already read the published snapshot.
+  // Staged during render so children rendered or mounted in this pass, their layout effects, and
+  // provider callbacks all read it. A discarded render is only ever superseded by a newer one.
+  store.stage(snapshot);
+  // Mounted subscribers that bailed out of this pass re-render from here, before paint.
   useLayoutEffect(() => {
-    store.publish(snapshot);
+    store.notify();
   }, [snapshot, store]);
 
   const actions = useMemo<AppActions>(
