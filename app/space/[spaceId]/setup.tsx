@@ -50,7 +50,7 @@ export default function SpaceSetupScreen() {
     try {
       await client.space(spaceId).sandbox.recreate();
       setConfirming(false);
-      toast({ title: t("space.settings.sandbox.restarted") });
+      toast({ title: t("space.settings.sandbox.restarted"), tone: "success" });
       await load().catch(() => undefined);
     } catch (caught) {
       toast({ title: t("space.settings.sandbox.restartFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });

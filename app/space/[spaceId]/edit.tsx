@@ -43,7 +43,7 @@ export default function EditSpaceScreen() {
         await spaceClient.profile({ description: description.trim() || null });
       }
       
-      toast({ title: t("space.edit.saved") });
+      toast({ title: t("space.edit.saved"), tone: "success" });
       router.back();
     } catch (error) {
       Alert.alert(

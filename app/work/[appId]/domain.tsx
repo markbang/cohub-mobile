@@ -171,7 +171,7 @@ function CopyLine({ label, value }: { label: string; value: string }) {
   const copy = async () => {
     try {
       await Clipboard.setStringAsync(value);
-      toast({ title: t("app.domain.copied") });
+      toast({ title: t("app.domain.copied"), tone: "success" });
     } catch (caught) {
       toast({ title: t("app.domain.error.generic"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     }

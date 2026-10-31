@@ -67,7 +67,7 @@ export function SpaceFileRow({ entry, onPress, onLongPress, menuActions, compact
       : t("space.file.type", { type: entry.mimeType || t("space.file.generic"), size: formatSpaceFileBytes(entry.size) });
   const copyPath = () => {
     void Clipboard.setStringAsync(entry.path)
-      .then(() => showToast({ title: t("file.pathCopied") }))
+      .then(() => showToast({ title: t("file.pathCopied"), tone: "success" }))
       .catch((caught: unknown) => showToast({ title: t("file.copyPathFailed.title"), message: caught instanceof Error ? caught.message : t("file.copyPathFailed.body"), tone: "danger" }));
   };
   // iOS lifts the row into the system context menu, which owns the hold; the no-op keeps it from becoming a press.

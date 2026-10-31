@@ -64,7 +64,7 @@ export default function ScheduleScreen() {
     setBusy("toggle");
     try {
       setJob((await client.cronJobs.toggle(job.id, enabled)).job);
-      toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled") });
+      toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
     } catch (caught) {
       toast({ title: t("space.settings.schedule.toggleFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     } finally {
@@ -82,7 +82,7 @@ export default function ScheduleScreen() {
       const { job: next } = await client.cronJobs.update(job.id, { title: editing.title.trim(), cronExpression: editing.cronExpression.trim(), timezone: editing.timezone.trim() });
       setJob(next);
       setEditing(null);
-      toast({ title: t("schedule.saved") });
+      toast({ title: t("schedule.saved"), tone: "success" });
     } catch (caught) {
       setEditError(caught instanceof Error ? caught.message : t("schedule.saveFailed"));
     } finally {
@@ -96,7 +96,7 @@ export default function ScheduleScreen() {
     try {
       await client.cronJobs.delete(job.id);
       setConfirmDelete(false);
-      toast({ title: t("schedule.deleted") });
+      toast({ title: t("schedule.deleted"), tone: "success" });
       router.back();
     } catch (caught) {
       toast({ title: t("schedule.deleteFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });

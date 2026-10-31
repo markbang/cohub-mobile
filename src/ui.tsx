@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
+  AccessibilityInfo,
   Dimensions,
   Image,
   Keyboard,
@@ -669,13 +670,33 @@ export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string
 
 const REMOVE_SLOP = { left: 12 } as const;
 
+// Shared across every mounted banner (each tab keeps its own), so one outage is read once and a link
+// flapping within the cooldown is not read again. A drop shorter than the delay is never read.
+const OUTAGE_ANNOUNCE_DELAY_MS = 1500;
+const OUTAGE_ANNOUNCE_COOLDOWN_MS = 30_000;
+let lastOutageAnnouncement = -Infinity;
+
+function useOutageAnnouncement(visible: boolean, label: string) {
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => {
+      if (Date.now() - lastOutageAnnouncement < OUTAGE_ANNOUNCE_COOLDOWN_MS) return;
+      lastOutageAnnouncement = Date.now();
+      AccessibilityInfo.announceForAccessibility(label);
+    }, OUTAGE_ANNOUNCE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [label, visible]);
+}
+
 export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
+  const label = t("ui.banner.unavailable");
+  useOutageAnnouncement(visible, label);
   if (!visible) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
-    <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
+    <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
       <Mascot size={20} mood="worried" />
-      <Text numberOfLines={1} className="text-caption text-fg">{t("ui.banner.unavailable")}</Text>
+      <Text numberOfLines={1} className="text-caption text-fg">{label}</Text>
     </View>
   </Animated.View>;
 }

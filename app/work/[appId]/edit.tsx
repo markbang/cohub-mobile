@@ -62,7 +62,7 @@ export default function ManageWorkScreen() {
       const meta = withCohubBar({ ...detail.app.meta, title: title.trim() || undefined, description: description.trim() || undefined }, hideBar);
       const result = await client.apps.update(appId, { status: published ? "published" : "disabled", visibility, meta });
       setDetail((current) => current ? { ...current, app: result.app } : current);
-      toast({ title: t("app.edit.saved") });
+      toast({ title: t("app.edit.saved"), tone: "success" });
       router.back();
     } catch (caught) {
       toast({ title: t("app.edit.saveFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
@@ -77,7 +77,7 @@ export default function ManageWorkScreen() {
     try {
       await client.apps.delete(appId);
       setConfirmDelete(false);
-      toast({ title: t("app.manage.deleted") });
+      toast({ title: t("app.manage.deleted"), tone: "success" });
       router.dismiss(2);
     } catch (caught) {
       toast({ title: t("app.manage.deleteFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
 import { getComposerMenuLayout, type ComposerMenuAnchor } from "@/src/ui/composer-menu-layout";
 import { PopoverSurface, type PopoverOrigin } from "@/src/ui/PopoverSurface";
+import { ToastViewport } from "@/src/components/Toast";
 
 // The layout stacks the menu above the composer, starting at its leading edge.
 const MENU_ORIGIN: PopoverOrigin = [0, "100%", 0];
@@ -57,6 +58,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
         role="dialog"
         className="absolute min-h-0 overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[layout, { height: fillHeight ? layout.maxHeight : undefined, borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
       >{children}</PopoverSurface> : null}
+      <ToastViewport />
     </View>
   </Modal>;
 }

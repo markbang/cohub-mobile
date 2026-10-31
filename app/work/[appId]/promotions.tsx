@@ -59,7 +59,7 @@ export default function WorkPromotionsScreen() {
   const copy = async (promotion: AppPromotionRecord) => {
     try {
       await Clipboard.setStringAsync(promotionUrl(publicUrl, promotion));
-      toast({ title: t("app.promo.copied") });
+      toast({ title: t("app.promo.copied"), tone: "success" });
     } catch (caught) {
       toast({ title: t("app.promo.copyFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     }

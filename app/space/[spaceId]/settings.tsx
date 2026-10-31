@@ -90,7 +90,7 @@ export default function SpaceSettingsScreen() {
       setEnv(result.env);
       setName("");
       setValue("");
-      toast({ title: t("space.settings.saved") });
+      toast({ title: t("space.settings.saved"), tone: "success" });
     } catch (error) {
       toast({ title: t("space.settings.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
     } finally {
@@ -153,9 +153,9 @@ export default function SpaceSettingsScreen() {
         } : current);
       }
       if (next.spec || next.image !== undefined) {
-        toast({ title: specNeedsRestart(sandbox ?? null, pendingRestart) ? t("space.settings.spec.savedRestart") : t(next.spec ? "space.settings.spec.updated" : "space.settings.image.updated") });
+        toast({ title: specNeedsRestart(sandbox ?? null, pendingRestart) ? t("space.settings.spec.savedRestart") : t(next.spec ? "space.settings.spec.updated" : "space.settings.image.updated"), tone: "success" });
       } else {
-        toast({ title: t("space.settings.saved") });
+        toast({ title: t("space.settings.saved"), tone: "success" });
       }
     } catch (error) {
       toast({ title: t("space.settings.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
@@ -172,7 +172,7 @@ export default function SpaceSettingsScreen() {
       const refreshed = await client.space(spaceId).getConfig().catch(() => null);
       if (refreshed?.config.sandbox) setConfig(refreshed.config.sandbox);
       else setConfig((current) => current ? { ...current, specPendingRestart: false, appliedSpec: current.spec ?? "standard" } : current);
-      toast({ title: t("space.settings.sandbox.restarted") });
+      toast({ title: t("space.settings.sandbox.restarted"), tone: "success" });
     } catch (error) {
       toast({ title: t("space.settings.sandbox.restartFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
     } finally {
@@ -202,7 +202,7 @@ export default function SpaceSettingsScreen() {
       setMods((current) => [...current.filter((mod) => mod.id !== result.item.id), result.item]);
       setAddModOpen(false);
       setModSpaceId("");
-      toast({ title: t("space.settings.modAdded"), message: t(result.sandboxRestarting ? "space.settings.modRestarting" : "space.settings.modAddedRestart") });
+      toast({ title: t("space.settings.modAdded"), message: t(result.sandboxRestarting ? "space.settings.modRestarting" : "space.settings.modAddedRestart"), tone: "success" });
     } catch (error) {
       setModError(error instanceof Error ? error.message : t("space.settings.modAddFailed"));
     } finally {
@@ -311,7 +311,7 @@ export default function SpaceSettingsScreen() {
                 else next.add(item.name);
                 return next;
               })}
-              onCopy={() => void Clipboard.setStringAsync(item.value).then(() => toast({ title: t("space.settings.copied") }))}
+              onCopy={() => void Clipboard.setStringAsync(item.value).then(() => toast({ title: t("space.settings.copied"), tone: "success" }))}
             />
           ))}
         </View>
@@ -447,7 +447,7 @@ export default function SpaceSettingsScreen() {
                     try {
                       await space.mods.update(mod.id, { enabled });
                       setMods((current) => current.map((m) => m.id === mod.id ? { ...m, enabled } : m));
-                      toast({ title: enabled ? t("space.settings.modEnabled") : t("space.settings.modDisabled") });
+                      toast({ title: enabled ? t("space.settings.modEnabled") : t("space.settings.modDisabled"), tone: "success" });
                       if (enabled) {
                         Alert.alert(t("space.settings.modEnabled"), t("space.settings.modEnabledRestart"));
                       }
@@ -480,7 +480,7 @@ export default function SpaceSettingsScreen() {
                   try {
                     await client.cronJobs.toggle(schedule.id, enabled);
                     setSchedules((current) => current.map((s) => s.id === schedule.id ? { ...s, enabled } : s));
-                    toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled") });
+                    toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
                   } catch (error) {
                     toast({ title: t("space.settings.schedule.toggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
                   }
