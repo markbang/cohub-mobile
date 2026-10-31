@@ -1,51 +1,37 @@
 import { Text, View } from "react-native";
 import Reanimated, { useReducedMotion } from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
+import { MASCOT_PATHS } from "@/src/design/brand";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
+import { MascotLoader } from "@/src/ui/Mascot";
 
-const SIZES = {
-  /** Fits a 16–20pt icon slot: buttons, rows, list edges. */
-  sm: { dot: 5, gap: 3, height: 16 },
-  /** A region's only content while it loads. */
-  md: { dot: 7, gap: 4, height: 24 },
-} as const;
+const SIZES = { sm: 20, md: 72 } as const;
+const SPIN = { from: { transform: [{ rotate: "0deg" }] }, to: { transform: [{ rotate: "360deg" }] } };
+const PULSE = { "0%": { opacity: 0.35 }, "50%": { opacity: 1 }, "100%": { opacity: 0.35 } };
 
-const CYCLE_MS = 1050;
-const STAGGER_MS = 150;
-const REST = { opacity: 0.3, transform: [{ scale: 0.7 }] };
-const PEAK = { opacity: 1, transform: [{ scale: 1 }] };
-// Each dot swells in turn; the rest of the cycle is a pause so the wave reads as a beat, not a blur.
-const WAVE = { "0%": REST, "28%": PEAK, "56%": REST, "100%": REST };
-// Reduced motion keeps the opacity beat that says "still working" and drops the scaling.
-const WAVE_REDUCED = { "0%": { opacity: 0.3 }, "28%": { opacity: 1 }, "56%": { opacity: 0.3 }, "100%": { opacity: 0.3 } };
-
-/** The app's only busy indicator. Replaces the platform spinner everywhere outside pull-to-refresh. */
+/**
+ * The app's busy indicator, from the icon on both platforms. Small slots (buttons, rows, list edges) spin the
+ * cheek's round "c", already an open arc and still legible at 16 pt; `md` is the mascot itself. `color`
+ * follows the surface it sits on, such as the label of an accent button. Reduce Motion pulses instead.
+ */
 export function Loader({ size = "sm", color, accessibilityLabel }: { size?: keyof typeof SIZES; color?: string; accessibilityLabel?: string }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const reduced = useReducedMotion();
-  const { dot, gap, height } = SIZES[size];
+  const label = accessibilityLabel ?? t("common.loading");
+  if (size === "md") return <MascotLoader size={SIZES.md} accessibilityLabel={label} />;
+  const box = SIZES.sm;
   return (
-    <View accessible accessibilityRole="progressbar" accessibilityLabel={accessibilityLabel ?? t("common.loading")} className="flex-row items-center" style={{ gap, height }}>
-      {[0, 1, 2].map((index) => (
-        <Reanimated.View
-          key={index}
-          style={{
-            width: dot,
-            height: dot,
-            borderRadius: dot / 2,
-            backgroundColor: color ?? theme.colors.accent,
-            ...(reduced ? { opacity: 0.3 } : REST),
-            animationName: reduced ? WAVE_REDUCED : WAVE,
-            animationDuration: CYCLE_MS,
-            animationDelay: index * STAGGER_MS,
-            animationIterationCount: "infinite",
-            animationTimingFunction: "ease-in-out",
-            animationFillMode: "backwards",
-          }}
-        />
-      ))}
-    </View>
+    <Reanimated.View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      style={{ width: box, height: box, animationName: reduced ? PULSE : SPIN, animationDuration: reduced ? 1200 : 900, animationIterationCount: "infinite", animationTimingFunction: reduced ? "ease-in-out" : "linear" }}
+    >
+      {/* The viewBox is a square centred on the "c", so the spin turns it in place. */}
+      <Svg width={box} height={box} viewBox="626 567 117 117"><Path d={MASCOT_PATHS.cheek} fill={color ?? theme.colors.accent} /></Svg>
+    </Reanimated.View>
   );
 }
 

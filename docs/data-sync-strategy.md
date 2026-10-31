@@ -28,7 +28,7 @@ Inspected on 2026-09-16:
 | Settings data | Several hooks refresh on focus and after mutations | No unified policy for prolonged foreground viewing or return from background |
 | Notifications | Notification-tap routing and authoritative Chat loading | No foreground notification-received invalidation of shared data |
 
-Relevant implementation: [context.tsx](../src/data/context.tsx), [session-status.ts](../src/data/session-status.ts), [use-source-sessions.ts](../src/data/use-source-sessions.ts), [use-activity.ts](../src/data/use-activity.ts), [Spaces tab](../app/(tabs)/spaces.tsx), [Space detail](../app/space/[spaceId]/index.tsx), and [Files](../app/space/[spaceId]/files.tsx).
+Relevant implementation: [context.tsx](../src/data/context.tsx), [session-status.ts](../src/data/session-status.ts), [use-source-sessions.ts](../src/data/use-source-sessions.ts), [use-activity.ts](../src/data/use-activity.ts), [Spaces tab](../app/(tabs)/(spaces)/spaces.tsx), [Space detail](../app/space/[spaceId]/index.tsx), and [Files](../app/space/[spaceId]/files.tsx).
 
 Two issues should be addressed before increasing frequency:
 

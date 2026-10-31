@@ -7,7 +7,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
@@ -261,7 +261,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="work/[appId]" />
             {/* design-system: the photo viewer is black in every theme so images read true. */}
           <Stack.Screen name="image-viewer" options={{ contentStyle: { backgroundColor: "#000000" } }} />
-            <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: "slide_from_bottom" }} />
+            <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: Platform.OS === "ios" ? "default" : "slide_from_bottom" }} />
             <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
             <Stack.Screen name="language" options={{ title: t("route.language") }} />
             <Stack.Screen name="about" options={{ title: t("route.about") }} />

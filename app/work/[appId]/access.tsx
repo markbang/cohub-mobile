@@ -1,20 +1,18 @@
 import type { Permission } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, Switch, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "@/src/components/Toast";
 import { APP_SCOPES } from "@/src/data/app-manage";
 import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
-import { DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppSwitch, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 
 export default function WorkAccessScreen() {
   const { appId = "" } = useLocalSearchParams<{ appId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useApp();
@@ -57,13 +55,11 @@ export default function WorkAccessScreen() {
             <Text className="text-body text-fg">{t(`app.scope.${scope}`)}</Text>
             <Text className="text-caption text-fg-muted">{t(`app.scope.${scope}.hint`)}</Text>
           </View>
-          <Switch
+          <AppSwitch
             value={scopes.has(scope)}
             disabled={saving}
             accessibilityLabel={t(`app.scope.${scope}`)}
             onValueChange={(enabled) => setScopes((current) => { const next = new Set(current); if (enabled) next.add(scope); else next.delete(scope); return next; })}
-            trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
-            thumbColor={theme.colors.surface}
           />
         </View>)}
       </SettingsGroup>

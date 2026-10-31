@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
 import { FilterChip } from "@/src/components/FilterChip";
@@ -20,7 +20,7 @@ import { formatWalletUsd } from "@/src/data/space-wallet";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, PrimaryButton, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
+import { AppSwitch, AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, Screen, Segmented, TopBar, type IconName } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
@@ -317,7 +317,7 @@ export default function SpaceSettingsScreen() {
           ))}
         </View>
 
-        {deviceRuntimeSupported && spaceId ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
+        {deviceRuntimeSupported && spaceId && sandbox?.provider === "local" ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
 
         <View>
           <Text className="text-headline font-semibold text-fg">{t("space.settings.sandbox")}</Text>
@@ -440,7 +440,7 @@ export default function SpaceSettingsScreen() {
                   <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{mod.mountPath}</Text>
                   <Text numberOfLines={1} ellipsizeMode="middle" className="text-micro text-fg-faint mt-0.5">Space: {mod.modSpaceId}</Text>
                 </View>
-                <Switch
+                <AppSwitch
                   value={mod.enabled}
                   onValueChange={async (enabled) => {
                     if (!client || !spaceId) return;
@@ -456,8 +456,6 @@ export default function SpaceSettingsScreen() {
                       toast({ title: t("space.settings.modToggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
                     }
                   }}
-                  trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
-                  thumbColor={theme.colors.background}
                 />
               </View>
             ))
@@ -493,12 +491,14 @@ export default function SpaceSettingsScreen() {
           )}
         </View>
       </ScrollView>
-      {addModOpen ? <AdaptiveSheet
-        visible
+      <AdaptiveSheet
+        visible={addModOpen}
+        detent="fit"
         title={t("space.settings.addMod")}
         subtitle={t("space.settings.addModPrompt")}
         onClose={() => setAddModOpen(false)}
         dismissible={!addingMod}
+        confirm={{ label: t("space.settings.addMod"), loading: addingMod, disabled: !client || !modSpaceId.trim(), onPress: () => void addMod() }}
         testID="space-add-mod-sheet"
       >
         <View className="gap-3">
@@ -517,14 +517,15 @@ export default function SpaceSettingsScreen() {
             className={FIELD_INPUT_CLASS}
           />
           {modError ? <Text selectable accessibilityLiveRegion="polite" className="text-caption text-danger">{modError}</Text> : null}
-          <PrimaryButton label={t("space.settings.addMod")} icon="plus" loading={addingMod} disabled={!client || !modSpaceId.trim()} onPress={() => void addMod()} />
         </View>
-      </AdaptiveSheet> : null}
-      {customTtlOpen ? <AdaptiveSheet
-        visible
+      </AdaptiveSheet>
+      <AdaptiveSheet
+        visible={customTtlOpen}
+        detent="fit"
         title={t("space.settings.sleep.customTitle")}
         subtitle={t("space.settings.sleep.customPrompt")}
         onClose={() => setCustomTtlOpen(false)}
+        confirm={{ label: t("common.save"), disabled: !customTtlValue.trim(), onPress: saveCustomTtl }}
       >
         <View className="gap-3">
           <TextInput
@@ -546,9 +547,8 @@ export default function SpaceSettingsScreen() {
             ]}
           />
           {customTtlError ? <Text accessibilityRole="alert" className="text-caption text-danger">{customTtlError}</Text> : null}
-          <PrimaryButton label={t("common.save")} disabled={!customTtlValue.trim()} onPress={saveCustomTtl} />
         </View>
-      </AdaptiveSheet> : null}
+      </AdaptiveSheet>
     </Screen>
   );
 }
@@ -812,7 +812,6 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
 }
 
 function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord; onPress: () => void; onToggle: (enabled: boolean) => Promise<void> }) {
-  const theme = useAppTheme();
   const { t } = useTranslation();
   const [toggling, setToggling] = useState(false);
   
@@ -836,12 +835,10 @@ function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord;
           </Text>
         )}
       </Pressable>
-      <Switch
+      <AppSwitch
         value={schedule.enabled}
         onValueChange={handleToggle}
         disabled={toggling}
-        trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
-        thumbColor={theme.colors.surface}
       />
     </View>
   );

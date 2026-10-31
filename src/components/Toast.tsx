@@ -5,10 +5,11 @@ import Reanimated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { dismissToast, pushToast, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
+import { haptics } from "@/src/platform/haptics";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
-import { AppIcon } from "@/src/ui";
+import { AppIcon, Mascot } from "@/src/ui";
 
 type ShowToast = (toast: { title: string; message?: string; tone?: ToastTone }) => void;
 
@@ -36,6 +37,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     counter.current += 1;
     const entry: ToastEntry = { key: `toast-${counter.current}`, title, message, tone };
     setToasts((current) => pushToast(current, entry));
+    // A neutral toast confirms what the user just did and the control already answered; a failure is news.
+    if (tone === "danger") haptics.failure();
     AccessibilityInfo.announceForAccessibility(message ? `${title}. ${message}` : title);
   }, []);
 
@@ -136,7 +139,7 @@ function ToastCard({ toast, depth, onDismiss }: { toast: ToastEntry; depth: numb
   return (
     <GestureDetector gesture={pan}>
     <Reanimated.View accessible accessibilityRole="alert" accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} className={`absolute bottom-0 left-0 right-0 flex-row items-center gap-2.5 rounded-md bg-surface-float px-3.5 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
-        <AppIcon name={danger ? "alert" : "check"} size={16} tone={danger ? "danger" : "success"} />
+        {danger ? <Mascot size={20} mood="worried" /> : <AppIcon name="check" size={16} tone="success" />}
         <View className="min-w-0 flex-1 gap-px">
           <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>
           {toast.message ? <Text numberOfLines={2} className="text-caption text-fg-secondary">{toast.message}</Text> : null}

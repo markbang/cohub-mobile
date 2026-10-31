@@ -171,9 +171,9 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
       startInLoadingState
     />
     {dialog.authOpen && dialog.pendingAuth ? <AuthorizeSheet appTitle={app.meta?.title || app.meta?.name || app.slug} dialog={dialog} onSelect={(spaceId) => bridge().setSelectedSpace(spaceId)} onConfirm={() => void bridge().confirmAuth(dialog.selectedSpaceId ?? undefined)} onCancel={() => bridge().cancelAuth()} /> : null}
-    {deviceRequest ? <AdaptiveSheet visible title={t("app.host.devicesTitle", { app: app.meta?.title || app.meta?.name || app.slug })} onClose={() => answerDevices(false)} scrollable={false}>
+    <AdaptiveSheet visible={Boolean(deviceRequest)} detent="fit" title={t("app.host.devicesTitle", { app: app.meta?.title || app.meta?.name || app.slug })} onClose={() => answerDevices(false)} scrollable={false}>
       <View className="gap-3">
-        {deviceRequest.devices.map((device) => <View key={device} className="flex-row items-center gap-3">
+        {(deviceRequest?.devices ?? []).map((device) => <View key={device} className="flex-row items-center gap-3">
           <AppIcon name={device === "camera" ? "camera" : "mic"} size={18} tone="accent" />
           <Text className="text-body text-fg">{t(DEVICE_LABELS[device])}</Text>
         </View>)}
@@ -183,7 +183,7 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
           <PrimaryButton label={t("app.host.allow")} onPress={() => answerDevices(true)} className="flex-1" />
         </View>
       </View>
-    </AdaptiveSheet> : null}
+    </AdaptiveSheet>
   </>;
 }
 

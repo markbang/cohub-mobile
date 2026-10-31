@@ -8,10 +8,14 @@ import { useApp } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, AppRefreshControl, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
+import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
+import { ROUNDED_TITLE } from "@/src/ui/rounded";
 
 export default function ActivityScreen() {
   const router = useRouter();
@@ -35,11 +39,16 @@ export default function ActivityScreen() {
       setPullRefreshing(false);
     }
   };
+  const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   return <Screen edgeToEdge>
-    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+      <LargeTitleBar title={t("tabs.activity")} />
       <ConnectionBanner visible={connectionUnavailable} />
-    </EdgeHeader>
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={onScroll} scrollEventThrottle={16} contentInsetAdjustmentBehavior="never" scrollIndicatorInsets={{ top: headerHeight, bottom: tabBarInset }} contentContainerStyle={{ paddingTop: headerHeight, paddingBottom: tabBarInset }} refreshControl={<AppRefreshControl refreshing={pullRefreshing} onRefresh={refreshOnPull} progressViewOffset={headerHeight} />}>
+    </EdgeHeader>}
+    <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
+      {pullRefresh.header}
+      {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-5" style={{ borderCurve: "continuous" }}>
@@ -48,7 +57,7 @@ export default function ActivityScreen() {
             <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
             <AppIcon name="chevron-right" size={16} tone="faint" />
           </View>
-          <Text className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
+          <Text style={ROUNDED_TITLE} className={`text-display font-bold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
         </PressableScale>
       </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}
@@ -69,5 +78,6 @@ export default function ActivityScreen() {
       {activity?.error ? <DataError message={activity.error} onRetry={retry} /> : null}
       {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <ActivityHeatmapSkeleton /> : null}
     </ScrollView>
+    </BrandRefreshArea>
   </Screen>;
 }

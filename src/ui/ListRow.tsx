@@ -1,24 +1,20 @@
 import type { ReactNode } from "react";
-import { Pressable, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
+import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
 export type ListRowStatus = "running" | "failed" | "stopped" | null;
 
-/** Where a row sits in a run of rows drawn as one card; a lone row is its own card. */
+/** Where a row sits in a run of rows that read as one item (a fork tree); only the run's end draws a separator. */
 export type ListRowGroup = "single" | "first" | "middle" | "last";
 
-const GROUP_SHAPE: Record<ListRowGroup, string> = {
-  single: "mb-2 rounded-md",
-  first: "rounded-t-md",
-  middle: "",
-  last: "mb-2 rounded-b-md",
-};
+/** 16 row padding + the leading avatar + its 14 gap. */
+const FLAT_SEPARATOR_INSET = 16 + 46 + 14;
 
 /**
  * The two-line, 72pt row behind every content list (docs/design-system.md §2.2): identity and time
- * on line 1, context on line 2, state carried by the leading glyph. Each row is a card on the page;
- * rows that belong together (a fork tree) join into one card through `group`.
+ * on line 1, context on line 2, state carried by the leading glyph. Lists are flat on both platforms, as in
+ * Mail and Messages: full-width rows with a hairline inset past the avatar.
  */
 export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false }: {
   leading?: ReactNode;
@@ -60,8 +56,9 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       {accessory}
     </View>
   </>;
-  const shell = `mx-4 flex-row items-stretch overflow-hidden bg-surface pl-4 ${GROUP_SHAPE[group]} ${compact ? "min-h-14" : "min-h-18"}`;
-  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell} style={CONTINUOUS}>{body}</View>;
+  const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-14" : "min-h-18"}`;
+  const separator = group === "single" || group === "last" ? <View className="absolute bottom-0 right-0 bg-border" style={{ left: leading ? FLAT_SEPARATOR_INSET : 16, height: StyleSheet.hairlineWidth }} /> : null;
+  if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell} style={CONTINUOUS}>{body}{separator}</View>;
   return (
     <Pressable
       accessibilityRole="button"
@@ -79,6 +76,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
       style={CONTINUOUS}
     >
       {body}
+      {separator}
     </Pressable>
   );
 }

@@ -47,12 +47,12 @@ export default function WorkScreen() {
       title={title} 
       subtitle={detail?.space.name || t("work.published")} 
       onBack={() => router.back()} 
-      actions={(
+      actions={detail || contentUrl ? (
         <>
           {detail && <IconButton name="settings" label={t("app.manage.title")} size={40} onPress={() => router.push({ pathname: "/work/[appId]/edit", params: { appId: detail.app.id } })} />}
           {contentUrl && <IconButton name="external-link" label={t("file.openExternally")} size={40} onPress={() => void openWebLink(contentUrl).catch(() => undefined)} />}
         </>
-      )} 
+      ) : undefined} 
     />
     {error ? <DataError message={error} onRetry={() => void load()} /> : null}
     {!detail ? (error ? null : <LoadingState />) : !contentUrl || !initialOrigin ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <AppHostWebView detail={detail} contentUrl={contentUrl} />}

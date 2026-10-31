@@ -7,7 +7,7 @@ import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
 import { FlatList, Image, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
-import Reanimated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, type SharedValue } from "react-native-reanimated";
+import Reanimated from "react-native-reanimated";
 import { formatMessageClock } from "@/src/data/chat-format";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { imageThumbnailUrl } from "@/src/data/media";
@@ -19,7 +19,7 @@ import type { StreamView } from "@/src/data/types";
 import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
-import { AppIcon, Loader, type IconName } from "@/src/ui";
+import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth } from "@/src/ui/message-bubble-layout";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
@@ -440,23 +440,10 @@ function UserBubbleFrame({
   return <BubbleContentWidth.Provider value={Math.max(0, maxWidth - BUBBLE_PADDING_X * 2)}><Reanimated.View ref={bubbleRef} collapsable={false} onLayout={onBubbleLayout} style={[style, surfaceHidden ? { backgroundColor: "transparent" } : null]}>{children}</Reanimated.View></BubbleContentWidth.Provider>;
 }
 
-function TypingDot({ progress, index, color }: { progress: SharedValue<number>; index: number; color: string }) {
-  const style = useAnimatedStyle(() => ({
-    opacity: 0.35 + progress.value * (index === 1 ? 0.65 : 0.35),
-    transform: [{ translateY: progress.value * (index === 1 ? -3 : -1) }],
-  }));
-  return <Reanimated.View style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }, style]} />;
-}
-
+/** A reply that has not started yet: the mascot thinking, inside the fixed meta row so nothing reflows. */
 function TypingIndicator() {
-  const theme = useAppTheme();
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = withRepeat(withSequence(withTiming(1, { duration: 420 }), withTiming(0, { duration: 420 })), -1, true);
-  }, [progress]);
-  return <View className="flex-row items-center gap-1 min-w-10 min-h-5">
-    {[0, 1, 2].map((index) => <TypingDot key={index} progress={progress} index={index} color={theme.colors.textMuted} />)}
-  </View>;
+  const { t } = useTranslation();
+  return <View className="flex-row items-center"><MascotLoader size={22} accessibilityLabel={t("message.stream.starting")} /></View>;
 }
 
 function BubbleMeta({ clock, local = false, t }: { clock?: string; local?: boolean; t: Translate }) {

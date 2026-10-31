@@ -8,6 +8,7 @@ import { selectSpaceList } from "@/src/data/space-list";
 import { useTranslation } from "@/src/i18n";
 import { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingFlatRows, Screen, SearchField, TopBar } from "@/src/ui";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { displaySpaceName } from "@/src/utils";
 
 type Params = { spaceId?: string | string[] };
@@ -40,9 +41,15 @@ export default function NewChatScreen() {
     ? state.booting || state.refreshing ? <LoadingFlatRows count={4} leading="avatar" /> : error ? null : <EmptyState icon="layers" title={t("newChat.noSpaces")} description={t("newChat.createSpaceHint")} action={{ icon: "layers", label: t("tabs.spaces"), onPress: () => router.dismissTo("/(tabs)/spaces") }} />
     : <EmptyState icon="search" title={t("spaces.empty.matching.title")} description={t("spaces.empty.matching.body")} />;
 
-  return <Screen keyboard>
-    <TopBar title={t("route.newChat")} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("route.newChat") })} onPress={() => router.back()} />} />
-    {state.spaces.length > 0 ? <View className="px-4 pb-2">
+  useNativeHeader({
+    title: t("route.newChat"),
+    close: { label: t("ui.sheet.close", { title: t("route.newChat") }), onPress: () => router.back() },
+    search: state.spaces.length > 0 ? { query, onQueryChange: setQuery, placeholder: t("spaces.search.placeholder"), pinned: true } : undefined,
+  });
+
+  return <Screen keyboard edgeToEdge={nativeHeaders}>
+    {nativeHeaders ? null : <TopBar title={t("route.newChat")} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("route.newChat") })} onPress={() => router.back()} />} />}
+    {!nativeHeaders && state.spaces.length > 0 ? <View className="px-4 pb-2">
       <SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} />
     </View> : null}
     {error ? <DataError message={error} onRetry={() => void refreshHome()} /> : null}
@@ -51,6 +58,7 @@ export default function NewChatScreen() {
       keyExtractor={(space) => space.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
+      {...(nativeHeaders ? NAVIGATION_BAR_INSETS : null)}
       contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 30, flexGrow: 1 }}
       ListEmptyComponent={empty}
       renderItem={({ item: space }) => {

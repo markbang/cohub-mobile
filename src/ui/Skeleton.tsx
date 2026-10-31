@@ -28,7 +28,7 @@ function Line({ width, lineHeight, height }: { width: DimensionValue; lineHeight
 }
 
 export function LoadingRows({ count = 5 }: { count?: number }) {
-  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className="mx-4 mb-2 min-h-18 flex-row items-center gap-3.5 rounded-md bg-surface px-4 py-3" style={CONTINUOUS}>
+  return <Skeleton>{Array.from({ length: count }, (_, index) => <View key={index} className="min-h-18 flex-row items-center gap-3.5 px-4 py-3" style={CONTINUOUS}>
     <Bone width={LIST_AVATAR_SIZE} height={LIST_AVATAR_SIZE} radius={LIST_AVATAR_SIZE * 0.3} />
     <View className="flex-1 gap-1">
       <View className="flex-row items-center gap-1.5">

@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
@@ -54,8 +54,9 @@ import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
 import { GlassBackground } from "@/src/ui/Glass";
-import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, listRefreshProps, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName } from "@/src/ui";
+import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
+import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
@@ -819,7 +820,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     }
     setStopping(true);
     recordDebugEvent("chat.stop.started");
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    haptics.commit();
     try {
       await abortSession(sessionId);
       recordDebugEvent("chat.stop.ended", { outcome: "success" });
@@ -831,7 +832,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const runFollowupAction = async (turnId: string, action: "steer" | "cancel") => {
     if (!client || !spaceId || pendingFollowupAction !== null) return;
     setPendingFollowupAction(turnId);
-    if (action === "steer") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (action === "steer") haptics.commit();
     try {
       if (action === "steer") await steerQueuedFollowup(client, spaceId, sessionId, turnId);
       else await cancelQueuedFollowup(client, spaceId, sessionId, turnId);
@@ -864,7 +865,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const openTitleMenu = useCallback(() => {
     setMoreOpen(false);
     setTitleMenuOpen(true);
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    haptics.longPress();
   }, []);
   // Edit the stored title, not its `@Label` display, so saving unchanged keeps mention markup.
   const openRename = () => {
@@ -1112,7 +1113,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       const { input: field, scrollY } = composerMeasurementRef.current;
       const source = reducedMotion ? null : await measureSendBubbleSource(files.length > 0 ? attachmentSourceRef.current : field, sendRootRef.current, files.length > 0 ? attachmentScrollYRef.current : scrollY);
       if (generation !== sendGenerationRef.current) return;
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      haptics.commit();
       setSendTransition(null);
       inputRef.current = "";
       setInput("");
@@ -1183,6 +1184,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     measureVisibleRows();
   }, [measureVisibleRows, trace]);
   const handleListRefresh = useCallback(() => { void refreshSession(sessionId); }, [refreshSession, sessionId]);
+  const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh, scrollEventThrottle: 100 });
+  const { onScroll: trackPull, onScrollBeginDrag: trackPullStart } = pullRefresh;
+  const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
+  const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
   const renderMessage = useCallback(({ item, index }: { item: MessageRecord; index: number }) => {
     const chronologicalIndex = index;
     const isTransitionMessage = sendTransition?.destination === "bubble" && !queueTransitionActive && isSendBubbleMessage(item, sendTransition.message);
@@ -1210,7 +1215,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
-        {timelineReady ? <LegendList
+        {timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><LegendList
           key={listGeneration}
           {...traceTouches}
           ref={listRef}
@@ -1235,8 +1240,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           viewabilityConfig={messageViewabilityConfig}
           onViewableItemsChanged={onViewableItemsChanged}
           scrollEventThrottle={100}
-          onScroll={handleScroll}
-          onScrollBeginDrag={handleScrollBeginDrag}
+          onScroll={handleListScroll}
+          onScrollBeginDrag={handleListDragBegin}
           onScrollEndDrag={handleScrollEndDrag}
           onMomentumScrollBegin={handleMomentumScrollBegin}
           onMomentumScrollEnd={handleMomentumScrollEnd}
@@ -1244,10 +1249,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           scrollIndicatorInsets={listIndicatorInsets}
           contentContainerStyle={listContentStyle}
           onContentSizeChange={handleContentSizeChange}
-          {...listRefreshProps({ refreshing: view.refreshing, onRefresh: handleListRefresh, progressViewOffset: headerHeight })}
-          ListHeaderComponent={view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}
+          {...pullRefresh.listProps}
+          ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
-        /> : null}
+        /></BrandRefreshArea> : null}
         {threadPlaceholder ? <View pointerEvents="none" style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></View> : null}
 
         {!followingTail ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="absolute right-4 z-4 size-11 items-center justify-center rounded-full shadow-float active:opacity-70" style={{ bottom: footerHeight + 12 }}><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable> : null}
@@ -1460,7 +1465,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
       setSending(false);
     }
   };
-  if (!space) return <Screen><TopBar title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
+  if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
   const spaceName = displaySpaceName(space);
   const spaceSessions = state.sessions.filter((item) => item.spaceId === space.id);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
@@ -1476,7 +1481,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
         </EdgeHeader>
         <View style={{ flex: 1, minHeight: 0, paddingTop: headerHeight }}>
           <View className="flex-1 min-h-0 items-center justify-center px-7 pb-4">
-            <View className="size-14 items-center justify-center rounded-full bg-accent-soft"><AppIcon name="sparkles" size={24} tone="accent" /></View>
+            <Mascot size={84} blink />
             <Text className="mt-4 text-center text-headline font-semibold text-fg">{t("chat.draft.title")}</Text>
             <Text className="text-body text-fg-muted mt-1.5 max-w-72 text-center">{t("chat.draft.body")}</Text>
             <Text className="text-caption text-fg-faint mt-4">{t("chat.draft.subtitle")}</Text>

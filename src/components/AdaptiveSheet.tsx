@@ -20,6 +20,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
+import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
 import { setDialogOpen } from "@/src/data/interaction-trace";
 import { motion, springs } from "@/src/motion";
 
@@ -29,7 +30,7 @@ const RELEASE_PROJECTION_S = 0.099;
 // A programmatic close has no release velocity to carry, so it eases out on the iOS sheet curve.
 const CLOSE_TIMING = { duration: motion.settle.duration, easing: Easing.bezier(0.32, 0.72, 0, 1) };
 
-type AdaptiveSheetProps = {
+export type AdaptiveSheetProps = {
   visible: boolean;
   title: string;
   subtitle?: string;
@@ -40,8 +41,20 @@ type AdaptiveSheetProps = {
   dismissible?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   fullHeight?: boolean;
+  /**
+   * The sheet's one confirming action, as iOS 26 sheets carry it: a checkmark at the bar's trailing edge,
+   * opposite the close. Destructive or two-way choices stay in `footer` with their words.
+   */
+  confirm?: SheetConfirm;
+  /**
+   * `fit` sizes a short sheet to its content on iOS, as a medium-height system sheet; the drawn Android
+   * sheet always wraps its content. Owners keep a `fit` sheet mounted and drive it through `visible`.
+   */
+  detent?: "fit" | "large";
   testID?: string;
 };
+
+export type { SheetConfirm } from "@/src/components/SheetConfirmButton";
 
 export function AdaptiveSheet({
   visible,
@@ -54,6 +67,7 @@ export function AdaptiveSheet({
   dismissible = true,
   contentStyle,
   fullHeight = false,
+  confirm,
   testID,
 }: AdaptiveSheetProps) {
   const theme = useAppTheme();
@@ -246,23 +260,19 @@ export function AdaptiveSheet({
                 </View>
               </GestureDetector>
             ) : null}
-            <View className="min-h-14 flex-row items-center gap-3 border-border px-4 pb-3 pt-2" style={{ borderBottomWidth: StyleSheet.hairlineWidth }}>
-              <View className="flex-1 min-w-0">
-                <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
-                {subtitle ? (
-                  <Text className="text-body text-fg-secondary mt-1">
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
+            {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
+            <View className="min-h-14 flex-row items-center px-2 pb-2">
               <IconButton
+                filled
                 name="x"
                 label={t("ui.sheet.close", { title })}
-                size={36}
                 disabled={!dismissible}
                 onPress={requestClose}
               />
+              <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
+              <SheetConfirmButton confirm={confirm} />
             </View>
+            {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (
               <ScrollView
                 style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}

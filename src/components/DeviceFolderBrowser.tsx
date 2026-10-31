@@ -89,7 +89,7 @@ export function DeviceFolderPickerSheet({ visible, onClose, onSelect }: { visibl
     title={t("deviceRuntime.chooseFolder")}
     onClose={onClose}
     testID="device-folder-sheet"
-    footer={<PrimaryButton label={t("deviceRuntime.useFolder")} icon="check" disabled={!browser.listing || browser.loading || Boolean(browser.failure)} onPress={() => { if (browser.listing) onSelect(browser.listing); }} />}
+    confirm={{ label: t("deviceRuntime.useFolder"), disabled: !browser.listing || browser.loading || Boolean(browser.failure), onPress: () => { if (browser.listing) onSelect(browser.listing); } }}
   >
     <DeviceFolderBrowser browser={browser} />
   </AdaptiveSheet>;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import type { SpaceListSpace } from "@/src/data/space-list";
 import { openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus } from "@/src/platform/device-runtime";
@@ -63,8 +63,8 @@ export function DeviceSpaceRow({ instance, space, onPress }: DeviceSpaceRowProps
       accessibilityLabel={[t("ui.openNamed", { name }), stateLabel, display && sharingHere ? t(deviceDisplayStateKey(display, instance.spaceId)) : null].filter(Boolean).join(", ")}
       onPress={onPress}
     />
-    {/* The actions close the row's card; they start at its text column: row padding + avatar + its gap. */}
-    <View className="mx-4 mb-2 flex-row flex-wrap gap-2 rounded-b-md bg-surface pb-3 pr-4" style={{ paddingLeft: 16 + LIST_AVATAR_SIZE + 14, borderCurve: "continuous" }}>
+    {/* The actions close the row; they start at its text column: row padding + avatar + its gap. */}
+    <View className="flex-row flex-wrap gap-2 border-border pb-3 pr-4" style={{ paddingLeft: 16 + LIST_AVATAR_SIZE + 14, borderBottomWidth: StyleSheet.hairlineWidth }}>
       {running
         ? <RowAction label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(instance.spaceId), "deviceRuntime.error.failed")} />
         : <RowAction label={t("deviceRuntime.connect")} icon="wifi" disabled={busy} onPress={() => void connect()} />}

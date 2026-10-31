@@ -1,5 +1,5 @@
 import { useRouter, useScrollToTop } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useCurrentUser } from "@/src/auth/current-user";
@@ -18,9 +18,13 @@ import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useThemePreference } from "@/src/theme";
 import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
+import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
+import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitleBar } from "@/src/ui/LargeTitle";
 
 export function SettingsHomeScreen() {
   const tabBarInset = useFloatingTabBarInset();
+  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
   const { t, preference: language, setPreference: setLanguage } = useTranslation();
@@ -40,7 +44,7 @@ export function SettingsHomeScreen() {
   // Preview channels are opted into from the debug menu; keep that visible outside it.
   const updateChannel = currentUpdateChannel();
   const openDebug = useCallback(() => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    haptics.success();
     router.push("/debug");
   }, [router]);
   const unlockDebug = useDebugUnlock(openDebug);
@@ -69,8 +73,9 @@ export function SettingsHomeScreen() {
     return undefined;
   };
 
-  return <Screen>
-    <ScrollView ref={scrollRef} scrollEnabled={!selecting} contentContainerStyle={{ paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
+  return <Screen edgeToEdge>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}><LargeTitleBar title={t("tabs.me")} /></EdgeHeader>}
+    <ScrollView ref={scrollRef} scrollEnabled={!selecting} onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
       <View className="mb-6 mt-4 px-4">
         <Pressable

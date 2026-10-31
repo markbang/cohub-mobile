@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { createContext, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
   Image,
   Keyboard,
@@ -18,14 +18,15 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { G, Path, Rect } from "react-native-svg";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
 import Animated, { FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { icons, type IconName } from "@/src/icons";
+import type { IconName } from "@/src/icons";
+import { Glyph } from "@/src/ui/Glyph";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
+import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame, keyboardOverlap } from "@/src/ui/keyboard-frame";
@@ -33,9 +34,12 @@ import { useTranslation } from "@/src/i18n";
 import { edgeChrome, useAppTheme, typography } from "@/src/theme";
 import type { ColorKey } from "@/src/design/tokens";
 import { motion, springs } from "@/src/motion";
+import { BarButtonContext } from "@/src/ui/bar-button-context";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
 import { Loader } from "@/src/ui/Loader";
+import { CohubLogo, Mascot } from "@/src/ui/Mascot";
 import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
@@ -43,7 +47,8 @@ import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import type { ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
-export { ExpandableSearchBar } from "@/src/ui/ExpandableSearchBar";
+export { AppSwitch } from "@/src/ui/AppSwitch";
+export { CohubLogo, Mascot, MascotLoader } from "@/src/ui/Mascot";
 export { AppRefreshControl, listRefreshProps } from "@/src/ui/AppRefreshControl";
 export { ListEdgeLoader, Loader, LoadingState } from "@/src/ui/Loader";
 export { Bone, LoadingDocument, LoadingFlatRows, LoadingRows, LoadingSections, Skeleton, type SkeletonSection } from "@/src/ui/Skeleton";
@@ -58,28 +63,10 @@ const ICON_TONES: Record<IconTone, ColorKey> = {
   success: "success", warning: "warning", danger: "danger", info: "info",
 };
 
-/** Lucide needs a JS color, so icons take a token `tone`; `color` is for computed values only. */
+/** Glyphs need a JS color, so icons take a token `tone`; `color` is for computed values only. */
 export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; style?: object }) {
   const theme = useAppTheme();
-  const Icon = icons[name];
-  return <Icon size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
-}
-
-export function CohubLogo({ size = 36 }: { size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 192 192">
-      {/* design-system: the Cohub logo keeps its brand colors in every theme. */}
-      <Rect width={192} height={192} rx={32} fill="#ff4500" />
-      {/* design-system: logo glyph */}
-      <G transform="translate(0,192) scale(0.1,-0.1)" fill="#ffffff">
-        <Path d="M853 1314 c-63 -23 -128 -86 -164 -160 -27 -54 -33 -79 -37 -157 -10 -196 63 -332 205 -383 53 -18 160 -17 219 3 92 31 184 151 184 240 0 21 -5 23 -45 23 -43 0 -45 -1 -55 -38 -13 -52 -48 -101 -89 -129 -27 -18 -48 -23 -98 -23 -77 0 -120 16 -156 60 -50 59 -61 96 -61 210 -1 89 3 113 22 155 28 61 47 82 95 107 48 24 152 26 195 4 36 -19 80 -69 88 -102 5 -21 12 -24 55 -24 27 0 49 4 49 8 0 5 -7 29 -16 55 -18 54 -74 115 -129 142 -54 25 -203 31 -262 9z" />
-      </G>
-    </Svg>
-  );
-}
-
-export function BrandMark({ size = 36 }: { size?: number }) {
-  return <CohubLogo size={size} />;
+  return <Glyph name={name} size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} fill={fill} style={style} />;
 }
 
 const LOCAL_HARNESS_ICONS: Record<LocalHarness, ComponentType<{ size?: number; color?: string }>> = {
@@ -113,17 +100,17 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
   );
 }
 
-/** Icon buttons in a top bar's actions draw filled unless they say otherwise. */
-const BarButtonContext = createContext(false);
-
-/** `filled` draws the glyph on a solid circle, for bar buttons over content; an accent one fills with the accent. */
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+/**
+ * `filled` draws the glyph on a solid circle, for bar buttons over content. `accent` fills with the accent and is
+ * kept for a screen's one primary action; `active` marks a control in a non-default state with an accent glyph only.
+ */
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
-  const inBar = useContext(BarButtonContext);
-  const filled = filledProp ?? inBar;
+  const bar = useContext(BarButtonContext);
+  const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
-  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" ? "accent" : tone === "danger" ? "danger" : filled ? "fg" : "secondary";
+  const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
   const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
@@ -137,7 +124,7 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       onPressOut={onPressOut}
       onTouchCancel={onTouchCancel}
       onPress={(event) => { traceAction("icon", { label, id: testID ?? name }); onPress(event); }}
-      className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
+      className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" || tone === "active" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
       style={{ width: target, height: target }}
     >
       {filled
@@ -190,8 +177,13 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
     <View className="flex-1 bg-background" style={contentStyle}>{children}</View>
   );
   const wrapped = !keyboard ? body : Platform.OS === "ios" ? <IOSKeyboardPaddingView>{body}</IOSKeyboardPaddingView> : <KeyboardAvoidingView className="flex-1 bg-background" behavior="height">{body}</KeyboardAvoidingView>;
+  // Under an iOS navigation bar the root insets would double the top gap; measure natively instead.
+  if (Platform.OS === "ios" && !edgeToEdge) return <View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView></View>;
   return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
 }
+
+const TOP_EDGE = ["top"] as const;
+const FILL = { flex: 1 } as const;
 
 type TopBarProps = {
   title: string;
@@ -214,20 +206,34 @@ type TopBarProps = {
    * The title stays as the screen reader's header.
    */
   titleHidden?: boolean;
+  /** Keeps the drawn bar on iOS, for bars that move with their content. */
+  drawn?: boolean;
 };
 
-export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false }: TopBarProps) {
+export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false, drawn = false }: TopBarProps) {
   const { t } = useTranslation();
+  // A pushed screen's plain bar is the iOS navigation bar. Its back button pops the route itself, so
+  // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
+  const system = nativeHeaders && !drawn && Boolean(onBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
+  useNativeHeader(system ? { title, subtitle, right: actions } : null);
+  // A drawn bar centers its title as UIKit does, balancing whichever side is wider.
+  const [trailingWidth, setTrailingWidth] = useState(0);
+  if (system) return null;
   const titleContent = children ?? <>
-    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
-    {subtitle ? <Text numberOfLines={1} className="text-caption text-fg-muted">{subtitle}</Text> : null}
+    <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-center text-headline font-semibold text-fg">{title}</Text>
+    {subtitle ? <Text numberOfLines={1} className="text-center text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
+  // Each bar slot is a 44 pt target; the gap between slots is 4.
+  const leadingWidth = onBack || leading ? 48 : 0;
+  const trailing = actions ? trailingWidth + 4 : 0;
+  const side = Math.max(leadingWidth, trailing);
+  const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="arrow-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {onBack ? <IconButton filled name="chevron-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
-        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
+        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
       {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
         <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-bold text-fg">{title}</Text>
@@ -239,17 +245,17 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1.5 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
         filled
-        name="arrow-left"
+        name="chevron-left"
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
         onPressOut={() => recordDebugEvent("navigation.back.press_out")}
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
       /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
-      <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1">
+      <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1" style={balance}>
         {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value>{actions}</BarButtonContext.Provider></View> : null}
+      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
     </View>
   );
 }
@@ -296,8 +302,12 @@ export function StatusPill({ label, tone = "neutral", dot = true }: { label: str
 export function EmptyState({ icon, title, description, action }: { icon: IconName; title: string; description?: string; action?: { icon: IconName; label: string; onPress: () => void } }) {
   return (
     <View className="min-h-64 flex-1 items-center justify-center px-6">
-      <View className="size-18 items-center justify-center rounded-full bg-accent-soft">
-        <AppIcon name={icon} size={30} tone="accent" strokeWidth={1.8} />
+      {/* The mascot is the brand; the sticker says which kind of empty this is, clear of its cheek mark. */}
+      <View>
+        <Mascot size={92} mood={icon === "alert" || icon === "circle-x" || icon === "cloud-off" ? "worried" : "idle"} />
+        <View className="absolute -bottom-0.5 -left-1 size-8 items-center justify-center rounded-full bg-accent">
+          <AppIcon name={icon} size={16} tone="onAccent" strokeWidth={2.1} />
+        </View>
       </View>
       <Text className="mt-4 text-center text-headline font-semibold text-fg">{title}</Text>
       {description ? <Text className="mt-1.5 max-w-75 text-center text-subhead text-fg-muted">{description}</Text> : null}
@@ -401,7 +411,7 @@ function CompactDrawnSegmented<T extends string>({ options, value, onChange, dis
             onPress={() => {
               traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
-              if (!selected) onChange(option.value);
+              if (!selected) { haptics.selection(); onChange(option.value); }
             }}
             className={`min-h-8.5 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
@@ -446,7 +456,7 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
             onPress={() => {
               traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
               if (option.locked) { onLocked?.(); return; }
-              if (!selected) onChange(option.value);
+              if (!selected) { haptics.selection(); onChange(option.value); }
             }}
             className={`min-h-10 flex-1 flex-row items-center justify-center gap-1.5 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
@@ -643,7 +653,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
     <View accessible accessibilityRole="alert" className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
-      <AppIcon name="cloud-off" size={14} tone="danger" />
+      <Mascot size={20} mood="worried" />
       <Text numberOfLines={1} className="text-caption text-fg">{t("ui.banner.unavailable")}</Text>
     </View>
   </Animated.View>;
@@ -652,7 +662,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
 export function DataError({ message, onRetry }: { message: string; onRetry: () => void }) {
   const { t } = useTranslation();
   return <View className="mx-4 mt-3 flex-row items-center gap-3 rounded-md bg-danger-soft py-2 pl-3 pr-1" style={CONTINUOUS}>
-    <AppIcon name="cloud-off" size={18} tone="danger" />
+    <Mascot size={32} mood="worried" />
     <View className="min-w-0 flex-1">
       <Text className="text-subhead font-semibold text-fg">{t("ui.dataError.title")}</Text>
       <Text selectable className="text-caption text-danger">{message}</Text>

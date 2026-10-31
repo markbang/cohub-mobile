@@ -436,6 +436,11 @@ const chromeScope = {
   traceAction: () => {},
   setDialogOpen: () => {},
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
+  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {},
+  ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
+  LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
+  BrandRefreshArea: "BrandRefreshArea",
+  useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key }),
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
@@ -527,7 +532,7 @@ const formScope = {
     useAppTheme: () => ({ colors: {}, spacing: { md: 12 }, radius: { md: 12 } }),
     installSpaceMod,
     Alert: { prompt: () => {}, alert: (...args) => alerts.push(args) },
-    Screen: "Screen", ScrollView: "ScrollView", SpecOptionList: "SpecOptionList", ActionButton: "ActionButton", Switch: "Switch",
+    Screen: "Screen", ScrollView: "ScrollView", SpecOptionList: "SpecOptionList", ActionButton: "ActionButton", Switch: "Switch", AppSwitch: "AppSwitch",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
     specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
@@ -539,11 +544,12 @@ const formScope = {
   add.props.onPress();
   const sheet = () => render().find((node) => node.type === "AdaptiveSheet");
   const input = () => render().find((node) => node.props.testID === "space-add-mod-input");
-  const submit = () => render().find((node) => node.type === "PrimaryButton");
+  // The sheet carries its confirm in the bar; its fields match the button it replaced.
+  const submit = () => ({ props: sheet().props.confirm });
   assert.ok(sheet()?.props.visible, "Android Add opens the cross-platform Mod input instead of the unsupported Alert.prompt");
   assert.equal(submit().props.disabled, true, "an empty Mod ID cannot be submitted");
   sheet().props.onClose();
-  assert.equal(sheet(), undefined, "Cancel dismisses without creating a Mod");
+  assert.equal(sheet().props.visible, false, "Cancel dismisses without creating a Mod");
   assert.equal(requests.length, 0);
   add.props.onPress();
   const modId = "7a316e62-207b-480d-9cb0-7b62564129dc";
@@ -564,7 +570,7 @@ const formScope = {
   const installed = { id: "mod", name: "Project tools", mountSlug: "tools", mountPath: "/mods/tools", modSpaceId: modId, enabled: true };
   requests[1].resolve({ item: installed, sandboxRestarting: true });
   await flushSync();
-  assert.equal(sheet(), undefined, "successful installation closes the input sheet");
+  assert.equal(sheet().props.visible, false, "successful installation closes the input sheet");
   assert.ok(render().some((node) => node.type === "Text" && node.props.children.includes(installed.name)), "the accepted Mod appears without another list request");
   assert.equal(alerts.at(-1).message, "space.settings.modRestarting");
   add.props.onPress();
@@ -633,9 +639,9 @@ try {
 
 // Data requests triggered by tab focus must not activate the pull-to-refresh control.
 for (const [tab, component, expectedRequests] of [
-  ["activity", "ActivityScreen", ["activity", "subscriptions"]],
-  ["spaces", "SpacesScreen", ["home", "spaces"]],
-  ["index", "ChatsScreen", ["home"]],
+  ["(activity)/activity", "ActivityScreen", ["activity", "subscriptions"]],
+  ["(spaces)/spaces", "SpacesScreen", ["home", "spaces"]],
+  ["(chats)/index", "ChatsScreen", ["home"]],
 ]) {
   let cursor = 0;
   const slots = [];
@@ -676,19 +682,18 @@ for (const [tab, component, expectedRequests] of [
     Screen: "Screen", ScrollView: "ScrollView", LegendList: "LegendList", RefreshControl: "RefreshControl",
     AccountAvatar: "AccountAvatar", TokenHeatmap: "TokenHeatmap", ActivityHeatmap: "ActivityHeatmap", PressableScale: "PressableScale",
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
     AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
-  const surface = () => render().find((node) => node.type === (tab === "activity" ? "ScrollView" : "LegendList"));
+  const surface = () => render().find((node) => node.type === (tab.endsWith("activity") ? "ScrollView" : "LegendList"));
   const refresh = () => surface().props.refreshControl;
   const scrollSurface = surface();
   assert.equal(render().find((node) => node.type === "Screen").props.edgeToEdge, true);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingTop, 103, `${tab}: initial content clears the measured header`);
   assert.equal(scrollSurface.props.contentContainerStyle.paddingBottom, 80, `${tab}: the last item clears the floating tabs`);
-  assert.equal(refresh().props.progressViewOffset, 103, `${tab}: refresh feedback clears the header`);
   assert.equal(refresh().props.refreshing, false, `${tab}: automatic loading must not show the pull-to-refresh spinner`);
   assert.equal(requests.length, 0, `${tab}: rendering the refresh control does not start a request`);
   for (const failed of [false, true]) {
@@ -707,7 +712,7 @@ for (const [tab, component, expectedRequests] of [
     if (failed) assert.ok(render().some((node) => node.type === "DataError"), `${tab}: refresh errors remain actionable`);
   }
   state.error = null;
-  if (tab === "index") {
+  if (tab === "(chats)/index") {
     // Replay the installed list's anchor algorithm with the real screen props.
     // This checks automatic scroll requests, not native navigation/layout itself.
     const legendSource = ts.createSourceFile("legend.js", readFileSync(new URL("../node_modules/@legendapp/list/react-native.js", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
@@ -755,7 +760,7 @@ for (const [tab, component, expectedRequests] of [
       }
     }
   }
-  if (tab === "spaces") {
+  if (tab === "(spaces)/spaces") {
     const list = surface();
     assert.notEqual(list.props.ListEmptyComponent.type, "LoadingRows", "returning to a loaded empty Spaces list must not flash skeletons");
     spaceList.overview = null;
@@ -966,7 +971,7 @@ for (const [tab, component, expectedRequests] of [
   const routes = [];
   let retries = 0;
   const subscriptions = { data: null, loading: true, error: null, load: async () => { retries++; } };
-  const renderActivity = loadChromeComponent("../app/(tabs)/activity.tsx", "ActivityScreen", {
+  const renderActivity = loadChromeComponent("../app/(tabs)/(activity)/activity.tsx", "ActivityScreen", {
     ...formScope, ...runner.hooks,
     useRouter: () => ({ push: (route) => routes.push(route) }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useEdgeChrome: () => ({ headerHeight: 100 }), useApp: () => ({ connectionState: "open" }),
@@ -1172,7 +1177,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1385,7 +1390,7 @@ for (const isPinned of [false, true]) {
 
 // Spaces uses the capsule for the create sheet's Cloud / This device choice.
 for (const [path, labels, chips] of [
-  ["../app/(tabs)/spaces.tsx", ["Recent", "All", "Pinned"], 2],
+  ["../app/(tabs)/(spaces)/spaces.tsx", ["Recent", "All", "Pinned"], 2],
 ]) {
   const source = readFileSync(new URL(path, import.meta.url), "utf8");
   assert.match(source, /import \{ FilterChip \} from "@\/src\/components\/FilterChip"/);
@@ -1416,7 +1421,7 @@ for (const [path, labels, chips] of [
     { spaceId: "space-gone", root: "/storage/emulated/0/Old", label: "Internal storage/Old", state: "stopped", error: null },
   ];
   const state = { booting: false, spaces: [{ id: "space-a", name: "Field notes", description: null, isPinned: false }, { id: "space-b", name: "Cloud", isPinned: false }], sessions: [], sessionViews: {} };
-  const renderSpaces = loadChromeComponent("../app/(tabs)/spaces.tsx", "SpacesScreen", {
+  const renderSpaces = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "SpacesScreen", {
     ...chromeScope, ...screen.hooks,
     useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useRouter: () => ({ push: (route) => pushes.push(route) }),
@@ -1430,13 +1435,13 @@ for (const [path, labels, chips] of [
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
     selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
-    EmptyState: "EmptyState", ExpandableSearchBar: "ExpandableSearchBar", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu",
   });
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
-  chromeNodes(render().find((node) => node.type === "ExpandableSearchBar").props.filters).find((node) => node.type === "Pressable").props.onPress();
+  chromeNodes(render().find((node) => node.type === "LargeTitleBar").props.actions).find((node) => node.props?.name === "filter").props.onPress();
   const deviceAction = () => render().find((node) => node.type === "AnchoredActionMenu").props.actions.find((action) => action.title === "deviceRuntime.thisDevice");
   deviceAction().onPress();
   assert.equal(deviceAction().checked, true);
@@ -1445,9 +1450,10 @@ for (const [path, labels, chips] of [
   assert.equal(row.type, "DeviceSpaceRow");
   row.props.onPress();
   assert.deepEqual(pushes.splice(0), [{ pathname: "/space/[spaceId]", params: { spaceId: "space-a" } }]);
-  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("old");
+  const searchField = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "SearchField");
+  searchField().props.onChangeText("old");
   assert.deepEqual(list().props.data.map((item) => item.instance.spaceId), ["space-gone"], "a query also matches the folder");
-  render().find((node) => node.type === "ExpandableSearchBar").props.onQueryChange("");
+  searchField().props.onChangeText("");
   instances = [];
   const empty = list().props.ListEmptyComponent;
   assert.equal(empty.props.title, "spaces.empty.device.title");
@@ -1463,53 +1469,9 @@ assert.equal(renderConnectionBanner({ visible: false }), null, "routine connecti
 {
   const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
   assert.ok(classes(nodes[0]).has("absolute"), "the banner overlays content instead of resizing the header");
-  assert.ok(nodes.some((node) => node.type === "AppIcon" && node.props.name === "cloud-off"));
+  assert.ok(nodes.some((node) => node.type === "Mascot" && node.props.mood === "worried"), "an outage shows the worried mascot");
   assert.deepEqual(nodes.filter((node) => node.type === "Text").flatMap((node) => node.props.children), ["ui.banner.unavailable"], "actual connection failures remain visible");
 }
-let searchExpanded;
-let searchQuery = "";
-let createdChats = 0;
-let keyboardDismissals = 0;
-let searchFocuses = 0;
-const searchInputRef = { current: { focus: () => searchFocuses++ } };
-const exposedSearchRef = { current: null };
-const searchEffects = [];
-const renderSearchBar = loadChromeComponent("../src/ui/ExpandableSearchBar.tsx", "ExpandableSearchBar", {
-  ...chromeScope,
-  useState: (initial) => { searchExpanded ??= initial; return [searchExpanded, (value) => { searchExpanded = value; }]; },
-  useRef: () => searchInputRef,
-  useEffect: (effect) => { searchEffects.push(effect); },
-  Keyboard: { dismiss: () => keyboardDismissals++ },
-});
-const searchProps = () => ({ title: "Chats", query: searchQuery, onQueryChange: (query) => { searchQuery = query; }, queryRef: exposedSearchRef, onCreate: () => createdChats++, createLabel: "New chat" });
-const searchAction = (tree, name) => chromeNodes(tree.props.actions).find((node) => node.props?.name === name);
-let searchTree = renderSearchBar(searchProps());
-assert.equal(chromeNodes(searchTree).some((node) => node.type === "TextInput"), false);
-searchAction(searchTree, "plus").props.onPress();
-assert.equal(createdChats, 1);
-searchAction(searchTree, "search").props.onPress();
-searchTree = renderSearchBar(searchProps());
-const searchInput = chromeNodes(searchTree).find((node) => node.type === "TextInput");
-assert.equal(searchInput.props.autoFocus, true);
-assert.equal(searchTree.props.actions, undefined, "empty search has no redundant clear/create controls");
-const releaseSearchRef = searchEffects.at(-1)();
-assert.equal(exposedSearchRef.current, searchInputRef.current);
-searchInput.props.onChangeText("project");
-searchTree = renderSearchBar(searchProps());
-assert.equal(chromeNodes(searchTree).find((node) => node.type === "TextInput").props.value, "project");
-searchAction(searchTree, "x").props.onPress();
-assert.equal(searchQuery, "");
-assert.equal(searchFocuses, 1);
-assert.equal(searchExpanded, true, "clearing search retains the editing mode");
-searchInput.props.onChangeText("another query");
-searchTree.props.onBack();
-assert.equal(searchQuery, "");
-assert.equal(searchExpanded, false);
-assert.equal(keyboardDismissals, 1);
-releaseSearchRef();
-assert.equal(exposedSearchRef.current, null);
-assert.ok(searchAction(renderSearchBar(searchProps()), "plus"), "closing search restores creation");
-
 const scrollTrace = new ChatScrollTrace();
 scrollTrace.record("ignored", "test");
 assert.equal(scrollTrace.snapshot().entries.length, 0);
@@ -3295,7 +3257,7 @@ const messageContent = readFileSync(new URL("../src/components/MessageContent.ts
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");
 assert.ok(panelsSource.text.includes("prefetchSession"), "opening a Chat from the space panel starts the load on press-in");
-assert.ok(readFileSync(new URL("../app/(tabs)/index.tsx", import.meta.url), "utf8").includes("prefetchSession"), "opening a Chat from Chats starts the load on press-in");
+assert.ok(readFileSync(new URL("../app/(tabs)/(chats)/index.tsx", import.meta.url), "utf8").includes("prefetchSession"), "opening a Chat from Chats starts the load on press-in");
 assert.match(readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8"), /useLayoutEffect\(\(\) => \{\s*void openSession\(sessionId\);/, "Chat open must attach before paint so a prefetch can win the first frame");
 
 // Space Chat counts come from a cached probe of the Space's first page.
@@ -4428,8 +4390,8 @@ for (const path of [
   "../src/components/ModelSelectorMenu.tsx",
   "../src/components/TurnNavigatorSheet.tsx",
   "../src/components/SpacePanels.tsx",
-  "../app/(tabs)/index.tsx",
-  "../app/(tabs)/spaces.tsx",
+  "../app/(tabs)/(chats)/index.tsx",
+  "../app/(tabs)/(spaces)/spaces.tsx",
   "../app/chat/[sessionId].tsx",
   "../app/space/[spaceId]/files.tsx",
 ]) {

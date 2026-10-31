@@ -1,7 +1,7 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
 import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
 import { Keyboard, Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -90,9 +90,9 @@ function barBottomOffset(bottomInset: number) {
 /** Space the tab bar occupies at the bottom of a tab screen. */
 export function useFloatingTabBarInset() {
   const insets = useSafeAreaInsets();
-  // iOS uses the system tab bar (`app/(tabs)/_layout.ios.tsx`); each tab's own safe area already
-  // ends above it, so only the breathing room is added. Android draws this bar over the screen.
-  if (Platform.OS === "ios") return insets.bottom + 16;
+  // iOS tab roots scroll with automatic insets, which already clear the system tab bar, so only the
+  // breathing room is added. Android draws this bar over the screen.
+  if (Platform.OS === "ios") return 16;
   return BAR_HEIGHT + barBottomOffset(insets.bottom) + 16;
 }
 
@@ -139,7 +139,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const lensTime = useSharedValue(0);
 
   const tick = useCallback(() => {
-    if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => undefined);
+    haptics.selection();
   }, []);
 
   const select = useCallback((index: number) => {
