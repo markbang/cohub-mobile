@@ -146,6 +146,8 @@ export function AdaptiveSheet({
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
+      // A sheet closed with the keyboard up never hears it hide; the next open must not start short.
+      setKeyboardHeight(0);
     };
   }, [visible]);
 

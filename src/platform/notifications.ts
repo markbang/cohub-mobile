@@ -41,11 +41,16 @@ let notificationHandlerConfigured = false;
 let foregroundSessionId: string | null = null;
 
 /**
- * Registers the Chat currently on screen (`null` when none). Its notifications skip the
- * foreground banner but still reach the notification list. Call on Chat focus and blur.
+ * Registers the Chat currently on screen. Its notifications skip the foreground banner but still
+ * reach the notification list. Call on Chat focus.
  */
 export function setForegroundSession(sessionId: string | null) {
   foregroundSessionId = sessionId?.trim() || null;
+}
+
+/** Call on Chat blur. Pushing one Chat over another focuses the new one before the old one blurs. */
+export function clearForegroundSession(sessionId: string) {
+  if (foregroundSessionId === sessionId.trim()) foregroundSessionId = null;
 }
 
 function isRecord(value: unknown): value is NotificationRecord {
