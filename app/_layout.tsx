@@ -262,8 +262,8 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="space/[spaceId]/files" />
             <Stack.Screen name="space/[spaceId]/file" />
             <Stack.Screen name="work/[appId]" />
-            {/* design-system: the photo viewer is black in every theme so images read true. Android has no zoom
-                transition, so the viewer floats over the Chat and its own backdrop fades as it is dragged away. */}
+            {/* Android has no zoom transition, so the viewer floats over the Chat and its own backdrop fades as it is dragged away. */}
+            {/* design-system: the photo viewer is black in every theme so images read true. */}
           <Stack.Screen name="image-viewer" options={Platform.OS === "android" ? { presentation: "transparentModal", animation: "fade", contentStyle: { backgroundColor: "transparent" } } : { contentStyle: { backgroundColor: "#000000" } }} />
             <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: Platform.OS === "ios" ? "default" : "slide_from_bottom" }} />
             <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
