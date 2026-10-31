@@ -1,5 +1,4 @@
 import { Link, usePreventZoomTransitionDismissal, useRouter } from "expo-router";
-// Internal to expo-router: whether this screen was opened by an Apple zoom transition, which owns its own drag-to-dismiss.
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Platform, Pressable, Text, View, useWindowDimensions, type AccessibilityActionEvent } from "react-native";
@@ -74,6 +73,9 @@ export default function ImageViewerScreen() {
 
   // Page position in pages, not points, so a rotation or resize keeps the current page.
   const page = useSharedValue(index);
+  // The settled page, read by the gestures: a drag starting while the last one still springs must not see a stale render.
+  const settled = useSharedValue(index);
+  const pageFrom = useSharedValue(index);
   const scale = useSharedValue(1);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
@@ -97,9 +99,10 @@ export default function ImageViewerScreen() {
   }, [height, scale, tx, ty, width]);
 
   const showPage = useCallback((next: number) => {
+    settled.set(next);
     setIndex(next);
     page.set(withSpring(next, SETTLE));
-  }, [page]);
+  }, [page, settled]);
 
   const gesture = useMemo(() => {
     const resetZoom = (velocity = 0) => {
@@ -155,8 +158,13 @@ export default function ImageViewerScreen() {
       .onUpdate((event) => {
         if (mode.get() === "idle") {
           // The first movement picks the axis: sideways pages, vertical dismisses.
-          if (Math.abs(event.translationX) > Math.abs(event.translationY)) mode.set(count > 1 ? "page" : "none");
-          else mode.set(zoomTransition ? "none" : "dismiss");
+          if (Math.abs(event.translationX) > Math.abs(event.translationY)) {
+            mode.set(count > 1 ? "page" : "none");
+            // Picks the pager up where it is, even mid-spring from the previous flick.
+            pageFrom.set(page.get());
+          } else {
+            mode.set(zoomTransition ? "none" : "dismiss");
+          }
         }
         const current = mode.get();
         if (current === "pan") {
@@ -166,7 +174,7 @@ export default function ImageViewerScreen() {
           tx.set(resist(from.x + event.translationX, bounds.x));
           ty.set(resist(from.y + event.translationY, bounds.y));
         } else if (current === "page") {
-          const raw = index - event.translationX / width;
+          const raw = pageFrom.get() - event.translationX / width;
           page.set(raw < 0 ? raw * EDGE_RESISTANCE : raw > count - 1 ? count - 1 + (raw - count + 1) * EDGE_RESISTANCE : raw);
         } else if (current === "dismiss") {
           dragX.set(event.translationX);
@@ -187,9 +195,13 @@ export default function ImageViewerScreen() {
           coast(tx, event.velocityX, bounds.x);
           coast(ty, event.velocityY, bounds.y);
         } else if (current === "page") {
-          const next = imageViewerReleasePage(index, event.translationX, event.velocityX, width, count);
+          const from = settled.get();
+          const next = imageViewerReleasePage(pageFrom.get(), from, event.translationX, event.velocityX, width, count);
           page.set(withSpring(next, { ...SETTLE, velocity: -event.velocityX / width }));
-          if (next !== index) scheduleOnRN(setIndex, next);
+          if (next !== from) {
+            settled.set(next);
+            scheduleOnRN(setIndex, next);
+          }
         } else if (current === "dismiss") {
           if (imageViewerShouldDismiss(event.translationY, event.velocityY)) {
             const direction = event.translationY === 0 ? Math.sign(event.velocityY) || 1 : Math.sign(event.translationY);
@@ -219,7 +231,7 @@ export default function ImageViewerScreen() {
       });
 
     return Gesture.Simultaneous(pinch, pan, doubleTap);
-  }, [close, count, dragX, dragY, fitSize, height, index, mode, page, scale, start, tx, ty, width, zoomTransition, zoomed]);
+  }, [close, count, dragX, dragY, fitSize, height, mode, page, pageFrom, scale, settled, start, tx, ty, width, zoomTransition, zoomed]);
 
   const dismissProgress = (y: number) => {
     "worklet";
@@ -282,7 +294,8 @@ export default function ImageViewerScreen() {
           <Animated.View style={[{ width, height }, pagerStyle]}>
             {payload.uris.map((uri, itemIndex) => {
               // Only the visible page and its neighbours stay mounted; a long gallery would otherwise hold every image.
-              if (Math.abs(itemIndex - index) > 1) return null;
+              // The opening page stays too, off screen: it carries the zoom target the native dismissal returns to.
+              if (Math.abs(itemIndex - index) > 1 && itemIndex !== payload.index) return null;
               const current = itemIndex === index;
               return (
                 <View

@@ -36,12 +36,15 @@ export function imageViewerPageIndex(offsetX: number, pageWidth: number, pageCou
 // UIScrollView's fast deceleration projects a release to where it would coast.
 const RELEASE_PROJECTION_S = 0.1;
 
-/** Page a horizontal drag lands on: a flick moves one page at most, as in Photos. */
-export function imageViewerReleasePage(index: number, translationX: number, velocityX: number, pageWidth: number, pageCount: number): number {
+/**
+ * Page a horizontal drag lands on. `fromPage` is where the pager was when the drag began (fractional
+ * mid-spring); a flick moves at most one page from the settled `current` page, as in Photos.
+ */
+export function imageViewerReleasePage(fromPage: number, current: number, translationX: number, velocityX: number, pageWidth: number, pageCount: number): number {
   "worklet";
-  const projected = index * pageWidth - (translationX + velocityX * RELEASE_PROJECTION_S);
+  const projected = fromPage * pageWidth - (translationX + velocityX * RELEASE_PROJECTION_S);
   const page = imageViewerPageIndex(projected, pageWidth, pageCount);
-  return page === null ? index : Math.min(Math.max(page, index - 1), index + 1);
+  return page === null ? current : Math.min(Math.max(page, current - 1), current + 1);
 }
 
 const DISMISS_DISTANCE = 120;
