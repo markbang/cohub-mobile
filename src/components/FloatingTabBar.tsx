@@ -9,7 +9,7 @@ import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedSty
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
 import { springs } from "@/src/motion";
-import { edgeChrome, useAppTheme } from "@/src/theme";
+import { edgeChrome, MAX_FONT_SCALE, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 
@@ -429,7 +429,7 @@ function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift
           <Animated.View className="absolute inset-0 items-center justify-center" style={activeIconStyle}>{activeIcon}</Animated.View>
         </View>
         {/* Labels are the one place icons never stand alone: tabs name destinations. */}
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} className={`text-micro ${focused ? "font-semibold" : "font-medium"}`} style={labelStyle}>{label}</Animated.Text>
+        <Animated.Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`text-micro ${focused ? "font-semibold" : "font-medium"}`} style={labelStyle}>{label}</Animated.Text>
       </Animated.View>
     </View>
   );

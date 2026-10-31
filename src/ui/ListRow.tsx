@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type AccessibilityActionInfo, type GestureResponderEvent } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
+import { MAX_FONT_SCALE } from "@/src/theme";
 export { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 
 export type ListRowStatus = "running" | "failed" | "stopped" | null;
@@ -109,8 +110,8 @@ export function Meta({ icon, value, label, tone = "muted" }: { icon: IconName; v
 /** A small label chip; at most two per row. */
 export function Tag({ label, tone = "accent" }: { label: string; tone?: "accent" | "info" }) {
   return (
-    <View className={tone === "info" ? "max-w-24 rounded-xs bg-info-soft px-1.5 py-px" : "max-w-24 rounded-xs bg-accent-soft px-1.5 py-px"}>
-      <Text numberOfLines={1} className={tone === "info" ? "text-micro font-semibold text-info" : "text-micro font-semibold text-accent"}>{label}</Text>
+    <View className={tone === "info" ? "max-w-24 rounded-xs bg-info-soft px-2 py-0.5" : "max-w-24 rounded-xs bg-accent-soft px-2 py-0.5"}>
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.badge} className={tone === "info" ? "text-micro font-semibold text-info" : "text-micro font-semibold text-accent"}>{label}</Text>
     </View>
   );
 }

@@ -211,6 +211,15 @@ export function useAppTheme(): AppTheme {
 
 export type FontScalePreference = "small" | "default" | "large" | "xlarge";
 
+/**
+ * Dynamic Type policy. The system text size multiplies on top of the in-app scale (up to 1.25), so copy and
+ * anything that wraps or grows (rows, buttons, fields) scales freely. Text inside a fixed-size control caps the
+ * system factor so the control keeps its frame: `control` for chips, segments, and tab labels, `badge` for tags
+ * drawn in a few points of padding, `glyph` for text that is part of a graphic, such as avatar initials.
+ * React Native ignores caps below 1.
+ */
+export const MAX_FONT_SCALE = { control: 1.3, badge: 1.15, glyph: 1 } as const;
+
 export const FONT_SCALE_VALUES: Record<FontScalePreference, number> = {
   small: 0.9,
   default: 1,
