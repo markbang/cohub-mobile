@@ -27,6 +27,34 @@ export function clearImageViewerPayload() {
  * pages; an unusable offset leaves the current page alone.
  */
 export function imageViewerPageIndex(offsetX: number, pageWidth: number, pageCount: number): number | null {
+  "worklet";
   if (!Number.isFinite(offsetX) || !Number.isFinite(pageWidth) || pageWidth <= 0 || pageCount <= 0) return null;
   return Math.min(Math.max(Math.round(offsetX / pageWidth), 0), pageCount - 1);
+}
+
+// UIScrollView's fast deceleration projects a release to where it would coast.
+const RELEASE_PROJECTION_S = 0.1;
+
+/** Page a horizontal drag lands on: a flick moves one page at most, as in Photos. */
+export function imageViewerReleasePage(index: number, translationX: number, velocityX: number, pageWidth: number, pageCount: number): number {
+  "worklet";
+  const projected = index * pageWidth - (translationX + velocityX * RELEASE_PROJECTION_S);
+  const page = imageViewerPageIndex(projected, pageWidth, pageCount);
+  return page === null ? index : Math.min(Math.max(page, index - 1), index + 1);
+}
+
+const DISMISS_DISTANCE = 120;
+const DISMISS_VELOCITY = 900;
+
+/** A vertical drag dismisses when it travels far enough or is thrown away from the center. */
+export function imageViewerShouldDismiss(translationY: number, velocityY: number): boolean {
+  "worklet";
+  if (Math.abs(translationY) > DISMISS_DISTANCE) return Math.sign(velocityY) !== -Math.sign(translationY) || Math.abs(velocityY) < DISMISS_VELOCITY;
+  return Math.abs(velocityY) > DISMISS_VELOCITY && Math.sign(velocityY) === Math.sign(translationY);
+}
+
+/** How far a zoomed image may pan from center before its edge leaves the screen edge. */
+export function imageViewerPanBounds(fitWidth: number, fitHeight: number, scale: number, viewWidth: number, viewHeight: number): { x: number; y: number } {
+  "worklet";
+  return { x: Math.max(0, (fitWidth * scale - viewWidth) / 2), y: Math.max(0, (fitHeight * scale - viewHeight) / 2) };
 }

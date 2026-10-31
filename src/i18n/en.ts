@@ -1385,6 +1385,10 @@ export const en = {
 
   // Image viewer
   "imageViewer.close": "Close image viewer",
+  "imageViewer.loading": "Loading image",
+  "imageViewer.failed": "Image failed to load",
+  "imageViewer.unavailable": "This image is no longer available",
+  "imageViewer.page": "Image {current} of {total}",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "Unable to open Chat",

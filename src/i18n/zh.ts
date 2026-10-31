@@ -1356,6 +1356,10 @@ export const zh: Record<TranslationKey, string> = {
 
   // Image viewer
   "imageViewer.close": "关闭图片查看器",
+  "imageViewer.loading": "正在加载图片",
+  "imageViewer.failed": "图片加载失败",
+  "imageViewer.unavailable": "此图片已无法显示",
+  "imageViewer.page": "第 {current} 张，共 {total} 张",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "无法打开对话",
