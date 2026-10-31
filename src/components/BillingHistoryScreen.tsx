@@ -5,15 +5,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { subscriptionCheckoutUrl } from "@/src/data/billing-settings";
+import { formatWalletUsd } from "@/src/data/space-wallet";
 import { openWebLink } from "@/src/platform/browser";
 import { useBillingHistory, type SubscriptionCancellation } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { EmptyState, IconButton, LoadingState, PrimaryButton, Screen, TopBar } from "@/src/ui";
+import { billingStatusLabel } from "@/src/utils";
 
 export function BillingHistoryScreen({ kind }: { kind: "history" | "subscriptions" }) {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
   const { data, page, setPage, loading, saving, error, load, cancel } = useBillingHistory(kind);
@@ -31,11 +33,11 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
         <PrimaryButton label={t("common.retry")} icon="refresh" disabled={busy} onPress={() => { setPaymentError(null); void load(); }} />
       </View> : null}
       {!loading && data?.list.page === page ? <>
-        {data.kind === "history" ? data.list.items.map((item) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status].filter(Boolean).join(" · ")}>
-          <Text className={`text-subhead font-semibold tabular-nums ${item.amountUsd < 0 ? "text-fg" : "text-success"}`} style={{ maxWidth: "35%" }}>{item.amountUsd > 0 ? "+" : ""}${item.amountUsd.toFixed(2)}</Text>
+        {data.kind === "history" ? data.list.items.map((item) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status && item.status !== "covered" ? billingStatusLabel(item.status) : null].filter(Boolean).join(" · ")}>
+          <Text className={`text-subhead font-semibold tabular-nums ${item.amountUsd < 0 ? "text-fg" : "text-success"}`} style={{ maxWidth: "35%" }}>{item.amountUsd > 0 ? "+" : ""}{formatWalletUsd(item.amountUsd, locale)}</Text>
         </SettingsRow>) : data.list.items.map((item) => <View key={item.id} className="p-4 gap-2 border-b border-border bg-surface">
           <Text className="text-body font-semibold text-fg">{item.productName}</Text>
-          <Text className="text-caption text-fg-secondary">{item.status} · ${item.amountUsd.toFixed(2)} · {item.billingPeriod}</Text>
+          <Text className="text-caption text-fg-secondary">{billingStatusLabel(item.status)} · {formatWalletUsd(item.amountUsd, locale)} · {item.billingPeriod}</Text>
           {item.currentPeriodStart || item.currentPeriodEnd ? <Text className="text-caption text-fg-muted">{[item.currentPeriodStart, item.currentPeriodEnd].filter(Boolean).map((date) => new Date(date!).toLocaleDateString()).join(" - ")}</Text> : null}
           {item.cancelAtPeriodEnd ? <Text className="text-caption text-fg-muted">{t("settings.billing.renewalCanceled")}</Text> : null}
           {item.checkoutExpiresAt && item.status === "pending_checkout" ? <Text className="text-caption text-fg-muted">{t("settings.billing.checkoutExpires", { date: new Date(item.checkoutExpiresAt).toLocaleString() })}</Text> : null}

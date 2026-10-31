@@ -8,6 +8,7 @@ import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SessionRow } from "@/src/components/SessionRow";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
+import { useToast } from "@/src/components/Toast";
 import { useApp } from "@/src/data/context";
 import { activityContributorName } from "@/src/data/activity";
 import { useSyncScope } from "@/src/data/use-sync-scope";
@@ -15,7 +16,7 @@ import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, AppRefreshControl, Avatar, TopBar, IconButton, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
+import { AppIcon, AppRefreshControl, Avatar, TopBar, IconButton, LoadingState, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatNumber, formatRelativeTime, sortByRecent } from "@/src/utils";
 
@@ -44,6 +45,7 @@ export default function SpaceScreen() {
   useSpaceRealtime(spaceId ? [spaceId] : []);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const { state, client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession, spaceList: { recordVisit } } = useApp();
   useFocusEffect(useCallback(() => {
     if (spaceId) recordVisit(spaceId);
@@ -207,6 +209,8 @@ export default function SpaceScreen() {
       const result = await client.tasks.list({ spaceId, limit: 8, cursor: taskCursor });
       setResources((current) => ({ ...current, tasks: mergeTaskRuns(current.tasks, result.runs) }));
       setTaskCursor(result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null);
+    } catch (error) {
+      toast({ title: t("space.tasks.loadMoreFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
     } finally {
       setTasksLoadingMore(false);
     }
@@ -296,7 +300,7 @@ export default function SpaceScreen() {
       <TopBar drawn title={t("space.title")} onBack={() => router.back()} />
       <View className="flex-1 items-center justify-center p-6">
         {opening
-          ? <Text className="text-body text-fg-muted">{t("space.opening")}</Text>
+          ? <LoadingState label={t("space.opening")} />
           : <><Text className="text-body text-fg-muted text-center">{t("space.unavailable")}</Text>{spaceError ? <Text selectable className="text-caption text-danger text-center mt-2">{spaceError}</Text> : null}{spaceId ? <PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void loadSpace({ force: true })} className="mt-4" /> : null}</>}
       </View>
     </Screen>;
@@ -322,6 +326,8 @@ export default function SpaceScreen() {
     try {
       await client.space(space.id).checkpoints.create();
       await loadResources({ force: true });
+    } catch (error) {
+      toast({ title: t("space.saveCheckpointFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
     } finally {
       setCheckpointing(false);
     }

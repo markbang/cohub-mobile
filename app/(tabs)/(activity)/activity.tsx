@@ -7,6 +7,7 @@ import { ActivityHeatmap, ActivityHeatmapSkeleton } from "@/src/components/Activ
 import { useApp } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
+import { formatWalletUsd } from "@/src/data/space-wallet";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -16,10 +17,11 @@ import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
+import { billingStatusLabel } from "@/src/utils";
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
   const { connectionUnavailable } = useApp();
@@ -57,7 +59,7 @@ export default function ActivityScreen() {
             <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
             <AppIcon name="chevron-right" size={16} tone="faint" />
           </View>
-          <Text style={ROUNDED_TITLE} className={`text-display font-semibold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? `$${credits.data.netUsd.toFixed(2)}` : "—"}</Text>
+          <Text style={ROUNDED_TITLE} className={`text-display font-semibold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? formatWalletUsd(credits.data.netUsd, locale) : "—"}</Text>
         </PressableScale>
       </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}
@@ -66,7 +68,7 @@ export default function ActivityScreen() {
           icon="calendar-clock"
           title={t("activity.subscription.title")}
           detail={subscriptions.data ? currentSubscription?.productName ?? t("activity.subscription.none") : t(subscriptions.error ? "settings.billing.error" : "common.loading")}
-          value={currentSubscription?.status}
+          value={currentSubscription ? billingStatusLabel(currentSubscription.status) : undefined}
           onPress={() => router.push({ pathname: "/settings/billing-history", params: { kind: "subscriptions" } })}
         />
         <SettingsRow icon="activity" title={t("activity.usageDetails")} onPress={() => router.push("/settings/activity")} />

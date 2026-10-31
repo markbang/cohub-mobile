@@ -423,6 +423,10 @@ function chromeNodes(node) {
   if (!node || typeof node !== "object") return [];
   return [node, ...chromeNodes(node.props?.children)];
 }
+const chatsRoute = "../app/(tabs)/(chats)/index.tsx";
+const chatItemKey = loadChromeComponent(chatsRoute, "chatItemKey", {});
+const holdOrder = loadChromeComponent(chatsRoute, "holdOrder", { chatItemKey });
+const ORDER_SETTLE_MS = loadChromeComponent(chatsRoute, "ORDER_SETTLE_MS", {});
 const chromeScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
@@ -441,7 +445,8 @@ const chromeScope = {
   LargeTitleBar: "LargeTitleBar", SearchField: "SearchField",
   BrandRefreshArea: "BrandRefreshArea",
   useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
-  useTranslation: () => ({ t: (key) => key }),
+  useTranslation: () => ({ t: (key) => key, locale: "en" }),
+  formatWalletUsd, billingStatusLabel: (status) => status, chatItemKey, holdOrder, ORDER_SETTLE_MS, ConnectionBanner: "ConnectionBanner",
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
   AppRefreshControl: "AppRefreshControl",
@@ -503,7 +508,7 @@ const translateForScreen = (key) => key;
 const resourceKeys = ["env", "config", "ports", "allowedSpec", "members", "invitations", "mods", "schedules"];
 const formScope = {
   ...chromeScope,
-  useTranslation: () => ({ t: translateForScreen }),
+  useTranslation: () => ({ t: translateForScreen, locale: "en" }),
   useAppTheme: () => ({ colors: {}, spacing: { md: 12, lg: 16 }, radius: { md: 12 } }),
   Screen: "Screen", ScrollView: "ScrollView", Avatar: "Avatar", PrimaryButton: "PrimaryButton",
   LoadingRows: "LoadingRows", LoadingFlatRows: "LoadingFlatRows", LoadingDocument: "LoadingDocument", LoadingSections: "LoadingSections", LoadingBlock: "LoadingBlock", DataError: "DataError", InlineError: "InlineError",
@@ -709,7 +714,12 @@ for (const [tab, component, expectedRequests] of [
     pending.resolve(); // Data hooks report failures in their resource state.
     await task;
     assert.equal(refresh().props.refreshing, false, `${tab}: completion stops the spinner on success and failure`);
-    if (failed) assert.ok(render().some((node) => node.type === "DataError"), `${tab}: refresh errors remain actionable`);
+    if (failed) {
+      const emptyRetry = tab.endsWith("activity") ? null : surface().props.ListEmptyComponent?.props.action;
+      const banners = render().filter((node) => node.type === "DataError").length;
+      assert.ok(banners > 0 || emptyRetry, `${tab}: refresh errors remain actionable`);
+      if (emptyRetry) assert.equal(banners, 0, `${tab}: an empty list shows its error once, in place of the content`);
+    }
   }
   state.error = null;
   if (tab === "(chats)/index") {
@@ -1421,17 +1431,20 @@ for (const [path, labels, chips] of [
     { spaceId: "space-gone", root: "/storage/emulated/0/Old", label: "Internal storage/Old", state: "stopped", error: null },
   ];
   const state = { booting: false, spaces: [{ id: "space-a", name: "Field notes", description: null, isPinned: false }, { id: "space-b", name: "Cloud", isPinned: false }], sessions: [], sessionViews: {} };
+  const created = [];
+  const toasts = [];
+  let startDevice = async () => null;
   const renderSpaces = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "SpacesScreen", {
     ...chromeScope, ...screen.hooks,
     useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useRouter: () => ({ push: (route) => pushes.push(route) }),
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
-    useApp: () => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {} }),
+    useApp: () => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {}, createSpace: async (name) => { created.push(name); return { id: `space-new-${created.length}`, name }; } }),
     useAppTheme: () => ({ colors: {}, spacing: {} }),
     useRemoteSearch: (_client, _query, options) => ({ query: "", spaces: [], enabled: options.enabled }), useSpaceSessionCounts: () => ({}),
-    useToast: () => () => {},
-    useDeviceRuntimeInstances: () => instances, deviceRuntimeSupported: true, startDeviceRuntime: async () => null,
-    useDeviceFolderBrowser: () => ({ listing: null, loading: false, failure: null }), DeviceFolderBrowser: "DeviceFolderBrowser", DeviceSpaceRow: "DeviceSpaceRow",
+    useToast: () => (toast) => toasts.push(toast),
+    useDeviceRuntimeInstances: () => instances, deviceRuntimeSupported: true, startDeviceRuntime: (...args) => startDevice(...args),
+    useDeviceFolderBrowser: () => ({ listing: { path: "/storage/emulated/0/Drafts", label: "Internal storage/Drafts", spaceId: null }, loading: false, failure: null }), DeviceFolderBrowser: "DeviceFolderBrowser", DeviceSpaceRow: "DeviceSpaceRow",
     isDeviceRuntimeRunning, deviceFolderName, deviceRuntimeRefusalKey, normalizeSearchQuery, displaySpaceName: (space) => space.name,
     selectSpaceList: ({ spaces }) => spaces, personalSpaceActivity: () => new Map(), SPACE_SEARCH_TYPES: ["space"],
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
@@ -1461,8 +1474,55 @@ for (const [path, labels, chips] of [
   const sheet = render().find((node) => node.type === "AdaptiveSheet");
   assert.equal(sheet.props.visible, true);
   assert.ok(chromeNodes(sheet).some((node) => node.type === "FilterChip" && node.props.icon === "smartphone" && node.props.selected), "creating from the empty state starts on this device");
+  // Once created, a Space whose folder fails to connect is entered with the error; the sheet cannot create it twice.
+  const createSheet = () => render().find((node) => node.type === "AdaptiveSheet");
+  chromeNodes(createSheet()).find((node) => node.type === "Pressable" && node.props.accessibilityLabel === "deviceRuntime.chooseFolder").props.onPress();
+  createSheet().props.confirm.onPress();
+  startDevice = async () => { throw new Error("native start failed"); };
+  createSheet().props.confirm.onPress();
+  await flushSync();
+  assert.deepEqual(created, ["Drafts"]);
+  assert.equal(createSheet().props.visible, false, "the sheet closes once the Space exists");
+  assert.deepEqual(pushes.splice(0), [{ pathname: "/space/[spaceId]", params: { spaceId: "space-new-1" } }]);
+  assert.deepEqual(toasts.map((toast) => toast.tone), ["danger"], "the connection failure is reported, not swallowed");
   screen.unmount();
 }
+// The Chats order holds while the list moves under a finger, then takes the new order once it settles.
+mock.timers.enable({ apis: ["setTimeout"] });
+try {
+  const screen = createScreenHooks();
+  const chat = (id) => ({ id, spaceId: "space", title: id });
+  const state = { booting: false, spaces: [], sessions: ["a", "b", "c"].map(chat), sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
+  const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
+    ...chromeScope, ...screen.hooks,
+    useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSyncScope: () => {}, useSpaceRealtime: () => {},
+    useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
+    useApp: () => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} }),
+    useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
+    useSourceSessions: () => ({ sessions: [], loading: false, loadingMore: false, error: null, initialized: true, loadMore: () => {}, reload: () => {} }),
+    useSessionSourcePreference: () => ({ filter: "all", error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
+    useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
+    Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu",
+  });
+  const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
+  const order = () => list().props.data.map((item) => item.session.id);
+  assert.deepEqual(order(), ["a", "b", "c"]);
+  list().props.onScrollBeginDrag({});
+  state.sessions = ["c", "a", "b"].map(chat);
+  assert.deepEqual(order(), ["a", "b", "c"], "a drag holds the row order");
+  list().props.onScrollEndDrag();
+  mock.timers.tick(500);
+  list().props.onScroll({});
+  mock.timers.tick(500);
+  state.sessions = ["c", "a", "b", "d"].map(chat);
+  assert.deepEqual(order(), ["a", "b", "c", "d"], "a fling keeps holding; arrivals append below held rows");
+  mock.timers.tick(299);
+  assert.deepEqual(order(), ["a", "b", "c", "d"], "the order holds briefly after the list settles");
+  mock.timers.tick(1);
+  assert.deepEqual(order(), ["c", "a", "b", "d"], "the held order releases to recent activity");
+  screen.unmount();
+} finally { mock.timers.reset(); }
 const fadeAnimation = { duration: () => fadeAnimation };
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } } });
 assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
