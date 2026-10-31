@@ -10,6 +10,7 @@ import { displaySpaceName, formatRelativeTime } from "@/src/utils";
 import { useTranslation } from "@/src/i18n";
 import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
+import { haptics } from "@/src/platform/haptics";
 
 type SpaceRowProps = {
   space: SpaceListSpace;
@@ -45,29 +46,28 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
       onPress={() => { traceAction("space_row", { space: debugAlias("space", space.id), active, pinned }); onPress(); }}
       // The handler stays attached while pinning: without one, Pressable would turn the hold into a press and navigate.
       // On iOS the system context menu owns the hold; the no-op still keeps a hold from becoming a press.
-      onLongPress={nativeContextMenus ? () => undefined : onTogglePin ? (event) => { if (pinning) return; const { pageX, pageY } = event.nativeEvent; setMenuAt({ x: pageX, y: pageY }); } : undefined}
+      onLongPress={nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
       accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
       onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin && !pinning) onTogglePin(); }}
     />
   );
   // iOS lifts the row into the system context menu; Android opens the drawn menu at the touch.
-  if (nativeContextMenus) return <NativeContextMenu
-    menu="space-row"
-    actions={[
-      { icon: "arrow-right", title: t("common.open"), onPress },
-      ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin } as const] : []),
-    ]}
-    preview={{ title: name, body: space.description?.trim() || undefined, footnote: [active ? t("ui.active") : null, countLabel, formatRelativeTime(space.lastActivityAt)].filter(Boolean).join(" · ") }}
-  >{row}</NativeContextMenu>;
+  const actions = [
+    { icon: "arrow-right", title: t("common.open"), onPress },
+    ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin } as const] : []),
+  ] as const;
+  const preview = { title: name, body: space.description?.trim() || undefined, footnote: [active ? t("ui.active") : null, countLabel, formatRelativeTime(space.lastActivityAt)].filter(Boolean).join(" · ") };
+  if (nativeContextMenus) return <NativeContextMenu menu="space-row" actions={actions} preview={preview}>{row}</NativeContextMenu>;
   return (
     <>
       {row}
-      {menuAt && onTogglePin ? <ContextMenu
+      {menuAt ? <ContextMenu
         visible
         x={menuAt.x}
         y={menuAt.y}
         onClose={() => setMenuAt(null)}
-        actions={[{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), onPress: () => { if (!pinning) onTogglePin(); } }]}
+        preview={preview}
+        actions={actions.map((action) => ({ icon: action.icon, title: action.title, onPress: () => { if (!("disabled" in action && action.disabled)) action.onPress(); } }))}
       /> : null}
     </>
   );

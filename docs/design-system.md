@@ -163,7 +163,7 @@ flag from such a file, so call sites stay the same:
 | Composer harness choice | SwiftUI `Menu` with sections and checks (`harnessMenuSections`) | `HarnessPicker` |
 | Yes-or-no confirmations: sign out, cancel billing, unbind or remove a channel, rotate a referral code, clear the cache | system action sheet (`ConfirmSheet` in `SystemDialogs.ios.tsx`); a failure returns as an alert with Retry | `ConfirmSheet` drawn as a sheet |
 | Notices with one way out | system alert (`NoticeSheet`) | `NoticeSheet` drawn as a sheet |
-| Long-press peek on Chat and Space rows: a preview of the last exchange or the Space's description above Open (and Pin) | SwiftUI `ContextMenu` with `preview` (`NativeContextMenu.ios.tsx`), built from data already on screen | none; Space rows keep the drawn pin menu |
+| Long-press peek on Chat and Space rows: a preview of the last exchange or the Space's description above Open (and Pin) | SwiftUI `ContextMenu` with `preview` (`NativeContextMenu.ios.tsx`), built from data already on screen | drawn `ContextMenu` with the same `preview` above the actions, opened at the touch |
 | Long-press menus: Space rows, file rows, the Chat and file titles | SwiftUI `ContextMenu` around the view (`NativeContextMenu.ios.tsx`), which lifts it into a preview | the drawn menu or alert from the view's own long press |
 
 Cache retention is picked in place with `SettingsSelectRow` on both. The system tab bar mounts every

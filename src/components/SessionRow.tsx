@@ -1,4 +1,5 @@
 import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
+import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
@@ -10,7 +11,9 @@ import { useApp } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
+import { ContextMenu } from "@/src/components/ContextMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
+import { haptics } from "@/src/platform/haptics";
 
 type SessionRowProps = {
   session: UserSessionListItem;
@@ -36,6 +39,7 @@ function railX(level: number, showSpace: boolean) {
 export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {
   const { t } = useTranslation();
   const { state } = useApp();
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const spaceName = session.space?.name?.trim() || t("space.fallbackName");
   const status = sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses);
   const latestTurn = state.sessionLatestTurns[session.id];
@@ -77,8 +81,10 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     ? <Text numberOfLines={1} className="text-subhead text-danger">{subtitle}</Text>
     : subtitle;
   const shownLabels = labels.slice(0, 2);
-  // iOS peeks at the last exchange on a hold; rows whose hold already manages labels keep it.
-  const peek = nativeContextMenus && !onLongPress;
+  // A hold peeks at the last exchange; rows whose hold already manages labels keep it.
+  const peek = !onLongPress;
+  const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }] as const;
+  const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? formatRelativeTime(session.lastMessageAt ?? session.updatedAt) };
   const row = <ListRow
     leading={leading}
     compact={branch}
@@ -92,14 +98,14 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}
-    onLongPress={peek ? () => undefined : onLongPress}
+    onLongPress={!peek ? onLongPress : nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
   />;
   if (!peek) return row;
-  return <NativeContextMenu
-    menu="session-row"
-    actions={[{ icon: "arrow-right", title: t("common.open"), onPress }]}
-    preview={{ title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? formatRelativeTime(session.lastMessageAt ?? session.updatedAt) }}
-  >{row}</NativeContextMenu>;
+  if (nativeContextMenus) return <NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu>;
+  return <>
+    {row}
+    {menuAt ? <ContextMenu visible x={menuAt.x} y={menuAt.y} onClose={() => setMenuAt(null)} preview={peekPreview} actions={[...actions]} /> : null}
+  </>;
 }
 
 export function SessionForkToggle({ hidden, expanded, showSpace = true, onPress }: { hidden: number; expanded: boolean; showSpace?: boolean; onPress: () => void }) {
