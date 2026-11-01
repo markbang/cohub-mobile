@@ -16,6 +16,7 @@ Search for `cohub:` to find each one.
 - md4c: a non-ASCII neighbour delimits a permissive autolink, so `通过：https://…。` links as in the web client.
 - Android: block bottom margins are a separate spacer line, so selecting a paragraph does not highlight the gap below it.
 - Android: wrapped inline code ends each fragment at its line's text and hugs the glyph box.
+- Android: `consumer-rules.pro` keeps `segments.MathContainerView`, so display math survives R8.
 - `src/`: two type casts for React Native 0.88 types (`styleUtils.ts`, `native/EnrichedMarkdownText.tsx`). The app's lint skips this directory; its typecheck covers it.
 
 Every change here is native: it changes the fingerprint and ships only in a new binary.
