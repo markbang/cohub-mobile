@@ -6,7 +6,6 @@ import com.swmansion.enriched.markdown.spans.ListItemSpacingSpan
 import com.swmansion.enriched.markdown.spans.MarginBottomSpan
 import com.swmansion.enriched.markdown.styles.ListStyle
 import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE
-import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_LINE_HEIGHT_PRIORITY
 import com.swmansion.enriched.markdown.utils.text.span.applyLineHeightSkippingImages
 import com.swmansion.enriched.markdown.utils.text.span.applyMarginTop
 
@@ -69,13 +68,7 @@ class ListRenderer(
     // TODO: LineHeightSpan may also clip superscript/subscript glyphs that extend
     // outside the normal line bounds. A similar "skip" strategy as for images may
     // be needed here once super/subscript usage in practice is better understood.
-    // cohub: priority flag so this list-wide line height iterates before the children's
-    // MarginBottomSpans in both the measuring StaticLayout and the TextView's
-    // insertion-ordered view of the text (see SPAN_FLAGS_LINE_HEIGHT_PRIORITY). The span
-    // is added after the children, so without the flag the two disagree on which runs
-    // last and the last line is drawn below the view's bottom edge. Ported from upstream
-    // issue #1060 / pull request #1102.
-    applyLineHeightSkippingImages(builder, start, builder.length, style.lineHeight, SPAN_FLAGS_LINE_HEIGHT_PRIORITY)
+    applyLineHeightSkippingImages(builder, start, builder.length, style.lineHeight)
 
     // Item spacing and external bottom margin are only handled by the root-level list
     if (depth == 0) {
