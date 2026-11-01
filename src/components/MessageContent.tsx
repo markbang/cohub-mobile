@@ -25,6 +25,7 @@ import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/compon
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
+import { splitMarkdownHeadings } from "@/src/data/markdown-headings";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
@@ -70,9 +71,10 @@ function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme
   const well = onUserBubble || onSurface ? theme.colors.surfaceRaised : theme.colors.surface;
   // Blocks in a bubble sit closer than in a document: one gap for paragraphs, lists, quotes, and code.
   const gap = Math.round(body.lineHeight * 0.45);
-  const heading = (size: number, fontWeight: "700" | "600" = "700"): MarkdownStyle["h1"] => {
+  // Top-level headings draw as capsules (`MarkdownHeading`); these only reach headings nested in lists and quotes.
+  const heading = (size: number): MarkdownStyle["h1"] => {
     const fontSize = scaleFontSize(size);
-    return { ...body, fontSize, lineHeight: Math.round(fontSize * 1.3), fontWeight, marginTop: Math.round(gap / 2), marginBottom: Math.round(gap / 2) };
+    return { ...body, fontSize, lineHeight: Math.round(fontSize * 1.3), fontWeight: "600", marginTop: Math.round(gap / 2), marginBottom: Math.round(gap / 2) };
   };
   const dark = theme.mode === "dark";
   // Inline code sits in prose: a narrow platform monospace (Space Mono is too wide beside CJK) on a
@@ -88,9 +90,9 @@ function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme
     h1: heading(21),
     h2: heading(19),
     h3: heading(17),
-    h4: heading(17, "600"),
-    h5: heading(15, "600"),
-    h6: heading(15, "600"),
+    h4: heading(17),
+    h5: heading(15),
+    h6: heading(15),
     strong: { color },
     em: { color },
     strikethrough: { color: onUserBubble ? color : theme.colors.textMuted },
@@ -178,19 +180,43 @@ function TextBlock({ value, muted = false, color, linkColor, streaming = false, 
   const markdownStyle = useMemo(() => enrichedMarkdownStyle(theme, textColor, linkColor, onUser), [linkColor, onUser, theme, textColor]);
   // Paced prefix: the renderer is native, so this only decides how much Markdown it has been given.
   const paced = useRevealedStreamText(value, streaming);
+  const segments = useMemo(() => splitMarkdownHeadings(paced), [paced]);
   // Native Markdown has no onTextLayout. A hidden Text measuring the source wraps differently
   // than the native view, so tucking the clock from those metrics made minWidth/marginTop
   // oscillate and the bubble jitter after opening a Chat.
-  return <View className="min-w-0">
-    <EnrichedMarkdownText
-      markdown={paced}
-      markdownStyle={markdownStyle}
-      selectable
-      flavor="github"
-      streamingAnimation={streaming}
-      onLinkPress={(event) => { openLink(event.url); }}
-    />
-    {footer ? <View className="self-end mt-0.5">{footer}</View> : null}
+  return <View className="min-w-0 gap-2">
+    {segments.map((segment, index) => segment.kind === "heading"
+      ? <MarkdownHeading key={index} level={segment.level} text={segment.text} color={textColor} onUser={onUser} />
+      : <EnrichedMarkdownText
+        key={index}
+        markdown={segment.text}
+        markdownStyle={markdownStyle}
+        selectable
+        flavor="github"
+        streamingAnimation={streaming}
+        onLinkPress={(event) => { openLink(event.url); }}
+      />)}
+    {footer ? <View className="self-end -mt-1.5">{footer}</View> : null}
+  </View>;
+}
+
+const HEADING_SIZES = [21, 19, 17, 17, 15, 15] as const;
+const HEADING_PADDING_Y = 4;
+
+/**
+ * A top-level heading on its own capsule, so it separates from the prose around it instead of
+ * running into it. The corner is half a single line's height: one line reads as a capsule and a
+ * wrapped title keeps the same corner rather than a stadium that clips its text.
+ */
+function MarkdownHeading({ level, text, color, onUser }: { level: number; text: string; color: string; onUser: boolean }) {
+  const theme = useAppTheme();
+  const fontSize = scaleFontSize(HEADING_SIZES[level - 1] ?? 15);
+  const lineHeight = Math.round(fontSize * 1.3);
+  // design-system: the capsule steps up from whichever surface the reply or bubble sits on.
+  const backgroundColor = onUser ? theme.colors.userBubbleCodeBackground : theme.colors.surfaceRaised;
+  return <View accessibilityRole="header" className="self-start max-w-full px-3" style={{ paddingVertical: HEADING_PADDING_Y, borderRadius: lineHeight / 2 + HEADING_PADDING_Y, borderCurve: "continuous", backgroundColor }}>
+    {/* design-system: heading metrics follow the app text-size setting like the native Markdown beside it. */}
+    <Text selectable style={{ fontSize, lineHeight, fontWeight: "600", color }}>{text}</Text>
   </View>;
 }
 
