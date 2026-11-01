@@ -226,6 +226,22 @@ function TextBlock({ value, muted = false, color, linkColor, streaming = false, 
   </View>;
 }
 
+/** A Markdown file as a document. The native renderer lays it out once, so scrolling does not re-measure per-token Text nodes. */
+export function MarkdownDocument({ markdown, spaceId }: { markdown: string; spaceId: string }) {
+  const theme = useAppTheme();
+  const openLink = useOpenMessageLink(spaceId);
+  const markdownStyle = useMemo(() => enrichedMarkdownStyle(theme, theme.colors.text), [theme]);
+  return <EnrichedMarkdownText
+    markdown={markdown}
+    markdownStyle={markdownStyle}
+    selectable
+    flavor="github"
+    // A preview toggle would change the rendered checkbox without writing the file.
+    enableTaskListItemToggle={false}
+    onLinkPress={(event) => { openLink(event.url); }}
+  />;
+}
+
 function imageUri(block: Extract<ContentBlock, { type: "image" }>) {
   if (block.source?.type === "url") return block.source.url;
   if (block.source?.type === "base64") return `data:${block.source.media_type};base64,${block.source.data}`;

@@ -3,6 +3,11 @@ import type { SpaceFsFileResponse } from "@neta-art/cohub";
 /** Editing happens in a single native TextInput, so very large files stay read-only. */
 export const MAX_EDITABLE_CODE_BYTES = 512 * 1024;
 
+/** `.md` and `.markdown` files preview as rendered documents; editing still works on their source. */
+export function isMarkdownFile(path: string): boolean {
+  return /\.(?:md|markdown)$/i.test(path);
+}
+
 export function isEditableTextFile(file: SpaceFsFileResponse | null | undefined): boolean {
   if (!file) return false;
   return file.kind === "text" &&
