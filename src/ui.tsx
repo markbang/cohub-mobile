@@ -239,7 +239,9 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   const leadingWidth = onBack || leading ? 48 : 0;
   const trailing = actions ? (trailingWidth ?? 0) + 4 : 0;
   const side = Math.max(leadingWidth, trailing);
-  const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
+  // The capsule drops only the leading balance, so a long title takes the slack beside the back button;
+  // with wider actions a short one sits slightly left of the screen's center.
+  const balance = children ? undefined : { marginLeft: capsule ? 0 : side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-1 px-2 py-1" style={{ minHeight: edgeChrome.headerMinHeight }}>
