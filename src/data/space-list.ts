@@ -42,6 +42,28 @@ export function personalSpaceActivity(views: Iterable<{ session: { spaceId: stri
   return activity;
 }
 
+/** Session rows carry a Space summary; a Space update must refresh those cached summaries. */
+export function applySpaceToSessionSummaries(sessions: UserSessionListItem[], space: SpaceRecord): UserSessionListItem[] {
+  let changed = false;
+  const next = sessions.map((session) => {
+    if (session.space?.id !== space.id) return session;
+    const name = space.name ?? session.space.name;
+    const avatarUrl = space.publicProfile?.avatarUrl ?? session.space.publicProfile?.avatarUrl ?? null;
+    if (name === session.space.name && space.slug === session.space.slug && avatarUrl === (session.space.publicProfile?.avatarUrl ?? null)) return session;
+    changed = true;
+    return {
+      ...session,
+      space: {
+        ...session.space,
+        name,
+        slug: space.slug,
+        publicProfile: { avatarUrl },
+      },
+    };
+  });
+  return changed ? next : sessions;
+}
+
 function time(value: string | null | undefined): number {
   const parsed = Date.parse(value ?? "");
   return Number.isFinite(parsed) ? parsed : 0;

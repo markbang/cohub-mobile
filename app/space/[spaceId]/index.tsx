@@ -238,6 +238,7 @@ export default function SpaceScreen() {
       key={space.id}
       spaceId={space.id}
       spaceName={name}
+      spaceAvatarUrl={space.publicProfile?.avatarUrl}
       sessions={sessions}
       client={client}
       activePanel={activePanel}

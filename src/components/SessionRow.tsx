@@ -40,9 +40,18 @@ function railX(level: number, showSpace: boolean) {
 export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {
   const { t } = useTranslation();
   // Only this Chat's status inputs; token batches keep the live stream's identity and phase.
-  const { status, latestTurn, liveTurnId, liveStatus } = useAppSelector(({ state }) => {
+  const { status, latestTurn, liveTurnId, liveStatus, spaceName: canonicalName, spaceAvatarUrl } = useAppSelector(({ state }) => {
     const live = state.sessionViews[session.id]?.stream;
-    return { status: sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses), latestTurn: state.sessionLatestTurns[session.id], liveTurnId: live?.turnId ?? null, liveStatus: live?.status ?? null };
+    const spaceId = session.space?.id;
+    const canonicalSpace = spaceId ? state.spaces.find((space) => space.id === spaceId) : undefined;
+    return {
+      status: sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses),
+      latestTurn: state.sessionLatestTurns[session.id],
+      liveTurnId: live?.turnId ?? null,
+      liveStatus: live?.status ?? null,
+      spaceName: canonicalSpace?.name?.trim() || session.space?.name?.trim() || "",
+      spaceAvatarUrl: canonicalSpace?.publicProfile?.avatarUrl ?? session.space?.publicProfile?.avatarUrl ?? null,
+    };
   }, shallowEqual);
   // The running label shows elapsed minutes, which used to advance only with unrelated app re-renders.
   const [, tick] = useReducer((count: number) => count + 1, 0);
@@ -52,7 +61,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     return () => clearInterval(timer);
   }, [status]);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-  const spaceName = session.space?.name?.trim() || t("space.fallbackName");
+  const spaceName = canonicalName || t("space.fallbackName");
   const activity = sessionActivity(session, { status, latestTurn, live: liveStatus ? { turnId: liveTurnId, status: liveStatus } : null, t });
   const glyph = status === "running" || status === "failed" || status === "stopped" ? status : null;
   const depth = tree?.depth ?? 0;
@@ -71,7 +80,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     : showSpace
       ? <View className="flex-1 justify-center">
         {tree?.hasChildren ? <View className="absolute bottom-0 top-1/2 w-px bg-border-strong" style={{ left: railX(1, true) }} /> : null}
-        <AvatarStatus status={glyph} size={AVATAR_SIZE}><Avatar name={spaceName} uri={session.space?.publicProfile?.avatarUrl} size={AVATAR_SIZE} /></AvatarStatus>
+        <AvatarStatus status={glyph} size={AVATAR_SIZE}><Avatar name={spaceName} uri={spaceAvatarUrl} size={AVATAR_SIZE} /></AvatarStatus>
       </View>
       : null;
   // Rows without an avatar carry state as a leading title icon instead of the avatar ring; a fork keeps its cue beside it.

@@ -27,7 +27,7 @@ import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
 import { useSpaceList as useSpaceListQuery, useSpaceListOwner } from "@/src/data/use-space-list";
 import { createAppQueryClient, createScopeInvalidator } from "@/src/data/query";
-import { listAllSpaces, personalSpaceActivity, type SpaceVisit } from "@/src/data/space-list";
+import { applySpaceToSessionSummaries, listAllSpaces, personalSpaceActivity, type SpaceVisit } from "@/src/data/space-list";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionsForCache, type CachedRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
@@ -863,6 +863,7 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case "space-upsert": {
       const exists = state.spaces.some((space) => space.id === action.space.id);
+      const sessions = applySpaceToSessionSummaries(state.sessions, action.space);
       return {
         ...state,
         spaces: sortByRecent(
@@ -870,6 +871,7 @@ function reducer(state: AppState, action: Action): AppState {
             ? state.spaces.map((space) => (space.id === action.space.id ? { ...space, ...action.space } : space))
             : [action.space, ...state.spaces],
         ),
+        ...(sessions === state.sessions ? {} : { sessions }),
       };
     }
     default:
@@ -2386,9 +2388,14 @@ export function AppProvider({
   }, [client, dispatch, userKey, stateRef]);
 
   const upsertSpace = useCallback((space: SpaceRecord) => {
+    const cachedSessions = stateRef.current.sessions;
     dispatch({ type: "space-upsert", space });
     void saveSpaces(userKey, [space]).catch(() => undefined);
-  }, [dispatch, userKey]);
+    const sessions = applySpaceToSessionSummaries(cachedSessions, space);
+    if (sessions !== cachedSessions) {
+      void saveSessions(userKey, sessions.filter((session) => session.space?.id === space.id)).catch(() => undefined);
+    }
+  }, [dispatch, stateRef, userKey]);
 
   const forkSession = useCallback(async (spaceId: string, sessionId: string, turn: Pick<SessionTurnRecord, "id" | "sourceTurnId">) => {
     if (!client) throw new Error(translate("data.stillConnecting"));

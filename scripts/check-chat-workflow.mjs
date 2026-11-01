@@ -29,7 +29,7 @@ import { compactionFromMessage, compactionStats } from "../src/data/compaction.t
 import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
 import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
-import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
+import { applySpaceToSessionSummaries, listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
 import { reconcileSessionHead } from "../src/data/session-list-sync.ts";
 import { invalidateScopes } from "../src/data/query-scopes.ts";
@@ -543,6 +543,133 @@ const formScope = {
   assert.equal(input().props.value, "");
   await assert.rejects(installSpaceMod(client, "space", "  "), /Mod Space ID/);
   assert.equal(requests.length, 2, "invalid input never reaches the SDK");
+}
+
+// Edit Space avatar flow: permission, cancellation, normalization, failures, and cache upsert.
+{
+  class MockAvatarFile {
+    constructor(...parts) { this.parts = parts; }
+    async write(bytes) { writes.push(bytes); }
+    delete() {}
+  }
+  const writes = [];
+  const hooks = createScreenHooks();
+  const alerts = [];
+  const toasts = [];
+  const uploads = [];
+  const profileCalls = [];
+  const upserts = [];
+  let space = { id: "space", name: "My Space", description: "", publicProfile: { avatarUrl: "https://old" } };
+  let permissionGranted = true;
+  let pickerResult = { canceled: true, assets: [] };
+  let byteLength = 3;
+  let uploadError = null;
+  const client = {
+    publicAssets: { upload: async (input) => { if (uploadError) throw uploadError; uploads.push(input); return { publicUrl: "https://new" }; } },
+    space: () => ({ profile: async (body) => { profileCalls.push(body); return { space: { ...space, publicProfile: { avatarUrl: body.avatarUrl } } }; } }),
+  };
+  const renderEdit = loadChromeComponent("../app/space/[spaceId]/edit.tsx", "EditSpaceScreen", {
+    ...chromeScope,
+    ...hooks.hooks,
+    useLocalSearchParams: () => ({ spaceId: "space" }),
+    useRouter: () => ({ back() {} }),
+    useToast: () => (notice) => toasts.push(notice),
+    useAppActions: () => ({ client, upsertSpace: (next) => { upserts.push(next); space = next; } }),
+    useAppSelector: (select) => select({ state: { spaces: [space] } }),
+    useTranslation: () => ({ t: (key) => key }),
+    useAppTheme: () => ({ colors: {} }),
+    Avatar: "Avatar", PrimaryButton: "PrimaryButton", Screen: "Screen", TopBar: "TopBar", FIELD_INPUT_CLASS: "", Loader: "Loader",
+    ScrollView: "ScrollView", View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable",
+    ImagePicker: { requestMediaLibraryPermissionsAsync: async () => ({ granted: permissionGranted }), launchImageLibraryAsync: async () => pickerResult },
+    ExpoFile: MockAvatarFile, Paths: { cache: "/cache" },
+    toUint8Array: () => ({ byteLength }),
+    Alert: { alert: (...args) => alerts.push(args) },
+    AVATAR_MAX_BYTES: 4 * 1024 * 1024,
+    isForbidden: (error) => error?.status === 403,
+  });
+  const render = () => chromeNodes(hooks.render(renderEdit));
+  const avatarUri = () => render().find((node) => node.type === "Avatar").props.uri;
+  const pressAvatar = () => render().find((node) => node.props?.accessibilityLabel === "space.edit.changePhoto").props.onPress();
+  assert.equal(avatarUri(), "https://old", "the edit screen starts from the cached Space avatar");
+
+  permissionGranted = false;
+  pressAvatar();
+  await flushSync();
+  assert.deepEqual(alerts.at(-1), ["space.edit.photoOffTitle", "space.edit.photoOffBody"]);
+  assert.equal(uploads.length, 0);
+
+  permissionGranted = true;
+  pickerResult = { canceled: true, assets: [] };
+  const alertCount = alerts.length;
+  pressAvatar();
+  await flushSync();
+  assert.equal(alerts.length, alertCount, "cancelling the picker is silent");
+  assert.equal(uploads.length, 0);
+  assert.equal(avatarUri(), "https://old", "cancelling keeps the existing avatar");
+
+  pickerResult = { canceled: false, assets: [{ uri: "file:///avatar.png" }] };
+  pressAvatar();
+  await flushSync();
+  assert.deepEqual(alerts.at(-1), ["space.edit.photoError", "space.edit.photoUnreadable"]);
+
+  pickerResult = { canceled: false, assets: [{ uri: "file:///avatar.png", base64: "avatar" }] };
+  byteLength = 4 * 1024 * 1024 + 1;
+  pressAvatar();
+  await flushSync();
+  assert.deepEqual(alerts.at(-1), ["space.edit.photoError", "space.edit.photoTooLarge"]);
+  assert.equal(uploads.length, 0);
+
+  byteLength = 3;
+  uploadError = Object.assign(new Error("forbidden"), { status: 403 });
+  pressAvatar();
+  await flushSync();
+  assert.deepEqual(alerts.at(-1), ["space.edit.photoError", "space.edit.photoForbidden"]);
+  assert.equal(upserts.length, 0);
+  assert.equal(avatarUri(), "https://old", "a failed upload keeps the existing avatar");
+
+  uploadError = null;
+  pressAvatar();
+  await flushSync();
+  assert.equal(uploads.length, 1);
+  assert.equal(uploads[0].purpose, "space_avatar");
+  assert.equal(uploads[0].spaceId, "space");
+  assert.equal(uploads[0].mimeType, "image/jpeg", "PNG/WebP/GIF picks are normalized to JPEG before upload");
+  assert.equal(uploads[0].filename, "avatar.jpg");
+  assert.ok(uploads[0].file instanceof MockAvatarFile);
+  assert.ok(writes.length >= 1, "the normalized JPEG is written before upload");
+  assert.deepEqual(profileCalls.at(-1), { avatarUrl: "https://new" });
+  assert.equal(upserts.length, 1);
+  assert.equal(upserts[0].publicProfile.avatarUrl, "https://new", "the returned Space record replaces the cache entry");
+  assert.equal(toasts.at(-1).title, "space.edit.photoUpdated");
+  assert.equal(avatarUri(), "https://new", "the edit screen reflects the uploaded avatar immediately");
+}
+
+// Session rows resolve the avatar and name from canonical Space state, not a stale query snapshot.
+{
+  const state = {
+    spaces: [{ id: "space", name: "Renamed Space", publicProfile: { avatarUrl: "https://new" } }],
+    sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {},
+  };
+  const renderSessionRow = loadChromeComponent("../src/components/SessionRow.tsx", "SessionRow", {
+    ...chromeScope,
+    ...appHooks(() => ({ state })),
+    React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
+    useState: () => [null, () => {}], useReducer: () => [0, () => {}], useEffect: () => {},
+    Avatar: "Avatar", AvatarStatus: "AvatarStatus", ListRow: "ListRow", Tag: "Tag", AppIcon: "AppIcon",
+    LIST_AVATAR_SIZE: 46, AVATAR_SIZE: 46, BRANCH_COLUMN: 16, TREE_STEP: 12,
+    ContextMenu: "ContextMenu", NativeContextMenu: "NativeContextMenu", SwipeActions: "SwipeActions",
+    haptics: { longPress() {} }, debugAlias: (_kind, id) => id,
+    sessionListStatus, sessionActivity,
+    displayForkSessionTitle: () => "Chat", formatRelativeTime: () => "now", previewText: () => "",
+  });
+  const staleSession = {
+    id: "chat", spaceId: "space", title: "Chat", updatedAt: "2026-01-01T00:00:00Z", lastMessageAt: "2026-01-01T00:00:00Z",
+    space: { id: "space", name: "Old Space", slug: null, publicProfile: { avatarUrl: "https://old" } },
+  };
+  const row = chromeNodes(renderSessionRow({ session: staleSession, onPress() {} })).find((node) => node.type === "ListRow");
+  const avatar = chromeNodes(row.props.leading).find((node) => node.type === "Avatar");
+  assert.equal(avatar.props.name, "Renamed Space");
+  assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
 }
 
 // The Space contributor renderer must show a human name, including when the API uses a UUID placeholder.
@@ -3845,6 +3972,16 @@ assert.deepEqual(spaceListCalls.map(({ filter, cursor, limit }) => ({ filter, cu
   { filter: "all", cursor: null, limit: 100 },
   { filter: "all", cursor: "page-2", limit: 100 },
 ]);
+
+const renamedSpace = { id: "space-1", name: "Renamed", slug: "renamed", publicProfile: { avatarUrl: "https://cdn.example/avatar.jpg" } };
+const cachedSession = { id: "chat-1", spaceId: "space-1", space: { id: "space-1", name: "Old", slug: null, publicProfile: { avatarUrl: null } } };
+const otherSpaceSession = { id: "chat-2", spaceId: "space-2", space: { id: "space-2", name: "Other", slug: null, publicProfile: null } };
+const patchedSessions = applySpaceToSessionSummaries([cachedSession, otherSpaceSession], renamedSpace);
+assert.equal(patchedSessions[0].space.name, "Renamed");
+assert.equal(patchedSessions[0].space.publicProfile.avatarUrl, "https://cdn.example/avatar.jpg");
+assert.equal(patchedSessions[1], otherSpaceSession, "updates never touch another Space's session summaries");
+assert.equal(applySpaceToSessionSummaries(patchedSessions, renamedSpace), patchedSessions, "an unchanged Space keeps the cached session array");
+assert.equal(applySpaceToSessionSummaries(patchedSessions, { ...renamedSpace, name: null })[0].space.name, "Renamed", "a missing Space name keeps the cached name");
 
 const mapped = mapRemoteSearchResults([
   searchResult({ score: 0.99, title: "Remote Chat", hit: { turnId: "turn-7", sequence: 7, excerpt: "Matched prompt", highlights: [] } }),
