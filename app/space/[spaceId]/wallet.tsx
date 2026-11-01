@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useAppSelector } from "@/src/data/context";
-import { formatWalletUsd, walletProductBalanceUsd } from "@/src/data/space-wallet";
+import { formatUsd, walletProductBalanceUsd } from "@/src/data/space-wallet";
 import { useSpaceWallet } from "@/src/data/use-space-wallet";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
@@ -24,12 +24,12 @@ const ACTIVITY_LABELS: Record<SpaceWalletActivity["kind"], TranslationKey> = {
 export default function SpaceWalletScreen() {
   const { spaceId = "" } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const wallet = useSpaceWallet(spaceId);
   const { summary, catalog, activity, errors, payment } = wallet;
   const [refreshing, setRefreshing] = useState(false);
   const space = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId));
-  const money = (amount: number, digits?: number) => formatWalletUsd(amount, locale, digits);
+  const money = (amount: number, digits?: number) => formatUsd(amount, digits);
   const canRecharge = Boolean(catalog?.supported && catalog.paymentAvailable && summary?.usable !== false && catalog.products.length);
 
   const refresh = async () => {

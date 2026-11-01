@@ -10,10 +10,23 @@ export function walletProductBalanceUsd(product: BillingCatalogProduct): number 
   return product.pricing.amountUsd;
 }
 
-/** Usage settles in fractions of a cent, so ledger rows keep up to eight places while the balance keeps four. */
-export function formatWalletUsd(amount: number, locale: string, maximumFractionDigits = 2): string {
+const USD_DIGITS = new Map<number, Intl.NumberFormat>();
+
+/**
+ * Every amount in the app reads `$1,234.50` / `-$3.20` in every language: the currency is always USD,
+ * and a Chinese locale's `US$` would make the same balance look different from screen to screen.
+ * Usage settles in fractions of a cent, so ledger rows keep up to eight places while the balance keeps four.
+ */
+export function formatUsd(amount: number, maximumFractionDigits = 2): string {
   const value = Number.isFinite(amount) ? amount : 0;
-  return new Intl.NumberFormat(locale === "zh" ? "zh-CN" : "en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits }).format(value);
+  let digits = USD_DIGITS.get(maximumFractionDigits);
+  if (!digits) {
+    digits = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits });
+    USD_DIGITS.set(maximumFractionDigits, digits);
+  }
+  const text = digits.format(Math.abs(value));
+  // A value that rounds to zero carries no sign.
+  return value < 0 && /[1-9]/.test(text) ? `-$${text}` : `$${text}`;
 }
 
 export function appendWalletActivity(current: readonly SpaceWalletActivity[], page: SpaceWalletActivityPage): SpaceWalletActivity[] {

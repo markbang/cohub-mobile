@@ -7,7 +7,7 @@ import { ActivityHeatmap, ActivityHeatmapSkeleton } from "@/src/components/Activ
 import { useAppSelector } from "@/src/data/context";
 import { useActivity } from "@/src/data/use-activity";
 import { useBillingHistory } from "@/src/data/use-billing-history";
-import { formatWalletUsd } from "@/src/data/space-wallet";
+import { formatUsd } from "@/src/data/space-wallet";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -21,7 +21,7 @@ import { billingStatusLabel } from "@/src/utils";
 
 export default function ActivityScreen() {
   const router = useRouter();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -59,7 +59,7 @@ export default function ActivityScreen() {
             <Text className="flex-1 text-subhead font-semibold text-fg-secondary">{t("settings.billing.balance")}</Text>
             <AppIcon name="chevron-right" size={16} tone="faint" />
           </View>
-          <Text style={ROUNDED_TITLE} className={`text-display font-semibold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? formatWalletUsd(credits.data.netUsd, locale) : "—"}</Text>
+          <Text style={ROUNDED_TITLE} className={`text-display font-semibold tabular-nums ${credits.data && credits.data.netUsd < 0 ? "text-danger" : "text-fg"}`}>{credits.data ? formatUsd(credits.data.netUsd) : "—"}</Text>
         </PressableScale>
       </View>
       {credits.error ? <DataError message={credits.error} onRetry={retry} /> : null}

@@ -16,7 +16,7 @@ import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, 
 import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus } from "@/src/data/sandbox-setup";
-import { formatWalletUsd } from "@/src/data/space-wallet";
+import { formatUsd } from "@/src/data/space-wallet";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
@@ -35,7 +35,7 @@ export default function SpaceSettingsScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
   const router = useRouter();
   const theme = useAppTheme();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
   const { env, setEnv, config, setConfig, sandbox, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
@@ -219,7 +219,7 @@ export default function SpaceSettingsScreen() {
           <SettingsRow
             icon="wallet"
             title={t("space.wallet.title")}
-            detail={wallet ? formatWalletUsd(wallet.balanceUsd, locale) : undefined}
+            detail={wallet ? formatUsd(wallet.balanceUsd) : undefined}
             last
             onPress={() => router.push({ pathname: "/space/[spaceId]/wallet", params: { spaceId } })}
           />

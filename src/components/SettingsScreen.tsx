@@ -40,6 +40,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import { AppIcon, Avatar, EmptyState, FIELD_INPUT_CLASS, IconButton, Loader, LoadingState, PrimaryButton, Screen, SectionHeader, StatusPill, TopBar } from "@/src/ui";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 import { openWebLink } from "@/src/platform/browser";
+import { formatUsd } from "@/src/data/space-wallet";
 
 type ProfileState = {
 	profile: UserProfile | null;
@@ -1196,9 +1197,4 @@ function InlineError({
 			</Pressable>
 		</View>
 	);
-}
-
-function formatUsd(value: number) {
-	if (!Number.isFinite(value)) return "$0.00";
-	return `$${value.toFixed(2)}`;
 }

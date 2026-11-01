@@ -8,17 +8,17 @@ import { useTranslation } from "@/src/i18n";
 import { Avatar, DataError, EmptyState, LoadingRows, Screen, Segmented, TopBar } from "@/src/ui";
 import { ListRow } from "@/src/ui/ListRow";
 import { formatNumber } from "@/src/utils";
+import { formatUsd } from "@/src/data/space-wallet";
 
 const DIMENSIONS: readonly TrendingDimension[] = ["spaces", "users", "models"];
 
 export default function TrendingRoute() {
   const router = useRouter();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const [board, setBoard] = useState<TrendingBoard>("llm");
   const [dimension, setDimension] = useState<TrendingDimension>("spaces");
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const { entries, error, loading, refresh } = useTrending(board, dimension);
-  const cost = new Intl.NumberFormat(locale, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
   const refreshOnPull = async () => {
     setPullRefreshing(true);
     try {
@@ -30,7 +30,7 @@ export default function TrendingRoute() {
   const row = (entry: TrendingEntry) => {
     const metric = formatNumber(entry.tokens ?? entry.requests);
     const metricLabel = t(entry.tokens === null ? "trending.metric.requests" : "trending.metric.tokens");
-    const subtitle = [entry.subtitle, cost.format(entry.cost), t("trending.sessions", { count: entry.sessions })].filter(Boolean).join(" · ");
+    const subtitle = [entry.subtitle, formatUsd(entry.cost), t("trending.sessions", { count: entry.sessions })].filter(Boolean).join(" · ");
     return <ListRow
       key={entry.key}
       accessibilityLabel={`${entry.rank}. ${entry.title}, ${metric} ${metricLabel}, ${subtitle}`}
