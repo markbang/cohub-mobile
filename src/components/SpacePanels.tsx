@@ -45,6 +45,7 @@ export type SpacePanel = "chat" | "files";
 type SpacePanelsProps = {
   spaceId: string;
   spaceName: string;
+  spaceAvatarUrl?: string | null;
   sessions: UserSessionListItem[];
   client: CohubClient | null;
   activePanel: SpacePanel | null;
@@ -76,7 +77,7 @@ const PANEL_SWIPE_SPRING = { duration: 300, dampingRatio: 1, overshootClamping: 
  * see NestedHorizontalScrollView in modules/react-native-enriched-markdown) cancel the pan. Do not disable the pager for messages
  * containing a fence — that blocks the swipe on almost every reply.
  */
-export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {
+export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {
   const { t } = useTranslation();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -386,7 +387,7 @@ export function SpacePanels({ spaceId, spaceName, sessions, client, activePanel,
             accessibilityElementsHidden={!(interactive && visiblePanel === "chat")}
             importantForAccessibility={interactive && visiblePanel === "chat" ? "yes" : "no-hide-descendants"}
           >
-            <ChatPanel spaceId={spaceId} spaceName={spaceName} sessions={sessions} client={client} onChipsTouchChange={handleChipsTouchChange} onClose={closePanel} onNewChat={() => { closePanel(); onNewChat(); }} onOpenSession={(sessionId, target) => { closePanel(); onOpenSession(sessionId, target); }} />
+            <ChatPanel spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={spaceAvatarUrl} sessions={sessions} client={client} onChipsTouchChange={handleChipsTouchChange} onClose={closePanel} onNewChat={() => { closePanel(); onNewChat(); }} onOpenSession={(sessionId, target) => { closePanel(); onOpenSession(sessionId, target); }} />
           </View>
           <View className="h-full bg-background" style={{ width }} accessibilityElementsHidden={visiblePanel !== null} importantForAccessibility={visiblePanel ? "no-hide-descendants" : "auto"}>
             {children}
@@ -457,7 +458,7 @@ const EMPTY_SESSIONS: UserSessionListItem[] = [];
 const EMPTY_LABELS: SessionLabel[] = [];
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
-function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; sessions: UserSessionListItem[]; client: CohubClient | null; onChipsTouchChange: (touching: boolean) => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string, target?: SessionNavigationTarget) => void }) {
+function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChipsTouchChange, onClose, onNewChat, onOpenSession }: { spaceId: string; spaceName: string; spaceAvatarUrl?: string | null; sessions: UserSessionListItem[]; client: CohubClient | null; onChipsTouchChange: (touching: boolean) => void; onClose: () => void; onNewChat: () => void; onOpenSession: (sessionId: string, target?: SessionNavigationTarget) => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { prefetchSession, refreshSessionStatuses, rememberSessionForks } = useAppActions();
@@ -623,7 +624,7 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   </ScrollView>;
   return (
     <KeyboardAvoidingView behavior="padding" automaticOffset style={PANEL_FILL}>
-      <TopBar title={spaceName} subtitle={t("space.panel.chats")} leading={<Avatar name={spaceName} uri={displaySessions.find((session) => session.space?.publicProfile?.avatarUrl)?.space?.publicProfile?.avatarUrl} size={38} />} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("space.panel.chats") })} onPress={onClose} />} />
+      <TopBar title={spaceName} subtitle={t("space.panel.chats")} leading={<Avatar name={spaceName} uri={spaceAvatarUrl ?? displaySessions.find((session) => session.space?.publicProfile?.avatarUrl)?.space?.publicProfile?.avatarUrl} size={38} />} actions={<IconButton name="x" label={t("ui.sheet.close", { title: t("space.panel.chats") })} onPress={onClose} />} />
       <View className="px-4 pt-3 pb-2 gap-2">
         <PrimaryButton label={t("space.newChat")} icon="plus" onPress={onNewChat} className="min-h-11" />
         <View className="flex-row items-center gap-2">
