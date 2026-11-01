@@ -1,12 +1,17 @@
 /**
- * Splits Markdown at top-level ATX headings so each heading can be drawn on its own surface.
- * Fenced code is opaque; only headings at column 0 split, so a heading nested in a list item or
- * quote stays with its block and an ordered list never restarts its numbering.
+ * Splits Markdown at top-level headings so each can be drawn on its own surface. Besides ATX headings,
+ * a paragraph that is only a bold line (`**Billing**`) counts: Agents title sections that way far more
+ * often than with `#`, and readers see it as a heading. Fenced code is opaque; only lines at column 0
+ * split, so a heading nested in a list item or quote stays with its block and an ordered list never
+ * restarts its numbering.
  */
 export type MarkdownSegment = { kind: "text"; text: string } | { kind: "heading"; level: number; text: string };
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const HEADING = /^(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
+const BOLD_TITLE = /^(\*\*|__)(?=\S)([^*_\n]+?)\1[ \t]*[:：]?[ \t]*$/;
+/** A bold-line title reads at the size of a fourth-level heading. */
+const BOLD_TITLE_LEVEL = 4;
 
 export function splitMarkdownHeadings(markdown: string): MarkdownSegment[] {
   const segments: MarkdownSegment[] = [];
@@ -30,12 +35,18 @@ export function splitMarkdownHeadings(markdown: string): MarkdownSegment[] {
       continue;
     }
     const heading = HEADING.exec(line);
-    if (!heading) {
+    // A bold line continuing a paragraph is emphasis, not a title.
+    const previous = buffer.at(-1);
+    const bold = !heading && (previous === undefined || !previous.trim()) ? BOLD_TITLE.exec(line) : null;
+    if (!heading && !bold) {
       buffer.push(line);
       continue;
     }
     flush();
-    segments.push({ kind: "heading", level: heading[1]!.length, text: plainInline(heading[2]!) });
+    segments.push(heading
+      ? { kind: "heading", level: heading[1]!.length, text: plainInline(heading[2]!) }
+      // The capsule already sets the title apart, so a lead-in colon is dropped.
+      : { kind: "heading", level: BOLD_TITLE_LEVEL, text: plainInline(bold![2]!).replace(/[:：]$/, "") });
   }
   flush();
   return segments;

@@ -1758,6 +1758,9 @@ const footerMarker = { type: "timestamp", props: {} };
 // Top-level headings leave the native Markdown for a capsule; fenced and nested ones stay in it.
 assert.deepEqual(splitMarkdownHeadings("# **One** `two`\nBody\n```\n# code\n```\n- # nested\n## Three ##").map((segment) => segment.kind === "heading" ? `h${segment.level}:${segment.text}` : "text"), ["h1:One two", "text", "h2:Three"]);
 assert.deepEqual(splitMarkdownHeadings("#tag\n####### seven"), [{ kind: "text", text: "#tag\n####### seven" }]);
+// A bold-only line opening a paragraph is a section title; bold inside or continuing a paragraph is emphasis.
+assert.deepEqual(splitMarkdownHeadings("**Billing：**\n- Plans"), [{ kind: "heading", level: 4, text: "Billing" }, { kind: "text", text: "- Plans" }]);
+assert.deepEqual(splitMarkdownHeadings("line one\n**not a title**\n\n**bold** and more").map((segment) => segment.kind), ["text"]);
 {
   const types = [];
   const walk = (node) => {

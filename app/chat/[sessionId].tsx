@@ -63,7 +63,7 @@ import { GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, DataError, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { EdgeFooter, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
+import { EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
 type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
@@ -93,7 +93,7 @@ function footerRowEntering() {
 }
 const TURN_START_STYLE = { paddingTop: 8 } as const;
 const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
-const ABOVE_FOOTER_MENU = { position: "absolute", left: 12, right: 12, bottom: "100%", marginBottom: 4 } as const;
+const FOOTER_MENU = { marginHorizontal: 12, marginBottom: 4 } as const;
 
 // Decided once per mount: removing the CSS animation mid-fade leaves the row at its partial opacity.
 function ArrivalRow({ arrival, reducedMotion, children }: { arrival: boolean; reducedMotion: boolean; children: ReactNode }) {
@@ -1338,8 +1338,6 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
         {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
-        {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 5 }} /> : null}
-        {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 6 }} /> : null}
         {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
@@ -1358,6 +1356,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
         ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
+        {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
+          {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
+          {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={FOOTER_MENU} /> : null}
+        </EdgeFooterOverlay> : null}
         {sendTransition && transitionMessage && (sendTransition.destination === "bubble" || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || windowWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
         {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => setLabelSheetOpen(false)} onChanged={() => undefined} /> : null}
         {attachmentMenuOpen ? <AttachmentMenu anchorRef={composerRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /> : null}

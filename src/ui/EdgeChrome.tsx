@@ -87,6 +87,16 @@ export function EdgeFooter({ children, onLayout, keyboard = false }: { children:
   return <View pointerEvents="box-none" onLayout={onLayout} style={FOOTER_STYLE}>{content}</View>;
 }
 
+/**
+ * A layer that sits just above a keyboard `EdgeFooter` and rides the keyboard with it. Anything that has to
+ * scroll goes here rather than hanging past the footer's top edge: native touches never reach a child drawn
+ * outside its parent's bounds, so a list there would let the drag fall through to the timeline beneath.
+ */
+export function EdgeFooterOverlay({ footerHeight, children }: { footerHeight: number; children: ReactNode }) {
+  const covered = useKeyboardCoveredInset();
+  return <KeyboardStickyView pointerEvents="box-none" offset={{ opened: covered }} style={[OVERLAY_STYLE, { bottom: footerHeight }]}>{children}</KeyboardStickyView>;
+}
+
 /** Pads by the same lift as a keyboard `EdgeFooter`. */
 export function KeyboardLiftPadding({ style, children }: { style?: StyleProp<ViewStyle>; children: ReactNode }) {
   const covered = useKeyboardCoveredInset();
@@ -96,3 +106,4 @@ export function KeyboardLiftPadding({ style, children }: { style?: StyleProp<Vie
 }
 
 const FOOTER_STYLE: ViewStyle = { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1 };
+const OVERLAY_STYLE: ViewStyle = { position: "absolute", left: 0, right: 0, zIndex: 2 };
