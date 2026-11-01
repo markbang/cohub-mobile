@@ -1,13 +1,13 @@
 import type { CheckpointRecord } from "@neta-art/cohub";
 import { LegendList } from "@legendapp/list/react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { useToast } from "@/src/components/Toast";
 import { saveTitle } from "@/src/data/checkpoint-diff";
 import { useAppActions } from "@/src/data/context";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
-import { useSyncQuery } from "@/src/data/query";
+import { usePagedQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, AppRefreshControl, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, Screen, TopBar } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow } from "@/src/ui/ListRow";
@@ -22,46 +22,27 @@ export default function SavesScreen() {
   const toast = useToast();
   const { client } = useAppActions();
   useSpaceRealtime(spaceId ? [spaceId] : []);
-  const [saves, setSaves] = useState<CheckpointRecord[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const list = usePagedQuery<CheckpointRecord>({
+    queryKey: [`space:${spaceId}:saves`, "list"],
+    enabled: Boolean(client && spaceId),
+    intervalMs: 60_000,
+    id: (item) => item.id,
+    fetchPage: async (cursor) => {
+      const result = await client!.space(spaceId).checkpoints.list(cursor ? { limit: PAGE_SIZE, cursor } : { limit: PAGE_SIZE });
+      return { items: result.checkpoints, cursor: result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null };
+    },
+  });
+  const saves = list.items;
+  const error = list.query.error ? list.query.error.message || t("save.loadFailed") : null;
+  const loadingMore = list.loadingMore;
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const generation = useRef(0);
-
-  const load = useCallback(async () => {
-    if (!client || !spaceId) return;
-    const request = ++generation.current;
-    try {
-      const result = await client.space(spaceId).checkpoints.list({ limit: PAGE_SIZE });
-      if (request !== generation.current) return;
-      setSaves(result.checkpoints);
-      setCursor(result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null);
-      setError(null);
-    } catch (caught) {
-      if (request === generation.current) setError(caught instanceof Error ? caught.message : t("save.loadFailed"));
-      throw caught;
-    }
-  }, [client, spaceId, t]);
-  useSyncQuery(`space:${spaceId}:saves`, load, 60_000, Boolean(spaceId));
-
+  const load = () => list.query.refetch();
   const loadMore = async () => {
-    if (!client || !cursor || loadingMore) return;
-    const request = generation.current;
-    setLoadingMore(true);
     try {
-      const result = await client.space(spaceId).checkpoints.list({ limit: PAGE_SIZE, cursor });
-      if (request !== generation.current) return;
-      setSaves((current) => {
-        const known = new Set((current ?? []).map((item) => item.id));
-        return [...(current ?? []), ...result.checkpoints.filter((item) => !known.has(item.id))];
-      });
-      setCursor(result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null);
+      await list.loadMore();
     } catch (caught) {
       toast({ title: t("save.loadFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
-    } finally {
-      setLoadingMore(false);
     }
   };
 
@@ -80,7 +61,7 @@ export default function SavesScreen() {
 
   return <Screen>
     <TopBar title={t("save.listTitle")} onBack={() => router.back()} actions={<IconButton name="plus" label={t("space.saveCheckpoint")} disabled={creating} onPress={() => void create()} />} />
-    {error && !saves ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
+    {error && !saves ? <DataError message={error} onRetry={() => void load()} /> : null}
     {!saves ? (error ? null : <LoadingRows count={6} />) : <LegendList
       data={saves}
       keyExtractor={(item) => item.id}
@@ -98,7 +79,7 @@ export default function SavesScreen() {
       onEndReachedThreshold={0.6}
       ListEmptyComponent={<EmptyState icon="bookmark" title={t("space.empty.saves")} action={{ icon: "plus", label: t("space.saveCheckpoint"), onPress: () => void create() }} />}
       ListFooterComponent={loadingMore ? <ListEdgeLoader /> : null}
-      refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load().catch(() => undefined).finally(() => setRefreshing(false)); }} />}
+      refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }} />}
     />}
   </Screen>;
 }

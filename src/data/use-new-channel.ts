@@ -1,6 +1,7 @@
 import type { CohubClient } from "@neta-art/cohub";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { createSettingsChannel, createWeChatLoginPoller, missingChannelField, type ChannelDraft, type ChannelProvider } from "./channel-settings";
 import { useTranslation } from "@/src/i18n";
 
@@ -8,6 +9,11 @@ type Login = { sessionKey: string; qrDataUrl: string; expiresAt: number; message
 
 export function useNewChannel(client: CohubClient | null, provider: ChannelProvider, onCreated: () => void) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const created = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["channels"] });
+    onCreated();
+  }, [onCreated, queryClient]);
   const [draft, setDraft] = useState<ChannelDraft>({ name: "", token: "", appId: "", secret: "", brand: "feishu" });
   const [login, setLogin] = useState<Login | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,13 +32,13 @@ export function useNewChannel(client: CohubClient | null, provider: ChannelProvi
       if (status.connected) {
         setBusy(false);
         setDraft({ name: "", token: "", appId: "", secret: "", brand: "feishu" });
-        onCreated();
+        created();
         return;
       }
       setLogin((current) => current ? { ...current, message: status.message, needsCode: Boolean(status.needVerifyCode), expired: Boolean(status.expired) } : null);
       if (status.needVerifyCode || status.expired) setBusy(false);
     }, fail, code);
-  }, [fail, onCreated, poller]);
+  }, [created, fail, poller]);
 
   useFocusEffect(useCallback(() => {
     return () => { operation.current += 1; submitting.current = false; poller?.stop(); };
@@ -62,7 +68,7 @@ export function useNewChannel(client: CohubClient | null, provider: ChannelProvi
         setDraft({ name: "", token: "", appId: "", secret: "", brand: "feishu" });
         setBusy(false);
         submitting.current = false;
-        onCreated();
+        created();
       }
     } catch (caught) {
       if (current === operation.current) fail(caught);

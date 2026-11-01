@@ -1,6 +1,9 @@
-import { focusManager, QueryClient, useQuery, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
+import { focusManager, QueryClient, useQuery, useQueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 import { useIsFocused } from "expo-router";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
+
+export { createScopeInvalidator, invalidateScopes } from "./query-scopes";
 
 // Foregrounding the app counts as window focus, so stale queries refetch and polling pauses in the background.
 focusManager.setEventListener((setFocused) => {
@@ -25,43 +28,6 @@ export function createAppQueryClient() {
         refetchIntervalInBackground: false,
       },
       mutations: { retry: 0 },
-    },
-  });
-}
-
-/**
- * Query keys start with the realtime scope string (e.g. `space:<id>:labels`), so realtime
- * invalidations and screen queries share one vocabulary. Event bursts are collapsed into one
- * invalidation per window, so a stream of events never restarts the same read repeatedly.
- */
-export function createScopeInvalidator(client: QueryClient, windowMs = 250) {
-  const exact = new Set<string>();
-  const prefixes = new Set<string>();
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const flush = () => {
-    timer = null;
-    invalidateScopes(client, { exact: [...exact], prefixes: [...prefixes] });
-    exact.clear();
-    prefixes.clear();
-  };
-  return {
-    add(change: { exact: readonly string[]; prefixes: readonly string[] }) {
-      for (const key of change.exact) exact.add(key);
-      for (const prefix of change.prefixes) prefixes.add(prefix);
-      if (timer === null && (exact.size > 0 || prefixes.size > 0)) timer = setTimeout(flush, windowMs);
-    },
-    dispose() {
-      if (timer !== null) clearTimeout(timer);
-      timer = null;
-    },
-  };
-}
-
-export function invalidateScopes(client: QueryClient, change: { exact: readonly string[]; prefixes: readonly string[] }) {
-  void client.invalidateQueries({
-    predicate: (query) => {
-      const scope = query.queryKey[0];
-      return typeof scope === "string" && (change.exact.includes(scope) || change.prefixes.some((prefix) => scope.startsWith(prefix)));
     },
   });
 }
@@ -97,4 +63,62 @@ export function useSyncQuery(key: string, run: () => Promise<unknown>, intervalM
     intervalMs,
     notifyOnChangeProps: [],
   });
+}
+
+export type Page<T> = { items: T[]; cursor: string | null };
+
+/**
+ * A cursor-paged list held as one cache entry. Refreshes read only the first page and hand it to
+ * `mergeHead` (default: replace), so polling never re-walks every loaded page. `loadMore` appends
+ * the next page unless a refresh replaced the cursor it started from.
+ */
+export function usePagedQuery<T>(options: {
+  queryKey: QueryKey;
+  enabled: boolean;
+  intervalMs?: number | ((loaded: Page<T> | undefined) => number);
+  fetchPage: (cursor: string | null) => Promise<Page<T>>;
+  id: (item: T) => string;
+  mergeHead?: (loaded: Page<T>, head: Page<T>) => Page<T>;
+}) {
+  const queryClient = useQueryClient();
+  const latest = useRef(options);
+  useLayoutEffect(() => { latest.current = options; });
+  const interval = options.intervalMs;
+  const query = useScreenQuery<Page<T>>({
+    queryKey: options.queryKey,
+    queryFn: async () => {
+      const { fetchPage, mergeHead, queryKey } = latest.current;
+      const head = await fetchPage(null);
+      const loaded = queryClient.getQueryData<Page<T>>(queryKey);
+      return loaded && mergeHead ? mergeHead(loaded, head) : head;
+    },
+    enabled: options.enabled,
+    refetchInterval: typeof interval === "function" ? (query) => interval(query.state.data) : interval,
+  });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<Error | null>(null);
+  const loadingMoreRef = useRef(false);
+  const loadMore = useCallback(async (): Promise<void> => {
+    const { fetchPage, id, queryKey } = latest.current;
+    const start = queryClient.getQueryData<Page<T>>(queryKey);
+    if (!start?.cursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const page = await fetchPage(start.cursor);
+      queryClient.setQueryData<Page<T>>(queryKey, (current) => {
+        if (!current || current.cursor !== start.cursor) return current;
+        const known = new Set(current.items.map(id));
+        return { items: [...current.items, ...page.items.filter((item) => !known.has(id(item)))], cursor: page.cursor };
+      });
+    } catch (error) {
+      setLoadMoreError(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [queryClient]);
+  return { query, items: query.data?.items ?? null, hasMore: Boolean(query.data?.cursor), loadingMore, loadMoreError, loadMore };
 }

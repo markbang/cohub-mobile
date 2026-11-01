@@ -1,6 +1,6 @@
 import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
@@ -11,7 +11,8 @@ import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { useToast } from "@/src/components/Toast";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { activityContributorName } from "@/src/data/activity";
-import { useSyncQuery } from "@/src/data/query";
+import { usePagedQuery, useScreenQuery, useSyncQuery, type Page } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
@@ -29,14 +30,11 @@ type Resources = {
   activity: SpaceActivityResponse | null;
 };
 
-type ResourceKey = keyof Resources;
-type ResourceFailures = Record<ResourceKey, boolean>;
-type ResourceLoading = Record<ResourceKey, boolean>;
-
-const emptyResources: Resources = { checkpoints: [], apps: [], tasks: [], activity: null };
-const noResourceFailures: ResourceFailures = { checkpoints: false, apps: false, tasks: false, activity: false };
-const allResourcesLoading: ResourceLoading = { checkpoints: true, apps: true, tasks: true, activity: true };
 const SPACE_REFRESH_INTERVAL_MS = 60_000;
+const NO_SESSIONS: UserSessionListItem[] = [];
+const NO_CHECKPOINTS: CheckpointRecord[] = [];
+const NO_APPS: AppRecord[] = [];
+const NO_TASKS: TaskRunRecord[] = [];
 
 export default function SpaceScreen() {
   const router = useRouter();
@@ -51,45 +49,49 @@ export default function SpaceScreen() {
   useFocusEffect(useCallback(() => {
     if (spaceId) recordVisit(spaceId);
   }, [recordVisit, spaceId]));
-  const [loadedSpace, setLoadedSpace] = useState<SpaceRecord | null>(null);
-  const [spaceLoading, setSpaceLoading] = useState(true);
-  const [spaceError, setSpaceError] = useState<string | null>(null);
-  const [resources, setResources] = useState<Resources>(emptyResources);
-  const [resourceLoading, setResourceLoading] = useState<ResourceLoading>(allResourcesLoading);
-  const loadingResources = resourceLoading.checkpoints || resourceLoading.apps || resourceLoading.tasks || resourceLoading.activity;
-  const [taskCursor, setTaskCursor] = useState<string | null>(null);
-  const [tasksLoadingMore, setTasksLoadingMore] = useState(false);
-  const [resourceFailures, setResourceFailures] = useState<ResourceFailures>(noResourceFailures);
-  const [spaceSessions, setSpaceSessions] = useState<UserSessionListItem[]>([]);
-  const [spaceSessionsHasMore, setSpaceSessionsHasMore] = useState(false);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
-  const [sessionsFailed, setSessionsFailed] = useState(false);
-  const [pageRefreshing, setPageRefreshing] = useState(false);
-  const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
-  const spaceActionsRef = useRef<View>(null);
-  const closeSpaceActions = useCallback(() => setSpaceActionsOpen(false), []);
-  const [pinning, setPinning] = useState(false);
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [checkpointing, setCheckpointing] = useState(false);
-  const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
-  const spaceRefreshAtRef = useRef<{ spaceId: string; at: number } | null>(null);
-  const spaceRefreshInFlightRef = useRef<{ spaceId: string; token: number } | null>(null);
-  const spaceRefreshTokenRef = useRef(0);
-  const resourcesRefreshAtRef = useRef(0);
-  const resourcesRequestRef = useRef(0);
-  const sessionsRefreshAtRef = useRef(0);
-  const sessionsRequestRef = useRef(0);
-  const resourcesInFlightRef = useRef(false);
-  const sessionsInFlightRef = useRef(false);
-  const tasksInFlightRef = useRef(false);
-  const tasksRequestRef = useRef(0);
+  const queryClient = useQueryClient();
+  const ready = Boolean(client && spaceId);
   const cachedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);
   const cachedSessions = useAppSelector((app) => app.state.sessions.filter((session) => session.spaceId === spaceId), shallowEqual);
-  const cachedSpaceRef = useRef<SpaceRecord | null>(cachedSpace);
-  useEffect(() => {
-    cachedSpaceRef.current = cachedSpace;
-  }, [cachedSpace]);
-  const space = cachedSpace ?? (loadedSpace?.id === spaceId ? loadedSpace : null);
+  // Home/cache data is enough to paint; global Space reconciliation keeps it fresh, so only an unknown Space is read here.
+  const spaceQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:detail`],
+    queryFn: async (): Promise<SpaceRecord> => {
+      // Pin state is private metadata, not a prerequisite for rendering the Space shell.
+      const pinRequest = refreshSpacePin(spaceId!).catch((error: unknown) => {
+        console.warn("[mobile-space] failed to refresh pin state", error);
+        return null;
+      });
+      const remoteSpace = await client!.spaces.get(spaceId!);
+      upsertSpace(remoteSpace);
+      void pinRequest.then((pinned) => { if (pinned !== null) upsertSpace({ ...remoteSpace, isPinned: pinned }); });
+      return remoteSpace;
+    },
+    enabled: ready && !cachedSpace,
+    staleTime: SPACE_REFRESH_INTERVAL_MS,
+  });
+  useSyncQuery(`space:${spaceId}:pin`, () => refreshSpacePin(spaceId!), SPACE_REFRESH_INTERVAL_MS, ready && cachedSpace?.isPinned === undefined);
+  const space = cachedSpace ?? spaceQuery.data ?? null;
+  const spaceLoading = ready && !cachedSpace && spaceQuery.isFetching;
+  const spaceError = spaceQuery.error ? spaceQuery.error.message.trim() || t("space.unavailable") : null;
+
+  const sessionsQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:chats`],
+    queryFn: async (): Promise<{ sessions: UserSessionListItem[]; hasMore: boolean }> => {
+      const response = await client!.space(spaceId!).sessions.list({ limit: SPACE_SESSION_COUNT_PAGE_SIZE });
+      const hasMore = Boolean(response.pageInfo?.hasMore);
+      publishSpaceSessionCount(queryClient, spaceId!, response.sessions.length, hasMore);
+      void refreshSessionStatuses(response.sessions, { silent: queryClient.getQueryData([`space:${spaceId}:chats`]) !== undefined });
+      return { sessions: response.sessions, hasMore };
+    },
+    enabled: ready,
+    staleTime: SPACE_REFRESH_INTERVAL_MS,
+    intervalMs: 15_000,
+  });
+  const spaceSessions = sessionsQuery.data?.sessions ?? NO_SESSIONS;
+  const spaceSessionsHasMore = sessionsQuery.data?.hasMore ?? false;
+  const sessionsLoading = ready && sessionsQuery.isPending;
+  const sessionsFailed = sessionsQuery.isError;
   const sessions = useMemo(() => {
     const byId = new Map<string, UserSessionListItem>();
     for (const session of cachedSessions) byId.set(session.id, session);
@@ -101,152 +103,78 @@ export default function SpaceScreen() {
     return sortByRecent([...byId.values()]);
   }, [cachedSessions, spaceSessions]);
 
-  const loadSpace = useCallback(async (options: { force?: boolean } = {}) => {
-    if (!client || !spaceId) return;
-    if (spaceRefreshInFlightRef.current?.spaceId === spaceId) return;
-    const lastRefresh = spaceRefreshAtRef.current;
-    const cached = cachedSpaceRef.current;
-    if (!options.force && cached?.id === spaceId && (!lastRefresh || (lastRefresh.spaceId === spaceId && Date.now() - lastRefresh.at < SPACE_REFRESH_INTERVAL_MS))) {
-      // Home/cache data is enough for first paint; global Space reconciliation keeps it fresh.
-      spaceRefreshAtRef.current ??= { spaceId, at: Date.now() };
-      setSpaceLoading(false);
-      setSpaceError(null);
-      if (cached.isPinned === undefined) void refreshSpacePin(spaceId).catch((error: unknown) => console.warn("[mobile-space] failed to refresh pin state", error));
-      return;
-    }
-    const requestToken = spaceRefreshTokenRef.current + 1;
-    spaceRefreshTokenRef.current = requestToken;
-    spaceRefreshInFlightRef.current = { spaceId, token: requestToken };
-    setSpaceLoading(true);
-    setSpaceError(null);
-    // Pin state is private metadata, not a prerequisite for rendering the Space shell.
-    const pinRequest = refreshSpacePin(spaceId).catch((error: unknown) => {
-      console.warn("[mobile-space] failed to refresh pin state", error);
-      return null;
-    });
-    try {
-      const remoteSpace = await client.spaces.get(spaceId);
-      if (spaceRefreshInFlightRef.current?.token !== requestToken) return;
-      spaceRefreshAtRef.current = { spaceId, at: Date.now() };
-      setLoadedSpace(remoteSpace);
-      upsertSpace(remoteSpace);
-      setSpaceLoading(false);
-      void pinRequest.then((pinned) => {
-        if (pinned === null || spaceRefreshTokenRef.current !== requestToken) return;
-        const resolved = { ...remoteSpace, isPinned: pinned };
-        setLoadedSpace(resolved);
-        upsertSpace(resolved);
-      });
-    } catch (error) {
-      if (spaceRefreshInFlightRef.current?.token !== requestToken) return;
-      setSpaceLoading(false);
-      setSpaceError(error instanceof Error && error.message.trim() ? error.message : t("space.unavailable"));
-    } finally {
-      if (spaceRefreshInFlightRef.current?.token === requestToken) spaceRefreshInFlightRef.current = null;
-    }
-  }, [client, refreshSpacePin, spaceId, t, upsertSpace]);
-
-  const loadResources = useCallback(async (options: { force?: boolean; silent?: boolean } = {}) => {
-    if (!client || !spaceId || resourcesInFlightRef.current) return;
-    if (!options.force && Date.now() - resourcesRefreshAtRef.current < SPACE_REFRESH_INTERVAL_MS) return;
-    const requestToken = ++resourcesRequestRef.current;
-    resourcesInFlightRef.current = true;
-    const taskToken = ++tasksRequestRef.current;
-    if (!options.silent) setResourceLoading(allResourcesLoading);
-    const settle = (key: ResourceKey, failed: boolean) => {
-      if (resourcesRequestRef.current !== requestToken) return;
-      setResourceFailures((current) => ({ ...current, [key]: failed }));
-      setResourceLoading((current) => ({ ...current, [key]: false }));
-    };
-    const checkpointRequest = client.space(spaceId).checkpoints.list({ limit: 5 }).then((result) => {
-      if (resourcesRequestRef.current === requestToken) setResources((current) => ({ ...current, checkpoints: result.checkpoints }));
-      settle("checkpoints", false);
-      return result;
-    }).catch((error: unknown) => { settle("checkpoints", true); throw error; });
-    const appRequest = client.apps.listBySpace(spaceId).then((result) => {
-      if (resourcesRequestRef.current === requestToken) setResources((current) => ({ ...current, apps: result.apps }));
-      settle("apps", false);
-      return result;
-    }).catch((error: unknown) => { settle("apps", true); throw error; });
-    const taskRequest = client.tasks.list({ spaceId, limit: 8 }).then((result) => {
-      if (resourcesRequestRef.current === requestToken && taskToken === tasksRequestRef.current) {
-        setResources((current) => ({ ...current, tasks: options.silent ? mergeTaskRuns(current.tasks, result.runs) : result.runs }));
-        if (!options.silent) setTaskCursor(result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null);
+  const resourceOptions = { enabled: ready, staleTime: SPACE_REFRESH_INTERVAL_MS, intervalMs: SPACE_REFRESH_INTERVAL_MS };
+  const checkpointsQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:resources`, "checkpoints"],
+    queryFn: async (): Promise<CheckpointRecord[]> => (await client!.space(spaceId!).checkpoints.list({ limit: 5 })).checkpoints,
+    ...resourceOptions,
+  });
+  const appsQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:resources`, "apps"],
+    queryFn: async (): Promise<AppRecord[]> => (await client!.apps.listBySpace(spaceId!)).apps,
+    ...resourceOptions,
+  });
+  const activityQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:resources`, "activity"],
+    queryFn: async (): Promise<SpaceActivityResponse | null> => {
+      const remote = client!.space(spaceId!);
+      return remote.activity?.get ? remote.activity.get(7) : null;
+    },
+    ...resourceOptions,
+  });
+  const taskList = usePagedQuery<TaskRunRecord>({
+    queryKey: [`space:${spaceId}:tasks`],
+    enabled: ready,
+    intervalMs: (loaded) => loaded?.items.some((task) => task.status === "running" || task.status === "pending") ? 10_000 : 60_000,
+    id: (task) => task.id,
+    fetchPage: async (cursor) => {
+      if (cursor) {
+        const result = await client!.tasks.list({ spaceId: spaceId!, limit: 8, cursor });
+        return { items: result.runs, cursor: result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null };
       }
-      settle("tasks", false);
-      return result;
-    }).catch((error: unknown) => { settle("tasks", true); throw error; });
-    const activityRequest = (async () => {
-      try {
-        const space = client.space(spaceId);
-        if (!space.activity?.get) {
-          settle("activity", false);
-          return null;
-        }
-        const result = await space.activity.get(7);
-        if (resourcesRequestRef.current === requestToken) {
-          setResources((current) => ({ ...current, activity: result }));
-        }
-        settle("activity", false);
-        return result;
-      } catch (error: unknown) {
-        settle("activity", true);
-        throw error;
+      const loaded = queryClient.getQueryData<Page<TaskRunRecord>>([`space:${spaceId}:tasks`]);
+      if (!loaded) {
+        const result = await client!.tasks.list({ spaceId: spaceId!, limit: 8 });
+        return { items: result.runs, cursor: result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null };
       }
-    })();
-    const results = await Promise.allSettled([checkpointRequest, appRequest, taskRequest, activityRequest]);
-    resourcesInFlightRef.current = false;
-    if (resourcesRequestRef.current !== requestToken) return;
-    if (results.every((result) => result.status === "fulfilled")) resourcesRefreshAtRef.current = Date.now();
-    const failed = results.find((result) => result.status === "rejected");
-    if (options.silent && failed?.status === "rejected") throw failed.reason;
-  }, [client, spaceId]);
+      // Loaded active runs are rechecked even when newer tasks push them out of the first page.
+      return { items: await refreshTaskRuns(client!, spaceId!, loaded.items), cursor: loaded.cursor };
+    },
+    mergeHead: (loaded, head) => ({ items: mergeTaskRuns(loaded.items, head.items), cursor: loaded.cursor }),
+  });
+  const resources: Resources = {
+    checkpoints: checkpointsQuery.data ?? NO_CHECKPOINTS,
+    apps: appsQuery.data ?? NO_APPS,
+    tasks: taskList.items ?? NO_TASKS,
+    activity: activityQuery.data ?? null,
+  };
+  const loadingResources = checkpointsQuery.isFetching || appsQuery.isFetching || activityQuery.isFetching || taskList.query.isFetching;
+  const resourceLoading = { checkpoints: ready && checkpointsQuery.isPending, apps: ready && appsQuery.isPending, tasks: ready && taskList.query.isPending };
+  const resourceFailures = { checkpoints: checkpointsQuery.isError, apps: appsQuery.isError, tasks: taskList.query.isError, activity: activityQuery.isError };
+  const taskCursor = taskList.hasMore;
+  const tasksLoadingMore = taskList.loadingMore;
+  const [pageRefreshing, setPageRefreshing] = useState(false);
+  const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
+  const spaceActionsRef = useRef<View>(null);
+  const closeSpaceActions = useCallback(() => setSpaceActionsOpen(false), []);
+  const [pinning, setPinning] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [checkpointing, setCheckpointing] = useState(false);
+  const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
 
   const loadMoreTasks = async () => {
-    if (!client || !spaceId || !taskCursor || tasksLoadingMore) return;
-    setTasksLoadingMore(true);
     try {
-      const result = await client.tasks.list({ spaceId, limit: 8, cursor: taskCursor });
-      setResources((current) => ({ ...current, tasks: mergeTaskRuns(current.tasks, result.runs) }));
-      setTaskCursor(result.pageInfo?.hasMore ? result.pageInfo.nextCursor : null);
+      await taskList.loadMore();
     } catch (error) {
       toast({ title: t("space.tasks.loadMoreFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
-    } finally {
-      setTasksLoadingMore(false);
     }
   };
 
-  const loadSessions = useCallback(async (options: { force?: boolean; silent?: boolean } = {}) => {
-    if (!client || !spaceId || sessionsInFlightRef.current) return;
-    if (!options.force && Date.now() - sessionsRefreshAtRef.current < SPACE_REFRESH_INTERVAL_MS) return;
-    const requestToken = ++sessionsRequestRef.current;
-    sessionsInFlightRef.current = true;
-    if (!options.silent) setSessionsLoading(true);
-    try {
-      const response = await client.space(spaceId).sessions.list({ limit: SPACE_SESSION_COUNT_PAGE_SIZE });
-      if (sessionsRequestRef.current !== requestToken) return;
-      sessionsRefreshAtRef.current = Date.now();
-      const hasMore = Boolean(response.pageInfo?.hasMore);
-      setSpaceSessions(response.sessions);
-      setSpaceSessionsHasMore(hasMore);
-      setSessionsFailed(false);
-      publishSpaceSessionCount(client, spaceId, response.sessions.length, hasMore);
-      setSessionsLoading(false);
-      void refreshSessionStatuses(response.sessions, { silent: options.silent });
-    } catch (error) {
-      if (sessionsRequestRef.current !== requestToken) return;
-      setSessionsFailed(true);
-      if (options.silent) throw error;
-    } finally {
-      sessionsInFlightRef.current = false;
-      if (sessionsRequestRef.current === requestToken) setSessionsLoading(false);
-    }
-  }, [client, refreshSessionStatuses, spaceId]);
-
   const reloadDetails = useCallback(() => Promise.allSettled([
-    loadResources({ force: true }),
-    loadSessions({ force: true }),
-  ]), [loadResources, loadSessions]);
+    queryClient.refetchQueries({ queryKey: [`space:${spaceId}:resources`] }),
+    queryClient.refetchQueries({ queryKey: [`space:${spaceId}:tasks`] }),
+    queryClient.refetchQueries({ queryKey: [`space:${spaceId}:chats`] }),
+  ]), [queryClient, spaceId]);
 
   const refreshPage = useCallback(async () => {
     setPageRefreshing(true);
@@ -257,43 +185,6 @@ export default function SpaceScreen() {
     }
   }, [refreshHome, reloadDetails]);
 
-  useFocusEffect(useCallback(() => {
-    void loadSpace();
-    void loadResources();
-    void loadSessions();
-  }, [loadResources, loadSessions, loadSpace]));
-
-  useEffect(() => () => {
-    spaceRefreshTokenRef.current += 1;
-    spaceRefreshInFlightRef.current = null;
-    resourcesRequestRef.current += 1;
-    sessionsRequestRef.current += 1;
-    tasksRequestRef.current += 1;
-    resourcesInFlightRef.current = false;
-    sessionsInFlightRef.current = false;
-    tasksInFlightRef.current = false;
-  }, [client, spaceId]);
-
-  const refreshTasks = useCallback(async () => {
-    if (!client || !spaceId || resourcesInFlightRef.current || tasksInFlightRef.current) return;
-    const token = ++tasksRequestRef.current;
-    tasksInFlightRef.current = true;
-    try {
-      const runs = await refreshTaskRuns(client, spaceId, resources.tasks);
-      if (token !== tasksRequestRef.current) return;
-      setResources((current) => ({ ...current, tasks: mergeTaskRuns(current.tasks, runs) }));
-      setResourceFailures((current) => ({ ...current, tasks: false }));
-    } catch (error) {
-      if (token === tasksRequestRef.current) setResourceFailures((current) => ({ ...current, tasks: true }));
-      throw error;
-    } finally {
-      tasksInFlightRef.current = false;
-    }
-  }, [client, resources.tasks, spaceId]);
-  useSyncQuery(`space:${spaceId}:chats`, () => loadSessions({ force: true, silent: true }), 15_000, Boolean(spaceId));
-  useSyncQuery(`space:${spaceId}:resources`, () => loadResources({ force: true, silent: true }), 60_000, Boolean(spaceId));
-  useSyncQuery(`space:${spaceId}:tasks`, refreshTasks, resources.tasks.some((task) => task.status === "running" || task.status === "pending") ? 10_000 : 60_000, Boolean(spaceId));
-
   if (!space) {
     const opening = Boolean(spaceId) && (booting || !client || spaceLoading);
     return <Screen>
@@ -301,7 +192,7 @@ export default function SpaceScreen() {
       <View className="flex-1 items-center justify-center p-6">
         {opening
           ? <LoadingState label={t("space.opening")} />
-          : <><Text className="text-body text-fg-muted text-center">{t("space.unavailable")}</Text>{spaceError ? <Text selectable className="text-caption text-danger text-center mt-2">{spaceError}</Text> : null}{spaceId ? <PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void loadSpace({ force: true })} className="mt-4" /> : null}</>}
+          : <><Text className="text-body text-fg-muted text-center">{t("space.unavailable")}</Text>{spaceError ? <Text selectable className="text-caption text-danger text-center mt-2">{spaceError}</Text> : null}{spaceId ? <PrimaryButton label={t("common.retry")} icon="refresh" onPress={() => void spaceQuery.refetch()} className="mt-4" /> : null}</>}
       </View>
     </Screen>;
   }
@@ -325,7 +216,7 @@ export default function SpaceScreen() {
     setCheckpointing(true);
     try {
       await client.space(space.id).checkpoints.create();
-      await loadResources({ force: true });
+      await queryClient.refetchQueries({ queryKey: [`space:${space.id}:resources`, "checkpoints"] });
     } catch (error) {
       toast({ title: t("space.saveCheckpointFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
     } finally {

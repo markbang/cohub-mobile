@@ -95,7 +95,7 @@ A complete all-account Running view cannot be guaranteed from the first 60 sessi
 
 Keep SDK operations, state merging, and cache writes in `src/data/`. Pages report focused scope, visible IDs, and open panels; they do not own protocol handling.
 
-TanStack Query owns scheduling, request deduplication, and screen-level caches (`src/data/query.ts`). `AppProvider` creates one `QueryClient` per signed-in user and clears it on account change. Query keys begin with the realtime scope string (for example `space:<id>:labels`), so realtime events invalidate queries directly. Chat state (sessions, turns, streams, pagination, read state) stays in the reducer, now held in a Zustand store; `useSyncQuery` schedules those reducer-owned reads without caching their data.
+TanStack Query owns scheduling, request deduplication, and every screen-level read (`src/data/query.ts`): `useScreenQuery` for single resources, `usePagedQuery` for cursor lists whose refresh reconciles only the head, and `useSyncQuery` for reads whose result the reducer owns. `AppProvider` creates one `QueryClient` per signed-in user and clears it on account change. Query keys begin with the realtime scope string (for example `space:<id>:labels`), so realtime events invalidate queries directly. Chat state (sessions, turns, streams, pagination, read state) stays in the reducer, now held in a Zustand store; `useSyncQuery` schedules those reducer-owned reads without caching their data.
 
 Required behavior:
 

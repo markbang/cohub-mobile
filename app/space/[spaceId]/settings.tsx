@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
@@ -53,12 +53,6 @@ export default function SpaceSettingsScreen() {
   const [customTtlValue, setCustomTtlValue] = useState("");
   const [customTtlUnit, setCustomTtlUnit] = useState<CustomTtlUnit>("hours");
   const [customTtlError, setCustomTtlError] = useState<string | null>(null);
-  // Schedules, the wallet, and the startup report change on the screens this one opens.
-  const focused = useRef(false);
-  useFocusEffect(useCallback(() => {
-    if (focused.current) for (const key of ["schedules", "wallet", "sandbox", "config"] as const) void loadResource(key);
-    focused.current = true;
-  }, [loadResource]));
   const idlePolicy = config?.autoDestroy.mode === "idle" ? config.autoDestroy : null;
   const sandboxBusy = busy || restarting || resources.config.loading;
 

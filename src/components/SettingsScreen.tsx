@@ -11,7 +11,7 @@ import type {
 } from "@neta-art/cohub";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
 	Linking,
 	Platform,
@@ -188,6 +188,9 @@ function SettingsRow({
 	);
 }
 
+const PROFILE_KEY = ["profile"];
+const EMPTY_PROFILE: ProfileState = { profile: null, email: null, uuid: "" };
+
 function ProfileSection({
 	client,
 	onNotice,
@@ -198,57 +201,42 @@ function ProfileSection({
 	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const { getClaims } = useProfileSession();
-	const [data, setData] = useState<ProfileState>({
-		profile: null,
-		email: null,
-		uuid: "",
+	const queryClient = useQueryClient();
+	const profileQuery = useScreenQuery({
+		queryKey: PROFILE_KEY,
+		queryFn: async (): Promise<ProfileState> => {
+			const [me, claims] = await Promise.all([client!.user.getMe(), getClaims()]);
+			return {
+				profile: me.profile,
+				email: me.email ?? (typeof claims.email === "string" ? claims.email : null),
+				uuid: me.uuid,
+			};
+		},
+		enabled: Boolean(client),
 	});
+	const data = profileQuery.data ?? EMPTY_PROFILE;
+	const setProfile = (profile: NonNullable<ProfileState["profile"]>) =>
+		queryClient.setQueryData<ProfileState>(PROFILE_KEY, (current) => ({ ...(current ?? EMPTY_PROFILE), profile }));
+	// The form seeds once from the first read; background reads never overwrite typing.
+	const [seededFrom, setSeededFrom] = useState<ProfileState["profile"]>(null);
 	const [displayName, setDisplayName] = useState("");
 	const [username, setUsername] = useState("");
-	const [loading, setLoading] = useState(true);
+	if (data.profile && !seededFrom) {
+		setSeededFrom(data.profile);
+		setDisplayName(data.profile.displayName);
+		setUsername(data.profile.username ?? "");
+	}
+	const loading = Boolean(client) && profileQuery.isPending;
 	const [saving, setSaving] = useState(false);
 	const [uploadingAvatar, setUploadingAvatar] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const load = useCallback(async () => {
-		if (!client) {
-			setLoading(false);
-			setError(t("settings.profile.connect"));
-			return;
-		}
-		setLoading(true);
-		setError(null);
-		try {
-			const [me, claims] = await Promise.all([
-				client.user.getMe(),
-				getClaims(),
-			]);
-			const profile = me.profile;
-			setData({
-				profile,
-				email:
-					me.email ?? (typeof claims.email === "string" ? claims.email : null),
-				uuid: me.uuid,
-			});
-			setDisplayName(profile.displayName);
-			setUsername(profile.username ?? "");
-		} catch (caught) {
-			setError(
-				caught instanceof Error ? caught.message : t("settings.profile.loadError"),
-			);
-		} finally {
-			setLoading(false);
-		}
-	}, [client, getClaims, t]);
-
-	useEffect(() => {
-		void Promise.resolve().then(() => load());
-	}, [load]);
+	const [actionError, setActionError] = useState<string | null>(null);
+	const error = actionError ?? (!client ? t("settings.profile.connect") : profileQuery.error ? profileQuery.error.message || t("settings.profile.loadError") : null);
+	const load = () => { setActionError(null); void profileQuery.refetch(); };
 
 	const changeAvatar = async () => {
 		if (!client || uploadingAvatar) return;
 		setUploadingAvatar(true);
-		setError(null);
+		setActionError(null);
 		try {
 			const permission =
 				await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -279,13 +267,13 @@ function ProfileSection({
 			const updated = await client.user.updateProfile({
 				avatarUrl: uploaded.publicUrl,
 			});
-			setData((current) => ({ ...current, profile: updated.profile }));
+			setProfile(updated.profile);
 			onNotice({
 				title: t("settings.profile.avatarUpdated.title"),
 				message: t("settings.profile.avatarUpdated.body"),
 			});
 		} catch (caught) {
-			setError(
+			setActionError(
 				caught instanceof Error ? caught.message : t("settings.profile.avatarError"),
 			);
 		} finally {
@@ -296,13 +284,13 @@ function ProfileSection({
 	const save = async () => {
 		if (!client || saving || !displayName.trim()) return;
 		setSaving(true);
-		setError(null);
+		setActionError(null);
 		try {
 			const result = await client.user.updateProfile({
 				displayName: displayName.trim(),
 				username: username.trim() || null,
 			});
-			setData((current) => ({ ...current, profile: result.profile }));
+			setProfile(result.profile);
 			setDisplayName(result.profile.displayName);
 			setUsername(result.profile.username ?? "");
 			onNotice({
@@ -310,7 +298,7 @@ function ProfileSection({
 				message: t("settings.profile.updated.body"),
 			});
 		} catch (caught) {
-			setError(
+			setActionError(
 				caught instanceof Error ? caught.message : t("settings.profile.saveError"),
 			);
 		} finally {

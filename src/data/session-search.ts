@@ -1,5 +1,6 @@
 import type { CohubClient, GlobalSearchResult, GlobalSearchType } from "@neta-art/cohub";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 
 export type SessionNavigationTarget = {
   turn?: number;
@@ -139,52 +140,43 @@ export function useRemoteSearch(
   const spaceId = options.spaceId ?? null;
   const typesKey = (options.types ?? DEFAULT_SEARCH_TYPES).join(",");
   const normalizedQuery = normalizeSearchQuery(query);
-  const [state, setState] = useState<RemoteSearchState>(EMPTY_STATE);
-  const requestIdRef = useRef(0);
-  const [retryToken, setRetryToken] = useState(0);
-  const retry = useCallback(() => setRetryToken((value) => value + 1), []);
-
+  const shouldSearch = enabled && client !== null && normalizedQuery.length >= 2;
+  const [debouncedQuery, setDebouncedQuery] = useState(normalizedQuery);
   useEffect(() => {
-    let active = true;
-    const requestId = ++requestIdRef.current;
-    const shouldSearch = enabled && client !== null && normalizedQuery.length >= 2;
-    const reset = () => {
-      if (active) setState(EMPTY_STATE);
-    };
-
-    if (!shouldSearch) {
-      reset();
-      return () => {
-        active = false;
-      };
-    }
-
-    void Promise.resolve().then(() => {
-      if (active && requestId === requestIdRef.current) setState({ ...EMPTY_STATE, query: normalizedQuery, loading: true });
-    });
-    const timer = setTimeout(() => {
-      if (!active || !client) return;
-      const types = typesKey.split(",").filter(isGlobalSearchType);
-      void client.search.query({
-        q: normalizedQuery,
+    const timer = setTimeout(() => setDebouncedQuery(normalizedQuery), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [normalizedQuery]);
+  const settled = debouncedQuery === normalizedQuery;
+  const search = useQuery({
+    queryKey: ["search", debouncedQuery, limit, typesKey, spaceId],
+    queryFn: async () => {
+      const response = await client!.search.query({
+        q: debouncedQuery,
         limit,
-        types,
+        types: typesKey.split(",").filter(isGlobalSearchType),
         ...(spaceId ? { spaceId } : {}),
-      }).then((response) => {
-        if (!active || requestId !== requestIdRef.current) return;
-        const mapped = mapRemoteSearchResults(response.items ?? []);
-        setState({ ...mapped, query: normalizedQuery, loading: false, error: null, degraded: response.degraded === true });
-      }).catch((caught) => {
-        if (!active || requestId !== requestIdRef.current) return;
-        setState({ ...EMPTY_STATE, query: normalizedQuery, error: caught instanceof Error ? caught.message : "Search is unavailable" });
       });
-    }, SEARCH_DEBOUNCE_MS);
+      return { ...mapRemoteSearchResults(response.items ?? []), degraded: response.degraded === true };
+    },
+    enabled: shouldSearch && settled,
+    staleTime: 30_000,
+    retry: 0,
+  });
+  const refetch = search.refetch;
+  const retry = useCallback(() => { void refetch(); }, [refetch]);
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [client, enabled, limit, normalizedQuery, retryToken, spaceId, typesKey]);
-
-  return { ...state, normalizedQuery, retry };
+  if (!shouldSearch) return { ...EMPTY_STATE, normalizedQuery, retry };
+  // Typing ahead of the debounce shows a loading state, never the previous query's hits.
+  const data = settled ? search.data : undefined;
+  const error = settled && search.error ? search.error.message || "Search is unavailable" : null;
+  return {
+    query: normalizedQuery,
+    sessions: data?.sessions ?? EMPTY_STATE.sessions,
+    spaces: data?.spaces ?? EMPTY_STATE.spaces,
+    loading: !data && !error,
+    error,
+    degraded: data?.degraded ?? false,
+    normalizedQuery,
+    retry,
+  };
 }

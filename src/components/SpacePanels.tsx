@@ -21,7 +21,8 @@ import { edgeChrome, useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
-import { invalidateScopes, useScreenQuery, useSyncQuery } from "@/src/data/query";
+import { invalidateScopes, useScreenQuery } from "@/src/data/query";
+import { useSpaceDirectory } from "@/src/data/use-space-directory";
 import { useQueryClient } from "@tanstack/react-query";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import {
@@ -451,6 +452,8 @@ type ChatListFilter =
   | { kind: "source"; source: SessionSourceGroup }
   | { kind: "label"; label: SessionLabel; ref: string };
 
+type PanelScope = { sessions: UserSessionListItem[]; cursor: string | null; hasMore: boolean; tailLoaded: boolean };
+const EMPTY_SESSIONS: UserSessionListItem[] = [];
 const EMPTY_LABELS: SessionLabel[] = [];
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
@@ -461,19 +464,36 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   const state = useAppSelector((app) => ({ sessionForks: app.state.sessionForks, sessionLatestTurns: app.state.sessionLatestTurns, sessionTurnStatuses: app.state.sessionTurnStatuses, sessionStatusError: app.state.sessionStatusError }), shallowEqual);
   const [query, setQuery] = useState("");
   const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
-  const [extraSessions, setExtraSessions] = useState<UserSessionListItem[]>([]);
-  const [scopeCursor, setScopeCursor] = useState<string | null>(null);
-  const [scopeHasMore, setScopeHasMore] = useState(false);
-  const [scopeInitialized, setScopeInitialized] = useState(false);
-  const tailLoadedRef = useRef(false);
-  const scopeGenerationRef = useRef(0);
-  useEffect(() => () => { scopeGenerationRef.current += 1; }, [client, spaceId]);
+  const queryClient = useQueryClient();
+  const scopeKey = useMemo(() => [`space:${spaceId}:chat-panel`], [spaceId]);
+  // The head refresh reconciles into loaded pages; once older pages load, their cursor wins.
+  const scopeQuery = useScreenQuery({
+    queryKey: scopeKey,
+    queryFn: async (): Promise<PanelScope> => {
+      const requestStartedAt = Date.now();
+      const response = await client!.space(spaceId).sessions.list({ limit: 60, includeForks: true });
+      rememberSessionForks(response.forks ?? []);
+      void refreshSessionStatuses(response.sessions, { silent: true });
+      const loaded = queryClient.getQueryData<PanelScope>(scopeKey);
+      const hasMore = response.pageInfo?.hasMore === true;
+      const merged = reconcileSessionHead(loaded?.sessions ?? [], response.sessions, hasMore, requestStartedAt);
+      return loaded?.tailLoaded ? { ...loaded, sessions: merged } : { sessions: merged, cursor: response.pageInfo?.nextCursor ?? null, hasMore, tailLoaded: false };
+    },
+    enabled: Boolean(client && spaceId),
+    intervalMs: 15_000,
+  });
+  const extraSessions = scopeQuery.data?.sessions ?? EMPTY_SESSIONS;
+  const scopeInitialized = scopeQuery.data !== undefined;
+  const scopeHasMore = scopeQuery.data?.hasMore ?? false;
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [loadMoreFailure, setLoadMoreFailure] = useState<{ message: string; at: number } | null>(null);
+  // A later successful refresh supersedes a load-more failure, as the refresh error does.
+  const loadMoreError = loadMoreFailure && loadMoreFailure.at > scopeQuery.dataUpdatedAt
+    ? loadMoreFailure.message
+    : scopeQuery.error && !scopeQuery.isFetching ? scopeQuery.error.message || t("space.panel.loadMoreError") : null;
   const [listFilter, setListFilter] = useState<ChatListFilter>({ kind: "all" });
   const selectedLabelRef = listFilter.kind === "label" ? listFilter.ref : null;
   const [labelSheetSession, setLabelSheetSession] = useState<UserSessionListItem | null>(null);
-  const queryClient = useQueryClient();
   const labelsQuery = useScreenQuery({
     queryKey: [`space:${spaceId}:labels`],
     queryFn: async () => toUserSessionLabels(await fetchSessionLabels(client!, spaceId)),
@@ -550,52 +570,30 @@ function ChatPanel({ spaceId, spaceName, sessions, client, onChipsTouchChange, o
   const rowExtraData = useMemo(() => ({ client, t, theme, prefetchSession }), [client, t, theme, prefetchSession]);
   const loadMore = async () => {
     if (!client || loadingMore) return;
-    if (scopeInitialized && !scopeHasMore) {
-      if (loadMoreError) await refreshPanel().catch(() => undefined);
+    const current = queryClient.getQueryData<PanelScope>(scopeKey);
+    if (current && !current.hasMore) {
+      if (loadMoreError) await scopeQuery.refetch();
       return;
     }
     setLoadingMore(true);
-    setLoadMoreError(null);
-    const generation = scopeGenerationRef.current;
+    setLoadMoreFailure(null);
     try {
-      const cursor = scopeCursor ?? cursorAfterOldestSession(sessions);
+      const cursor = current?.cursor ?? cursorAfterOldestSession(sessions);
       const response = await client.space(spaceId).sessions.list({ limit: 60, includeForks: true, ...(cursor ? { cursor } : {}) });
-      if (generation !== scopeGenerationRef.current) return;
       rememberSessionForks(response.forks ?? []);
-      tailLoadedRef.current = true;
-      setExtraSessions((current) => mergePanelSessions(current, response.sessions, spaceId, spaceName));
+      queryClient.setQueryData<PanelScope>(scopeKey, (latest) => ({
+        sessions: mergePanelSessions(latest?.sessions ?? [], response.sessions, spaceId, spaceName),
+        cursor: response.pageInfo?.nextCursor ?? null,
+        hasMore: Boolean(response.pageInfo?.hasMore),
+        tailLoaded: true,
+      }));
       void refreshSessionStatuses(response.sessions, { silent: true });
-      setScopeCursor(response.pageInfo?.nextCursor ?? null);
-      setScopeHasMore(Boolean(response.pageInfo?.hasMore));
-      setScopeInitialized(true);
     } catch (error) {
-      setLoadMoreError(error instanceof Error ? error.message : t("space.panel.loadMoreError"));
+      setLoadMoreFailure({ message: error instanceof Error ? error.message : t("space.panel.loadMoreError"), at: Date.now() });
     } finally {
       setLoadingMore(false);
     }
   };
-  const refreshPanel = async () => {
-    if (!client) return;
-    const generation = scopeGenerationRef.current;
-    const requestStartedAt = Date.now();
-    try {
-      const response = await client.space(spaceId).sessions.list({ limit: 60, includeForks: true });
-      if (generation !== scopeGenerationRef.current) return;
-      rememberSessionForks(response.forks ?? []);
-      setExtraSessions((current) => reconcileSessionHead(current, response.sessions, response.pageInfo?.hasMore === true, requestStartedAt));
-      if (!tailLoadedRef.current) {
-        setScopeCursor(response.pageInfo?.nextCursor ?? null);
-        setScopeHasMore(response.pageInfo?.hasMore === true);
-        setScopeInitialized(true);
-      }
-      setLoadMoreError(null);
-      void refreshSessionStatuses(response.sessions, { silent: true });
-    } catch (error) {
-      if (generation === scopeGenerationRef.current) setLoadMoreError(error instanceof Error ? error.message : t("space.panel.loadMoreError"));
-      throw error;
-    }
-  };
-  useSyncQuery(`space:${spaceId}:chat-panel`, refreshPanel, 15_000);
   const showLoadMore = Boolean(client && !trimmedQuery && (!scopeInitialized || scopeHasMore || loadMoreError));
   const emptyLoading = (remoteQueryMatches && remoteSearch.loading) || labelSessionsLoading;
   const emptyLabel = listFilter.kind === "label"
@@ -663,47 +661,10 @@ function FilesPanel({ enabled = true, spaceId, spaceName, client, onClose, onOpe
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [path, setPath] = useState("");
-  const [entries, setEntries] = useState<SpaceFsEntry[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const requestIdRef = useRef(0);
-  const inFlightRef = useRef(false);
-
-  const load = useCallback(async (options: { silent?: boolean } = {}) => {
-    if (!enabled || inFlightRef.current) return;
-    const currentRequest = ++requestIdRef.current;
-    if (!client) {
-      setEntries([]);
-      setError(t("files.panelConnect"));
-      setLoading(false);
-      return;
-    }
-    inFlightRef.current = true;
-    if (!options.silent) { setLoading(true); setError(null); setEntries([]); }
-    try {
-      const result = await client.space(spaceId).files.list(path || undefined);
-      if (currentRequest === requestIdRef.current) { setEntries(result.entries); setError(null); }
-    } catch (caught) {
-      if (currentRequest === requestIdRef.current) setError(caught instanceof Error ? caught.message : t("files.loadError"));
-      if (options.silent) throw caught;
-    } finally {
-      if (currentRequest === requestIdRef.current) { inFlightRef.current = false; setLoading(false); }
-    }
-  }, [client, enabled, path, spaceId, t]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (active) void load();
-    });
-    return () => {
-      active = false;
-      requestIdRef.current += 1;
-      inFlightRef.current = false;
-    };
-  }, [enabled, load]);
-  useSyncQuery(`space:${spaceId}:files-panel:${path}`, () => load({ silent: true }), 30_000, enabled);
+  const directory = useSpaceDirectory(client, spaceId, path, enabled);
+  const { entries, loading } = directory;
+  const error = enabled && !client ? t("files.panelConnect") : directory.error ? directory.error.message || t("files.loadError") : null;
+  const load = directory.refetch;
 
   const openEntry = (entry: SpaceFsEntry) => {
     if (entry.type === "dir") {

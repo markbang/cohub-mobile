@@ -1,6 +1,6 @@
 import type { AppDetailResponse, AppViewStatsResponse, AppVisibility } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsRow } from "@/src/components/SettingsRow";
@@ -8,6 +8,8 @@ import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { APP_HIDE_COHUB_BAR_FEATURE, dailyViews, hidesCohubBar, withCohubBar } from "@/src/data/app-manage";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppSwitch, DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
@@ -22,11 +24,28 @@ export default function ManageWorkScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [detail, setDetail] = useState<AppDetailResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [stats, setStats] = useState<AppViewStatsResponse | null>(null);
-  const [canHideBar, setCanHideBar] = useState<boolean | null>(null);
+  const queryClient = useQueryClient();
+  const detailKey = [`app:${appId}:detail`];
+  const detailQuery = useScreenQuery({
+    queryKey: detailKey,
+    queryFn: (): Promise<AppDetailResponse> => client!.apps.get(appId),
+    enabled: Boolean(client && appId),
+  });
+  const detail = detailQuery.data ?? null;
+  const error = detailQuery.error ? detailQuery.error.message || t("work.error") : null;
+  // Stats and the entitlement are extras: their failure leaves the form usable.
+  const stats = useScreenQuery({
+    queryKey: [`app:${appId}:stats`],
+    queryFn: (): Promise<AppViewStatsResponse> => client!.apps.getStats(appId),
+    enabled: Boolean(client && appId),
+  }).data ?? null;
+  const entitlement = useScreenQuery({
+    queryKey: ["billing", "entitlement", APP_HIDE_COHUB_BAR_FEATURE],
+    queryFn: async () => (await client!.billing.getFeatureEntitlement(APP_HIDE_COHUB_BAR_FEATURE)).enabled,
+    enabled: Boolean(client),
+  });
+  const canHideBar = entitlement.isError ? false : entitlement.data ?? null;
+  const [seeded, setSeeded] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [published, setPublished] = useState(true);
@@ -36,24 +55,15 @@ export default function ManageWorkScreen() {
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  useEffect(() => {
-    if (!client || !appId) return;
-    let active = true;
-    void client.apps.get(appId).then((result) => {
-      if (!active) return;
-      setDetail(result);
-      setTitle(result.app.meta?.title || result.app.meta?.name || "");
-      setDescription(result.app.meta?.description || "");
-      setPublished(result.app.status === "published");
-      setVisibility(result.app.visibility);
-      setHideBar(hidesCohubBar(result.app.meta));
-      setError(null);
-    }).catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : t("work.error")); });
-    // Stats and the entitlement are extras: their failure leaves the form usable.
-    void client.apps.getStats(appId).then((result) => { if (active) setStats(result); }).catch(() => undefined);
-    void client.billing.getFeatureEntitlement(APP_HIDE_COHUB_BAR_FEATURE).then((result) => { if (active) setCanHideBar(result.enabled); }).catch(() => { if (active) setCanHideBar(false); });
-    return () => { active = false; };
-  }, [appId, attempt, client, t]);
+  // The form seeds once; later reads must not overwrite edits in progress.
+  if (detail && !seeded) {
+    setSeeded(true);
+    setTitle(detail.app.meta?.title || detail.app.meta?.name || "");
+    setDescription(detail.app.meta?.description || "");
+    setPublished(detail.app.status === "published");
+    setVisibility(detail.app.visibility);
+    setHideBar(hidesCohubBar(detail.app.meta));
+  }
 
   const save = async () => {
     if (!client || !detail || saving) return;
@@ -61,7 +71,8 @@ export default function ManageWorkScreen() {
     try {
       const meta = withCohubBar({ ...detail.app.meta, title: title.trim() || undefined, description: description.trim() || undefined }, hideBar);
       const result = await client.apps.update(appId, { status: published ? "published" : "disabled", visibility, meta });
-      setDetail((current) => current ? { ...current, app: result.app } : current);
+      queryClient.setQueryData<AppDetailResponse>(detailKey, (current) => current ? { ...current, app: result.app } : current);
+      void queryClient.invalidateQueries({ queryKey: detailKey });
       toast({ title: t("app.edit.saved"), tone: "success" });
       router.back();
     } catch (caught) {
@@ -76,6 +87,7 @@ export default function ManageWorkScreen() {
     setDeleting(true);
     try {
       await client.apps.delete(appId);
+      queryClient.removeQueries({ queryKey: detailKey });
       setConfirmDelete(false);
       toast({ title: t("app.manage.deleted"), tone: "success" });
       router.dismiss(2);
@@ -90,7 +102,7 @@ export default function ManageWorkScreen() {
   const workTitle = app?.meta?.title || app?.meta?.name || app?.slug || t("work.fallbackTitle");
   return <Screen keyboard>
     <TopBar title={t("app.manage.title")} subtitle={app ? workTitle : undefined} onBack={() => router.back()} />
-    {error && !detail ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
+    {error && !detail ? <DataError message={error} onRetry={() => void detailQuery.refetch()} /> : null}
     {!detail || !app ? (error ? null : <LoadingSections sections={[{ kind: "field" }, { kind: "field", tall: true }, { kind: "field" }, { kind: "group", rows: 2, trailing: "switch" }, { kind: "capsule" }]} />) : <ScrollView className="flex-1" keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       {stats ? <ViewStats stats={stats} /> : null}
 

@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import type { AppPromotionProviderStatus, AppPromotionRecord, AppPromotionStatsResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -129,14 +129,13 @@ function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId:
 function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appId: string; promotion: AppPromotionRecord; link: string; onCopy: () => void; onClose: () => void }) {
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [stats, setStats] = useState<AppPromotionStatsResponse | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!client) return;
-    let active = true;
-    void client.apps.getPromotionStats(appId, promotion.id).then((result) => { if (active) setStats(result); }).catch(() => { if (active) setFailed(true); });
-    return () => { active = false; };
-  }, [appId, client, promotion.id]);
+  const statsQuery = useScreenQuery({
+    queryKey: [`app:${appId}:promotions`, promotion.id, "stats"],
+    queryFn: (): Promise<AppPromotionStatsResponse> => client!.apps.getPromotionStats(appId, promotion.id),
+    enabled: Boolean(client),
+  });
+  const stats = statsQuery.data ?? null;
+  const failed = statsQuery.isError;
   return <AdaptiveSheet visible title={promotion.name} subtitle={promotion.provider} onClose={onClose}>
     <View className="gap-4">
       <Pressable accessibilityRole="button" accessibilityLabel={t("app.promo.copyLink")} onPress={onCopy} className="flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-3 active:bg-surface-pressed" style={{ borderCurve: "continuous" }}>

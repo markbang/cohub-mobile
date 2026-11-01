@@ -2,7 +2,7 @@ import * as Clipboard from "expo-clipboard";
 import type { SpaceFsFileResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Keyboard, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { CodeBlock } from "@/src/components/CodeBlock";
@@ -13,6 +13,8 @@ import { detectCodeLanguage } from "@/src/data/code-language";
 import { classifySaveConflict, isEditableTextFile, isFileConflictError, MAX_EDITABLE_CODE_BYTES } from "@/src/data/code-file";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { typography, useAppTheme } from "@/src/theme";
@@ -33,13 +35,24 @@ export default function FileScreen() {
   const { t } = useTranslation();
   const showToast = useToast();
   const { client } = useAppActions();
-  const [file, setFile] = useState<SpaceFsFileResponse | null>(null);
-  const requestIdRef = useRef(0);
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [retryToken, setRetryToken] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const fileKey = useMemo(() => [`space:${spaceId}:file:${path}`], [path, spaceId]);
+  const ready = Boolean(client && spaceId && path);
+  const fileQuery = useScreenQuery({
+    queryKey: fileKey,
+    queryFn: async (): Promise<SpaceFsFileResponse> => {
+      const result = await client!.space(spaceId).files.read(path);
+      if (!("content" in result)) throw new Error(t("file.preparing"));
+      return result;
+    },
+    // An open draft pins its base revision; a background read must not move the conflict baseline.
+    enabled: ready && draft === null,
+  });
+  const file = fileQuery.data ?? null;
+  const url = file?.delivery === "url" && file.url ? file.url : null;
+  const loading = ready && fileQuery.isPending;
+  const error = !spaceId ? t("file.spaceUnavailable") : !path ? t("file.pathMissing") : !client ? t("file.connect") : fileQuery.error ? fileQuery.error.message || t("file.openError") : null;
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -60,50 +73,6 @@ export default function FileScreen() {
       editorScrollRef.current?.scrollTo({ y: Math.max(0, caretY - lineHeight), animated: true });
     }
   }, []);
-
-  const loadFile = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
-    if (!client || !spaceId || !path) {
-      setFile(null);
-      setUrl(null);
-      setLoading(false);
-      setError(!spaceId ? t("file.spaceUnavailable") : !path ? t("file.pathMissing") : t("file.connect"));
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setFile(null);
-    setUrl(null);
-    setDraft(null);
-    setSaveError(null);
-    setConflict(false);
-    try {
-      const result = await client.space(spaceId).files.read(path);
-      if (requestId !== requestIdRef.current) return;
-      if ("content" in result) {
-        setFile(result);
-        if (result.delivery === "url" && result.url) setUrl(result.url);
-      } else {
-        setError(t("file.preparing"));
-      }
-    } catch (caught) {
-      if (requestId === requestIdRef.current) setError(caught instanceof Error ? caught.message : t("file.openError"));
-    } finally {
-      if (requestId === requestIdRef.current) setLoading(false);
-    }
-  }, [client, path, spaceId, t]);
-
-  useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (active) void loadFile();
-    });
-    return () => {
-      active = false;
-      requestIdRef.current += 1;
-    };
-  }, [loadFile, retryToken]);
 
   const language = detectCodeLanguage(path);
   const inlineContent = file && file.kind === "text" && file.delivery !== "url" ? file.content : null;
@@ -178,7 +147,7 @@ export default function FileScreen() {
       }
       if (!saved) throw new Error(t("file.saveIncomplete"));
       const { size, mtimeMs } = saved;
-      setFile((current) => current ? { ...current, content, size, mtimeMs } : current);
+      queryClient.setQueryData<SpaceFsFileResponse>(fileKey, (current) => current ? { ...current, content, size, mtimeMs } : current);
       // Keep editing if the draft advanced while the write was in flight.
       setDraft((current) => current === content ? null : current);
       setConflict(false);
@@ -187,7 +156,7 @@ export default function FileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [client, draft, file, path, spaceId, t]);
+  }, [client, draft, file, fileKey, path, queryClient, spaceId, t]);
 
   const reloadForConflict = useCallback(async () => {
     if (!client || !spaceId || !path) return;
@@ -196,7 +165,7 @@ export default function FileScreen() {
     try {
       const fresh = await client.space(spaceId).files.read(path);
       if (!("content" in fresh)) throw new Error(t("file.preparing"));
-      setFile(fresh);
+      queryClient.setQueryData(fileKey, fresh);
       setDraft(fresh.kind === "text" && fresh.delivery !== "url" ? fresh.content : null);
       setConflict(false);
     } catch (caught) {
@@ -204,7 +173,7 @@ export default function FileScreen() {
     } finally {
       setSaving(false);
     }
-  }, [client, path, spaceId, t]);
+  }, [client, fileKey, path, queryClient, spaceId, t]);
 
   const copyPath = useCallback(async () => {
     try {
@@ -264,7 +233,7 @@ export default function FileScreen() {
       ) : error ? (
         <FileError
           message={error}
-          onRetry={() => setRetryToken((value) => value + 1)}
+          onRetry={() => void fileQuery.refetch()}
           onBack={() => router.back()}
         />
       ) : showWebView && previewUrl && file ? (

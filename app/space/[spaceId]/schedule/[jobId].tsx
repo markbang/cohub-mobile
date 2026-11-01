@@ -1,6 +1,6 @@
 import type { CronJobRecord, TaskRunRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -9,7 +9,8 @@ import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
-import { useSyncQuery } from "@/src/data/query";
+import { usePagedQuery, useScreenQuery } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { AppSwitch, AppIcon, DataError, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
@@ -24,38 +25,48 @@ function promptText(job: CronJobRecord): string | null {
 }
 
 export default function ScheduleScreen() {
-  const { jobId = "" } = useLocalSearchParams<{ spaceId: string; jobId: string }>();
+  const { spaceId = "", jobId = "" } = useLocalSearchParams<{ spaceId: string; jobId: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, locale } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [job, setJob] = useState<CronJobRecord | null>(null);
-  const [runs, setRuns] = useState<{ items: TaskRunRecord[]; cursor: string | null } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"toggle" | "save" | "delete" | "more" | null>(null);
+  const queryClient = useQueryClient();
+  const jobKey = [`schedule:${jobId}`, "job"];
+  const jobQuery = useScreenQuery({
+    queryKey: jobKey,
+    queryFn: async (): Promise<CronJobRecord> => (await client!.cronJobs.get(jobId)).job,
+    enabled: Boolean(client && jobId),
+    intervalMs: 60_000,
+  });
+  const job = jobQuery.data ?? null;
+  const setJob = (next: CronJobRecord) => {
+    queryClient.setQueryData(jobKey, next);
+    void queryClient.invalidateQueries({ queryKey: [`space:${spaceId}:schedules`] });
+  };
+  const runList = usePagedQuery<TaskRunRecord>({
+    queryKey: [`schedule:${jobId}`, "runs"],
+    enabled: Boolean(client && jobId),
+    intervalMs: (loaded) => loaded?.items.some((run) => run.status === "running" || run.status === "pending") ? 10_000 : 60_000,
+    id: (run) => run.id,
+    fetchPage: async (cursor) => {
+      const history = await client!.cronJobs.runs(jobId, cursor ? { limit: RUN_PAGE, cursor } : { limit: RUN_PAGE });
+      return { items: history.runs, cursor: history.pageInfo.hasMore ? history.pageInfo.nextCursor : null };
+    },
+    // Refreshing the newest runs keeps the older pages already loaded below them.
+    mergeHead: (loaded, head) => {
+      if (loaded.items.length <= RUN_PAGE) return head;
+      const seen = new Set(head.items.map((run) => run.id));
+      return { items: [...head.items, ...loaded.items.filter((run) => !seen.has(run.id))], cursor: loaded.cursor };
+    },
+  });
+  const runs = runList.items ? { items: runList.items, cursor: runList.hasMore ? "more" : null } : null;
+  const error = jobQuery.error ? jobQuery.error.message || t("schedule.loadFailed") : null;
+  const load = () => Promise.all([jobQuery.refetch(), runList.query.refetch()]);
+  const [busy, setBusy] = useState<"toggle" | "save" | "delete" | null>(null);
   const [editing, setEditing] = useState<ScheduleValues | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!client || !jobId) return;
-    try {
-      const [detail, history] = await Promise.all([client.cronJobs.get(jobId), client.cronJobs.runs(jobId, { limit: RUN_PAGE })]);
-      setJob(detail.job);
-      setRuns((current) => {
-        if (!current || current.items.length <= RUN_PAGE) return { items: history.runs, cursor: history.pageInfo.hasMore ? history.pageInfo.nextCursor : null };
-        const seen = new Set(history.runs.map((run) => run.id));
-        return { items: [...history.runs, ...current.items.filter((run) => !seen.has(run.id))], cursor: current.cursor };
-      });
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("schedule.loadFailed"));
-      throw caught;
-    }
-  }, [client, jobId, t]);
-  const active = runs?.items.some((run) => run.status === "running" || run.status === "pending") ?? false;
-  useSyncQuery(`schedule:${jobId}`, load, active ? 10_000 : 60_000, Boolean(jobId));
 
   const nextRuns = useMemo(() => job ? nextCronRuns(job.cronExpression, job.timezone, 3) : [], [job]);
 
@@ -95,6 +106,8 @@ export default function ScheduleScreen() {
     setBusy("delete");
     try {
       await client.cronJobs.delete(job.id);
+      queryClient.removeQueries({ queryKey: [`schedule:${jobId}`] });
+      void queryClient.invalidateQueries({ queryKey: [`space:${spaceId}:schedules`] });
       setConfirmDelete(false);
       toast({ title: t("schedule.deleted"), tone: "success" });
       router.back();
@@ -106,25 +119,18 @@ export default function ScheduleScreen() {
   };
 
   const loadMore = async () => {
-    if (!client || !runs?.cursor || busy) return;
-    setBusy("more");
+    if (busy) return;
     try {
-      const next = await client.cronJobs.runs(jobId, { limit: RUN_PAGE, cursor: runs.cursor });
-      setRuns((current) => {
-        const seen = new Set((current?.items ?? []).map((run) => run.id));
-        return { items: [...(current?.items ?? []), ...next.runs.filter((run) => !seen.has(run.id))], cursor: next.pageInfo.hasMore ? next.pageInfo.nextCursor : null };
-      });
+      await runList.loadMore();
     } catch (caught) {
       toast({ title: t("schedule.loadFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
-    } finally {
-      setBusy(null);
     }
   };
 
   const prompt = job ? promptText(job) : null;
   return <Screen>
     <TopBar title={job?.title || t("space.settings.schedule.unnamed")} subtitle={job ? cronSummaryText(summarizeCron(job.cronExpression), job.cronExpression, t) : undefined} onBack={() => router.back()} actions={job ? <IconButton name="square-pen" label={t("schedule.edit")} onPress={() => { setEditError(null); setEditing({ title: job.title, prompt: "", cronExpression: job.cronExpression, timezone: job.timezone }); }} /> : undefined} />
-    {error && !job ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
+    {error && !job ? <DataError message={error} onRetry={() => void load()} /> : null}
     {!job ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 4 }, { kind: "group", rows: 2, label: true }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <SettingsGroup>
         <View className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2">
@@ -143,8 +149,8 @@ export default function ScheduleScreen() {
         {!runs ? <View className="min-h-13 items-center justify-center bg-surface"><Loader /></View>
           : runs.items.length === 0 ? <Text className="bg-surface p-4 text-subhead text-fg-muted">{t("schedule.noRuns")}</Text>
           : runs.items.map((run, index) => <RunRow key={run.id} run={run} last={index === runs.items.length - 1 && !runs.cursor} onPress={() => router.push({ pathname: "/task/[taskId]", params: { taskId: run.id } })} />)}
-        {runs?.cursor ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.wallet.loadMore")} disabled={busy !== null} onPress={() => void loadMore()} className="min-h-12 flex-row items-center justify-center gap-2 bg-surface active:bg-surface-pressed">
-          {busy === "more" ? <Loader /> : <AppIcon name="chevrons-down" size={16} tone="accent" />}
+        {runs?.cursor ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.wallet.loadMore")} disabled={busy !== null || runList.loadingMore} onPress={() => void loadMore()} className="min-h-12 flex-row items-center justify-center gap-2 bg-surface active:bg-surface-pressed">
+          {runList.loadingMore ? <Loader /> : <AppIcon name="chevrons-down" size={16} tone="accent" />}
           <Text className="text-subhead font-semibold text-accent">{t("space.wallet.loadMore")}</Text>
         </Pressable> : null}
       </SettingsGroup>

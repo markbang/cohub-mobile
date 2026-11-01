@@ -1,10 +1,10 @@
 import type { CheckpointDiffFileResponse, CheckpointDiffPatchLine } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import { Platform, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DIFF_STATUS, formatDiffCounts } from "@/src/data/checkpoint-diff";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { DataError, LoadingDocument, Screen, TopBar } from "@/src/ui";
 
@@ -27,24 +27,21 @@ export default function SaveDiffScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [diff, setDiff] = useState<CheckpointDiffFileResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!client || !path) return;
-    let active = true;
-    void client.space(spaceId).checkpoints(checkpointId).diff.file(path, { base: base ?? null })
-      .then((result) => { if (active) { setDiff(result); setError(null); } })
-      .catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : t("save.diffFailed")); });
-    return () => { active = false; };
-  }, [attempt, base, checkpointId, client, path, spaceId, t]);
+  const diffQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:save`, checkpointId, "diff-file", path, base ?? null],
+    queryFn: (): Promise<CheckpointDiffFileResponse> => client!.space(spaceId).checkpoints(checkpointId).diff.file(path, { base: base ?? null }),
+    enabled: Boolean(client && path),
+    staleTime: Infinity,
+  });
+  const diff = diffQuery.data ?? null;
+  const error = diffQuery.error ? diffQuery.error.message || t("save.diffFailed") : null;
   const name = path.split("/").pop() || path;
   const status = diff?.status ? DIFF_STATUS[diff.status] : null;
   const subtitle = [status ? t(status.label) : null, diff ? formatDiffCounts(diff.additions, diff.deletions) : null].filter(Boolean).join(" · ");
   const unavailable = diff && diff.kind !== "text" ? t(diff.kind === "binary" || diff.kind === "asset" ? "save.binaryDiff" : diff.kind === "too_large" ? "save.tooLargeDiff" : "save.diffUnavailable") : null;
   return <Screen>
     <TopBar title={name} subtitle={subtitle || path} onBack={() => router.back()} />
-    {error ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : !diff ? <LoadingDocument /> : unavailable ? <Text className="px-6 py-10 text-center text-subhead text-fg-muted">{unavailable}</Text> : (
+    {error ? <DataError message={error} onRetry={() => void diffQuery.refetch()} /> : !diff ? <LoadingDocument /> : unavailable ? <Text className="px-6 py-10 text-center text-subhead text-fg-muted">{unavailable}</Text> : (
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
         {/* Long lines scroll sideways together, so columns stay aligned like a terminal diff. */}
         <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: "100%" }}>

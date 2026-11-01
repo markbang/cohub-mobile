@@ -69,7 +69,6 @@ import { claimedFailedSends, failedSendMessage, isFailedSend, mergeDisplayMessag
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
-import { clearSlashCommandCache } from "@/src/data/use-composer-slash";
 import { shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
@@ -2444,7 +2443,6 @@ export function AppProvider({
     runningDiscoveryRequests.current.clear();
     statusSessionsRef.current.clear();
     resetSpaceList();
-    clearSlashCommandCache();
     await clearUserCache(userKey);
     paginationRequestsRef.current.clear();
     spacePinMutationVersionsRef.current.clear();
