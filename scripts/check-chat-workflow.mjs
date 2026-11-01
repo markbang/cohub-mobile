@@ -41,7 +41,7 @@ import { createSpaceRealtime } from "../src/data/space-realtime.ts";
 import { spaceRealtimeChange, userSessionRealtimeChange } from "../src/data/space-realtime-events.ts";
 import { DEFAULT_SESSION_FILTER_MINUTES, getSessionStatus, sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, latestTurn, loadSessionLatestTurns, parseSessionFilterMinutes, reconcileLatestTurn, reconcileTurnStatusPatch, sessionFilterCutoff, sessionPageState } from "../src/data/session-status.ts";
 import { followupPreviewText, queuedFollowupTurns, followupQueueItems, isOptimisticFollowup, isSendQueueItem, shouldQueueFollowup } from "../src/data/followup-queue.ts";
-import { classifySaveConflict, isEditableTextFile, isFileConflictError } from "../src/data/code-file.ts";
+import { classifySaveConflict, isEditableTextFile, isFileConflictError, isMarkdownFile } from "../src/data/code-file.ts";
 import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-language.ts";
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, withSettledClose } from "../src/data/session-reconnect.ts";
@@ -940,17 +940,19 @@ for (const [tab, component, expectedRequests] of [
   let write = Promise.withResolvers();
   const file = { kind: "text", encoding: "utf-8", content: "original", size: 8, mtimeMs: 1 };
   const client = { space: () => ({ files: { read: async () => file, write: () => write.promise } }) };
+  let filePath = "notes.txt";
   const renderFile = loadChromeComponent("../app/space/[spaceId]/file.tsx", "FileScreen", {
     ...formScope, ...runner.hooks,
-    useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ spaceId: "space", path: "notes.txt" }),
+    useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ spaceId: "space", path: filePath }),
     firstParam: (value) => value ?? "", ...appHooks(() => ({ client })), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
-    Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict,
-    MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict, isMarkdownFile,
+    MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const render = () => chromeNodes(runner.render(renderFile));
   const actions = () => chromeNodes(render().find((node) => node.type === "TopBar").props.actions);
   render(); await flushSync(); render();
+  assert.equal(render().some((node) => node.type === "MarkdownDocument"), false, "non-Markdown files keep the code preview");
   assert.equal(guard.enabled, false, "read-only files do not block navigation");
   actions().find((node) => node.props.label === "file.edit").props.onPress(); render();
   assert.equal(guard.enabled, true);
@@ -976,6 +978,11 @@ for (const [tab, component, expectedRequests] of [
   guard.callback({ data: { action: { type: "GO_BACK" } } });
   alerts.at(-1)[2].find((button) => button.style === "destructive").onPress(); render();
   assert.equal(guard.enabled, false, "confirmed discard returns to the file preview");
+  filePath = "AGENTS.md";
+  render(); await flushSync();
+  assert.deepEqual(render().filter((node) => ["MarkdownDocument", "CodeBlock"].includes(node.type)).map((node) => [node.type, node.props.markdown]), [["MarkdownDocument", file.content]], "Markdown files preview rendered");
+  actions().find((node) => node.props.label === "file.edit").props.onPress();
+  assert.equal(render().find((node) => node.type === "CodeEditor").props.value, file.content, "Markdown files edit their source");
   runner.unmount();
 }
 
@@ -1727,11 +1734,11 @@ for (const viewport of [240, 320, 360, 390, 768]) {
 
 // Execute the real JSX composition to catch a dropped footer between the bubble layers.
 const bubbleSource = ts.createSourceFile("MessageContent.tsx", readFileSync(new URL("../src/components/MessageContent.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const bubbleFunctionNames = new Set(["enrichedMarkdownStyle", "TextBlock", "Block", "MessageContent"]);
+const bubbleFunctionNames = new Set(["enrichedMarkdownStyle", "TextBlock", "Block", "MessageContent", "MarkdownDocument"]);
 const bubbleFunctions = bubbleSource.statements.filter((statement) =>
   ts.isFunctionDeclaration(statement) && bubbleFunctionNames.has(statement.name?.text)
 ).map((statement) => statement.getText(bubbleSource).replace(/^export /, ""));
-assert.equal(bubbleFunctions.length, 4);
+assert.equal(bubbleFunctions.length, 5);
 const bubbleScope = {
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   memo: (component) => component,
@@ -1752,8 +1759,9 @@ const bubbleScope = {
   ImageGallery: "ImageGallery", ToolCall: "ToolCall", SystemNoteRow: "SystemNoteRow",
   imageUri: (block) => block.source?.type === "url" ? block.source.url : null,
 };
-const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
+const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, MarkdownDocument, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
 const bubbleRender = bubbleModule.MessageContent;
+assert.equal(bubbleModule.MarkdownDocument({ markdown: "- [ ] task", spaceId: "space" }).props.enableTaskListItemToggle, false, "a file preview cannot toggle tasks it would not save");
 const markdownTheme = { mode: "dark", colors: { text: "#f7f8fa", textMuted: "muted", textSecondary: "secondary", borderStrong: "border-strong", accentBorder: "accent-border", accent: "accent", border: "border", surfaceRaised: "raised", userBubbleCodeBackground: "user-code" } };
 const userInlineCode = bubbleModule.enrichedMarkdownStyle(markdownTheme, "#fff6f0", "user-link", true).code;
 assert.equal(userInlineCode.color, "#fff6f0", "inline code on a user bubble keeps the bubble foreground");

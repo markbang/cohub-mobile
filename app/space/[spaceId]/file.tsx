@@ -8,9 +8,10 @@ import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { CodeBlock } from "@/src/components/CodeBlock";
 import { CodeEditor } from "@/src/components/CodeEditor";
 import { UrlFilePreview } from "@/src/components/MediaViewers";
+import { MarkdownDocument } from "@/src/components/MessageContent";
 import { modelFormat } from "@/src/data/media";
 import { detectCodeLanguage } from "@/src/data/code-language";
-import { classifySaveConflict, isEditableTextFile, isFileConflictError, MAX_EDITABLE_CODE_BYTES } from "@/src/data/code-file";
+import { classifySaveConflict, isEditableTextFile, isFileConflictError, isMarkdownFile, MAX_EDITABLE_CODE_BYTES } from "@/src/data/code-file";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
 import { useScreenQuery } from "@/src/data/query";
@@ -79,6 +80,7 @@ export default function FileScreen() {
   const editing = draft !== null;
   const dirty = editing && file !== null && draft !== file.content;
   const editable = isEditableTextFile(file);
+  const markdownPreview = inlineContent !== null && isMarkdownFile(path) ? inlineContent : null;
 
   useEffect(() => {
     if (!editing) return;
@@ -264,7 +266,7 @@ export default function FileScreen() {
             />
           </ScrollView>
         ) : (
-          <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={markdownPreview !== null ? { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 } : { padding: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
             {file.kind === "text" && file.size > MAX_EDITABLE_CODE_BYTES ? (
               <View className="flex-row items-center gap-2 mb-2">
                 <AppIcon name="alert" size={14} tone="muted" />
@@ -273,7 +275,11 @@ export default function FileScreen() {
                 </Text>
               </View>
             ) : null}
-            <CodeBlock code={inlineContent ?? ""} language={language} showLineNumbers />
+            {markdownPreview !== null ? (
+              <MarkdownDocument markdown={markdownPreview} spaceId={spaceId} />
+            ) : (
+              <CodeBlock code={inlineContent ?? ""} language={language} showLineNumbers />
+            )}
           </ScrollView>
         )
       ) : null}
