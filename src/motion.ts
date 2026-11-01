@@ -61,6 +61,8 @@ export const popover = {
   open: { duration: 200 },
   close: { duration: 150 },
   from: { x: 0.97, y: 0.95 },
+  /** Suggestion menus reappear on each keystroke, so they grow uniformly from nearly full size and never pulse. */
+  typingFromScale: 0.98,
 } as const;
 
 /** Drawn Android alerts and action sheets. */

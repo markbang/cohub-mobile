@@ -13,6 +13,7 @@ import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
+import { splitMarkdownHeadings } from "../src/data/markdown-headings.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
@@ -50,7 +51,7 @@ import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
 import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
-import { appendWalletActivity, formatWalletUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
+import { appendWalletActivity, formatUsd, walletProductBalanceUsd } from "../src/data/space-wallet.ts";
 import { nextCronRuns, parseCron, summarizeCron } from "../src/data/cron.ts";
 import { appDevicesRequest, appHostScript, appNavigationRequest, appRuntimeSignal, readAppHostMessage } from "../src/data/app-host.ts";
 import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.ts";
@@ -479,6 +480,7 @@ const holdOrder = loadChromeComponent(chatsRoute, "holdOrder", { chatItemKey, ch
 const ORDER_SETTLE_MS = loadChromeComponent(chatsRoute, "ORDER_SETTLE_MS", {});
 const ORDER_HOLD_MAX_MS = loadChromeComponent(chatsRoute, "ORDER_HOLD_MAX_MS", {});
 const chromeScope = {
+  MAX_FONT_SCALE: { control: 1.3, badge: 1.15, glyph: 1 },
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
   // Design-system primitives render as named placeholders, like the components above.
@@ -497,7 +499,7 @@ const chromeScope = {
   BrandRefreshArea: "BrandRefreshArea",
   useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key, locale: "en" }),
-  formatWalletUsd, billingStatusLabel: (status) => status, chatItemKey, holdOrder, ORDER_SETTLE_MS, ORDER_HOLD_MAX_MS, ConnectionBanner: "ConnectionBanner",
+  formatUsd, billingStatusLabel: (status) => status, chatItemKey, holdOrder, ORDER_SETTLE_MS, ORDER_HOLD_MAX_MS, ConnectionBanner: "ConnectionBanner",
   typography: { heading: { fontSize: 17 }, caption: { fontSize: 12 }, body: { fontSize: 15 }, code: { fontSize: 12, lineHeight: 16 } },
   Keyboard: { addListener: () => ({ remove() {} }) }, Platform: { OS: "android" },
   AppRefreshControl: "AppRefreshControl",
@@ -582,7 +584,7 @@ const formScope = {
     useRef: (current) => { const index = cursor++; if (!(index in slots)) slots[index] = { current }; return slots[index]; },
     useEffect: () => {}, useFocusEffect: () => {}, useCallback: (callback) => callback, useRouter: () => ({}), useLocalSearchParams: () => ({ spaceId: "space" }),
     ...appHooks(() => ({ client })), useToast: () => (notice) => alerts.push(notice),
-    SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatWalletUsd, cronSummaryText: (_summary, expression) => expression, summarizeCron,
+    SettingsRow: "SettingsRow", SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus, formatUsd, cronSummaryText: (_summary, expression) => expression, summarizeCron,
     useSpaceSettings: () => ({ env: [], config: null, ports: {}, allowedSpec: "standard", members: [], invitations: [], mods, setMods: (next) => { mods = next(mods); }, schedules: [], resources: Object.fromEntries(resourceKeys.map((key) => [key, { loaded: true, loading: false, error: null }])), loadResource: async () => {} }),
     ResourceStatus: "ResourceStatus",
     useAppTheme: () => ({ colors: {}, spacing: { md: 12 }, radius: { md: 12 } }),
@@ -1730,6 +1732,7 @@ const bubbleScope = {
   View: "View", Text: "Text", BubbleText: "BubbleText",
   ImageGallery: "ImageGallery", ToolCall: "ToolCall", SystemNoteRow: "SystemNoteRow",
   imageUri: (block) => block.source?.type === "url" ? block.source.url : null,
+  splitMarkdownHeadings, MarkdownHeading: "MarkdownHeading",
 };
 const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
 const bubbleRender = bubbleModule.MessageContent;
@@ -1752,6 +1755,21 @@ function footerPlacements(node, footer, found = []) {
   return found;
 }
 const footerMarker = { type: "timestamp", props: {} };
+// Top-level headings leave the native Markdown for a capsule; fenced and nested ones stay in it.
+assert.deepEqual(splitMarkdownHeadings("# **One** `two`\nBody\n```\n# code\n```\n- # nested\n## Three ##").map((segment) => segment.kind === "heading" ? `h${segment.level}:${segment.text}` : "text"), ["h1:One two", "text", "h2:Three"]);
+assert.deepEqual(splitMarkdownHeadings("#tag\n####### seven"), [{ kind: "text", text: "#tag\n####### seven" }]);
+{
+  const types = [];
+  const walk = (node) => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (!node || typeof node !== "object") return;
+    if (typeof node.type === "function") return walk(node.type(node.props));
+    if (node.type === "MarkdownHeading" || node.type === "EnrichedMarkdownText") types.push(node.type);
+    walk(node.props?.children);
+  };
+  walk(bubbleRender({ content: [{ type: "text", text: "## Plan\nFirst step" }], active: false }));
+  assert.deepEqual(types, ["MarkdownHeading", "EnrichedMarkdownText"], "a heading draws on its own capsule above the prose");
+}
 for (const text of ["你好", "First paragraph.\n\nLast paragraph.", "## Heading", "> Quote", "- First\n- Last", "**Bold** and `code`.", "---", "https://example.com/a.mp4", "![image](https://example.com/image)", "```ts\nconst x = 1;\n```", "| A | B |\n| --- | --- |\n| 1 | 2 |"]) {
   for (const active of [false, true]) {
     assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text }], active, footer: footerMarker }), footerMarker), ["timestamp"], `native markdown keeps the clock on a sibling row: ${text}`);
@@ -1968,7 +1986,10 @@ assert.deepEqual(summarizeCron("*/15 * * * *"), { kind: "minutes", every: 15 });
 assert.deepEqual(summarizeCron("0 9 1 * *"), { kind: "custom" });
 
 // Space wallet and startup report readers.
-assert.equal(formatWalletUsd(1.23456, "en", 4), "$1.2346");
+assert.equal(formatUsd(1.23456, 4), "$1.2346");
+assert.equal(formatUsd(-3.2), "-$3.20");
+assert.equal(formatUsd(-0.001), "$0.00");
+assert.equal(formatUsd(1234.5), "$1,234.50");
 assert.equal(walletProductBalanceUsd({ display: { creditBenefits: [], creditsAmount: 500_000_000 }, pricing: { amountUsd: 9 } }), 5, "credits convert at 1e-8 USD");
 assert.deepEqual(appendWalletActivity([{ id: "a" }], { items: [{ id: "a" }, { id: "b" }], hasMore: false }).map((item) => item.id), ["a", "b"]);
 assert.equal(sandboxSetupStatus(null), "unavailable");
@@ -3655,10 +3676,10 @@ assert.equal(estimateComposerContentHeight("a\nb\nc", lineHeight), 3 * lineHeigh
 assert.equal(estimateComposerContentHeight("a short dictation transcript", lineHeight), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).scrollEnabled, true, "the estimate alone unsticks the overflow signal when the native measurement is stale");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).height, 120, "the estimated overflow still respects the collapsed height cap");
-assert.equal(COMPOSER_CHROME_HEIGHT, 132);
-assert.equal(collapsedComposerHeight(34), 166);
-assert.equal(collapsedComposerHeight(0), 132);
-assert.equal(collapsedComposerHeight(-1), 132);
+assert.equal(COMPOSER_CHROME_HEIGHT, 130);
+assert.equal(collapsedComposerHeight(34), 164);
+assert.equal(collapsedComposerHeight(0), 130);
+assert.equal(collapsedComposerHeight(-1), 130);
 assert.equal(keyboardOverlap({ screenY: 620, height: 336 }, 956), 336, "a docked keyboard covers its own height");
 assert.equal(keyboardOverlap({ screenY: 0, height: 0 }, 956), 0, "the iOS resume frame must not cover the whole screen");
 assert.equal(keyboardOverlap({ screenY: 0, height: 956 }, 956), 0, "a zero-origin frame is never a docked keyboard");

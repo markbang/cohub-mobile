@@ -1,4 +1,4 @@
-import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AccessibilityInfo, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useKeyboardContext } from "react-native-keyboard-controller";
@@ -157,8 +157,24 @@ function AndroidToastViewport() {
  * reach the screen beneath, so it is not an accessibility modal.
  */
 function Overlay({ front, children }: { front: string; children: ReactNode }) {
+  const raised = useSyncExternalStore(subscribeOverlayRaise, readOverlayRaise);
   if (Platform.OS !== "ios") return <Fragment>{children}</Fragment>;
-  return <FullWindowOverlay key={front} unstable_accessibilityContainerViewIsModal={false}>{children}</FullWindowOverlay>;
+  return <FullWindowOverlay key={`${front}:${raised}`} unstable_accessibilityContainerViewIsModal={false}>{children}</FullWindowOverlay>;
+}
+
+let overlayRaise = 0;
+const overlayRaiseListeners = new Set<() => void>();
+const subscribeOverlayRaise = (listener: () => void) => { overlayRaiseListeners.add(listener); return () => { overlayRaiseListeners.delete(listener); }; };
+const readOverlayRaise = () => overlayRaise;
+
+/**
+ * iOS: call once a modal or sheet has finished presenting. A toast already on screen was attached under it;
+ * remounting the overlay lifts it back on top. Its entrance does not replay, and nothing happens without toasts.
+ */
+export function raiseToastOverlay() {
+  if (Platform.OS !== "ios") return;
+  overlayRaise += 1;
+  for (const listener of overlayRaiseListeners) listener();
 }
 
 function ToastLayer() {

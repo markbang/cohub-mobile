@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
@@ -26,7 +26,9 @@ export type BrandRefresh = ReturnType<typeof useBrandRefresh>;
  * once the list is at its top and the finger moves down, the list follows it on the UI thread with a
  * rubber band and the mascot grows in the gap; past the band a release refreshes.
  *
- * `scrollEventThrottle` is the list's own, so the iOS reveal can bridge a slow event rate.
+ * `scrollEventThrottle` is the list's own. A drag that starts at the top switches the list to per-frame
+ * events (`listScrollEventThrottle`) until it is released, so the iOS reveal tracks the finger exactly;
+ * a slow rate elsewhere is bridged by prediction.
  */
 export function useBrandRefresh({ refreshing, onRefresh, scrollEventThrottle = 16 }: { refreshing: boolean; onRefresh: () => void; scrollEventThrottle?: number }) {
   const pull = useSharedValue(0);
@@ -35,7 +37,14 @@ export function useBrandRefresh({ refreshing, onRefresh, scrollEventThrottle = 1
   const lastDistance = useRef(0);
   // LegendList's types omit `refreshControl` even though it hands the element to its ScrollView.
   const listProps = useMemo(() => Platform.OS === "ios" ? { refreshControl: <AppRefreshControl brand refreshing={refreshing} onRefresh={onRefresh} /> } : {}, [onRefresh, refreshing]);
-  const onScrollBeginDrag = useCallback((event: ScrollEvent) => { dragStart.current = event.nativeEvent.contentOffset.y; lastDistance.current = 0; }, []);
+  const [pulling, setPulling] = useState(false);
+  const eventInterval = pulling ? 16 : scrollEventThrottle;
+  const onScrollBeginDrag = useCallback((event: ScrollEvent) => {
+    dragStart.current = event.nativeEvent.contentOffset.y;
+    lastDistance.current = 0;
+    if (Platform.OS === "ios" && scrollEventThrottle > 16 && event.nativeEvent.contentOffset.y <= 1) setPulling(true);
+  }, [scrollEventThrottle]);
+  const onScrollEndDrag = useCallback(() => setPulling(false), []);
   const onScroll = useCallback((event: ScrollEvent) => {
     const y = event.nativeEvent.contentOffset.y;
     atTop.set(y <= 1);
@@ -47,10 +56,10 @@ export function useBrandRefresh({ refreshing, onRefresh, scrollEventThrottle = 1
     lastDistance.current = distance;
     // A slow event rate is bridged by heading, at constant speed, to where the pull will be by the next
     // event, so the reveal keeps pace with the finger instead of trailing it by one interval.
-    pull.set(scrollEventThrottle > 20 ? withTiming(Math.max(0, distance + step), { duration: scrollEventThrottle, easing: Easing.linear }) : distance);
-  }, [atTop, pull, scrollEventThrottle]);
+    pull.set(eventInterval > 20 ? withTiming(Math.max(0, distance + step), { duration: eventInterval, easing: Easing.linear }) : distance);
+  }, [atTop, eventInterval, pull]);
   const header = useMemo(() => Platform.OS === "ios" ? <InContentMascot refreshing={refreshing} pull={pull} /> : null, [pull, refreshing]);
-  return { listProps, header, onScroll, onScrollBeginDrag, refreshing, onRefresh, pull, atTop };
+  return { listProps, header, onScroll, onScrollBeginDrag, onScrollEndDrag, listScrollEventThrottle: eventInterval, refreshing, onRefresh, pull, atTop };
 }
 
 function RefreshMascot({ refreshing }: { refreshing: boolean }) {

@@ -16,7 +16,7 @@ import { AppSwitch, AppIcon, Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHe
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useTranslation } from "@/src/i18n";
-import { useAppTheme } from "@/src/theme";
+import { useAppTheme, MAX_FONT_SCALE } from "@/src/theme";
 
 const REPOSITORY_URL = "https://github.com/markbang/cohub-mobile";
 const RELEASES_URL = `${REPOSITORY_URL}/releases`;
@@ -118,8 +118,8 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
         <Image source={require("../../assets/images/icon.png")} resizeMode="contain" className="size-20 rounded-lg" />
         <Text style={ROUNDED_TITLE} className="mt-4 text-title font-semibold text-fg">{t("about.appName")}</Text>
         <Text className="mt-1 text-center text-subhead text-fg-muted">{t("about.tagline")}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("about.versionLabel", { version })} onPress={unlockDebug} hitSlop={8} className="mt-3 rounded-full bg-accent-soft px-2.5 py-1">
-          <Text className="text-caption tabular-nums text-accent">{t("about.version", { version })}</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("about.versionLabel", { version })} onPress={unlockDebug} hitSlop={8} className="mt-3 rounded-full bg-accent-soft px-3 py-1">
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.badge} className="text-caption tabular-nums text-accent">{t("about.version", { version })}</Text>
         </Pressable>
       </View>
 

@@ -11,7 +11,7 @@ import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
-import { ToastViewport } from "@/src/components/Toast";
+import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
 
@@ -207,7 +207,7 @@ function SelectMenu<T extends string>({ menu, title, options, value, highlight, 
   const rootRef = useRef<View>(null);
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
-  return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+  return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
     <View ref={rootRef} collapsable={false} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} style={StyleSheet.absoluteFill} onPress={onClose} />
       <PopoverSurface

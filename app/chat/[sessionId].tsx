@@ -6,8 +6,8 @@ import { clearForegroundSession, setForegroundSession } from "@/src/platform/not
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, KeyboardAvoidingView as RNKeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
-import Animated, { cubicBezier, FadeIn, FadeOut, useAnimatedRef, useReducedMotion } from "react-native-reanimated";
-import { motion } from "@/src/motion";
+import Animated, { cubicBezier, Easing, FadeIn, FadeOut, ReduceMotion, useAnimatedRef, useReducedMotion, withTiming } from "react-native-reanimated";
+import { curves, motion } from "@/src/motion";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-controller";
@@ -81,6 +81,16 @@ const ARRIVAL_STYLE = {
   animationTimingFunction: cubicBezier(0.23, 1, 0.32, 1),
 } as const;
 const ARRIVAL_STYLE_REDUCED = { animationName: { from: { opacity: 0 }, to: { opacity: 1 } }, animationDuration: 200 } as const;
+// Rows that open above the composer rise out from behind it, so the footer reads as growing rather than
+// a block popping in. Reduce Motion is honored by the layout animation itself.
+const FOOTER_ROW_IN = { duration: motion.fade.duration, easing: Easing.bezier(...curves.easeOut), reduceMotion: ReduceMotion.System };
+function footerRowEntering() {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 8 }] },
+    animations: { opacity: withTiming(1, FOOTER_ROW_IN), transform: [{ translateY: withTiming(0, FOOTER_ROW_IN) }] },
+  };
+}
 const TURN_START_STYLE = { paddingTop: 8 } as const;
 const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
 const ABOVE_FOOTER_MENU = { position: "absolute", left: 12, right: 12, bottom: "100%", marginBottom: 4 } as const;
@@ -1250,9 +1260,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [measureVisibleRows, trace]);
   const handleListRefresh = useCallback(() => { void refreshSession(sessionId); }, [refreshSession, sessionId]);
   const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh, scrollEventThrottle: 100 });
-  const { onScroll: trackPull, onScrollBeginDrag: trackPullStart } = pullRefresh;
+  const { onScroll: trackPull, onScrollBeginDrag: trackPullStart, onScrollEndDrag: trackPullEnd } = pullRefresh;
   const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
   const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
+  const handleListDragEnd = useCallback((event: ChatScrollEvent) => { trackPullEnd(); handleScrollEndDrag(event); }, [handleScrollEndDrag, trackPullEnd]);
   const renderMessage = useCallback(({ item, index }: { item: MessageRecord; index: number }) => {
     const chronologicalIndex = index;
     const isTransitionMessage = sendTransition?.destination === "bubble" && !queueTransitionActive && isSendBubbleMessage(item, sendTransition.message);
@@ -1306,10 +1317,10 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           maintainVisibleContentPosition={maintainVisiblePosition}
           viewabilityConfig={messageViewabilityConfig}
           onViewableItemsChanged={onViewableItemsChanged}
-          scrollEventThrottle={100}
+          scrollEventThrottle={pullRefresh.listScrollEventThrottle}
           onScroll={handleListScroll}
           onScrollBeginDrag={handleListDragBegin}
-          onScrollEndDrag={handleScrollEndDrag}
+          onScrollEndDrag={handleListDragEnd}
           onMomentumScrollBegin={handleMomentumScrollBegin}
           onMomentumScrollEnd={handleMomentumScrollEnd}
           contentInsetAdjustmentBehavior="never"
@@ -1329,7 +1340,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
         {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 5 }} /> : null}
         {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ ...ABOVE_FOOTER_MENU, zIndex: 6 }} /> : null}
-        {queueItems.length > 0 ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
+        {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
             {queueItems.map((item) => {
@@ -1648,7 +1659,7 @@ function MissingChat() {
 
 function VoiceStatusRow({ error, partial }: { error: string | null; partial: string }) {
   const { t } = useTranslation();
-  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="bg-background px-4 pt-1">
+  return <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="bg-background px-4 pt-1">
     <Text className={`text-caption ${error ? "text-danger" : "text-fg-muted"}`}>{error ? error : t("chat.listening", { text: partial })}</Text>
   </Animated.View>;
 }

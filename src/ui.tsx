@@ -234,7 +234,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   const balance = children ? undefined : { marginLeft: side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
-      <View className="flex-row items-center gap-1 px-2 py-1.5" style={{ minHeight: edgeChrome.headerMinHeight }}>
+      <View className="flex-row items-center gap-1 px-2 py-1" style={{ minHeight: edgeChrome.headerMinHeight }}>
         {onBack ? <IconButton filled name="chevron-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
         {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
@@ -246,7 +246,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     </View>
   );
   return (
-    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1.5 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
+    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
         filled
         name="chevron-left"
@@ -296,9 +296,9 @@ const STATUS_PILL_CLASSES = {
 export function StatusPill({ label, tone = "neutral", dot = true }: { label: string; tone?: "neutral" | "success" | "warning" | "danger" | "info"; dot?: boolean }) {
   const classes = STATUS_PILL_CLASSES[tone];
   return (
-    <View className={`flex-row items-center gap-1.5 rounded-full px-2 py-1 ${classes.bg}`}>
+    <View className={`flex-row items-center gap-1 rounded-full px-2 py-1 ${classes.bg}`}>
       {dot ? <View className={`size-1.5 rounded-full ${classes.dot}`} /> : null}
-      <Text className={`text-micro font-semibold ${classes.fg}`}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.badge} className={`text-micro font-semibold ${classes.fg}`}>{label}</Text>
     </View>
   );
 }
@@ -559,7 +559,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   return (
     // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`.
-    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 10 }]}>
+    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
       {/* Glyphs pop only when they change, not when the composer first appears. */}
       <LayoutAnimationConfig skipEntering skipExiting>
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
@@ -696,7 +696,7 @@ export function ConnectionBanner({ visible }: { visible: boolean }) {
   useOutageAnnouncement(visible, label);
   if (!visible) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
-    <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-1.5 rounded-full bg-surface-float px-3 py-1.5 shadow-float">
+    <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-2 rounded-full bg-surface-float px-3 py-1 shadow-float">
       <Mascot size={20} mood="worried" />
       <Text numberOfLines={1} className="text-caption text-fg">{label}</Text>
     </View>
@@ -745,8 +745,8 @@ function controlIconExiting() {
 }
 
 const styles = StyleSheet.create({
-  composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 10 },
+  composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
   // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
   composerSurface: { padding: 8, borderRadius: 30, borderCurve: "continuous" },
-  composerText: { paddingHorizontal: 5, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
+  composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
 });

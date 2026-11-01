@@ -4,6 +4,7 @@ import Reanimated, { useReducedMotion, type CSSAnimationKeyframes } from "react-
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 import { BRAND, MASCOT_PATHS as PATHS } from "@/src/design/brand";
 import { loops } from "@/src/motion";
+import { useAppTheme } from "@/src/theme";
 
 export type MascotMood = "idle" | "worried";
 
@@ -15,8 +16,16 @@ const STROKE = { fill: "none", stroke: BRAND.ink, strokeLinecap: "round", stroke
 /** Lids close and open over this long at each end of a blink, so it reads as a blink rather than a cut. */
 const LID_MS = 20;
 
-function FaceBase() {
+// The icon's ink outline disappears into a dark page; the icon's own orange traces it there, as the tile does.
+const RIM = { fill: "none", stroke: BRAND.gradient[1], strokeWidth: 18, strokeLinejoin: "round" } as const;
+
+function useRim() {
+  return useAppTheme().mode === "dark";
+}
+
+function FaceBase({ rim = false }: { rim?: boolean }) {
   return <>
+    {rim ? <Path d={PATHS.outline} {...RIM} /> : null}
     <Path d={PATHS.outline} fill={BRAND.ink} />
     <Path d={PATHS.face} fill={BRAND.face} />
     <Path d={PATHS.cheek} fill={BRAND.ink} />
@@ -75,11 +84,11 @@ function glanceKeyframes(size: number): CSSAnimationKeyframes {
  * The face as stacked layers so blinking and glancing run as UI-thread CSS animations: they keep going
  * while JS is busy streaming a reply, and the SVG is never re-rendered for them.
  */
-function LivingFace({ size, mood, blink, glance }: { size: number; mood: MascotMood; blink: boolean; glance: boolean }) {
+function LivingFace({ size, mood, blink, glance, rim }: { size: number; mood: MascotMood; blink: boolean; glance: boolean; rim: boolean }) {
   const glanceStyle = useMemo(() => glance ? { animationName: glanceKeyframes(size), animationDuration: loops.glanceHold.duration * GLANCES.length, animationIterationCount: "infinite", animationTimingFunction: "ease-in-out" } as const : null, [glance, size]);
   const layer = (children: ReactNode) => <Svg width={size} height={size} viewBox={VIEW_BOX}>{children}</Svg>;
   return <View style={{ width: size, height: size }}>
-    {layer(<FaceBase />)}
+    {layer(<FaceBase rim={rim} />)}
     <Reanimated.View style={[StyleSheet.absoluteFill, blink ? blinkStyle(OPEN_EYES_BLINK) : null]}>
       <Reanimated.View style={glanceStyle}>{layer(<OpenEyes mood={mood} />)}</Reanimated.View>
     </Reanimated.View>
@@ -87,16 +96,17 @@ function LivingFace({ size, mood, blink, glance }: { size: number; mood: MascotM
   </View>;
 }
 
-function Face({ mood }: { mood: MascotMood }) {
-  return <><FaceBase /><OpenEyes mood={mood} /></>;
+function Face({ mood, rim = false }: { mood: MascotMood; rim?: boolean }) {
+  return <><FaceBase rim={rim} /><OpenEyes mood={mood} /></>;
 }
 
 /** The icon's character without its tile, for brand moments and empty states. Decorative: the words around it carry the meaning. */
 export function Mascot({ size, mood = "idle", blink = false }: { size: number; mood?: MascotMood; blink?: boolean }) {
   const reduced = useReducedMotion();
-  if (blink && !reduced) return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><LivingFace size={size} mood={mood} blink glance={false} /></View>;
+  const rim = useRim();
+  if (blink && !reduced) return <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><LivingFace size={size} mood={mood} blink glance={false} rim={rim} /></View>;
   return <Svg width={size} height={size} viewBox={VIEW_BOX} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-    <Face mood={mood} />
+    <Face mood={mood} rim={rim} />
   </Svg>;
 }
 
@@ -107,11 +117,12 @@ export function Mascot({ size, mood = "idle", blink = false }: { size: number; m
  */
 export function MascotLoader({ size, accessibilityLabel }: { size: number; accessibilityLabel: string }) {
   const reduced = useReducedMotion();
+  const rim = useRim();
   const lift = Math.max(2, Math.round(size * 0.07));
   const bob = { "0%": { transform: [{ translateY: 0 }] }, "50%": { transform: [{ translateY: -lift }] }, "100%": { transform: [{ translateY: 0 }] } };
   return <View accessible accessibilityRole="progressbar" accessibilityLabel={accessibilityLabel} style={{ width: size, height: size + lift }}>
     <Reanimated.View style={{ paddingTop: lift, ...(reduced ? null : { animationName: bob, animationDuration: 900, animationIterationCount: "infinite", animationTimingFunction: "ease-in-out" }) }}>
-      <LivingFace size={size} mood="idle" blink glance={!reduced} />
+      <LivingFace size={size} mood="idle" blink glance={!reduced} rim={rim} />
     </Reanimated.View>
   </View>;
 }

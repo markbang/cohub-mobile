@@ -9,7 +9,7 @@ import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { IconButton } from "@/src/ui";
 import { SheetConfirmButton } from "@/src/components/SheetConfirmButton";
-import { ToastViewport } from "@/src/components/Toast";
+import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 import type { AdaptiveSheetProps } from "./AdaptiveSheet";
 
 export type { AdaptiveSheetProps, SheetConfirm } from "./AdaptiveSheet";
@@ -60,7 +60,7 @@ function PageSheet({ visible, title, subtitle, onClose, children, footer, scroll
   const bodyStyle = [CONTENT_PADDING, { paddingBottom: footer ? theme.spacing.lg : bottomPadding }, contentStyle];
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal={dismissible} onRequestClose={requestClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal={dismissible} onRequestClose={requestClose} onShow={raiseToastOverlay}>
       <GestureHandlerRootView testID={testID} accessibilityViewIsModal className="flex-1 bg-surface">
         <View className="min-h-14 flex-row items-center px-2 pt-2">
           <IconButton filled name="x" label={t("ui.sheet.close", { title })} disabled={!dismissible} onPress={requestClose} />
@@ -91,7 +91,12 @@ function FitSheet({ visible, title, subtitle, onClose, children, footer, dismiss
   useEffect(() => {
     if (!visible) return;
     setDialogOpen(`sheet:${title}`, true);
-    return () => setDialogOpen(`sheet:${title}`, false);
+    // SwiftUI reports no presentation end; lift any toast once the sheet has settled.
+    const raise = setTimeout(raiseToastOverlay, SHEET_PRESENT_MS);
+    return () => {
+      clearTimeout(raise);
+      setDialogOpen(`sheet:${title}`, false);
+    };
   }, [title, visible]);
   return <Host colorScheme={theme.mode} style={HIDDEN_HOST}>
     <BottomSheet isPresented={visible} fitToContents onIsPresentedChange={(presented) => { if (!presented && dismissible) onClose(); }}>
@@ -113,5 +118,6 @@ function FitSheet({ visible, title, subtitle, onClose, children, footer, dismiss
   </Host>;
 }
 
+const SHEET_PRESENT_MS = 450;
 const HIDDEN_HOST = { position: "absolute", width: 0, height: 0 } as const;
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
