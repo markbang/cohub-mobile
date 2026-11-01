@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.3.4](https://github.com/markbang/cohub-mobile/compare/v2.3.3...v2.3.4) (2026-11-01)
+
+
+### Features
+
+* **chat:** draw top-level message headings on capsules at semibold ([44b39f6](https://github.com/markbang/cohub-mobile/commit/44b39f60ac3f1a2c3a6196dab843c972fe137997))
+* **image-viewer:** add zoom, swipe to dismiss, and load states ([2a47a6b](https://github.com/markbang/cohub-mobile/commit/2a47a6b2135fb94c8af835b1afd125efaeae2491))
+* **markdown:** restyle tables, code blocks, and the block menu ([f7fd7a2](https://github.com/markbang/cohub-mobile/commit/f7fd7a2800a955cbbced95f0efd4fe9d9b0976f5))
+* **notifications:** skip the banner for the Chat on screen ([e43fde2](https://github.com/markbang/cohub-mobile/commit/e43fde2c17adcb0f7c07750a2102c9feef0a85ed))
+* **work:** show in-app load, error, and crash states for Work pages ([182dee9](https://github.com/markbang/cohub-mobile/commit/182dee94c03b9d73143f4acce799dc7a3c137264))
+
+
+### Fixes
+
+* **a11y:** announce a connection outage once instead of as a live alert ([7e3eb34](https://github.com/markbang/cohub-mobile/commit/7e3eb34a1a94de301f2ea5d5f325ccb622ad0b47))
+* **chat:** give failed sends one retryable bubble and steady chat feedback ([f94e935](https://github.com/markbang/cohub-mobile/commit/f94e935deae5a518b35b4465a2a886378136638c))
+* **chat:** keep retried and accepted sends out of the cache, retry Space lookup ([9a93f2c](https://github.com/markbang/cohub-mobile/commit/9a93f2ca5d67c6f700ef33535a573826a215bf8e))
+* **chat:** lift the timeline with the keyboard instead of resizing it ([#148](https://github.com/markbang/cohub-mobile/issues/148)) ([b6270fb](https://github.com/markbang/cohub-mobile/commit/b6270fb2fddb727d638e3bc405af5705cedd4e4c))
+* **chat:** put the Chat title on a glass capsule instead of capsuling message headings ([6903cf0](https://github.com/markbang/cohub-mobile/commit/6903cf0b6d84cf2accb194634596223c9e40621f))
+* **chat:** scroll the mention and slash menus, and title bold-line sections ([9c54a77](https://github.com/markbang/cohub-mobile/commit/9c54a770cfa57895f71534b5209d4557d44b5600))
+* **chats:** release held row order on blur, momentum end, and a hold cap; keep forks under their parent ([01c5d79](https://github.com/markbang/cohub-mobile/commit/01c5d79ef30cdf068fe308c7876a9606543cca99))
+* **data:** stage the app snapshot during render so same-commit mounts read it ([17f365f](https://github.com/markbang/cohub-mobile/commit/17f365fb93c0e52eb14bc0f4fdfe0a99c5d70d5e))
+* **image-viewer:** page from shared state and keep the zoom target mounted ([d7a43cb](https://github.com/markbang/cohub-mobile/commit/d7a43cb57f0b17b6821cb86a2b6f96d5b1a6f5b2))
+* **markdown:** keep the display math view through R8 on Android ([e6b7adc](https://github.com/markbang/cohub-mobile/commit/e6b7adccc814513172ea576d1576e3d3fa45e534))
+* **motion:** calm frequent transitions and follow the Android keyboard early ([969be34](https://github.com/markbang/cohub-mobile/commit/969be34ddb422c8c5e2389ac34ab15cf131281bd))
+* **screens:** correct list and detail states, money, and status labels ([b51fbf1](https://github.com/markbang/cohub-mobile/commit/b51fbf1d925a8d967e71b97b2b25b7cbc3a33932))
+* **toast:** keep toasts above the keyboard and modals, dedupe repeats, and expire each one ([0da3ed8](https://github.com/markbang/cohub-mobile/commit/0da3ed80a8068faec4a9f43dd32b2d823ba3a246))
+* **toast:** mark confirmations as success and the source filter failure as danger ([27b614a](https://github.com/markbang/cohub-mobile/commit/27b614a5cb2cf1000e520060bce293d3b160c2b8))
+* **toast:** track holds per front card so a late or lost release cannot freeze expiry ([56151c6](https://github.com/markbang/cohub-mobile/commit/56151c6294d7555f4e2dbf6bc68beec2aa1f13a2))
+* **ui:** cap text scaling in fixed controls and widen small touch targets ([c556467](https://github.com/markbang/cohub-mobile/commit/c556467b807948dab44f70e04ad0e20dd7fd9996))
+* **ui:** format every USD amount as $1,234.50 in all languages ([9f5841f](https://github.com/markbang/cohub-mobile/commit/9f5841f2adfe6fb0b48b9dc6bdeaee4fb7bc3c66))
+* **ui:** keep foreground chat registrations stacked, restart the order hold per drag, and settle sheet and zoom edge cases ([257224f](https://github.com/markbang/cohub-mobile/commit/257224f9a456fdb0aece2ea1f82d9cd837c5809e))
+* **ui:** keep the image viewer color opt-out on the line the design check reads ([78c7e8e](https://github.com/markbang/cohub-mobile/commit/78c7e8e1893426da66db7fd11712c9cfb1ae1e41))
+* **ui:** reset the sheet keyboard height on close and scope foreground chat clearing ([b519a7b](https://github.com/markbang/cohub-mobile/commit/b519a7b2f9e93a9c089f739fd66e8c70d3d00021))
+* **ui:** wire toast viewports, foreground chat notifications, and merge follow-ups ([6c3724c](https://github.com/markbang/cohub-mobile/commit/6c3724cf6305fa3b9c378d45e1796664c448ac71))
+
+
+### Performance
+
+* **data:** split app context into stable actions and selector subscriptions ([71e88e8](https://github.com/markbang/cohub-mobile/commit/71e88e8e989f05b5eca6a5c0f34a2daf355fd16b))
+* **ui:** run mascot and running-ring loops on the UI thread ([7fc8c54](https://github.com/markbang/cohub-mobile/commit/7fc8c545a44deb5b629a401b64d148c4c4971989))
+
+
+### Refactoring
+
+* **data:** move data fetching to TanStack Query and app state to Zustand ([d723c0f](https://github.com/markbang/cohub-mobile/commit/d723c0f54967355b612bc90aed365c72d1b7c5f3))
+
 ## [2.3.3](https://github.com/markbang/cohub-mobile/compare/v2.3.2...v2.3.3) (2026-10-31)
 
 
