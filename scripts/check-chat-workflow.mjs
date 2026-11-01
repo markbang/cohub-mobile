@@ -13,7 +13,6 @@ import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
-import { splitMarkdownHeadings } from "../src/data/markdown-headings.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
@@ -1240,13 +1239,15 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name) });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 } });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
   assert.ok(headerClasses.has("bg-background"), "an opaque header paints the screen background token");
   const transparentHeader = renderTopBar({ title: "Chats", transparent: true });
   assert.equal([...classes(transparentHeader)].some((name) => name.startsWith("bg-")), false, "a transparent header paints nothing");
+  assert.ok(chromeNodes(transparentHeader).some((node) => node.type === "GlassBackground"), "a title over scrolling content sits on a capsule");
+  assert.equal(chromeNodes(header).some((node) => node.type === "GlassBackground"), false, "an opaque bar needs no capsule");
   const renderScrim = loadChromeComponent("../src/ui/EdgeChrome.tsx", "EdgeScrim", { ...chromeScope, LinearGradient: "LinearGradient", SCRIM_CURVES: { top: [{ at: 0, alpha: 1 }, { at: 0.5, alpha: 0.5 }, { at: 1, alpha: 0 }], bottom: [{ at: 0, alpha: 1 }, { at: 0.6, alpha: 0.5 }, { at: 1, alpha: 0 }] }, useAppTheme: () => ({ colors: { background } }) });
   for (const edge of ["top", "bottom"]) {
     const root = renderScrim({ edge, solid: edge === "top" ? 24 : 0 });
@@ -1732,7 +1733,6 @@ const bubbleScope = {
   View: "View", Text: "Text", BubbleText: "BubbleText",
   ImageGallery: "ImageGallery", ToolCall: "ToolCall", SystemNoteRow: "SystemNoteRow",
   imageUri: (block) => block.source?.type === "url" ? block.source.url : null,
-  splitMarkdownHeadings, MarkdownHeading: "MarkdownHeading",
 };
 const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
 const bubbleRender = bubbleModule.MessageContent;
@@ -1755,24 +1755,6 @@ function footerPlacements(node, footer, found = []) {
   return found;
 }
 const footerMarker = { type: "timestamp", props: {} };
-// Top-level headings leave the native Markdown for a capsule; fenced and nested ones stay in it.
-assert.deepEqual(splitMarkdownHeadings("# **One** `two`\nBody\n```\n# code\n```\n- # nested\n## Three ##").map((segment) => segment.kind === "heading" ? `h${segment.level}:${segment.text}` : "text"), ["h1:One two", "text", "h2:Three"]);
-assert.deepEqual(splitMarkdownHeadings("#tag\n####### seven"), [{ kind: "text", text: "#tag\n####### seven" }]);
-// A bold-only line opening a paragraph is a section title; bold inside or continuing a paragraph is emphasis.
-assert.deepEqual(splitMarkdownHeadings("**Billing：**\n- Plans"), [{ kind: "heading", level: 4, text: "Billing" }, { kind: "text", text: "- Plans" }]);
-assert.deepEqual(splitMarkdownHeadings("line one\n**not a title**\n\n**bold** and more").map((segment) => segment.kind), ["text"]);
-{
-  const types = [];
-  const walk = (node) => {
-    if (Array.isArray(node)) return node.forEach(walk);
-    if (!node || typeof node !== "object") return;
-    if (typeof node.type === "function") return walk(node.type(node.props));
-    if (node.type === "MarkdownHeading" || node.type === "EnrichedMarkdownText") types.push(node.type);
-    walk(node.props?.children);
-  };
-  walk(bubbleRender({ content: [{ type: "text", text: "## Plan\nFirst step" }], active: false }));
-  assert.deepEqual(types, ["MarkdownHeading", "EnrichedMarkdownText"], "a heading draws on its own capsule above the prose");
-}
 for (const text of ["你好", "First paragraph.\n\nLast paragraph.", "## Heading", "> Quote", "- First\n- Last", "**Bold** and `code`.", "---", "https://example.com/a.mp4", "![image](https://example.com/image)", "```ts\nconst x = 1;\n```", "| A | B |\n| --- | --- |\n| 1 | 2 |"]) {
   for (const active of [false, true]) {
     assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text }], active, footer: footerMarker }), footerMarker), ["timestamp"], `native markdown keeps the clock on a sibling row: ${text}`);

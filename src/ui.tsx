@@ -186,6 +186,8 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
 }
 
 const TOP_EDGE = ["top"] as const;
+/** Two lines (headline + caption) and the 2 pt inset make 44, so one radius keeps it a capsule with or without a subtitle. */
+const TITLE_CAPSULE = { minHeight: 44, borderRadius: 22, borderCurve: "continuous" } as const;
 const FILL = { flex: 1 } as const;
 
 type TopBarProps = {
@@ -223,10 +225,16 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   // buttons are measured the title is not drawn, so it never lands off-center for a frame and jumps.
   const [trailingWidth, setTrailingWidth] = useState<number | null>(null);
   if (system) return null;
-  const titleContent = children ?? <>
+  // Over scrolling content the title sits on a glass capsule like the bar's buttons, so the rows passing
+  // beneath never run through its text.
+  const capsule = transparent && !children;
+  const titleText = <>
     <Text accessibilityRole={onTitleLongPress ? undefined : "header"} numberOfLines={1} className="text-center text-headline font-semibold text-fg">{title}</Text>
     {subtitle ? <Text numberOfLines={1} className="text-center text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
+  const titleContent = children ?? (capsule
+    ? <View className="max-w-full self-center justify-center px-4 py-0.5" style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} />{titleText}</View>
+    : titleText);
   // Each bar slot is a 44 pt target; the gap between slots is 4.
   const leadingWidth = onBack || leading ? 48 : 0;
   const trailing = actions ? (trailingWidth ?? 0) + 4 : 0;
@@ -257,7 +265,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
         onTouchCancel={() => recordDebugEvent("navigation.back.touch_cancel")}
       /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
       <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1" style={balance}>
-        {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className="min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed" style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
+        {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className={capsule ? "max-w-full self-center active:opacity-70" : "min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed"} style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
       {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
     </View>
