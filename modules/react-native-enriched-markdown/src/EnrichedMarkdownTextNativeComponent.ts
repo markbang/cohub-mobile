@@ -81,6 +81,10 @@ interface CodeBlockStyleInternal extends BaseBlockStyleInternal {
   borderRadius: CodegenTypes.Float;
   borderWidth: CodegenTypes.Float;
   padding: CodegenTypes.Float;
+  headerBackgroundColor: ColorValue;
+  headerTextColor: ColorValue;
+  headerDividerColor: ColorValue;
+  headerPaddingVertical: CodegenTypes.Float;
   syntaxColors: CodeBlockSyntaxColorsInternal;
 }
 
@@ -158,6 +162,19 @@ interface ThematicBreakStyleInternal {
   marginBottom: CodegenTypes.Float;
 }
 
+interface ContextMenuStyleInternal {
+  backgroundColor: ColorValue;
+  textColor: ColorValue;
+  iconColor: ColorValue;
+  pressedColor: ColorValue;
+  dividerColor: ColorValue;
+  borderColor: ColorValue;
+  borderWidth: CodegenTypes.Float;
+  borderRadius: CodegenTypes.Float;
+  fontSize: CodegenTypes.Float;
+  iconSize: CodegenTypes.Float;
+}
+
 interface TableStyleInternal extends BaseBlockStyleInternal {
   headerFontFamily: string;
   headerBackgroundColor: ColorValue;
@@ -170,6 +187,8 @@ interface TableStyleInternal extends BaseBlockStyleInternal {
   cellPaddingHorizontal: CodegenTypes.Float;
   cellPaddingVertical: CodegenTypes.Float;
   horizontalOverflow: CodegenTypes.Float;
+  columnDividers: boolean;
+  maxColumnWidth: CodegenTypes.Float;
   align: string;
 }
 
@@ -250,6 +269,7 @@ export interface MarkdownStyleInternal {
   inlineImage: InlineImageStyleInternal;
   thematicBreak: ThematicBreakStyleInternal;
   table: TableStyleInternal;
+  contextMenu: ContextMenuStyleInternal;
   taskList: TaskListStyleInternal;
   math: MathStyleInternal;
   inlineMath: InlineMathStyleInternal;

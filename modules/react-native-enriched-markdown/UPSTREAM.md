@@ -17,6 +17,10 @@ Search for `cohub:` to find each one.
 - Android: block bottom margins are a separate spacer line, so selecting a paragraph does not highlight the gap below it.
 - Android: wrapped inline code ends each fragment at its line's text and hugs the glyph box.
 - Android: `consumer-rules.pro` keeps `segments.MathContainerView`, so display math survives R8.
+- `markdownStyle.contextMenu`: the long-press block menu (`ContextMenuPopup`) reads its colors, radius, and sizes from JS. iOS keeps the system menu and ignores it.
+- `table.columnDividers`, `table.maxColumnWidth`: rows-only grid and a JS-set wrap width. The table frame stays on the viewport while content scrolls.
+- `codeBlock.header*`: tinted header band with its own padding, a 44pt copy target, and a checkmark after copying. A block without a language has no header; the copy button floats over the code.
+- `android/generated` and `ios/generated` are regenerated for these spec fields.
 - `src/`: two type casts for React Native 0.88 types (`styleUtils.ts`, `native/EnrichedMarkdownText.tsx`). The app's lint skips this directory; its typecheck covers it.
 
 Every change here is native: it changes the fingerprint and ships only in a new binary.

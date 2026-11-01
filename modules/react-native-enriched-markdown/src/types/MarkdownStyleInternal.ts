@@ -94,6 +94,10 @@ interface CodeBlockStyleInternal extends BaseBlockStyleInternal {
   borderRadius: number;
   borderWidth: number;
   padding: number;
+  headerBackgroundColor: string;
+  headerTextColor: string;
+  headerDividerColor: string;
+  headerPaddingVertical: number;
   syntaxColors: CodeBlockSyntaxColorsInternal;
 }
 
@@ -169,6 +173,19 @@ interface ThematicBreakStyleInternal {
   marginBottom: number;
 }
 
+interface ContextMenuStyleInternal {
+  backgroundColor: string;
+  textColor: string;
+  iconColor: string;
+  pressedColor: string;
+  dividerColor: string;
+  borderColor: string;
+  borderWidth: number;
+  borderRadius: number;
+  fontSize: number;
+  iconSize: number;
+}
+
 interface TableStyleInternal extends BaseBlockStyleInternal {
   headerFontFamily: string;
   headerBackgroundColor: string;
@@ -181,6 +198,8 @@ interface TableStyleInternal extends BaseBlockStyleInternal {
   cellPaddingHorizontal: number;
   cellPaddingVertical: number;
   horizontalOverflow: number;
+  columnDividers: boolean;
+  maxColumnWidth: number;
   align: TableAlign;
 }
 
@@ -261,6 +280,7 @@ export interface MarkdownStyleInternal {
   inlineImage: InlineImageStyleInternal;
   thematicBreak: ThematicBreakStyleInternal;
   table: TableStyleInternal;
+  contextMenu: ContextMenuStyleInternal;
   taskList: TaskListStyleInternal;
   math: MathStyleInternal;
   inlineMath: InlineMathStyleInternal;

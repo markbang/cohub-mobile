@@ -202,6 +202,10 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   CGFloat _codeBlockBorderRadius;
   CGFloat _codeBlockBorderWidth;
   CGFloat _codeBlockPadding;
+  RCTUIColor *_codeBlockHeaderBackgroundColor;
+  RCTUIColor *_codeBlockHeaderTextColor;
+  RCTUIColor *_codeBlockHeaderDividerColor;
+  CGFloat _codeBlockHeaderPaddingVertical;
   RCTUIColor *_codeBlockSyntaxColors[kENRMCodeBlockSyntaxColorCount];
   ENRMFontSlot *_codeBlockFont;
   // Thematic break properties
@@ -230,6 +234,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   CGFloat _tableCellPaddingHorizontal;
   CGFloat _tableCellPaddingVertical;
   CGFloat _tableHorizontalOverflow;
+  BOOL _tableColumnDividers;
+  CGFloat _tableMaxColumnWidth;
   NSString *_tableAlign;
   // Task list checkbox
   RCTUIColor *_taskListCheckedColor;
@@ -486,6 +492,10 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   copy->_codeBlockBorderRadius = _codeBlockBorderRadius;
   copy->_codeBlockBorderWidth = _codeBlockBorderWidth;
   copy->_codeBlockPadding = _codeBlockPadding;
+  copy->_codeBlockHeaderBackgroundColor = [_codeBlockHeaderBackgroundColor copy];
+  copy->_codeBlockHeaderTextColor = [_codeBlockHeaderTextColor copy];
+  copy->_codeBlockHeaderDividerColor = [_codeBlockHeaderDividerColor copy];
+  copy->_codeBlockHeaderPaddingVertical = _codeBlockHeaderPaddingVertical;
   for (NSInteger i = 0; i < kENRMCodeBlockSyntaxColorCount; i++) {
     copy->_codeBlockSyntaxColors[i] = [_codeBlockSyntaxColors[i] copy];
   }
@@ -511,6 +521,8 @@ static inline NSString *normalizedFontWeight(NSString *fontWeight)
   copy->_tableCellPaddingHorizontal = _tableCellPaddingHorizontal;
   copy->_tableCellPaddingVertical = _tableCellPaddingVertical;
   copy->_tableHorizontalOverflow = _tableHorizontalOverflow;
+  copy->_tableColumnDividers = _tableColumnDividers;
+  copy->_tableMaxColumnWidth = _tableMaxColumnWidth;
   copy->_tableAlign = [_tableAlign copy];
   copy->_taskListCheckedColor = [_taskListCheckedColor copy];
   copy->_taskListBorderColor = [_taskListBorderColor copy];
@@ -2173,6 +2185,46 @@ static const CGFloat kDefaultMinGap = 4.0;
   _codeBlockBorderRadius = newValue;
 }
 
+- (RCTUIColor *)codeBlockHeaderBackgroundColor
+{
+  return _codeBlockHeaderBackgroundColor;
+}
+
+- (void)setCodeBlockHeaderBackgroundColor:(RCTUIColor *)newValue
+{
+  _codeBlockHeaderBackgroundColor = newValue;
+}
+
+- (RCTUIColor *)codeBlockHeaderTextColor
+{
+  return _codeBlockHeaderTextColor;
+}
+
+- (void)setCodeBlockHeaderTextColor:(RCTUIColor *)newValue
+{
+  _codeBlockHeaderTextColor = newValue;
+}
+
+- (RCTUIColor *)codeBlockHeaderDividerColor
+{
+  return _codeBlockHeaderDividerColor;
+}
+
+- (void)setCodeBlockHeaderDividerColor:(RCTUIColor *)newValue
+{
+  _codeBlockHeaderDividerColor = newValue;
+}
+
+- (CGFloat)codeBlockHeaderPaddingVertical
+{
+  return _codeBlockHeaderPaddingVertical;
+}
+
+- (void)setCodeBlockHeaderPaddingVertical:(CGFloat)newValue
+{
+  _codeBlockHeaderPaddingVertical = newValue;
+}
+
 - (CGFloat)codeBlockBorderWidth
 {
   return _codeBlockBorderWidth;
@@ -2484,6 +2536,26 @@ static const CGFloat kDefaultMinGap = 4.0;
 - (void)setTableHorizontalOverflow:(CGFloat)newValue
 {
   _tableHorizontalOverflow = newValue;
+}
+
+- (BOOL)tableColumnDividers
+{
+  return _tableColumnDividers;
+}
+
+- (void)setTableColumnDividers:(BOOL)newValue
+{
+  _tableColumnDividers = newValue;
+}
+
+- (CGFloat)tableMaxColumnWidth
+{
+  return _tableMaxColumnWidth;
+}
+
+- (void)setTableMaxColumnWidth:(CGFloat)newValue
+{
+  _tableMaxColumnWidth = newValue;
 }
 
 - (NSString *)tableAlign

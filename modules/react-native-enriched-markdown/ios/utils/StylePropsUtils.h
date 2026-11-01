@@ -931,6 +931,26 @@ BOOL applyMarkdownStyleToConfig(StyleConfig *config, const MarkdownStyle &newSty
     changed = YES;
   }
 
+  if (newStyle.codeBlock.headerBackgroundColor != oldStyle.codeBlock.headerBackgroundColor) {
+    [config setCodeBlockHeaderBackgroundColor:RCTUIColorFromSharedColor(newStyle.codeBlock.headerBackgroundColor)];
+    changed = YES;
+  }
+
+  if (newStyle.codeBlock.headerTextColor != oldStyle.codeBlock.headerTextColor) {
+    [config setCodeBlockHeaderTextColor:RCTUIColorFromSharedColor(newStyle.codeBlock.headerTextColor)];
+    changed = YES;
+  }
+
+  if (newStyle.codeBlock.headerDividerColor != oldStyle.codeBlock.headerDividerColor) {
+    [config setCodeBlockHeaderDividerColor:RCTUIColorFromSharedColor(newStyle.codeBlock.headerDividerColor)];
+    changed = YES;
+  }
+
+  if (newStyle.codeBlock.headerPaddingVertical != oldStyle.codeBlock.headerPaddingVertical) {
+    [config setCodeBlockHeaderPaddingVertical:newStyle.codeBlock.headerPaddingVertical];
+    changed = YES;
+  }
+
   if (newStyle.codeBlock.borderRadius != oldStyle.codeBlock.borderRadius) {
     [config setCodeBlockBorderRadius:newStyle.codeBlock.borderRadius];
     changed = YES;
@@ -1105,6 +1125,16 @@ BOOL applyMarkdownStyleToConfig(StyleConfig *config, const MarkdownStyle &newSty
 
   if (newStyle.table.horizontalOverflow != oldStyle.table.horizontalOverflow) {
     [config setTableHorizontalOverflow:newStyle.table.horizontalOverflow];
+    changed = YES;
+  }
+
+  if (newStyle.table.columnDividers != oldStyle.table.columnDividers) {
+    [config setTableColumnDividers:newStyle.table.columnDividers];
+    changed = YES;
+  }
+
+  if (newStyle.table.maxColumnWidth != oldStyle.table.maxColumnWidth) {
+    [config setTableMaxColumnWidth:newStyle.table.maxColumnWidth];
     changed = YES;
   }
 

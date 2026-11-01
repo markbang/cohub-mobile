@@ -21,6 +21,8 @@ data class TableStyle(
   val cellPaddingHorizontal: Float,
   val cellPaddingVertical: Float,
   val horizontalOverflow: Float,
+  val columnDividers: Boolean,
+  val maxColumnWidth: Float,
   val align: String,
 ) : BaseBlockStyle {
   companion object {
@@ -47,6 +49,8 @@ data class TableStyle(
       val cellPaddingHorizontal = parser.toPixelFromDIP(map.getDouble("cellPaddingHorizontal").toFloat())
       val cellPaddingVertical = parser.toPixelFromDIP(map.getDouble("cellPaddingVertical").toFloat())
       val horizontalOverflow = parser.toPixelFromDIP(map.getDouble("horizontalOverflow").toFloat())
+      val columnDividers = map.getBoolean("columnDividers")
+      val maxColumnWidth = parser.toPixelFromDIP(map.getDouble("maxColumnWidth").toFloat())
       val align = parser.parseString(map, "align")
 
       return TableStyle(
@@ -68,6 +72,8 @@ data class TableStyle(
         cellPaddingHorizontal = cellPaddingHorizontal,
         cellPaddingVertical = cellPaddingVertical,
         horizontalOverflow = horizontalOverflow,
+        columnDividers = columnDividers,
+        maxColumnWidth = maxColumnWidth,
         align = align,
       )
     }

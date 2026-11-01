@@ -1,28 +1,38 @@
 package com.swmansion.enriched.markdown.views
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
+import android.graphics.Outline
 import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RectF
-import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.View.MeasureSpec
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
+import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import com.swmansion.enriched.markdown.styles.ContextMenuStyle
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
+// cohub: colors, radius, and sizes come from markdownStyle.contextMenu.
 object ContextMenuPopup {
+  private const val ENTER_SCALE = 0.96f
+  private const val ENTER_DURATION_MS = 140L
+
   private var activePopup: PopupWindow? = null
 
   fun dismiss() {
@@ -55,6 +65,7 @@ object ContextMenuPopup {
   fun show(
     anchor: View,
     parent: View,
+    style: ContextMenuStyle,
     block: Builder.() -> Unit,
   ) {
     activePopup?.dismiss()
@@ -67,58 +78,90 @@ object ContextMenuPopup {
     val container =
       LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        elevation = 12f.dp.toFloat()
-        setPadding(4f.dp, 12f.dp, 4f.dp, 12f.dp)
-        background =
-          GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = 14f.dp.toFloat()
+        // Clips the row ripples; the window background below paints the surface and casts the shadow.
+        outlineProvider =
+          object : ViewOutlineProvider() {
+            override fun getOutline(
+              view: View,
+              outline: Outline,
+            ) {
+              outline.setRoundRect(0, 0, view.width, view.height, style.borderRadius)
+            }
           }
+        clipToOutline = true
       }
 
     builder.items.forEachIndexed { index, item ->
-      if (index > 0) container.addView(createDivider(context))
-      container.addView(createMenuItemView(context, item))
+      if (index > 0 && Color.alpha(style.dividerColor) > 0) container.addView(createDivider(context, style))
+      container.addView(createMenuItemView(context, item, style))
     }
 
+    val metrics = context.resources.displayMetrics
+    val margin = 8f.dp
+    container.measure(
+      MeasureSpec.makeMeasureSpec(metrics.widthPixels - margin * 2, MeasureSpec.AT_MOST),
+      MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+    )
+    val menuWidth = container.measuredWidth
+    val menuHeight = container.measuredHeight
+
+    // An explicit size keeps the window on the measured content, which the position below relies on.
     val popup =
-      PopupWindow(
-        container,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-        ViewGroup.LayoutParams.WRAP_CONTENT,
-        true,
-      ).apply {
-        elevation = 24f.dp.toFloat()
+      PopupWindow(container, menuWidth, menuHeight, true).apply {
+        elevation = 12f.dp.toFloat()
         isOutsideTouchable = true
-        setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        animationStyle = 0
+        setBackgroundDrawable(
+          GradientDrawable().apply {
+            setColor(style.backgroundColor)
+            cornerRadius = style.borderRadius
+            if (style.borderWidth > 0f) setStroke(ceil(style.borderWidth).toInt(), style.borderColor)
+          },
+        )
         setOnDismissListener {
           activePopup = null
         }
       }
 
-    container.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
-
     val location = IntArray(2).also { anchor.getLocationOnScreen(it) }
     val centerX = location[0] + anchor.width / 2
-    val topY = location[1]
+    val x = (centerX - menuWidth / 2).coerceIn(margin, metrics.widthPixels - menuWidth - margin)
 
-    val screenW = context.resources.displayMetrics.widthPixels
-    val margin = 8f.dp
-
-    val x =
-      (centerX - container.measuredWidth / 2)
-        .coerceIn(margin, screenW - container.measuredWidth - margin)
+    val above = location[1] - menuHeight - margin
+    val below = location[1] + anchor.height + margin
+    val opensAbove = above >= margin
     val y =
-      (topY - container.measuredHeight - margin)
-        .coerceAtLeast(margin)
+      when {
+        opensAbove -> above
+        below + menuHeight <= metrics.heightPixels - margin -> below
+        // The anchor fills the screen, as a long code block can.
+        else -> ((metrics.heightPixels - menuHeight) / 2).coerceAtLeast(margin)
+      }
 
     activePopup = popup
     popup.showAtLocation(parent, Gravity.NO_GRAVITY, x, y)
+
+    // The root holds the window background, so the surface and its shadow scale with the rows.
+    val root = container.rootView
+    root.pivotX = (centerX - x).toFloat().coerceIn(0f, menuWidth.toFloat())
+    root.pivotY = if (opensAbove) menuHeight.toFloat() else 0f
+    root.alpha = 0f
+    root.scaleX = ENTER_SCALE
+    root.scaleY = ENTER_SCALE
+    root
+      .animate()
+      .alpha(1f)
+      .scaleX(1f)
+      .scaleY(1f)
+      .setDuration(ENTER_DURATION_MS)
+      .setInterpolator(DecelerateInterpolator())
+      .start()
   }
 
   private fun createMenuItemView(
     context: Context,
     item: MenuItem,
+    style: ContextMenuStyle,
   ) = LinearLayout(context).apply {
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.CENTER_VERTICAL
@@ -126,25 +169,21 @@ object ContextMenuPopup {
     minimumHeight = 48f.dp
     isClickable = true
     isFocusable = true
+    background = RippleDrawable(ColorStateList.valueOf(style.pressedColor), null, ColorDrawable(Color.WHITE))
 
-    val outValue = TypedValue()
-    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
-    foreground = context.getDrawable(outValue.resourceId)
-
+    val iconSize = ceil(style.iconSize).toInt()
     addView(
       ImageView(context).apply {
-        setImageDrawable(createIconDrawable(item.icon))
-        setColorFilter(Color.parseColor("#333333"))
+        setImageDrawable(createIconDrawable(item.icon, style.iconColor))
       },
-      LinearLayout.LayoutParams(20f.dp, 20f.dp),
+      LinearLayout.LayoutParams(iconSize, iconSize),
     )
 
     addView(
       TextView(context).apply {
         text = item.label
-        textSize = 16f
-        setTextColor(Color.parseColor("#1C1C1E"))
-        typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, style.fontSize)
+        setTextColor(style.textColor)
       },
       LinearLayout
         .LayoutParams(
@@ -159,20 +198,25 @@ object ContextMenuPopup {
     }
   }
 
-  private fun createDivider(context: Context) =
-    View(context).apply {
-      setBackgroundColor(Color.parseColor("#E5E5EA"))
-      layoutParams =
-        LinearLayout
-          .LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            1f.dp.coerceAtLeast(1),
-          ).apply {
-            setMargins(16f.dp, 0, 16f.dp, 0)
-          }
-    }
+  private fun createDivider(
+    context: Context,
+    style: ContextMenuStyle,
+  ) = View(context).apply {
+    setBackgroundColor(style.dividerColor)
+    layoutParams =
+      LinearLayout
+        .LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT,
+          1f.dp.coerceAtLeast(1),
+        ).apply {
+          setMargins(16f.dp, 0, 16f.dp, 0)
+        }
+  }
 
-  private fun createIconDrawable(icon: Icon): Drawable =
+  private fun createIconDrawable(
+    icon: Icon,
+    iconColor: Int,
+  ): Drawable =
     object : Drawable() {
       private val paint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -180,7 +224,7 @@ object ContextMenuPopup {
           strokeWidth = 1.5f * density
           strokeJoin = Paint.Join.ROUND
           strokeCap = Paint.Cap.ROUND
-          color = Color.parseColor("#333333")
+          color = iconColor
         }
 
       private val copyGlyph = CopyGlyph()

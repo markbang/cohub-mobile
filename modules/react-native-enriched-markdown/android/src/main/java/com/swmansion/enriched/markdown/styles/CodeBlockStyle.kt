@@ -15,6 +15,10 @@ data class CodeBlockStyle(
   val borderRadius: Float,
   val borderWidth: Float,
   val padding: Float,
+  val headerBackgroundColor: Int,
+  val headerTextColor: Int,
+  val headerDividerColor: Int,
+  val headerPaddingVertical: Float,
   val syntaxColors: List<Int>,
 ) : BaseBlockStyle {
   companion object {
@@ -53,6 +57,10 @@ data class CodeBlockStyle(
       val borderRadius = parser.toPixelFromDIP(map.getDouble("borderRadius").toFloat())
       val borderWidth = parser.toPixelFromDIP(map.getDouble("borderWidth").toFloat())
       val padding = parser.toPixelFromDIP(map.getDouble("padding").toFloat())
+      val headerBackgroundColor = parser.parseColor(map, "headerBackgroundColor")
+      val headerTextColor = parser.parseColor(map, "headerTextColor")
+      val headerDividerColor = parser.parseColor(map, "headerDividerColor")
+      val headerPaddingVertical = parser.toPixelFromDIP(map.getDouble("headerPaddingVertical").toFloat())
 
       val syntaxMap = map.getMap("syntaxColors")
       val syntaxColors =
@@ -73,6 +81,10 @@ data class CodeBlockStyle(
         borderRadius,
         borderWidth,
         padding,
+        headerBackgroundColor,
+        headerTextColor,
+        headerDividerColor,
+        headerPaddingVertical,
         syntaxColors,
       )
     }

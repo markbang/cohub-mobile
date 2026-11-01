@@ -81,7 +81,7 @@ class VideoContainerView(
   private fun showContextMenu(anchor: android.view.View): Boolean {
     val url = currentUrl ?: return false
     if (!dynamicProps.enableBlockContextMenu || url.isEmpty()) return false
-    ContextMenuPopup.show(anchor, this) {
+    ContextMenuPopup.show(anchor, this, styleConfig.contextMenuStyle) {
       item(ContextMenuPopup.Icon.COPY, dynamicProps.copyLabel) { copyToClipboard(url) }
       item(ContextMenuPopup.Icon.DOCUMENT, dynamicProps.copyAsMarkdownLabel) { copyToClipboard(videoMarkdown(url)) }
     }

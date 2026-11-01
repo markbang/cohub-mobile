@@ -88,10 +88,16 @@
       [rowData.backgroundColor setFill];
       UIRectFill(cellRect);
 
-      [_borderColor setStroke];
-      UIBezierPath *border = [UIBezierPath bezierPathWithRect:cellRect];
-      border.lineWidth = _borderWidth;
-      [border stroke];
+      if (_columnDividers) {
+        [_borderColor setStroke];
+        UIBezierPath *border = [UIBezierPath bezierPathWithRect:cellRect];
+        border.lineWidth = _borderWidth;
+        [border stroke];
+      } else if (r > 0) {
+        // cohub: the next cell's fill clears the overlap, so each cell draws its own full line.
+        [_borderColor setFill];
+        UIRectFillUsingBlendMode(CGRectMake(xOffset, yOffset, cellRect.size.width, _borderWidth), kCGBlendModeNormal);
+      }
 
       NSAttributedString *text = rowData.cellTexts[c];
       if (text.length > 0) {

@@ -332,6 +332,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setCodeBlockBorderWidth:(CGFloat)newValue;
 - (CGFloat)codeBlockPadding;
 - (void)setCodeBlockPadding:(CGFloat)newValue;
+- (RCTUIColor *)codeBlockHeaderBackgroundColor;
+- (void)setCodeBlockHeaderBackgroundColor:(RCTUIColor *)newValue;
+- (RCTUIColor *)codeBlockHeaderTextColor;
+- (void)setCodeBlockHeaderTextColor:(RCTUIColor *)newValue;
+- (RCTUIColor *)codeBlockHeaderDividerColor;
+- (void)setCodeBlockHeaderDividerColor:(RCTUIColor *)newValue;
+- (CGFloat)codeBlockHeaderPaddingVertical;
+- (void)setCodeBlockHeaderPaddingVertical:(CGFloat)newValue;
 - (UIFont *)codeBlockFont;
 // Syntax highlight colors, indexed by HighlightTokenType ordinal. Resolved on
 // the JS side; the getter returns a cached color with no allocation.
@@ -385,6 +393,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setTableCellPaddingVertical:(CGFloat)newValue;
 - (CGFloat)tableHorizontalOverflow;
 - (void)setTableHorizontalOverflow:(CGFloat)newValue;
+- (BOOL)tableColumnDividers;
+- (void)setTableColumnDividers:(BOOL)newValue;
+- (CGFloat)tableMaxColumnWidth;
+- (void)setTableMaxColumnWidth:(CGFloat)newValue;
 - (NSString *)tableAlign;
 - (void)setTableAlign:(NSString *)newValue;
 // Task list checkbox properties

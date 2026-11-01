@@ -112,6 +112,10 @@ interface CodeBlockStyle extends BaseBlockStyle {
   borderRadius?: number;
   borderWidth?: number;
   padding?: number;
+  headerBackgroundColor?: string;
+  headerTextColor?: string;
+  headerDividerColor?: string;
+  headerPaddingVertical?: number;
   syntaxColors?: CodeBlockSyntaxColors;
 }
 
@@ -232,6 +236,10 @@ interface TableStyle extends BaseBlockStyle {
   cellPaddingHorizontal?: number;
   cellPaddingVertical?: number;
   horizontalOverflow?: number;
+  /** Android: false keeps only the lines between rows. */
+  columnDividers?: boolean;
+  /** Android: longer cells wrap at this width. */
+  maxColumnWidth?: number;
   /**
    * Horizontal alignment of the whole table within the container. Only applies
    * when the table is narrower than the container; tables that overflow and
@@ -241,6 +249,20 @@ interface TableStyle extends BaseBlockStyle {
    * the container width.
    */
   align?: 'left' | 'center' | 'right';
+}
+
+/** Android long-press menu on blocks; iOS uses the system menu. A transparent divider hides it. */
+interface ContextMenuStyle {
+  backgroundColor?: string;
+  textColor?: string;
+  iconColor?: string;
+  pressedColor?: string;
+  dividerColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
+  borderRadius?: number;
+  fontSize?: number;
+  iconSize?: number;
 }
 
 interface TaskListStyle {
@@ -380,6 +402,7 @@ export interface MarkdownStyle {
   inlineImage?: InlineImageStyle;
   thematicBreak?: ThematicBreakStyle;
   table?: TableStyle;
+  contextMenu?: ContextMenuStyle;
   taskList?: TaskListStyle;
   math?: MathStyle;
   inlineMath?: InlineMathStyle;

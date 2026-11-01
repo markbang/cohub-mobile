@@ -1163,6 +1163,10 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockStruct {
   Float borderRadius{0.0};
   Float borderWidth{0.0};
   Float padding{0.0};
+  SharedColor headerBackgroundColor{};
+  SharedColor headerTextColor{};
+  SharedColor headerDividerColor{};
+  Float headerPaddingVertical{0.0};
   EnrichedMarkdownMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
 
 
@@ -1183,6 +1187,10 @@ struct EnrichedMarkdownMarkdownStyleCodeBlockStruct {
     result["borderRadius"] = borderRadius;
     result["borderWidth"] = borderWidth;
     result["padding"] = padding;
+    result["headerBackgroundColor"] = ::facebook::react::toDynamic(headerBackgroundColor);
+    result["headerTextColor"] = ::facebook::react::toDynamic(headerTextColor);
+    result["headerDividerColor"] = ::facebook::react::toDynamic(headerDividerColor);
+    result["headerPaddingVertical"] = headerPaddingVertical;
     result["syntaxColors"] = ::facebook::react::toDynamic(syntaxColors);
     return result;
   }
@@ -1239,6 +1247,22 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   auto tmp_padding = map.find("padding");
   if (tmp_padding != map.end()) {
     fromRawValue(context, tmp_padding->second, result.padding);
+  }
+  auto tmp_headerBackgroundColor = map.find("headerBackgroundColor");
+  if (tmp_headerBackgroundColor != map.end()) {
+    fromRawValue(context, tmp_headerBackgroundColor->second, result.headerBackgroundColor);
+  }
+  auto tmp_headerTextColor = map.find("headerTextColor");
+  if (tmp_headerTextColor != map.end()) {
+    fromRawValue(context, tmp_headerTextColor->second, result.headerTextColor);
+  }
+  auto tmp_headerDividerColor = map.find("headerDividerColor");
+  if (tmp_headerDividerColor != map.end()) {
+    fromRawValue(context, tmp_headerDividerColor->second, result.headerDividerColor);
+  }
+  auto tmp_headerPaddingVertical = map.find("headerPaddingVertical");
+  if (tmp_headerPaddingVertical != map.end()) {
+    fromRawValue(context, tmp_headerPaddingVertical->second, result.headerPaddingVertical);
   }
   auto tmp_syntaxColors = map.find("syntaxColors");
   if (tmp_syntaxColors != map.end()) {
@@ -1827,6 +1851,8 @@ struct EnrichedMarkdownMarkdownStyleTableStruct {
   Float cellPaddingHorizontal{0.0};
   Float cellPaddingVertical{0.0};
   Float horizontalOverflow{0.0};
+  bool columnDividers{false};
+  Float maxColumnWidth{0.0};
   std::string align{};
 
 
@@ -1853,6 +1879,8 @@ struct EnrichedMarkdownMarkdownStyleTableStruct {
     result["cellPaddingHorizontal"] = cellPaddingHorizontal;
     result["cellPaddingVertical"] = cellPaddingVertical;
     result["horizontalOverflow"] = horizontalOverflow;
+    result["columnDividers"] = columnDividers;
+    result["maxColumnWidth"] = maxColumnWidth;
     result["align"] = align;
     return result;
   }
@@ -1934,6 +1962,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   if (tmp_horizontalOverflow != map.end()) {
     fromRawValue(context, tmp_horizontalOverflow->second, result.horizontalOverflow);
   }
+  auto tmp_columnDividers = map.find("columnDividers");
+  if (tmp_columnDividers != map.end()) {
+    fromRawValue(context, tmp_columnDividers->second, result.columnDividers);
+  }
+  auto tmp_maxColumnWidth = map.find("maxColumnWidth");
+  if (tmp_maxColumnWidth != map.end()) {
+    fromRawValue(context, tmp_maxColumnWidth->second, result.maxColumnWidth);
+  }
   auto tmp_align = map.find("align");
   if (tmp_align != map.end()) {
     fromRawValue(context, tmp_align->second, result.align);
@@ -1946,6 +1982,94 @@ static inline std::string toString(const EnrichedMarkdownMarkdownStyleTableStruc
 
 #ifdef RN_SERIALIZABLE_STATE
 static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleTableStruct &value) {
+  return value.toDynamic();
+}
+#endif
+
+struct EnrichedMarkdownMarkdownStyleContextMenuStruct {
+  SharedColor backgroundColor{};
+  SharedColor textColor{};
+  SharedColor iconColor{};
+  SharedColor pressedColor{};
+  SharedColor dividerColor{};
+  SharedColor borderColor{};
+  Float borderWidth{0.0};
+  Float borderRadius{0.0};
+  Float fontSize{0.0};
+  Float iconSize{0.0};
+
+
+#ifdef RN_SERIALIZABLE_STATE
+  bool operator==(const EnrichedMarkdownMarkdownStyleContextMenuStruct&) const = default;
+
+  folly::dynamic toDynamic() const {
+    folly::dynamic result = folly::dynamic::object();
+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
+    result["textColor"] = ::facebook::react::toDynamic(textColor);
+    result["iconColor"] = ::facebook::react::toDynamic(iconColor);
+    result["pressedColor"] = ::facebook::react::toDynamic(pressedColor);
+    result["dividerColor"] = ::facebook::react::toDynamic(dividerColor);
+    result["borderColor"] = ::facebook::react::toDynamic(borderColor);
+    result["borderWidth"] = borderWidth;
+    result["borderRadius"] = borderRadius;
+    result["fontSize"] = fontSize;
+    result["iconSize"] = iconSize;
+    return result;
+  }
+#endif
+};
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownMarkdownStyleContextMenuStruct &result) {
+  auto map = (std::unordered_map<std::string, RawValue>)value;
+
+  auto tmp_backgroundColor = map.find("backgroundColor");
+  if (tmp_backgroundColor != map.end()) {
+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
+  }
+  auto tmp_textColor = map.find("textColor");
+  if (tmp_textColor != map.end()) {
+    fromRawValue(context, tmp_textColor->second, result.textColor);
+  }
+  auto tmp_iconColor = map.find("iconColor");
+  if (tmp_iconColor != map.end()) {
+    fromRawValue(context, tmp_iconColor->second, result.iconColor);
+  }
+  auto tmp_pressedColor = map.find("pressedColor");
+  if (tmp_pressedColor != map.end()) {
+    fromRawValue(context, tmp_pressedColor->second, result.pressedColor);
+  }
+  auto tmp_dividerColor = map.find("dividerColor");
+  if (tmp_dividerColor != map.end()) {
+    fromRawValue(context, tmp_dividerColor->second, result.dividerColor);
+  }
+  auto tmp_borderColor = map.find("borderColor");
+  if (tmp_borderColor != map.end()) {
+    fromRawValue(context, tmp_borderColor->second, result.borderColor);
+  }
+  auto tmp_borderWidth = map.find("borderWidth");
+  if (tmp_borderWidth != map.end()) {
+    fromRawValue(context, tmp_borderWidth->second, result.borderWidth);
+  }
+  auto tmp_borderRadius = map.find("borderRadius");
+  if (tmp_borderRadius != map.end()) {
+    fromRawValue(context, tmp_borderRadius->second, result.borderRadius);
+  }
+  auto tmp_fontSize = map.find("fontSize");
+  if (tmp_fontSize != map.end()) {
+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
+  }
+  auto tmp_iconSize = map.find("iconSize");
+  if (tmp_iconSize != map.end()) {
+    fromRawValue(context, tmp_iconSize->second, result.iconSize);
+  }
+}
+
+static inline std::string toString(const EnrichedMarkdownMarkdownStyleContextMenuStruct &value) {
+  return "[Object EnrichedMarkdownMarkdownStyleContextMenuStruct]";
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const EnrichedMarkdownMarkdownStyleContextMenuStruct &value) {
   return value.toDynamic();
 }
 #endif
@@ -2387,6 +2511,7 @@ struct EnrichedMarkdownMarkdownStyleStruct {
   EnrichedMarkdownMarkdownStyleInlineImageStruct inlineImage{};
   EnrichedMarkdownMarkdownStyleThematicBreakStruct thematicBreak{};
   EnrichedMarkdownMarkdownStyleTableStruct table{};
+  EnrichedMarkdownMarkdownStyleContextMenuStruct contextMenu{};
   EnrichedMarkdownMarkdownStyleTaskListStruct taskList{};
   EnrichedMarkdownMarkdownStyleMathStruct math{};
   EnrichedMarkdownMarkdownStyleInlineMathStruct inlineMath{};
@@ -2423,6 +2548,7 @@ struct EnrichedMarkdownMarkdownStyleStruct {
     result["inlineImage"] = ::facebook::react::toDynamic(inlineImage);
     result["thematicBreak"] = ::facebook::react::toDynamic(thematicBreak);
     result["table"] = ::facebook::react::toDynamic(table);
+    result["contextMenu"] = ::facebook::react::toDynamic(contextMenu);
     result["taskList"] = ::facebook::react::toDynamic(taskList);
     result["math"] = ::facebook::react::toDynamic(math);
     result["inlineMath"] = ::facebook::react::toDynamic(inlineMath);
@@ -2525,6 +2651,10 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   auto tmp_table = map.find("table");
   if (tmp_table != map.end()) {
     fromRawValue(context, tmp_table->second, result.table);
+  }
+  auto tmp_contextMenu = map.find("contextMenu");
+  if (tmp_contextMenu != map.end()) {
+    fromRawValue(context, tmp_contextMenu->second, result.contextMenu);
   }
   auto tmp_taskList = map.find("taskList");
   if (tmp_taskList != map.end()) {
@@ -5276,6 +5406,10 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockStruct {
   Float borderRadius{0.0};
   Float borderWidth{0.0};
   Float padding{0.0};
+  SharedColor headerBackgroundColor{};
+  SharedColor headerTextColor{};
+  SharedColor headerDividerColor{};
+  Float headerPaddingVertical{0.0};
   EnrichedMarkdownTextMarkdownStyleCodeBlockSyntaxColorsStruct syntaxColors{};
 
 
@@ -5296,6 +5430,10 @@ struct EnrichedMarkdownTextMarkdownStyleCodeBlockStruct {
     result["borderRadius"] = borderRadius;
     result["borderWidth"] = borderWidth;
     result["padding"] = padding;
+    result["headerBackgroundColor"] = ::facebook::react::toDynamic(headerBackgroundColor);
+    result["headerTextColor"] = ::facebook::react::toDynamic(headerTextColor);
+    result["headerDividerColor"] = ::facebook::react::toDynamic(headerDividerColor);
+    result["headerPaddingVertical"] = headerPaddingVertical;
     result["syntaxColors"] = ::facebook::react::toDynamic(syntaxColors);
     return result;
   }
@@ -5352,6 +5490,22 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   auto tmp_padding = map.find("padding");
   if (tmp_padding != map.end()) {
     fromRawValue(context, tmp_padding->second, result.padding);
+  }
+  auto tmp_headerBackgroundColor = map.find("headerBackgroundColor");
+  if (tmp_headerBackgroundColor != map.end()) {
+    fromRawValue(context, tmp_headerBackgroundColor->second, result.headerBackgroundColor);
+  }
+  auto tmp_headerTextColor = map.find("headerTextColor");
+  if (tmp_headerTextColor != map.end()) {
+    fromRawValue(context, tmp_headerTextColor->second, result.headerTextColor);
+  }
+  auto tmp_headerDividerColor = map.find("headerDividerColor");
+  if (tmp_headerDividerColor != map.end()) {
+    fromRawValue(context, tmp_headerDividerColor->second, result.headerDividerColor);
+  }
+  auto tmp_headerPaddingVertical = map.find("headerPaddingVertical");
+  if (tmp_headerPaddingVertical != map.end()) {
+    fromRawValue(context, tmp_headerPaddingVertical->second, result.headerPaddingVertical);
   }
   auto tmp_syntaxColors = map.find("syntaxColors");
   if (tmp_syntaxColors != map.end()) {
@@ -5940,6 +6094,8 @@ struct EnrichedMarkdownTextMarkdownStyleTableStruct {
   Float cellPaddingHorizontal{0.0};
   Float cellPaddingVertical{0.0};
   Float horizontalOverflow{0.0};
+  bool columnDividers{false};
+  Float maxColumnWidth{0.0};
   std::string align{};
 
 
@@ -5966,6 +6122,8 @@ struct EnrichedMarkdownTextMarkdownStyleTableStruct {
     result["cellPaddingHorizontal"] = cellPaddingHorizontal;
     result["cellPaddingVertical"] = cellPaddingVertical;
     result["horizontalOverflow"] = horizontalOverflow;
+    result["columnDividers"] = columnDividers;
+    result["maxColumnWidth"] = maxColumnWidth;
     result["align"] = align;
     return result;
   }
@@ -6047,6 +6205,14 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   if (tmp_horizontalOverflow != map.end()) {
     fromRawValue(context, tmp_horizontalOverflow->second, result.horizontalOverflow);
   }
+  auto tmp_columnDividers = map.find("columnDividers");
+  if (tmp_columnDividers != map.end()) {
+    fromRawValue(context, tmp_columnDividers->second, result.columnDividers);
+  }
+  auto tmp_maxColumnWidth = map.find("maxColumnWidth");
+  if (tmp_maxColumnWidth != map.end()) {
+    fromRawValue(context, tmp_maxColumnWidth->second, result.maxColumnWidth);
+  }
   auto tmp_align = map.find("align");
   if (tmp_align != map.end()) {
     fromRawValue(context, tmp_align->second, result.align);
@@ -6059,6 +6225,94 @@ static inline std::string toString(const EnrichedMarkdownTextMarkdownStyleTableS
 
 #ifdef RN_SERIALIZABLE_STATE
 static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleTableStruct &value) {
+  return value.toDynamic();
+}
+#endif
+
+struct EnrichedMarkdownTextMarkdownStyleContextMenuStruct {
+  SharedColor backgroundColor{};
+  SharedColor textColor{};
+  SharedColor iconColor{};
+  SharedColor pressedColor{};
+  SharedColor dividerColor{};
+  SharedColor borderColor{};
+  Float borderWidth{0.0};
+  Float borderRadius{0.0};
+  Float fontSize{0.0};
+  Float iconSize{0.0};
+
+
+#ifdef RN_SERIALIZABLE_STATE
+  bool operator==(const EnrichedMarkdownTextMarkdownStyleContextMenuStruct&) const = default;
+
+  folly::dynamic toDynamic() const {
+    folly::dynamic result = folly::dynamic::object();
+    result["backgroundColor"] = ::facebook::react::toDynamic(backgroundColor);
+    result["textColor"] = ::facebook::react::toDynamic(textColor);
+    result["iconColor"] = ::facebook::react::toDynamic(iconColor);
+    result["pressedColor"] = ::facebook::react::toDynamic(pressedColor);
+    result["dividerColor"] = ::facebook::react::toDynamic(dividerColor);
+    result["borderColor"] = ::facebook::react::toDynamic(borderColor);
+    result["borderWidth"] = borderWidth;
+    result["borderRadius"] = borderRadius;
+    result["fontSize"] = fontSize;
+    result["iconSize"] = iconSize;
+    return result;
+  }
+#endif
+};
+
+static inline void fromRawValue(const PropsParserContext& context, const RawValue &value, EnrichedMarkdownTextMarkdownStyleContextMenuStruct &result) {
+  auto map = (std::unordered_map<std::string, RawValue>)value;
+
+  auto tmp_backgroundColor = map.find("backgroundColor");
+  if (tmp_backgroundColor != map.end()) {
+    fromRawValue(context, tmp_backgroundColor->second, result.backgroundColor);
+  }
+  auto tmp_textColor = map.find("textColor");
+  if (tmp_textColor != map.end()) {
+    fromRawValue(context, tmp_textColor->second, result.textColor);
+  }
+  auto tmp_iconColor = map.find("iconColor");
+  if (tmp_iconColor != map.end()) {
+    fromRawValue(context, tmp_iconColor->second, result.iconColor);
+  }
+  auto tmp_pressedColor = map.find("pressedColor");
+  if (tmp_pressedColor != map.end()) {
+    fromRawValue(context, tmp_pressedColor->second, result.pressedColor);
+  }
+  auto tmp_dividerColor = map.find("dividerColor");
+  if (tmp_dividerColor != map.end()) {
+    fromRawValue(context, tmp_dividerColor->second, result.dividerColor);
+  }
+  auto tmp_borderColor = map.find("borderColor");
+  if (tmp_borderColor != map.end()) {
+    fromRawValue(context, tmp_borderColor->second, result.borderColor);
+  }
+  auto tmp_borderWidth = map.find("borderWidth");
+  if (tmp_borderWidth != map.end()) {
+    fromRawValue(context, tmp_borderWidth->second, result.borderWidth);
+  }
+  auto tmp_borderRadius = map.find("borderRadius");
+  if (tmp_borderRadius != map.end()) {
+    fromRawValue(context, tmp_borderRadius->second, result.borderRadius);
+  }
+  auto tmp_fontSize = map.find("fontSize");
+  if (tmp_fontSize != map.end()) {
+    fromRawValue(context, tmp_fontSize->second, result.fontSize);
+  }
+  auto tmp_iconSize = map.find("iconSize");
+  if (tmp_iconSize != map.end()) {
+    fromRawValue(context, tmp_iconSize->second, result.iconSize);
+  }
+}
+
+static inline std::string toString(const EnrichedMarkdownTextMarkdownStyleContextMenuStruct &value) {
+  return "[Object EnrichedMarkdownTextMarkdownStyleContextMenuStruct]";
+}
+
+#ifdef RN_SERIALIZABLE_STATE
+static inline folly::dynamic toDynamic(const EnrichedMarkdownTextMarkdownStyleContextMenuStruct &value) {
   return value.toDynamic();
 }
 #endif
@@ -6500,6 +6754,7 @@ struct EnrichedMarkdownTextMarkdownStyleStruct {
   EnrichedMarkdownTextMarkdownStyleInlineImageStruct inlineImage{};
   EnrichedMarkdownTextMarkdownStyleThematicBreakStruct thematicBreak{};
   EnrichedMarkdownTextMarkdownStyleTableStruct table{};
+  EnrichedMarkdownTextMarkdownStyleContextMenuStruct contextMenu{};
   EnrichedMarkdownTextMarkdownStyleTaskListStruct taskList{};
   EnrichedMarkdownTextMarkdownStyleMathStruct math{};
   EnrichedMarkdownTextMarkdownStyleInlineMathStruct inlineMath{};
@@ -6536,6 +6791,7 @@ struct EnrichedMarkdownTextMarkdownStyleStruct {
     result["inlineImage"] = ::facebook::react::toDynamic(inlineImage);
     result["thematicBreak"] = ::facebook::react::toDynamic(thematicBreak);
     result["table"] = ::facebook::react::toDynamic(table);
+    result["contextMenu"] = ::facebook::react::toDynamic(contextMenu);
     result["taskList"] = ::facebook::react::toDynamic(taskList);
     result["math"] = ::facebook::react::toDynamic(math);
     result["inlineMath"] = ::facebook::react::toDynamic(inlineMath);
@@ -6638,6 +6894,10 @@ static inline void fromRawValue(const PropsParserContext& context, const RawValu
   auto tmp_table = map.find("table");
   if (tmp_table != map.end()) {
     fromRawValue(context, tmp_table->second, result.table);
+  }
+  auto tmp_contextMenu = map.find("contextMenu");
+  if (tmp_contextMenu != map.end()) {
+    fromRawValue(context, tmp_contextMenu->second, result.contextMenu);
   }
   auto tmp_taskList = map.find("taskList");
   if (tmp_taskList != map.end()) {

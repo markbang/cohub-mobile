@@ -21,6 +21,8 @@ typedef void (^ENRMTableIOSLinkBlock)(NSString *url);
 
 @property (nonatomic, copy, nullable) ENRMTableIOSLinkBlock onLinkTap;
 @property (nonatomic, copy, nullable) ENRMTableIOSLinkBlock onLinkLongTap;
+/// NO keeps only the lines between rows.
+@property (nonatomic, assign) BOOL columnDividers;
 
 - (void)updateWithRows:(NSArray<ENRMTableIOSRowData *> *)rows
              columnWidths:(NSArray<NSNumber *> *)columnWidths

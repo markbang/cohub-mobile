@@ -224,6 +224,14 @@ class StyleConfig(
     TableStyle.fromReadableMap(map, styleParser)
   }
 
+  val contextMenuStyle: ContextMenuStyle by lazy {
+    val map =
+      requireNotNull(style.getMap("contextMenu")) {
+        "ContextMenu style not found. JS should always provide defaults."
+      }
+    ContextMenuStyle.fromReadableMap(map, styleParser)
+  }
+
   val taskListStyle: TaskListStyle by lazy {
     val map =
       requireNotNull(style.getMap("taskList")) {
@@ -342,6 +350,7 @@ class StyleConfig(
       codeBlockStyle == other.codeBlockStyle &&
       thematicBreakStyle == other.thematicBreakStyle &&
       tableStyle == other.tableStyle &&
+      contextMenuStyle == other.contextMenuStyle &&
       taskListStyle == other.taskListStyle &&
       mathStyle == other.mathStyle &&
       inlineMathStyle == other.inlineMathStyle &&
@@ -370,6 +379,7 @@ class StyleConfig(
     result = 31 * result + codeBlockStyle.hashCode()
     result = 31 * result + thematicBreakStyle.hashCode()
     result = 31 * result + tableStyle.hashCode()
+    result = 31 * result + contextMenuStyle.hashCode()
     result = 31 * result + taskListStyle.hashCode()
     result = 31 * result + mathStyle.hashCode()
     result = 31 * result + inlineMathStyle.hashCode()

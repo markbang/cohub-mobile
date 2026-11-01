@@ -112,6 +112,15 @@ class TableContainerView(
   private var totalTableWidth = 0f
   private var totalTableHeight = 0f
   private var tableMarkdown = ""
+  private val framesViewport = tableStyle.horizontalOverflow <= 0f
+  private val frameRect = RectF()
+  private val framePath = Path()
+  private val framePaint =
+    Paint(Paint.ANTI_ALIAS_FLAG).apply {
+      style = Paint.Style.STROKE
+      color = tableStyle.borderColor
+      strokeWidth = tableStyle.borderWidth
+    }
 
   init {
     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -179,7 +188,7 @@ class TableContainerView(
 
   private fun renderGrid() {
     gridContainer.removeAllViews()
-    gridContainer.configure(totalTableWidth, totalTableHeight, tableStyle)
+    gridContainer.configure(totalTableWidth, totalTableHeight, tableStyle, !framesViewport)
 
     var yOffset = 0f
     var bodyRowIndex = 0
@@ -208,7 +217,7 @@ class TableContainerView(
 
         val cellBg =
           CellBackgroundView(context).apply {
-            configure(rowBg, tableStyle.borderColor, tableStyle.borderWidth)
+            configure(rowBg, tableStyle.borderColor, tableStyle.borderWidth, tableStyle.columnDividers, rowIndex > 0)
             setOnLongClickListener { view -> showContextMenu(view) }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
           }
@@ -388,10 +397,36 @@ class TableContainerView(
     }
   }
 
+  // cohub: the frame belongs to the viewport, so a table wider than the bubble keeps its rounded
+  // edge while its content scrolls. horizontalOverflow lets content bleed past the view, so that
+  // mode keeps the frame on the grid.
+  override fun dispatchDraw(canvas: Canvas) {
+    if (!framesViewport) {
+      super.dispatchDraw(canvas)
+      return
+    }
+    val tableOverflows = totalTableWidth > width
+    val left = if (tableOverflows) 0f else gridContainer.left + gridContainer.translationX - scrollView.scrollX
+    val right = if (tableOverflows) width.toFloat() else left + ceil(totalTableWidth)
+    frameRect.set(left, 0f, right, min(height.toFloat(), ceil(totalTableHeight)))
+    val radius = tableStyle.borderRadius
+    framePath.reset()
+    framePath.addRoundRect(frameRect, radius, radius, Path.Direction.CW)
+    canvas.save()
+    canvas.clipPath(framePath)
+    super.dispatchDraw(canvas)
+    canvas.restore()
+    if (tableStyle.borderWidth > 0f) {
+      val halfStroke = tableStyle.borderWidth / 2
+      frameRect.inset(halfStroke, halfStroke)
+      canvas.drawRoundRect(frameRect, radius, radius, framePaint)
+    }
+  }
+
   private fun showContextMenu(anchor: View): Boolean {
     if (!dynamicProps.enableBlockContextMenu) return false
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    ContextMenuPopup.show(anchor, this) {
+    ContextMenuPopup.show(anchor, this, styleConfig.contextMenuStyle) {
       item(ContextMenuPopup.Icon.COPY, dynamicProps.copyLabel) {
         val plainText = rows.joinToString("\n") { row -> row.joinToString("\t") { it.plainText } }
         if (plainText.isNotEmpty()) {
@@ -464,7 +499,7 @@ class TableContainerView(
     ): Pair<List<Float>, List<Float>> {
       val style = config.tableStyle
       val density = context.resources.displayMetrics.density
-      val (minColumnWidth, maxColumnWidth) = 60f * density to 300f * density
+      val (minColumnWidth, maxColumnWidth) = 60f * density to style.maxColumnWidth
       val (horizontalPadding, verticalPadding) = style.cellPaddingHorizontal * 2 to style.cellPaddingVertical * 2
       val paint =
         TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -547,6 +582,7 @@ class TableContainerView(
     context: Context,
   ) : FrameLayout(context) {
     private var radius = 0f
+    private var drawsFrame = true
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val path = Path()
     private val rect = RectF()
@@ -559,13 +595,19 @@ class TableContainerView(
       tableWidth: Float,
       tableHeight: Float,
       style: TableStyle,
+      drawsFrame: Boolean,
     ) {
+      this.drawsFrame = drawsFrame
       radius = style.borderRadius
       paint.color = style.borderColor
       paint.strokeWidth = style.borderWidth
     }
 
     override fun dispatchDraw(canvas: Canvas) {
+      if (!drawsFrame) {
+        super.dispatchDraw(canvas)
+        return
+      }
       rect.set(0f, 0f, width.toFloat(), height.toFloat())
       if (radius > 0f) {
         path.apply {
@@ -591,12 +633,18 @@ class TableContainerView(
   ) : FrameLayout(context) {
     private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private var columnDividers = true
+    private var rowDivider = false
 
     fun configure(
       backgroundColor: Int,
       borderColor: Int,
       borderWidth: Float,
+      columnDividers: Boolean,
+      rowDivider: Boolean,
     ) {
+      this.columnDividers = columnDividers
+      this.rowDivider = rowDivider
       backgroundPaint.color = backgroundColor
       borderPaint.color = borderColor
       borderPaint.strokeWidth = borderWidth
@@ -606,7 +654,12 @@ class TableContainerView(
       canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), backgroundPaint)
       if (borderPaint.strokeWidth > 0f) {
         val halfStroke = borderPaint.strokeWidth / 2
-        canvas.drawRect(halfStroke, halfStroke, width.toFloat() - halfStroke, height.toFloat() - halfStroke, borderPaint)
+        if (columnDividers) {
+          canvas.drawRect(halfStroke, halfStroke, width.toFloat() - halfStroke, height.toFloat() - halfStroke, borderPaint)
+        } else if (rowDivider) {
+          // Cells overlap their neighbours by one border width; stop short so translucent lines do not double up.
+          canvas.drawLine(0f, halfStroke, width.toFloat() - borderPaint.strokeWidth, halfStroke, borderPaint)
+        }
       }
       super.dispatchDraw(canvas)
     }

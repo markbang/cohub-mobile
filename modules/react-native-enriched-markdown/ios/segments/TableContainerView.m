@@ -179,9 +179,8 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
                                    NSMutableArray<NSNumber *> *_Nullable *_Nullable outRowHeights,
                                    CGFloat *_Nullable outTotalWidth, CGFloat *_Nullable outTotalHeight)
 {
-  // TODO: Consider making minColumnWidth / maxColumnWidth configurable via style props
   const CGFloat minimumColumnWidth = 60.0;
-  const CGFloat maximumColumnWidth = 300.0;
+  const CGFloat maximumColumnWidth = config.tableMaxColumnWidth;
   const CGFloat horizontalPadding = config.tableCellPaddingHorizontal * 2;
   const CGFloat verticalPadding = config.tableCellPaddingVertical * 2;
 
@@ -454,8 +453,15 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
 - (void)renderGridIOS
 {
   _gridContainer.frame = CGRectMake(0, 0, _totalTableWidth, _totalTableHeight);
-  _gridContainer.layer.cornerRadius = self.config.tableBorderRadius;
-  _gridContainer.layer.masksToBounds = YES;
+  // cohub: the frame belongs to the viewport, so a wide table keeps its rounded edge while its
+  // content scrolls. horizontalOverflow lets content bleed past the view, so that mode keeps it on the grid.
+  BOOL framesViewport = self.config.tableHorizontalOverflow <= 0;
+  _gridContainer.layer.cornerRadius = framesViewport ? 0 : self.config.tableBorderRadius;
+  _gridContainer.layer.masksToBounds = !framesViewport;
+  _scrollView.layer.cornerRadius = framesViewport ? self.config.tableBorderRadius : 0;
+  _scrollView.layer.masksToBounds = framesViewport;
+  _scrollView.layer.borderWidth = framesViewport ? self.config.tableBorderWidth : 0;
+  _scrollView.layer.borderColor = self.config.tableBorderColor.CGColor;
 
   NSUInteger bodyRowIndex = 0;
   NSMutableArray<ENRMTableIOSRowData *> *rowDataArray = [NSMutableArray arrayWithCapacity:_rows.count];
@@ -474,6 +480,7 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
   }
 
   ENRMTableIOSGridView *gridView = (ENRMTableIOSGridView *)_gridContainer;
+  gridView.columnDividers = self.config.tableColumnDividers;
   [gridView updateWithRows:[rowDataArray copy]
                columnWidths:_colWidths
                  rowHeights:_rowHeights
@@ -719,6 +726,14 @@ static void ENRMTableComputeLayout(NSArray<NSArray<TableCellData *> *> *rows, NS
     }
     _scrollView.contentSize = CGSizeMake(_totalTableWidth, _totalTableHeight);
     _scrollView.scrollEnabled = YES;
+    _gridContainer.frame = CGRectMake(0, 0, _totalTableWidth, _totalTableHeight);
+  } else if (overhang <= 0) {
+    BOOL tableIsWide = _totalTableWidth > containerWidth;
+    CGFloat alignOffset = [self alignOffsetForFreeSpace:containerWidth - _totalTableWidth];
+    _scrollView.frame = CGRectMake(alignOffset, 0, tableIsWide ? containerWidth : _totalTableWidth, self.bounds.size.height);
+    _scrollView.contentInset = UIEdgeInsetsZero;
+    _scrollView.contentSize = CGSizeMake(_totalTableWidth, _totalTableHeight);
+    _scrollView.scrollEnabled = tableIsWide;
     _gridContainer.frame = CGRectMake(0, 0, _totalTableWidth, _totalTableHeight);
   } else {
     CGFloat alignOffset = [self alignOffsetForFreeSpace:containerWidth - overhang * 2 - _totalTableWidth];

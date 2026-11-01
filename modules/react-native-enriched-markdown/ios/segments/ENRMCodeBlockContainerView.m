@@ -9,7 +9,9 @@
 
 // Block segment view for fenced code blocks (see SegmentRenderer.m):
 // a fixed header bar (language name, copy button) above a horizontally
-// scrolling, non-wrapping code pane. The container's drawRect: draws
+// scrolling, non-wrapping code pane. A block without a language has no header:
+// cohub: a row holding only the copy button reads as empty, so the button floats
+// over the code instead. The container's drawRect: draws
 // background, border, label, and divider; only the copy button and the
 // scroll view are subviews. Syntax coloring comes from the
 // ENRMCodeBlockHighlighter seam and falls back to plain text. The box
@@ -24,8 +26,9 @@ static const CGFloat kENRMHeaderLabelScale = 0.85;
 // The copy glyph reads cleaner a touch smaller than the language label and at a
 // regular (not medium) weight; sized independently so the two never couple.
 static const CGFloat kENRMHeaderIconScale = 0.72;
-static const CGFloat kENRMHeaderSecondaryAlpha = 0.6;
-static const CGFloat kENRMHeaderDividerAlpha = 0.2;
+static const CGFloat kENRMCopyTargetSize = 44.0;
+static const CGFloat kENRMCopyBackingPadding = 4.0;
+static const NSTimeInterval kENRMCopiedFeedbackDuration = 1.5;
 
 // Height geometry and code-run construction shared by the instance layout path
 // and the view-free measureHeightForCodeBlockNode:, so the two cannot drift.
@@ -74,6 +77,17 @@ static CGFloat ENRMCodeBlockPerLineHeight(StyleConfig *config)
 {
   CGFloat lineHeight = [config codeBlockLineHeight];
   return lineHeight > 0 ? lineHeight : ceil(UIFontLineHeight([config codeBlockFont]));
+}
+
+// A band of one label line plus its vertical padding. The instance and the
+// view-free measure both read this, so a block without a language reports no header.
+static CGFloat ENRMCodeBlockHeaderHeight(StyleConfig *config, NSString *displayLanguage)
+{
+  if (displayLanguage.length == 0) {
+    return 0;
+  }
+  return ceil(ENRMCodeBlockHeaderLabelLineHeight(ENRMCodeBlockHeaderFont(config)) +
+              [config codeBlockHeaderPaddingVertical] * 2);
 }
 
 // Analytic code height: lines never wrap and each fragment is a fixed height, so
@@ -269,6 +283,9 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
 #if !TARGET_OS_OSX
   UIFont *_headerFont;
   UIButton *_copyButton;
+  UIImage *_copyImage;
+  UIImage *_copiedImage;
+  UIView *_copyBacking;
   UITapGestureRecognizer *_tapRecognizer;
 #else
   NSFont *_headerFont;
@@ -322,10 +339,17 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
     UIImageSymbolConfiguration *symbolConfig =
         [UIImageSymbolConfiguration configurationWithPointSize:[config codeBlockFont].pointSize * kENRMHeaderIconScale
                                                         weight:UIImageSymbolWeightRegular];
-    [_copyButton setImage:[UIImage systemImageNamed:@"doc.on.doc" withConfiguration:symbolConfig]
-                 forState:UIControlStateNormal];
-    _copyButton.tintColor = [[config codeBlockColor] colorWithAlphaComponent:kENRMHeaderSecondaryAlpha];
+    _copyImage = [UIImage systemImageNamed:@"doc.on.doc" withConfiguration:symbolConfig];
+    _copiedImage = [UIImage systemImageNamed:@"checkmark" withConfiguration:symbolConfig];
+    [_copyButton setImage:_copyImage forState:UIControlStateNormal];
+    _copyButton.tintColor = [config codeBlockHeaderTextColor];
     [_copyButton addTarget:self action:@selector(copyCodeToPasteboard) forControlEvents:UIControlEventTouchUpInside];
+    // Over the code the glyph needs a backing, or scrolled text would run through it.
+    _copyBacking = [[UIView alloc] initWithFrame:CGRectZero];
+    _copyBacking.backgroundColor = [config codeBlockBackgroundColor];
+    _copyBacking.userInteractionEnabled = NO;
+    _copyBacking.layer.cornerRadius = kENRMCopyBackingPadding;
+    [self addSubview:_copyBacking];
     [self addSubview:_copyButton];
 
     _tapRecognizer = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleCodeBlockTap:)];
@@ -339,7 +363,7 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
                                     accessibilityDescription:nil] imageWithSymbolConfiguration:symbolConfig];
     _copyButton = [NSButton buttonWithImage:copyImage target:self action:@selector(copyCodeToPasteboard)];
     _copyButton.bordered = NO;
-    _copyButton.contentTintColor = [[config codeBlockColor] colorWithAlphaComponent:kENRMHeaderSecondaryAlpha];
+    _copyButton.contentTintColor = [config codeBlockHeaderTextColor];
     [self addSubview:_copyButton];
 #endif
   }
@@ -391,7 +415,9 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
   _scrollView.frame = frame;
 
   CGFloat horizontalPad = MAX(inset - borderW, 0);
-  CGFloat contentWidth = MAX(_codeSize.width + horizontalPad * 2, frame.size.width);
+  // Room past the longest line, so its end can scroll clear of the floating button.
+  CGFloat floatingCopyRoom = headerH > 0 ? 0 : kENRMCopyTargetSize;
+  CGFloat contentWidth = MAX(_codeSize.width + horizontalPad * 2 + floatingCopyRoom, frame.size.width);
   _codeContentView.textOrigin = CGPointMake(horizontalPad, inset);
   _codeContentView.frame = CGRectMake(0, 0, contentWidth, frame.size.height);
 #if !TARGET_OS_OSX
@@ -400,25 +426,31 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
 #endif
 }
 
-// Header is the top content inset plus one label line; the code text's own
-// top inset then forms the single gap below the label.
 - (CGFloat)headerHeight
 {
-  return [self contentInset] + _headerLabelLineHeight;
+  return ENRMCodeBlockHeaderHeight(_config, _displayLanguage);
 }
 
 - (void)layoutHeaderButton
 {
   CGFloat headerH = [self headerHeight];
-  CGFloat iconWidth = _copyButton.intrinsicContentSize.width;
-  if (iconWidth <= 0 || iconWidth > headerH) {
-    iconWidth = headerH;
-  }
-  CGFloat iconSlack = (headerH - iconWidth) / 2;
-  CGFloat buttonLeft = MAX(self.bounds.size.width - [self contentInset] - headerH + iconSlack, 0);
-  CGFloat labelCenterY = headerH - _headerLabelLineHeight / 2;
-  CGFloat buttonTop = MAX(labelCenterY - headerH / 2, 0);
-  _copyButton.frame = CGRectMake(buttonLeft, buttonTop, headerH, headerH);
+  CGFloat target = MAX(headerH, kENRMCopyTargetSize);
+#if !TARGET_OS_OSX
+  CGSize iconSize = _copyImage.size;
+#else
+  CGSize iconSize = _copyButton.intrinsicContentSize;
+#endif
+  CGFloat iconSlack = (target - MIN(iconSize.width, target)) / 2;
+  CGFloat buttonLeft = MAX(self.bounds.size.width - [self contentInset] - target + iconSlack, 0);
+  // A target taller than its row overhangs it: the top is clipped by this view and the bottom sits over the code.
+  CGFloat centerY = headerH > 0 ? headerH / 2 : [self contentInset] + ENRMCodeBlockPerLineHeight(_config) / 2;
+  _copyButton.frame = CGRectMake(buttonLeft, centerY - target / 2, target, target);
+#if !TARGET_OS_OSX
+  _copyBacking.hidden = headerH > 0;
+  CGFloat backingSide = MAX(iconSize.width, iconSize.height) + kENRMCopyBackingPadding * 2;
+  _copyBacking.frame = CGRectMake(CGRectGetMidX(_copyButton.frame) - backingSide / 2, centerY - backingSide / 2,
+                                  backingSide, backingSide);
+#endif
 }
 
 #if !TARGET_OS_OSX
@@ -505,7 +537,7 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
   }
   NSMutableDictionary *labelAttributes = [NSMutableDictionary dictionary];
   labelAttributes[NSFontAttributeName] = _headerFont;
-  RCTUIColor *labelColor = [[_config codeBlockColor] colorWithAlphaComponent:kENRMHeaderSecondaryAlpha];
+  RCTUIColor *labelColor = [_config codeBlockHeaderTextColor];
   if (labelColor) {
     labelAttributes[NSForegroundColorAttributeName] = labelColor;
   }
@@ -532,7 +564,7 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
 + (CGFloat)measureHeightForCodeBlockNode:(MarkdownASTNode *)node config:(StyleConfig *)config
 {
   CGFloat inset = ENRMCodeBlockContentInset(config);
-  CGFloat headerH = inset + ENRMCodeBlockHeaderLabelLineHeight(ENRMCodeBlockHeaderFont(config));
+  CGFloat headerH = ENRMCodeBlockHeaderHeight(config, ENRMCodeBlockDisplayLanguageName(ENRMCodeBlockLanguage(node)));
   CGFloat codeHeight = ENRMCodeBlockCodeHeight(ENRMCodeBlockExtractCode(node), config);
   return codeHeight + inset * 2 + headerH;
 }
@@ -566,11 +598,25 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
   CGFloat inset = [self contentInset];
   CGFloat headerH = [self headerHeight];
 
-  // Divider between the header and the code, centered in the gap the code
-  // text's top inset creates, so it adds no height of its own.
-  RCTUIColor *dividerColor = [[_config codeBlockColor] colorWithAlphaComponent:kENRMHeaderDividerAlpha];
+  if (headerH == 0) {
+    return;
+  }
+
+#if !TARGET_OS_OSX
+  RCTUIColor *headerColor = [_config codeBlockHeaderBackgroundColor];
+  if (headerColor) {
+    CGRect headerRect = CGRectMake(borderWidth, borderWidth, self.bounds.size.width - borderWidth * 2, headerH - borderWidth);
+    CGFloat headerRadius = MAX(radius - borderWidth, 0);
+    [headerColor setFill];
+    [[UIBezierPath bezierPathWithRoundedRect:headerRect
+                           byRoundingCorners:UIRectCornerTopLeft | UIRectCornerTopRight
+                                 cornerRadii:CGSizeMake(headerRadius, headerRadius)] fill];
+  }
+#endif
+
+  RCTUIColor *dividerColor = [_config codeBlockHeaderDividerColor];
   if (dividerColor) {
-    CGRect dividerRect = CGRectMake(borderWidth, headerH + inset / 2, self.bounds.size.width - borderWidth * 2, 1);
+    CGRect dividerRect = CGRectMake(borderWidth, headerH - 1, self.bounds.size.width - borderWidth * 2, 1);
     [dividerColor setFill];
 #if !TARGET_OS_OSX
     [[UIBezierPath bezierPathWithRect:dividerRect] fill];
@@ -580,7 +626,7 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
   }
 
   if (_languageLabel.length > 0) {
-    [_languageLabel drawAtPoint:CGPointMake(inset, headerH - _languageLabelSize.height)];
+    [_languageLabel drawAtPoint:CGPointMake(inset, (headerH - _languageLabelSize.height) / 2)];
   }
 }
 
@@ -595,7 +641,19 @@ static BOOL ENRMColorIsDark(RCTUIColor *color)
   if (self.onCopyPress) {
     self.onCopyPress(_cachedCode ?: @"", _cachedLanguage ?: @"");
   }
+#if !TARGET_OS_OSX
+  [_copyButton setImage:_copiedImage forState:UIControlStateNormal];
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(clearCopiedFeedback) object:nil];
+  [self performSelector:@selector(clearCopiedFeedback) withObject:nil afterDelay:kENRMCopiedFeedbackDuration];
+#endif
 }
+
+#if !TARGET_OS_OSX
+- (void)clearCopiedFeedback
+{
+  [_copyButton setImage:_copyImage forState:UIControlStateNormal];
+}
+#endif
 
 - (void)copyMarkdownToPasteboard
 {

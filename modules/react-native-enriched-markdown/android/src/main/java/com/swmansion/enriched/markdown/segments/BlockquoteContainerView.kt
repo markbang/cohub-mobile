@@ -146,7 +146,7 @@ class BlockquoteContainerView(
   private fun showContextMenu(anchor: View): Boolean {
     if (!parentConfig.dynamicProps.enableBlockContextMenu) return false
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    ContextMenuPopup.show(anchor, this) {
+    ContextMenuPopup.show(anchor, this, parentConfig.style.contextMenuStyle) {
       item(ContextMenuPopup.Icon.COPY, parentConfig.dynamicProps.copyLabel) {
         if (cachedPlainText.isNotEmpty()) {
           clipboard.setPrimaryClip(ClipData.newPlainText("Blockquote", cachedPlainText))

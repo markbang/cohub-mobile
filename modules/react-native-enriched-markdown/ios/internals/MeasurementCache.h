@@ -135,7 +135,7 @@ template <typename StyleStruct> inline size_t computeStyleFingerprint(const Styl
   // Code & Inlines
   hashFields(s.codeBlock.fontFamily, s.codeBlock.fontSize, s.codeBlock.fontWeight, s.codeBlock.marginTop,
              s.codeBlock.marginBottom, s.codeBlock.lineHeight, s.codeBlock.padding, s.codeBlock.borderRadius,
-             s.codeBlock.borderWidth);
+             s.codeBlock.borderWidth, s.codeBlock.headerPaddingVertical);
   hashFields(s.code.fontFamily, s.code.fontSize);
   hashFields(s.link.fontFamily, s.strong.fontFamily, s.strong.fontWeight, s.em.fontFamily, s.em.fontStyle);
   hashFields(s.highlight.backgroundColor, s.highlight.color);
@@ -150,7 +150,7 @@ template <typename StyleStruct> inline size_t computeStyleFingerprint(const Styl
   // Complex Components
   hashTextLayout(s.table);
   hashFields(s.table.headerFontFamily, s.table.cellPaddingHorizontal, s.table.cellPaddingVertical, s.table.borderWidth,
-             s.table.borderRadius, s.table.horizontalOverflow);
+             s.table.borderRadius, s.table.horizontalOverflow, s.table.maxColumnWidth);
   hashFields(s.math.fontSize, s.math.padding, s.math.marginTop, s.math.marginBottom, s.math.textAlign);
   hashFields(s.taskList.checkboxSize, s.taskList.checkboxBorderRadius);
 

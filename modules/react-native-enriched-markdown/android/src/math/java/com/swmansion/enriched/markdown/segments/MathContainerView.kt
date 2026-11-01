@@ -31,6 +31,7 @@ class MathContainerView(
 ) : FrameLayout(context),
   BlockSegmentView {
   private val mathStyle: MathStyle = styleConfig.mathStyle
+  private val contextMenuStyle = styleConfig.contextMenuStyle
   private val scrollView = HorizontalScrollView(context)
   private var cachedLatex: String = ""
 
@@ -117,7 +118,7 @@ class MathContainerView(
   private fun showContextMenu(anchor: View): Boolean {
     if (!dynamicProps.enableBlockContextMenu) return false
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    ContextMenuPopup.show(anchor, this) {
+    ContextMenuPopup.show(anchor, this, contextMenuStyle) {
       item(ContextMenuPopup.Icon.COPY, dynamicProps.copyLabel) {
         clipboard.setPrimaryClip(ClipData.newPlainText("Math", cachedLatex))
       }
