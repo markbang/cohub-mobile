@@ -11,7 +11,7 @@ import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { useToast } from "@/src/components/Toast";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { activityContributorName } from "@/src/data/activity";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSyncQuery } from "@/src/data/query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
@@ -46,8 +46,7 @@ export default function SpaceScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const toast = useToast();
-  const { client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession } = useAppActions();
-  const recordVisit = useAppSelector((app) => app.spaceList.recordVisit);
+  const { client, refreshHome, refreshSessionStatuses, refreshSpacePin, toggleSpacePin, upsertSpace, prefetchSession, recordSpaceVisit: recordVisit } = useAppActions();
   const { booting, refreshing, realtimeError } = useAppSelector((app) => ({ booting: app.state.booting, refreshing: app.state.refreshing, realtimeError: app.state.realtimeError }), shallowEqual);
   useFocusEffect(useCallback(() => {
     if (spaceId) recordVisit(spaceId);
@@ -291,9 +290,9 @@ export default function SpaceScreen() {
       tasksInFlightRef.current = false;
     }
   }, [client, resources.tasks, spaceId]);
-  useSyncScope(`space:${spaceId}:chats`, () => loadSessions({ force: true, silent: true }), 15_000, Boolean(spaceId));
-  useSyncScope(`space:${spaceId}:resources`, () => loadResources({ force: true, silent: true }), 60_000, Boolean(spaceId));
-  useSyncScope(`space:${spaceId}:tasks`, refreshTasks, resources.tasks.some((task) => task.status === "running" || task.status === "pending") ? 10_000 : 60_000, Boolean(spaceId));
+  useSyncQuery(`space:${spaceId}:chats`, () => loadSessions({ force: true, silent: true }), 15_000, Boolean(spaceId));
+  useSyncQuery(`space:${spaceId}:resources`, () => loadResources({ force: true, silent: true }), 60_000, Boolean(spaceId));
+  useSyncQuery(`space:${spaceId}:tasks`, refreshTasks, resources.tasks.some((task) => task.status === "running" || task.status === "pending") ? 10_000 : 60_000, Boolean(spaceId));
 
   if (!space) {
     const opening = Boolean(spaceId) && (booting || !client || spaceLoading);

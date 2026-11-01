@@ -7,7 +7,7 @@ import { useToast } from "@/src/components/Toast";
 import { saveTitle } from "@/src/data/checkpoint-diff";
 import { useAppActions } from "@/src/data/context";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSyncQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, AppRefreshControl, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, Screen, TopBar } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow } from "@/src/ui/ListRow";
@@ -44,7 +44,7 @@ export default function SavesScreen() {
       throw caught;
     }
   }, [client, spaceId, t]);
-  useSyncScope(`space:${spaceId}:saves`, load, 60_000, Boolean(spaceId));
+  useSyncQuery(`space:${spaceId}:saves`, load, 60_000, Boolean(spaceId));
 
   const loadMore = async () => {
     if (!client || !cursor || loadingMore) return;

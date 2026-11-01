@@ -4,6 +4,7 @@ import type {
   HarnessKind,
   MessageRecord,
   ModelStatusResponse,
+  PaletteOverviewResponse,
   SessionListFork,
   SessionRecord,
   SessionTurnIndexItem,
@@ -13,7 +14,10 @@ import type {
   UnauthorizedContext,
   UserSessionListItem,
 } from "@neta-art/cohub";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { useStore } from "zustand";
+import { createStore, type StoreApi } from "zustand/vanilla";
 import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
@@ -21,9 +25,9 @@ import { config } from "@/src/config";
 import { createMobileClient } from "@/src/data/client";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { markChatEntry, startChatEntry } from "@/src/data/chat-entry-trace";
-import { useSpaceListData } from "@/src/data/use-space-list";
-import { listAllSpaces, personalSpaceActivity } from "@/src/data/space-list";
-import { createSyncScheduler, type SyncScheduler } from "@/src/data/sync-scheduler";
+import { useSpaceList as useSpaceListQuery, useSpaceListOwner } from "@/src/data/use-space-list";
+import { createAppQueryClient, createScopeInvalidator } from "@/src/data/query";
+import { listAllSpaces, personalSpaceActivity, type SpaceVisit } from "@/src/data/space-list";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionsForCache, type CachedRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
@@ -879,20 +883,14 @@ export type AppSnapshot = {
   state: AppState;
   connectionState: ConnectionState;
   connectionUnavailable: boolean;
-  spaceList: ReturnType<typeof useSpaceListData>;
-  models: ChatModelCatalogItem[];
-  modelsLoading: boolean;
-  modelsError: string | null;
-  modelStatus: ModelStatusResponse | null;
-  modelStatusLoading: boolean;
-  modelStatusError: string | null;
+  spaceVisits: SpaceVisit[];
+  spaceVisitsError: string | null;
 };
 
 /** Provider operations and session-scoped handles; identities change only with the client or user. */
 export type AppActions = {
   client: CohubClient | null;
   userUuid: string;
-  sync: SyncScheduler;
   spaceRealtime: SpaceRealtime | null;
   refreshChats: () => Promise<void>;
   discoverRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
@@ -924,6 +922,8 @@ export type AppActions = {
   abortSession: (sessionId: string) => Promise<void>;
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
+  loadSpaceOverview: () => Promise<PaletteOverviewResponse>;
+  recordSpaceVisit: (spaceId: string) => void;
   /** `onDevice` creates a Space whose sandbox is a local Runtime, e.g. a folder on this device. */
   createSpace: (name: string, description?: string, options?: { onDevice?: boolean }) => Promise<SpaceRecord>;
   refreshSpacePin: (spaceId: string) => Promise<boolean>;
@@ -938,38 +938,18 @@ export type AppActions = {
   saveSessionReadSequence: (sessionId: string, sequence: number) => Promise<void>;
 };
 
-type AppStore = {
-  getSnapshot: () => AppSnapshot;
-  subscribe: (listener: () => void) => () => void;
-  /** Render phase: makes the snapshot readable before any child renders, without notifying. */
-  stage: (snapshot: AppSnapshot) => void;
-  /** Layout phase: wakes already-mounted subscribers whose slice the staged snapshot changed. */
-  notify: () => void;
-};
+type AppStore = StoreApi<AppSnapshot>;
 
-function createAppStore(): AppStore {
-  let current: AppSnapshot | null = null;
-  let notified: AppSnapshot | null = null;
-  const listeners = new Set<() => void>();
-  return {
-    getSnapshot: () => {
-      if (!current) throw new Error(translate("data.useAppProvider"));
-      return current;
-    },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
-    stage: (snapshot) => {
-      current = snapshot;
-    },
-    notify: () => {
-      if (current === notified) return;
-      notified = current;
-      for (const listener of [...listeners]) listener();
-    },
-  };
-}
+const createAppStore = (): AppStore => createStore<AppSnapshot>()(() => ({
+  state: initialState,
+  connectionState: "idle",
+  connectionUnavailable: false,
+  spaceVisits: [],
+  spaceVisitsError: null,
+}));
+
+const MODELS_KEY = ["models"] as const;
+const MODEL_STATUS_KEY = ["model-status"] as const;
 
 const AppActionsContext = createContext<AppActions | null>(null);
 const AppStoreContext = createContext<AppStore | null>(null);
@@ -988,15 +968,17 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [installationId, setInstallationId] = useState<string | null>(null);
-  const [state, setState] = useState<AppState>(initialState);
-  const [sync] = useState(() => createSyncScheduler({ active: NativeAppState.currentState === "active" }));
-  const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
-  const connectionStateRef = useRef<ConnectionState>("idle");
-  const [connectionUnavailable, setConnectionUnavailable] = useState(false);
   const [store] = useState(createAppStore);
-  // Reads the snapshot staged by this render, so a child's layout effect in the same commit
-  // (e.g. `useSession` opening a Chat `sendNewMessage` just seeded) sees the state it rendered.
-  const [stateRef] = useState(() => ({ get current() { return store.getSnapshot().state; } }));
+  // The provider is keyed by user, so this cache never outlives the account it was filled for.
+  const [queryClient] = useState(createAppQueryClient);
+  const [scopeInvalidator] = useState(() => createScopeInvalidator(queryClient));
+  useEffect(() => () => { scopeInvalidator.dispose(); queryClient.clear(); }, [queryClient, scopeInvalidator]);
+  const booting = useStore(store, (snapshot) => snapshot.state.booting);
+  const connectionStateRef = useRef<ConnectionState>("idle");
+  const setConnectionState = useCallback((connectionState: ConnectionState) => store.setState({ connectionState }), [store]);
+  const setConnectionUnavailable = useCallback((connectionUnavailable: boolean) => store.setState({ connectionUnavailable }), [store]);
+  // Reducer updates apply synchronously, so callbacks and layout effects always read the newest state.
+  const [stateRef] = useState(() => ({ get current() { return store.getState().state; } }));
   const subscriptions = useRef(new Map<string, () => void>());
   const sessionSpaces = useRef(new Map<string, string>());
   const openTokens = useRef(new Map<string, number>());
@@ -1027,15 +1009,6 @@ export function AppProvider({
     cooldowns: { "out-of-sync": OUT_OF_SYNC_RESYNC_COOLDOWN_MS },
     run: (sessionId, reason) => resyncRunRef.current(sessionId, reason),
   }));
-  const [models, setModels] = useState<ChatModelCatalogItem[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
-  const modelsRequestRef = useRef<Promise<ChatModelCatalogItem[]> | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
-  const [modelStatusLoading, setModelStatusLoading] = useState(false);
-  const [modelStatusError, setModelStatusError] = useState<string | null>(null);
-  const modelStatusRequestRef = useRef<Promise<ModelStatusResponse | null> | null>(null);
-  const modelStatusLoadedAtRef = useRef(0);
   const paginationRequestsRef = useRef(new Map<string, Promise<void>>());
   const optimisticMessageSequenceRef = useRef(new Map<string, number>());
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
@@ -1052,8 +1025,8 @@ export function AppProvider({
       const id = action.type === "session-upsert" ? action.session.id : action.sessionId;
       sessionEventRevisions.current.set(id, ++sessionEventRevision.current);
     }
-    setState((current) => reducer(current, action));
-  }, []);
+    store.setState((current) => ({ state: reducer(current.state, action) }));
+  }, [store]);
 
   const ensureInstallation = useCallback(async () => {
     const existing = installationIdRef.current;
@@ -1087,66 +1060,25 @@ export function AppProvider({
     [createClient, installationId],
   );
 
-  const spaceList = useSpaceListData(client, userKey);
-  const { recordVisit: recordSpaceVisit, reset: resetSpaceList } = spaceList;
+  const { loadOverview: loadSpaceOverview, recordVisit: recordSpaceVisit, reset: resetSpaceList } = useSpaceListOwner(client, userKey, store, queryClient);
 
   useEffect(() => {
     clientRef.current = client;
   }, [client]);
 
   const loadModels = useCallback(async (options: { force?: boolean } = {}) => {
-    if (models.length > 0 && !options.force) return models;
-    if (modelsRequestRef.current && !options.force) return modelsRequestRef.current;
     const activeClient = clientRef.current;
     if (!activeClient) throw new Error(translate("data.stillConnecting"));
+    if (options.force) await queryClient.invalidateQueries({ queryKey: MODELS_KEY, refetchType: "none" });
+    return queryClient.fetchQuery({ queryKey: MODELS_KEY, queryFn: async () => Object.values(await activeClient.models.list()).flat(), staleTime: Infinity });
+  }, [queryClient]);
 
-    setModelsLoading(true);
-    setModelsError(null);
-    const request = activeClient.models.list()
-      .then((catalog) => {
-        const next = Object.values(catalog).flat();
-        setModels(next);
-        return next;
-      })
-      .catch((error) => {
-        const message = errorMessage(error, "Unable to load models");
-        setModelsError(message);
-        throw error;
-      })
-      .finally(() => {
-        setModelsLoading(false);
-        if (modelsRequestRef.current === request) modelsRequestRef.current = null;
-      });
-    modelsRequestRef.current = request;
-    return request;
-  }, [models]);
-
-  const loadModelStatus = useCallback(async (options: { force?: boolean } = {}) => {
-    if (!options.force && modelStatus && Date.now() - modelStatusLoadedAtRef.current < 60_000) return modelStatus;
-    if (modelStatusRequestRef.current && !options.force) return modelStatusRequestRef.current;
+  const loadModelStatus = useCallback(async (options: { force?: boolean } = {}): Promise<ModelStatusResponse | null> => {
     const activeClient = clientRef.current;
     if (!activeClient) throw new Error(translate("data.stillConnecting"));
-
-    setModelStatusLoading(true);
-    setModelStatusError(null);
-    const request = activeClient.models.status()
-      .then((next) => {
-        setModelStatus(next);
-        modelStatusLoadedAtRef.current = Date.now();
-        return next;
-      })
-      .catch((error) => {
-        const message = errorMessage(error, "Unable to load model status");
-        setModelStatusError(message);
-        throw error;
-      })
-      .finally(() => {
-        setModelStatusLoading(false);
-        if (modelStatusRequestRef.current === request) modelStatusRequestRef.current = null;
-      });
-    modelStatusRequestRef.current = request;
-    return request;
-  }, [modelStatus]);
+    if (options.force) await queryClient.invalidateQueries({ queryKey: MODEL_STATUS_KEY, refetchType: "none" });
+    return queryClient.fetchQuery({ queryKey: MODEL_STATUS_KEY, queryFn: () => activeClient.models.status(), staleTime: 60_000 });
+  }, [queryClient]);
 
   const refreshSessionStatuses = useCallback(async (sessions: StatusSession[], options: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean } = {}) => {
     const activeClient = clientRef.current;
@@ -1510,7 +1442,7 @@ export function AppProvider({
       recovery.update(snapshot);
       if (!isTransportRecovery(previous, snapshot.state)) return;
       for (const sessionId of subscriptions.current.keys()) resyncCoordinatorRef.current.request(sessionId, "transport-open");
-      sync.invalidate();
+      void queryClient.invalidateQueries();
     });
     return () => {
       stopConnection();
@@ -1518,12 +1450,10 @@ export function AppProvider({
       recovery.dispose();
       setConnectionUnavailable(false);
     };
-  }, [client, sync]);
+  }, [client, queryClient, setConnectionState, setConnectionUnavailable]);
 
   useEffect(() => {
-    sync.setActive(NativeAppState.currentState === "active");
     const subscription = NativeAppState.addEventListener("change", (next) => {
-      sync.setActive(next === "active");
       if (next !== "active") {
         for (const controller of runningDiscoveryControllers.current.values()) controller.abort();
         runningDiscoveryControllers.current.clear();
@@ -1532,48 +1462,56 @@ export function AppProvider({
       }
       // A suspended native socket can still report open after foregrounding.
       for (const sessionId of subscriptions.current.keys()) resyncCoordinatorRef.current.request(sessionId, "foreground");
+      void queryClient.invalidateQueries();
     });
-    // Effects may restart with the same state-owned scheduler (e.g. Fast Refresh).
-    return () => { subscription.remove(); sync.setActive(false); };
-  }, [sync]);
+    return () => subscription.remove();
+  }, [queryClient]);
 
-  useEffect(() => {
-    if (!client || state.booting) return;
-    const stopChats = sync.watch("chats", { run: refreshChats, intervalMs: () => 60_000, minRefreshMs: 2_000 });
-    const stopStatuses = sync.watch("chat-statuses", {
-      // User-room Turn projections carry live status; polling only reconciles missed events.
-      intervalMs: () => connectionStateRef.current === "open" ? 30_000 : 5_000,
-      minRefreshMs: 5_000,
-      run: async () => {
-        const sessions = new Map(statusSessionsRef.current);
-        for (const session of stateRef.current.sessions) if (!sessions.has(session.id)) sessions.set(session.id, session);
-        for (const query of Object.values(stateRef.current.runningSessions)) for (const session of query.sessions) sessions.set(session.id, session);
-        for (const view of Object.values(stateRef.current.sessionViews)) if (view.session && !sessions.has(view.session.id)) sessions.set(view.session.id, view.session);
-        const active = [...sessions.values()].filter((session) => {
-          const turn = stateRef.current.sessionLatestTurns[session.id];
-          return sessionListStatus(session, turn, stateRef.current.sessionTurnStatuses) === "running";
-        });
-        await refreshSessionStatuses(active, { silent: true, activeOnly: true });
-      },
-    });
-    // Account-wide Running discovery is owned by the Chats screen while its Running filter is visible;
-    // Turn projections keep membership current in between, so boot does not scan every Chat.
-    const stopSpaces = sync.watch("spaces", {
-      intervalMs: () => 120_000,
-      run: async () => {
-        const generation = homeRefreshGenerationRef.current;
-        try {
-          const spaces = await withTimeout(listAllSpaces(client), "Loading Spaces");
-          if (generation !== homeRefreshGenerationRef.current) return;
-          dispatch({ type: "spaces-sync", spaces });
-        } catch (error) {
-          if (generation === homeRefreshGenerationRef.current) dispatch({ type: "spaces-sync", error: errorMessage(error, "Unable to refresh Spaces") });
-          throw error;
-        }
-      },
-    });
-    return () => { stopChats(); stopStatuses(); stopSpaces(); };
-  }, [client, dispatch, refreshChats, refreshSessionStatuses, state.booting, sync, stateRef]);
+  // These queries schedule reducer-owned reads; their data is only a completion stamp.
+  const accountSyncEnabled = Boolean(client) && !booting;
+  const connectionOpen = useStore(store, (snapshot) => snapshot.connectionState === "open");
+  useQuery({ queryKey: ["chats"], queryFn: async () => { await refreshChats(); return Date.now(); }, enabled: accountSyncEnabled, staleTime: 2_000, refetchInterval: 60_000, notifyOnChangeProps: [] }, queryClient);
+  useQuery({
+    queryKey: ["chat-statuses"],
+    enabled: accountSyncEnabled,
+    notifyOnChangeProps: [],
+    staleTime: 5_000,
+    // User-room Turn projections carry live status; polling only reconciles missed events.
+    refetchInterval: connectionOpen ? 30_000 : 5_000,
+    queryFn: async () => {
+      const sessions = new Map(statusSessionsRef.current);
+      for (const session of stateRef.current.sessions) if (!sessions.has(session.id)) sessions.set(session.id, session);
+      for (const query of Object.values(stateRef.current.runningSessions)) for (const session of query.sessions) sessions.set(session.id, session);
+      for (const view of Object.values(stateRef.current.sessionViews)) if (view.session && !sessions.has(view.session.id)) sessions.set(view.session.id, view.session);
+      const active = [...sessions.values()].filter((session) => {
+        const turn = stateRef.current.sessionLatestTurns[session.id];
+        return sessionListStatus(session, turn, stateRef.current.sessionTurnStatuses) === "running";
+      });
+      await refreshSessionStatuses(active, { silent: true, activeOnly: true });
+      return Date.now();
+    },
+  }, queryClient);
+  // Account-wide Running discovery is owned by the Chats screen while its Running filter is visible;
+  // Turn projections keep membership current in between, so boot does not scan every Chat.
+  useQuery({
+    queryKey: ["spaces"],
+    enabled: accountSyncEnabled,
+    notifyOnChangeProps: [],
+    staleTime: 120_000,
+    refetchInterval: 120_000,
+    queryFn: async () => {
+      if (!client) return Date.now();
+      const generation = homeRefreshGenerationRef.current;
+      try {
+        const spaces = await withTimeout(listAllSpaces(client), "Loading Spaces");
+        if (generation === homeRefreshGenerationRef.current) dispatch({ type: "spaces-sync", spaces });
+      } catch (error) {
+        if (generation === homeRefreshGenerationRef.current) dispatch({ type: "spaces-sync", error: errorMessage(error, "Unable to refresh Spaces") });
+        throw error;
+      }
+      return Date.now();
+    },
+  }, queryClient);
 
   const applyRealtimeChange = useCallback((change: ReturnType<typeof spaceRealtimeChange>) => {
     if (change.sessionId) {
@@ -1588,9 +1526,8 @@ export function AppProvider({
       }
       if (change.turn) dispatch({ type: "session-realtime-turn", sessionId: change.sessionId, turn: change.turn });
     }
-    for (const key of change.exact) sync.invalidate(key);
-    for (const prefix of change.prefixes) sync.invalidatePrefix(prefix);
-  }, [dispatch, sync, stateRef]);
+    scopeInvalidator.add(change);
+  }, [dispatch, scopeInvalidator, stateRef]);
 
   const handleSpaceEvent = useCallback((event: SpaceRealtimeEvent) => {
     recordDebugEvent("realtime.space_event", {
@@ -2143,9 +2080,9 @@ export function AppProvider({
       dispatch({ type: "stream-clear", sessionId });
       dispatch({ type: "send-end", sessionId });
       await refreshSession(sessionId);
-      sync.invalidate();
+      void queryClient.invalidateQueries();
     },
-    [client, dispatch, refreshSession, sync, stateRef],
+    [client, dispatch, refreshSession, queryClient, stateRef],
   );
 
   const sendMessage = useCallback(
@@ -2247,7 +2184,7 @@ export function AppProvider({
         dispatch({ type: "send-end", sessionId });
         // The accepted Turn owns this message now; a leftover local row would come back as a failed send.
         void deleteMessages(userKey, sessionId, [optimistic.id]).catch(() => undefined);
-        sync.invalidate();
+        void queryClient.invalidateQueries();
       } catch (error) {
         const message = error instanceof Error ? error.message : translate("data.messageSendFailed");
         dispatch({ type: "send-failed", sessionId, clientMessageId, message });
@@ -2255,7 +2192,7 @@ export function AppProvider({
         throw error;
       }
     },
-    [client, dispatch, loadLatestWindow, sync, userKey, userUuid, stateRef],
+    [client, dispatch, loadLatestWindow, queryClient, userKey, userUuid, stateRef],
   );
 
   const discardFailedSend = useCallback((sessionId: string, messageId: string) => {
@@ -2332,10 +2269,10 @@ export function AppProvider({
       dispatch({ type: "turn-upsert", sessionId: result.session.id, session: result.session, turn });
       void saveSessions(userKey, [session]).catch(() => undefined);
       void saveMessages(userKey, result.session.id, messages).catch(() => undefined);
-      sync.invalidate();
+      void queryClient.invalidateQueries();
       return { session: result.session, turn, message };
     },
-    [client, dispatch, sync, userKey, stateRef],
+    [client, dispatch, queryClient, userKey, stateRef],
   );
 
   const loadComposerDraftForUser = useCallback(
@@ -2463,9 +2400,9 @@ export function AppProvider({
     dispatch({ type: "session-upsert", session });
     dispatch({ type: "session-forks", forks: [fork] });
     void saveSessions(userKey, [session], [fork]).catch(() => undefined);
-    sync.invalidate();
+    void queryClient.invalidateQueries();
     return result.session;
-  }, [client, dispatch, sync, userKey, stateRef]);
+  }, [client, dispatch, queryClient, userKey, stateRef]);
 
   const rememberSessionForks = useCallback((forks: SessionListFork[]) => {
     if (forks.length === 0) return;
@@ -2484,9 +2421,9 @@ export function AppProvider({
       dispatch({ type: "session-upsert", session: { ...result.session, space: summary?.space ?? null } });
       const currentView = stateRef.current.sessionViews[sessionId];
       if (currentView) dispatch({ type: "session-meta", sessionId, session: result.session, space: currentView.space });
-      sync.invalidate();
+      void queryClient.invalidateQueries();
     },
-    [client, dispatch, sync, stateRef],
+    [client, dispatch, queryClient, stateRef],
   );
 
   const loadSessionReadSequenceForUser = useCallback(
@@ -2509,34 +2446,17 @@ export function AppProvider({
     resetSpaceList();
     clearSlashCommandCache();
     await clearUserCache(userKey);
-    setModels([]);
-    setModelsError(null);
-    setModelStatus(null);
-    setModelStatusError(null);
-    modelStatusLoadedAtRef.current = 0;
     paginationRequestsRef.current.clear();
     spacePinMutationVersionsRef.current.clear();
     spacePinPendingMutationsRef.current.clear();
-    setState({ ...initialState, booting: false, refreshing: false });
-  }, [resetSpaceList, userKey]);
-
-  const snapshot = useMemo<AppSnapshot>(
-    () => ({ state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError }),
-    [state, connectionState, connectionUnavailable, spaceList, models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError],
-  );
-  // Staged during render so children rendered or mounted in this pass, their layout effects, and
-  // provider callbacks all read it. A discarded render is only ever superseded by a newer one.
-  store.stage(snapshot);
-  // Mounted subscribers that bailed out of this pass re-render from here, before paint.
-  useLayoutEffect(() => {
-    store.notify();
-  }, [snapshot, store]);
+    store.setState({ state: { ...initialState, booting: false, refreshing: false } });
+    void queryClient.resetQueries();
+  }, [queryClient, resetSpaceList, store, userKey]);
 
   const actions = useMemo<AppActions>(
     () => ({
       client,
       userUuid,
-      sync,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
@@ -2565,6 +2485,8 @@ export function AppProvider({
       abortSession,
       loadModels,
       loadModelStatus,
+      loadSpaceOverview,
+      recordSpaceVisit,
       createSpace,
       refreshSpacePin,
       toggleSpacePin,
@@ -2578,7 +2500,6 @@ export function AppProvider({
       saveSessionReadSequence: saveSessionReadSequenceForUser,
     }),
     [
-      sync,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
@@ -2600,6 +2521,8 @@ export function AppProvider({
       loadLatestTurns,
       loadModelStatus,
       loadModels,
+      loadSpaceOverview,
+      recordSpaceVisit,
       loadMoreSessions,
       loadNewerTurns,
       loadOlderTurns,
@@ -2623,7 +2546,7 @@ export function AppProvider({
     ],
   );
 
-  return <AppActionsContext.Provider value={actions}><AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider></AppActionsContext.Provider>;
+  return <QueryClientProvider client={queryClient}><AppActionsContext.Provider value={actions}><AppStoreContext.Provider value={store}>{children}</AppStoreContext.Provider></AppActionsContext.Provider></QueryClientProvider>;
 }
 
 function useAppStore() {
@@ -2653,10 +2576,9 @@ export function shallowEqual<T>(a: T, b: T) {
 function createSelectionCache<T>() {
   let committed: { value: T } | null = null;
   return {
-    reader(store: AppStore, selector: (snapshot: AppSnapshot) => T, isEqual: (a: T, b: T) => boolean) {
+    reader(selector: (snapshot: AppSnapshot) => T, isEqual: (a: T, b: T) => boolean) {
       let memo: { snapshot: AppSnapshot; value: T } | null = null;
-      return () => {
-        const snapshot = store.getSnapshot();
+      return (snapshot: AppSnapshot) => {
         if (memo?.snapshot === snapshot) return memo.value;
         const next = selector(snapshot);
         const previous = memo ?? committed;
@@ -2680,8 +2602,8 @@ function createSelectionCache<T>() {
 export function useAppSelector<T>(selector: (snapshot: AppSnapshot) => T, isEqual: (a: T, b: T) => boolean = Object.is): T {
   const store = useAppStore();
   const [cache] = useState(() => createSelectionCache<T>());
-  const getSelection = useMemo(() => cache.reader(store, selector, isEqual), [cache, isEqual, selector, store]);
-  const value = useSyncExternalStore(store.subscribe, getSelection);
+  const getSelection = useMemo(() => cache.reader(selector, isEqual), [cache, isEqual, selector]);
+  const value = useStore(store, getSelection);
   useLayoutEffect(() => {
     cache.commit(value);
   }, [cache, value]);
@@ -2691,7 +2613,7 @@ export function useAppSelector<T>(selector: (snapshot: AppSnapshot) => T, isEqua
 /** Latest committed state for event handlers and callbacks that must not subscribe. */
 export function useAppStateGetter() {
   const store = useAppStore();
-  return useCallback(() => store.getSnapshot().state, [store]);
+  return useCallback(() => store.getState().state, [store]);
 }
 
 /** The main Chat body tracks only the stream's identity and phase; token content stays in `useSessionStream`. */
@@ -2741,6 +2663,23 @@ export function usePersonalSpaceActivity(userUuid: string) {
   return useMemo(() => personalSpaceActivity(Object.values(views), userUuid), [userUuid, views]);
 }
 
-export function selectModelCatalog(app: AppSnapshot) {
-  return { models: app.models, modelsLoading: app.modelsLoading, modelsError: app.modelsError, modelStatus: app.modelStatus, modelStatusLoading: app.modelStatusLoading, modelStatusError: app.modelStatusError };
+/** Reads the catalog `loadModels`/`loadModelStatus` fill; it never fetches on its own. */
+export function useModelCatalog() {
+  const models = useQuery<ChatModelCatalogItem[]>({ queryKey: MODELS_KEY, enabled: false });
+  const status = useQuery<ModelStatusResponse | null>({ queryKey: MODEL_STATUS_KEY, enabled: false });
+  return {
+    models: models.data ?? [],
+    modelsLoading: models.isFetching,
+    modelsError: models.error ? errorMessage(models.error, "Unable to load models") : null,
+    modelStatus: status.data ?? null,
+    modelStatusLoading: status.isFetching,
+    modelStatusError: status.error ? errorMessage(status.error, "Unable to load model status") : null,
+  };
+}
+
+/** Recent Space visits and the server overview; refreshes while mounted when `enabled`. */
+export function useSpaceList(options: { enabled?: boolean; intervalMs?: number } = {}) {
+  const { loadSpaceOverview } = useAppActions();
+  const { spaceVisits, spaceVisitsError } = useAppSelector((app) => ({ spaceVisits: app.spaceVisits, spaceVisitsError: app.spaceVisitsError }), shallowEqual);
+  return useSpaceListQuery(loadSpaceOverview, spaceVisits, spaceVisitsError, options.enabled ?? true, options.intervalMs);
 }

@@ -1,9 +1,10 @@
 import { HttpError, normalizeAppDomainHostname, type AppDomainListResponse, type AppDomainRecord, type CohubClient } from "@neta-art/cohub";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { withAppDomainResult } from "./app-domains";
 import { useAppActions } from "./context";
+import { useScreenQuery } from "./query";
 import { useSpaceRealtime } from "./use-space-realtime";
-import { useSyncScope } from "./use-sync-scope";
 
 export type AppDomainAction = "add" | "check" | "remove";
 export type AppDomainProblem = { code: string | null; message: string | null };
@@ -17,32 +18,20 @@ const toProblem = (error: unknown): AppDomainProblem => ({
 const SETTLING = new Set<AppDomainRecord["status"]>(["pending", "provisioning", "removing"]);
 
 export function useAppDomains(appId: string, spaceId: string | undefined) {
-  const { client, sync } = useAppActions();
-  const key = `app:${appId}:domains`;
-  const [list, setList] = useState<AppDomainListResponse | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { client } = useAppActions();
+  const queryClient = useQueryClient();
+  const queryKey = [`app:${appId}:domains`];
   const [busy, setBusy] = useState<AppDomainAction | null>(null);
   const [problem, setProblem] = useState<AppDomainProblem | null>(null);
-  // Bumped by each mutation, so a list read that started before it cannot restore the old binding.
-  const generation = useRef(0);
-  useEffect(() => () => { generation.current += 1; }, [appId, client]);
   useSpaceRealtime(spaceId ? [spaceId] : []);
-
-  const load = useCallback(async () => {
-    if (!client) return;
-    const request = generation.current;
-    try {
-      const next = await client.apps.listDomains(appId);
-      if (request !== generation.current) return;
-      setList(next);
-      setLoadError(null);
-    } catch (error) {
-      if (request === generation.current) setLoadError(error instanceof Error ? error.message : String(error));
-      throw error;
-    }
-  }, [appId, client]);
-  const settling = list?.domains.some((domain) => SETTLING.has(domain.status)) ?? false;
-  useSyncScope(key, load, settling ? 15_000 : 60_000);
+  const listQuery = useScreenQuery({
+    queryKey,
+    queryFn: (): Promise<AppDomainListResponse> => client!.apps.listDomains(appId),
+    enabled: Boolean(client),
+    refetchInterval: (query) => query.state.data?.domains.some((domain) => SETTLING.has(domain.status)) ? 15_000 : 60_000,
+  });
+  const list = listQuery.data ?? null;
+  const loadError = listQuery.error?.message ?? null;
 
   const run = async (action: AppDomainAction, request: (client: CohubClient) => Promise<MutationResult>) => {
     if (!client || busy) return false;
@@ -50,9 +39,10 @@ export function useAppDomains(appId: string, spaceId: string | undefined) {
     setProblem(null);
     try {
       const result = await request(client);
-      generation.current += 1;
-      setList((current) => current && withAppDomainResult(current, result));
-      sync.invalidate(key);
+      // A list read that started before the mutation must not restore the old binding.
+      await queryClient.cancelQueries({ queryKey });
+      queryClient.setQueryData<AppDomainListResponse>(queryKey, (current) => current && withAppDomainResult(current, result));
+      void queryClient.invalidateQueries({ queryKey });
       return true;
     } catch (error) {
       setProblem(toProblem(error));
@@ -67,7 +57,7 @@ export function useAppDomains(appId: string, spaceId: string | undefined) {
     loadError,
     busy,
     problem,
-    reload: () => sync.invalidate(key),
+    reload: () => void queryClient.invalidateQueries({ queryKey }),
     add: (input: string) => {
       const hostname = normalizeAppDomainHostname(input);
       if (!hostname) {

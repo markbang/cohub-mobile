@@ -1,7 +1,7 @@
 import type { CohubClient, SessionRecord, SpaceRecord } from "@neta-art/cohub";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextInput } from "react-native";
-import { useAppActions, useAppSelector, usePersonalSpaceActivity } from "@/src/data/context";
+import { useAppActions, useAppSelector, usePersonalSpaceActivity, useSpaceList } from "@/src/data/context";
 import { normalizeSearchQuery, useRemoteSearch } from "@/src/data/session-search";
 import { selectSpaceList } from "@/src/data/space-list";
 import {
@@ -74,7 +74,7 @@ export function useComposerMentions({ value, onChange, currentSpaceId, composer 
   const { client, userUuid } = useAppActions();
   const spaces = useAppSelector((app) => app.state.spaces);
   const sessions = useAppSelector((app) => app.state.sessions);
-  const spaceList = useAppSelector((app) => app.spaceList);
+  const spaceList = useSpaceList({ enabled: false });
   const personalActivity = usePersonalSpaceActivity(userUuid);
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [focused, setFocused] = useState(false);
@@ -101,7 +101,7 @@ export function useComposerMentions({ value, onChange, currentSpaceId, composer 
   const refreshSpaceList = spaceList.refresh;
   useEffect(() => {
     if (!open) return;
-    void refreshSpaceList({ silent: true }).catch(() => undefined).finally(() => setNow(Date.now()));
+    void refreshSpaceList().finally(() => setNow(Date.now()));
   }, [open, refreshSpaceList]);
 
   const listInput = useMemo(() => ({ spaces, sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, now }), [now, personalActivity, sessions, spaceList.overview, spaceList.visits, spaces]);

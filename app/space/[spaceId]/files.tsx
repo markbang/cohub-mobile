@@ -8,7 +8,7 @@ import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions, useAppSelector } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSyncQuery } from "@/src/data/query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -78,7 +78,7 @@ export default function FilesScreen() {
       inFlightRef.current = false;
     };
   }, [loadEntries, refreshToken]);
-  useSyncScope(`space:${spaceId}:files:${currentPath}`, () => loadEntries({ silent: true }), 30_000, Boolean(spaceId));
+  useSyncQuery(`space:${spaceId}:files:${currentPath}`, () => loadEntries({ silent: true }), 30_000, Boolean(spaceId));
 
   const openPath = useCallback(
     (path: string) => {

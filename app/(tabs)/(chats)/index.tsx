@@ -17,7 +17,7 @@ import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeL
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSyncQuery } from "@/src/data/query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
@@ -75,7 +75,7 @@ export default function ChatsScreen() {
     const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
-  useSyncScope("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
+  useSyncQuery("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
   const dataError = state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
   const remoteSearch = useRemoteSearch(client, query, { enabled: sourceFilter === "all", types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);

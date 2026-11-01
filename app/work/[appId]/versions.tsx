@@ -1,11 +1,12 @@
 import type { AppRecord, AppVersionRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useScreenQuery } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
@@ -17,32 +18,28 @@ export default function WorkVersionsScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [app, setApp] = useState<AppRecord | null>(null);
-  const [versions, setVersions] = useState<AppVersionRecord[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = [`app:${appId}:versions`];
+  const versionsQuery = useScreenQuery({
+    queryKey,
+    queryFn: async (): Promise<{ app: AppRecord; versions: AppVersionRecord[] }> => {
+      const [detail, list] = await Promise.all([client!.apps.get(appId), client!.apps.listVersions(appId)]);
+      return { app: detail.app, versions: [...list.versions].sort((a, b) => b.version - a.version) };
+    },
+    enabled: Boolean(client && appId),
+    intervalMs: 60_000,
+  });
+  const app = versionsQuery.data?.app ?? null;
+  const versions = versionsQuery.data?.versions ?? null;
+  const error = versionsQuery.error ? versionsQuery.error.message || t("app.versions.loadFailed") : null;
   const [publishing, setPublishing] = useState(false);
-
-  const load = useCallback(async () => {
-    if (!client || !appId) return;
-    try {
-      const [detail, list] = await Promise.all([client.apps.get(appId), client.apps.listVersions(appId)]);
-      setApp(detail.app);
-      setVersions([...list.versions].sort((a, b) => b.version - a.version));
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("app.versions.loadFailed"));
-      throw caught;
-    }
-  }, [appId, client, t]);
-  useSyncScope(`app:${appId}:versions`, load, 60_000, Boolean(appId));
 
   const publish = async () => {
     if (!client || publishing) return;
     setPublishing(true);
     try {
       const result = await client.apps.publishVersion(appId);
-      setApp(result.app);
-      setVersions((current) => [result.version, ...(current ?? []).filter((item) => item.id !== result.version.id)].sort((a, b) => b.version - a.version));
+      queryClient.setQueryData<{ app: AppRecord; versions: AppVersionRecord[] }>(queryKey, (current) => ({ app: result.app, versions: [result.version, ...(current?.versions ?? []).filter((item) => item.id !== result.version.id)].sort((a, b) => b.version - a.version) }));
       toast({ title: t("app.versions.published", { version: result.version.version }), tone: "success" });
     } catch (caught) {
       toast({ title: t("app.versions.publishFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
@@ -53,7 +50,7 @@ export default function WorkVersionsScreen() {
 
   return <Screen>
     <TopBar title={t("app.versions.title")} onBack={() => router.back()} />
-    {error && !versions ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
+    {error && !versions ? <DataError message={error} onRetry={() => void versionsQuery.refetch()} /> : null}
     {!versions ? (error ? null : <LoadingSections sections={[{ kind: "capsule" }, { kind: "caption" }, { kind: "group", rows: 4 }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <PrimaryButton label={t("app.versions.publish")} icon="rocket" loading={publishing} onPress={() => void publish()} className="mx-4 mb-2" />
       <Text className="mb-6 px-8 text-caption text-fg-muted">{t("app.versions.publishHint")}</Text>

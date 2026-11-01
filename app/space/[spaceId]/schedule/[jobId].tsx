@@ -9,7 +9,7 @@ import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSyncQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { AppSwitch, AppIcon, DataError, IconButton, Loader, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { formatRelativeTime } from "@/src/utils";
@@ -55,7 +55,7 @@ export default function ScheduleScreen() {
     }
   }, [client, jobId, t]);
   const active = runs?.items.some((run) => run.status === "running" || run.status === "pending") ?? false;
-  useSyncScope(`schedule:${jobId}`, load, active ? 10_000 : 60_000, Boolean(jobId));
+  useSyncQuery(`schedule:${jobId}`, load, active ? 10_000 : 60_000, Boolean(jobId));
 
   const nextRuns = useMemo(() => job ? nextCronRuns(job.cronExpression, job.timezone, 3) : [], [job]);
 

@@ -4,7 +4,7 @@ import { translate } from "@/src/i18n/core";
 import { sessionPageState, type SessionPageBoundary } from "@/src/data/session-status";
 import { sessionSourceFilterKeys, type SessionSourceFilter } from "@/src/data/session-source";
 import { mergeSessionPages, reconcileSessionHead } from "./session-list-sync";
-import { useSyncScope } from "./use-sync-scope";
+import { useSyncQuery } from "./query";
 import { sortByRecent } from "@/src/utils";
 
 const PAGE_SIZE = 60;
@@ -120,7 +120,7 @@ export function useSourceSessions(client: CohubClient | null, filter: SessionSou
     void request.finally(() => { if (headRequestRef.current === request) headRequestRef.current = null; }).catch(() => undefined);
     return request;
   }, [fetchPage]);
-  useSyncScope(`chats:source:${filter}`, refresh, 15_000, enabled && state.initialized && !state.loading);
+  useSyncQuery(`chats:source:${filter}`, refresh, 15_000, enabled && state.initialized && !state.loading);
 
   const loadMore = useCallback(() => {
     if (!enabled || loadingMoreRef.current || !hasMoreRef.current) return;

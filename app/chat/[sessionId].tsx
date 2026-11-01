@@ -32,8 +32,8 @@ import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { fetchSessionLabels, toUserSessionLabels, type SessionLabel } from "@/src/data/session-labels";
 import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
-import { selectModelCatalog, shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useSession, useSessionStream } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useModelCatalog, useSession, useSessionStream } from "@/src/data/context";
+import { useSyncQuery } from "@/src/data/query";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
 import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -205,7 +205,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const showToast = useToast();
   const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const latestTurnStatus = useAppSelector((app) => app.state.sessionLatestTurns[sessionId]?.status);
   const parentSessionId = useAppSelector((app) => app.state.sessionForks[sessionId]?.parentSessionId ?? null);
@@ -215,7 +215,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const session = view.session ?? sessionSummary;
   const spaceId = view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
   const runtime = useSpaceRuntime(spaceId);
-  useSyncScope(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
+  useSyncQuery(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
   const composerRef = useRef<View>(null);
   const [sendTransition, setSendTransition] = useState<SendBubbleTransition | null>(() => initialSendTransition ?? null);
@@ -1448,7 +1448,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const { t } = useTranslation();
   const showToast = useToast();
   const { client, sendNewMessage, upsertSpace, getAccessToken, loadModels, loadModelStatus, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const runtime = useSpaceRuntime(spaceId);
   const listedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);

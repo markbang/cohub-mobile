@@ -1,46 +1,32 @@
 import type { CohubClient, ReferralDashboard } from "@neta-art/cohub";
-import { useCallback, useRef, useState } from "react";
-import { useFocusEffect } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useTranslation } from "@/src/i18n";
+import { useScreenQuery } from "./query";
+
+const REFERRALS_KEY = ["referrals"];
 
 export function useReferrals(client: CohubClient | null) {
   const { t } = useTranslation();
-  const [data, setData] = useState<ReferralDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const query = useScreenQuery({ queryKey: REFERRALS_KEY, queryFn: (): Promise<ReferralDashboard> => client!.referrals.getMine(), enabled: Boolean(client) });
   const [rotating, setRotating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const generation = useRef(0);
-  const load = useCallback(async () => {
-    const current = ++generation.current;
-    if (!client) { setError(t("settings.referrals.connect")); setLoading(false); return; }
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await client.referrals.getMine();
-      if (current === generation.current) setData(result);
-    } catch (caught) {
-      if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.referrals.error"));
-    } finally {
-      if (current === generation.current) setLoading(false);
-    }
-  }, [client, t]);
-  useFocusEffect(useCallback(() => { void load(); return () => { generation.current += 1; }; }, [load]));
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  const loadError = !client ? t("settings.referrals.connect") : query.error ? query.error.message || t("settings.referrals.error") : null;
   const rotate = async (): Promise<boolean> => {
     if (!client || rotating) return false;
     setRotating(true);
-    setError(null);
-    const current = generation.current;
+    setRotateError(null);
     try {
       const { code } = await client.referrals.rotateCode();
-      if (current !== generation.current) return false;
-      setData((previous) => previous ? { ...previous, code } : null);
+      queryClient.setQueryData<ReferralDashboard>(REFERRALS_KEY, (previous) => previous ? { ...previous, code } : previous);
       return true;
     } catch (caught) {
-      if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.referrals.error"));
+      setRotateError(caught instanceof Error ? caught.message : t("settings.referrals.error"));
       return false;
     } finally {
-      if (current === generation.current) setRotating(false);
+      setRotating(false);
     }
   };
-  return { data, loading, rotating, error, load, rotate };
+  return { data: query.data ?? null, loading: Boolean(client) && query.isPending, rotating, error: rotateError ?? loadError, load: async () => { setRotateError(null); await query.refetch(); }, rotate };
 }

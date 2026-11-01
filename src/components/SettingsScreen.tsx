@@ -9,9 +9,9 @@ import type {
 	UserActivityResponse,
 	UserProfile,
 } from "@neta-art/cohub";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
 	Linking,
 	Platform,
@@ -30,6 +30,8 @@ import { useUserRules } from "@/src/data/use-user-rules";
 import { useReferrals } from "@/src/data/use-referrals";
 import { useProfileSession } from "@/src/auth/profile-session";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { settingsSections, type SettingsSection } from "@/src/data/settings-navigation";
 import {
@@ -432,35 +434,16 @@ function ProfileSection({
 function ActivitySection({ client }: { client: CohubClient | null }) {
 	const { t } = useTranslation();
 	const [days, setDays] = useState(30);
-	const [data, setData] = useState<UserActivityResponse | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const generation = useRef(0);
-	const load = useCallback(async () => {
-		const request = ++generation.current;
-		if (!client) {
-			setLoading(false);
-			setError(t("settings.activity.connect"));
-			return;
-		}
-		setLoading(true);
-		setError(null);
-		try {
-			const result = await client.user.getActivity({ days });
-			if (request === generation.current) setData(result);
-		} catch (caught) {
-			if (request === generation.current) setError(
-				caught instanceof Error ? caught.message : t("settings.activity.error"),
-			);
-		} finally {
-			if (request === generation.current) setLoading(false);
-		}
-	}, [client, days, t]);
-	useEffect(() => {
-		let active = true;
-		void Promise.resolve().then(() => { if (active) void load(); });
-		return () => { active = false; generation.current += 1; };
-	}, [load]);
+	const query = useScreenQuery({
+		queryKey: ["settings-activity", days],
+		queryFn: (): Promise<UserActivityResponse> => client!.user.getActivity({ days }),
+		enabled: Boolean(client),
+		placeholderData: keepPreviousData,
+	});
+	const data = query.data ?? null;
+	const loading = Boolean(client) && query.isFetching && (query.isPending || query.isPlaceholderData);
+	const error = !client ? t("settings.activity.connect") : query.error ? query.error.message || t("settings.activity.error") : null;
+	const load = () => query.refetch();
 	const summary = data?.summary;
 	return (
 		<View>
@@ -728,6 +711,9 @@ function RulesSection() {
 	);
 }
 
+const CHANNELS_KEY = ["channels"];
+const EMPTY_CHANNELS: Channel[] = [];
+
 function ChannelsSection({
 	client,
 	onNotice,
@@ -739,40 +725,22 @@ function ChannelsSection({
 	const { t } = useTranslation();
 	const router = useRouter();
 	const [bindingChannel, setBindingChannel] = useState<Channel | null>(null);
-	const [channels, setChannels] = useState<Channel[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
+	const query = useScreenQuery({ queryKey: CHANNELS_KEY, queryFn: (): Promise<Channel[]> => client!.channels.list(), enabled: Boolean(client) });
+	const channels = query.data ?? EMPTY_CHANNELS;
+	const loading = Boolean(client) && query.isPending;
+	const error = !client ? t("settings.channels.connect") : query.error ? query.error.message || t("settings.channels.error") : null;
+	const load = () => query.refetch();
 	const [removeCandidate, setRemoveCandidate] = useState<Channel | null>(null);
 	const [removing, setRemoving] = useState(false);
-	const load = useCallback(async () => {
-		if (!client) {
-			setLoading(false);
-			setError(t("settings.channels.connect"));
-			return;
-		}
-		setLoading(true);
-		setError(null);
-		try {
-			setChannels(await client.channels.list());
-		} catch (caught) {
-			setError(
-				caught instanceof Error ? caught.message : t("settings.channels.error"),
-			);
-		} finally {
-			setLoading(false);
-		}
-	}, [client, t]);
-	useFocusEffect(useCallback(() => {
-		void load();
-	}, [load]));
 	const confirmRemove = async () => {
 		if (!client || !removeCandidate || removeCandidate.boundSpace || removing)
 			return;
 		setRemoving(true);
 		try {
 			await client.channels.delete(removeCandidate.id);
-			setChannels((current) =>
-				current.filter((item) => item.id !== removeCandidate.id),
+			queryClient.setQueryData<Channel[]>(CHANNELS_KEY, (current) =>
+				current?.filter((item) => item.id !== removeCandidate.id),
 			);
 			setRemoveCandidate(null);
 		} catch (caught) {
@@ -791,7 +759,7 @@ function ChannelsSection({
 		<View>
 			{bindingChannel ? <ChannelBindingSheet key={bindingChannel.id} channel={bindingChannel} onClose={() => setBindingChannel(null)} onChanged={() => { setBindingChannel(null); void load(); }} /> : null}
 			<View className="px-4 items-end">
-				<IconButton name="refresh" label={t("common.refresh")} disabled={loading} onPress={() => void load()} />
+				<IconButton name="refresh" label={t("common.refresh")} disabled={query.isFetching} onPress={() => void load()} />
 			</View>
 			{loading ? (
 				<LoadingBlock />
@@ -884,37 +852,20 @@ function BillingSection({
 }) {
 	const theme = useAppTheme();
 	const { t } = useTranslation();
-	const [credits, setCredits] = useState<BillingCreditStatus | null>(null);
-	const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const query = useScreenQuery({
+		queryKey: ["billing", "overview"],
+		queryFn: async (): Promise<{ credits: BillingCreditStatus; catalog: BillingCatalog }> => {
+			const [credits, catalogResult] = await Promise.all([client!.billing.getCredits(), client!.billing.getCatalog()]);
+			return { credits, catalog: catalogResult.catalog };
+		},
+		enabled: Boolean(client),
+	});
+	const credits = query.data?.credits ?? null;
+	const catalog = query.data?.catalog ?? null;
+	const loading = Boolean(client) && query.isPending;
+	const error = !client ? t("settings.billing.connect") : query.error ? query.error.message || t("settings.billing.error") : null;
+	const load = () => query.refetch();
 	const [pendingProductKey, setPendingProductKey] = useState<string | null>(null);
-	const load = useCallback(async () => {
-		if (!client) {
-			setLoading(false);
-			setError(t("settings.billing.connect"));
-			return;
-		}
-		setLoading(true);
-		setError(null);
-		try {
-			const [credit, catalogResult] = await Promise.all([
-				client.billing.getCredits(),
-				client.billing.getCatalog(),
-			]);
-			setCredits(credit);
-			setCatalog(catalogResult.catalog);
-		} catch (caught) {
-			setError(
-				caught instanceof Error ? caught.message : t("settings.billing.error"),
-			);
-		} finally {
-			setLoading(false);
-		}
-	}, [client, t]);
-	useEffect(() => {
-		void Promise.resolve().then(() => load());
-	}, [load]);
 	const openProduct = async (
 		product: BillingCatalog["plans"][number] | BillingCatalog["addons"][number],
 	) => {

@@ -3,7 +3,8 @@ import { randomUUID } from "expo-crypto";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppActions } from "./context";
 import { appendWalletActivity } from "./space-wallet";
-import { useSyncScope } from "./use-sync-scope";
+import { useSyncQuery } from "./query";
+import { useQueryClient } from "@tanstack/react-query";
 
 type WalletCatalog = { supported: boolean; paymentAvailable: boolean; products: BillingCatalogProduct[] };
 export type WalletPayment = "pending" | "settled" | "failed";
@@ -12,7 +13,8 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 
 /** Checkout runs in the browser, so a pending payment is confirmed on refresh and polled meanwhile. */
 export function useSpaceWallet(spaceId: string) {
-  const { client, sync } = useAppActions();
+  const { client } = useAppActions();
+  const queryClient = useQueryClient();
   const key = `space:${spaceId}:wallet`;
   const [summary, setSummary] = useState<SpaceWalletSummary | null>(null);
   const [catalog, setCatalog] = useState<WalletCatalog | null>(null);
@@ -58,7 +60,7 @@ export function useSpaceWallet(spaceId: string) {
     });
     if (nextSummary.status === "rejected") throw nextSummary.reason;
   }, [client, confirm, spaceId]);
-  useSyncScope(key, load, payment === "pending" ? 15_000 : 60_000);
+  useSyncQuery(key, load, payment === "pending" ? 15_000 : 60_000);
 
   const loadMore = async () => {
     if (!client || !activity?.hasMore || loadingMore) return;
@@ -116,7 +118,7 @@ export function useSpaceWallet(spaceId: string) {
     buying,
     checkoutError,
     payment,
-    reload: () => sync.invalidate(key),
+    reload: () => void queryClient.invalidateQueries({ queryKey: [key] }),
     refresh: load,
     loadMore,
     startCheckout,

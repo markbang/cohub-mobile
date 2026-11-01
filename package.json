@@ -11,6 +11,7 @@
     "@react-native-async-storage/async-storage": "~2.2.0",
     "@shikijs/langs": "^4.5.0",
     "@shikijs/themes": "^4.5.0",
+    "@tanstack/react-query": "^5.105.0",
     "culori": "^4.0.2",
     "expo": "~58.0.19",
     "expo-application": "~58.1.1",
@@ -56,7 +57,8 @@
     "shiki": "^4.5.0",
     "tailwindcss": "^4.3.3",
     "unicode-segmenter": "^0.17.3",
-    "uniwind": "^1.12.2"
+    "uniwind": "^1.12.2",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
     "@types/culori": "^4.0.1",

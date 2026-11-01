@@ -6,7 +6,7 @@ import {
 } from "@/src/data/composer-state";
 import { AttachmentMenu } from "@/src/components/AttachmentMenu";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
-import { selectModelCatalog, shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
+import { useAppActions, useModelCatalog } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
 import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
 import { useAppTheme } from "@/src/theme";
@@ -34,7 +34,7 @@ export default function DebugComposerScreen() {
   const theme = useAppTheme();
   const matrix = useMemo(() => buildMatrix(), []);
   const { loadModels, loadModelStatus } = useAppActions();
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const composerRef = useRef<View>(null);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
