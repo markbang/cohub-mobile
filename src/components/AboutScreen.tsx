@@ -143,7 +143,8 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
 
       <SectionHeader title={t("about.section.legal")} />
       <SettingsGroup>
-        <SettingsRow external icon="shield" title={t("about.row.license")} value={t("about.row.licenseDetail")} last onPress={() => void openExternal(LICENSE_URL, t("about.row.license"))} />
+        <SettingsRow external icon="shield" title={t("about.row.license")} value={t("about.row.licenseDetail")} onPress={() => void openExternal(LICENSE_URL, t("about.row.license"))} />
+        <SettingsRow icon="file-text" title={t("about.row.thirdParty")} value={t("about.row.thirdPartyDetail")} last onPress={() => router.push("/licenses")} />
       </SettingsGroup>
 
       <Text className="mx-6 mt-2 text-center text-caption text-fg-faint">{t("about.builtWith")}</Text>
