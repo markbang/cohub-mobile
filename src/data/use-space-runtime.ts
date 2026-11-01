@@ -1,30 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
 import type { SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "./query";
 
 export function useSpaceRuntime(spaceId: string) {
   const { client } = useAppActions();
-  const [status, setStatus] = useState<SpaceRuntimeStatus | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!spaceId || !client) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setStatus(await client.space(spaceId).getRuntime());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to check the local runtime.");
-      setStatus(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [client, spaceId]);
-
-  useEffect(() => {
-    const task = Promise.resolve().then(() => refresh());
-    return () => { void task.catch(() => undefined); };
-  }, [refresh]);
-  return { status, loading, error, refresh };
+  const query = useScreenQuery({
+    queryKey: [`space:${spaceId}:runtime`],
+    queryFn: (): Promise<SpaceRuntimeStatus> => client!.space(spaceId).getRuntime(),
+    enabled: Boolean(client && spaceId),
+    retry: 0,
+  });
+  return {
+    status: query.isError ? null : query.data ?? null,
+    loading: query.isFetching,
+    error: query.error ? query.error.message || "Unable to check the local runtime." : null,
+    refresh: async () => { await query.refetch(); },
+  };
 }

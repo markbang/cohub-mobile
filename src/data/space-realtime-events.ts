@@ -65,7 +65,7 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       break;
     }
     case "space.fs.changed":
-      change.prefixes.push(`space:${spaceId}:files:`, `space:${spaceId}:files-panel:`);
+      change.prefixes.push(`space:${spaceId}:files:`);
       break;
     case "app.version.published":
       change.exact.push(`space:${spaceId}:resources`);

@@ -1,10 +1,10 @@
 import type { GenerationContentBlock, TaskRunDetailResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { GenerationBlock } from "@/src/components/GenerationOutput";
 import { useAppActions } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useScreenQuery } from "@/src/data/query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, Bone, Screen, Skeleton, StatusPill, TopBar } from "@/src/ui";
@@ -15,11 +15,19 @@ export default function TaskScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [detail, setDetail] = useState<TaskRunDetailResponse | null>(null);
+  const detailQuery = useScreenQuery({
+    queryKey: [`task:${taskId}`],
+    queryFn: (): Promise<TaskRunDetailResponse> => client!.tasks.get(taskId),
+    enabled: Boolean(client && taskId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.run.status;
+      return !status || status === "running" || status === "pending" ? 5_000 : 60_000;
+    },
+  });
+  const detail = detailQuery.data ?? null;
   useSpaceRealtime(detail?.run.spaceId ? [detail.run.spaceId] : []);
-  const [error, setError] = useState<string | null>(null);
+  const error = detailQuery.error ? detailQuery.error.message || t("task.error") : null;
   const [showJson, setShowJson] = useState(false);
-  const generation = useRef(0);
   
   // Memoize expensive JSON stringification and limit size
   const jsonString = useMemo(() => {
@@ -41,20 +49,6 @@ export default function TaskScreen() {
       return "[Unable to serialize]";
     }
   }, [detail]);
-  useEffect(() => () => { generation.current += 1; }, [client, taskId]);
-  useSyncScope(`task:${taskId}`, async () => {
-    if (!client || !taskId) return;
-    const token = generation.current;
-    try {
-      const result = await client.tasks.get(taskId);
-      if (token !== generation.current) return;
-      setDetail(result);
-      setError(null);
-    } catch (caught) {
-      if (token === generation.current) setError(caught instanceof Error ? caught.message : t("task.error"));
-      throw caught;
-    }
-  }, !detail || detail.run.status === "running" || detail.run.status === "pending" ? 5_000 : 60_000, Boolean(taskId));
   const output = generationOutput(detail?.run.result);
   const run = detail?.run;
   

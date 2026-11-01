@@ -95,7 +95,7 @@ A complete all-account Running view cannot be guaranteed from the first 60 sessi
 
 Keep SDK operations, state merging, and cache writes in `src/data/`. Pages report focused scope, visible IDs, and open panels; they do not own protocol handling.
 
-Introduce a small framework-free scheduling module (proposed `src/data/sync-scheduler.ts`) with registration, invalidation, foreground state, and disposal as its interface. It owns timing and request admission, not application entities. Connect it through `AppProvider` and existing data hooks incrementally; do not build a replacement query framework or refactor unrelated state.
+TanStack Query owns scheduling, request deduplication, and every screen-level read (`src/data/query.ts`): `useScreenQuery` for single resources, `usePagedQuery` for cursor lists whose refresh reconciles only the head, and `useSyncQuery` for reads whose result the reducer owns. `AppProvider` creates one `QueryClient` per signed-in user and clears it on account change. Query keys begin with the realtime scope string (for example `space:<id>:labels`), so realtime events invalidate queries directly. Chat state (sessions, turns, streams, pagination, read state) stays in the reducer, now held in a Zustand store; `useSyncQuery` schedules those reducer-owned reads without caching their data.
 
 Required behavior:
 
@@ -164,7 +164,7 @@ These changes would make global running discovery and terminal outcomes cheaper 
 
 ## Implemented Scope
 
-- Added an account-owned, foreground-aware scheduler and a route-focus registration hook. Requests are completion-scheduled, deduplicated per resource key, coalesced over 250 ms, and retried with jittered exponential backoff. Authentication/access failures pause automatic retries until invalidation. Four automatic resource operations can run concurrently; operations containing multiple SDK calls are not a strict four-HTTP-request budget.
+- Scheduling runs on TanStack Query. Queries refetch when their route regains focus (`useScreenQuery`), poll only while focused and the app is foregrounded, and share one in-flight request per key. Foregrounding and transport recovery invalidate all queries; realtime invalidations are coalesced over 250 ms. A failed read retries once, then waits for the next interval. Access failures do not retry, and stop polling until the next invalidation. There is no global concurrency cap, interval jitter, or failure backoff on the polling interval.
 - Global Chats poll every 15 seconds while the Chats tab is visible and every 60 seconds offscreen. Source-filtered and Space/panel Chat lists poll every 15 seconds. Head reconciliation retains loaded older pages and tail cursors, and the Chat lists enable LegendList data-change anchoring.
 - Known active turns are checked on a 5-second schedule, including turns outside the 30-minute display window. Status reads share a per-client, two-request concurrency limit and in-flight deduplication. Unchanged outcome reads are cached for 60 seconds; active reads for 4 seconds. `activeTurn` supplements execution detection, while targeted turn reads and a per-turn status ledger prevent stale snapshots from reviving terminal turns. Latest-outcome queries remain in use; they have not all been eliminated.
 - Queued and stop-requested turns count as active. Running is account-wide and has no recency cutoff; Completed retains its existing time window. Running renders known active rows immediately and incorporates validated scan pages as they arrive. Partial results stay marked as loading until the last page, and a failed later page retains earlier results.
@@ -187,7 +187,7 @@ This environment has neither `adb` nor `xcrun`. Native builds, foreground/backgr
 
 ## Verification Plan
 
-Extend the existing Node workflow assertions in `scripts/check-chat-workflow.mjs`; do not add a test framework. Inject clock/scheduling dependencies into the scheduling helper.
+Extend the existing Node workflow assertions in `scripts/check-chat-workflow.mjs`; do not add a test framework.
 
 Cover timer disposal; foreground/focus/reconnect coalescing; dirty-during-flight follow-up; backoff and request limits; old-account responses; event-versus-snapshot ordering; queued/running/stopping/terminal transitions; an active turn older than 30 minutes; source-filter membership; head refresh after loading 120+ Chats; stable cursor/scroll anchors; and missed-finalization recovery.
 

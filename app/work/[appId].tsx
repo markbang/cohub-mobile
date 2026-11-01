@@ -1,9 +1,10 @@
 import type { AppDetailResponse } from "@neta-art/cohub";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { AppHostWebView } from "@/src/components/AppHostWebView";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
 import { DataError, TopBar, IconButton, LoadingState, Screen } from "@/src/ui";
@@ -16,30 +17,18 @@ export default function WorkScreen() {
   const appId = Array.isArray(params.appId) ? params.appId[0] : params.appId;
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [detail, setDetail] = useState<AppDetailResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const generation = useRef(0);
+  const detailQuery = useScreenQuery({
+    queryKey: [`app:${appId}:detail`],
+    queryFn: (): Promise<AppDetailResponse> => client!.apps.get(appId!),
+    enabled: Boolean(client && appId),
+  });
+  const detail = detailQuery.data ?? null;
+  const error = detailQuery.error ? detailQuery.error.message || t("work.error") : null;
   const contentUrl = detail?.content?.url ?? null;
   const initialOrigin = useMemo(() => {
     if (!contentUrl) return null;
     try { return new URL(contentUrl).origin; } catch { return null; }
   }, [contentUrl]);
-
-  const load = useCallback(async () => {
-    if (!client || !appId) return;
-    const request = ++generation.current;
-    setError(null);
-    try {
-      const result = await client.apps.get(appId);
-      if (request === generation.current) setDetail(result);
-    } catch (caught) {
-      if (request === generation.current) setError(caught instanceof Error ? caught.message : t("work.error"));
-    }
-  }, [appId, client, t]);
-  useFocusEffect(useCallback(() => {
-    void load();
-    return () => { generation.current += 1; };
-  }, [load]));
 
   const title = detail?.app.meta?.title || detail?.app.meta?.name || detail?.app.slug || t("work.fallbackTitle");
   return <Screen>
@@ -54,7 +43,7 @@ export default function WorkScreen() {
         </>
       ) : undefined} 
     />
-    {error ? <DataError message={error} onRetry={() => void load()} /> : null}
+    {error ? <DataError message={error} onRetry={() => void detailQuery.refetch()} /> : null}
     {!detail ? (error ? null : <LoadingState />) : !contentUrl || !initialOrigin ? <View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("work.noContent")}</Text></View> : <AppHostWebView detail={detail} contentUrl={contentUrl} />}
   </Screen>;
 }

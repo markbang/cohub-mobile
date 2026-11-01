@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import type { CheckpointDiffFile, CheckpointDiffSummary, CheckpointRecord, SpaceFsEntry } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -9,6 +9,7 @@ import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useToast } from "@/src/components/Toast";
 import { DIFF_STATUS, formatDiffCounts, joinSavePath, saveStat, saveTitle } from "@/src/data/checkpoint-diff";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, IconButton, Loader, LoadingSections, Screen, Segmented, TopBar } from "@/src/ui";
 import { Meta } from "@/src/ui/ListRow";
@@ -24,21 +25,17 @@ export default function SaveScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [save, setSave] = useState<CheckpointRecord | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const saveQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:save`, checkpointId],
+    queryFn: async (): Promise<CheckpointRecord> => (await client!.space(spaceId).checkpoints.get(checkpointId)).checkpoint,
+    enabled: Boolean(client && spaceId && checkpointId),
+    staleTime: Infinity,
+  });
+  const save = saveQuery.data ?? null;
+  const error = saveQuery.error ? saveQuery.error.message || t("save.loadFailed") : null;
   const [tab, setTab] = useState<Tab>("changes");
-  const [attempt, setAttempt] = useState(0);
   const [comparing, setComparing] = useState(false);
   const title = save ? saveTitle(save, (hash) => t("space.save", { hash })) : t("save.title");
-
-  useEffect(() => {
-    if (!client || !spaceId || !checkpointId) return;
-    let active = true;
-    void client.space(spaceId).checkpoints.get(checkpointId)
-      .then((result) => { if (active) { setSave(result.checkpoint); setError(null); } })
-      .catch((caught: unknown) => { if (active) setError(caught instanceof Error ? caught.message : t("save.loadFailed")); });
-    return () => { active = false; };
-  }, [attempt, checkpointId, client, spaceId, t]);
 
   const copyHash = async () => {
     if (!save) return;
@@ -52,7 +49,7 @@ export default function SaveScreen() {
 
   return <Screen>
     <TopBar title={title} subtitle={save ? formatRelativeTime(save.createdAt) : undefined} onBack={() => router.back()} actions={save ? <IconButton name="copy" label={t("save.copyHash")} onPress={() => void copyHash()} /> : undefined} />
-    {error && !save ? <DataError message={error} onRetry={() => setAttempt((value) => value + 1)} /> : null}
+    {error && !save ? <DataError message={error} onRetry={() => void saveQuery.refetch()} /> : null}
     {!save ? (error ? null : <LoadingSections paddingTop={4} sections={[{ kind: "caption" }, { kind: "capsule" }, { kind: "group", rows: 4, leading: true }]} />) : <>
       <View className="gap-3 px-4 pb-3 pt-1">
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
@@ -81,20 +78,14 @@ function ChangesTab({ spaceId, save, base, bottomInset, onCompare }: { spaceId: 
   const router = useRouter();
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [diff, setDiff] = useState<{ key: string; summary: CheckpointDiffSummary } | null>(null);
-  const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const key = `${save.id}:${base ?? ""}:${attempt}`;
-  useEffect(() => {
-    if (!client) return;
-    let active = true;
-    void client.space(spaceId).checkpoints(save.id).diff.summary({ base })
-      .then((summary) => { if (active) setDiff({ key, summary }); })
-      .catch((caught: unknown) => { if (active) setError({ key, message: caught instanceof Error ? caught.message : t("save.diffFailed") }); });
-    return () => { active = false; };
-  }, [base, client, key, save.id, spaceId, t]);
-  const summary = diff?.key === key ? diff.summary : null;
-  const failure = error?.key === key ? error.message : null;
+  const diffQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:save`, save.id, "diff", base],
+    queryFn: (): Promise<CheckpointDiffSummary> => client!.space(spaceId).checkpoints(save.id).diff.summary({ base }),
+    enabled: Boolean(client),
+    staleTime: Infinity,
+  });
+  const summary = diffQuery.data ?? null;
+  const failure = diffQuery.error ? diffQuery.error.message || t("save.diffFailed") : null;
   const compareLabel = base && base !== save.parentCheckpointId ? t("save.comparedWith", { hash: base.slice(0, 8) }) : save.parentCheckpointId ? t("save.comparedWithParent") : t("save.firstSave");
   return <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset + 32 }}>
     <View className="flex-row items-center gap-2 px-4 pb-2">
@@ -104,7 +95,7 @@ function ChangesTab({ spaceId, save, base, bottomInset, onCompare }: { spaceId: 
         <Text className="text-caption font-semibold text-accent">{t("save.compare")}</Text>
       </Pressable>
     </View>
-    {failure ? <DataError message={failure} onRetry={() => setAttempt((value) => value + 1)} /> : !summary ? <LoadingSections paddingTop={0} sections={[{ kind: "caption" }, { kind: "group", rows: 4, leading: true }]} /> : <>
+    {failure ? <DataError message={failure} onRetry={() => void diffQuery.refetch()} /> : !summary ? <LoadingSections paddingTop={0} sections={[{ kind: "caption" }, { kind: "group", rows: 4, leading: true }]} /> : <>
       <View className="flex-row flex-wrap gap-x-4 gap-y-1 px-4 pb-3">
         <Meta icon="file-text" value={String(summary.stats.changedFileCount)} label={t("save.changedFiles", { count: summary.stats.changedFileCount })} />
         <Text className="text-caption tabular-nums text-success">+{summary.stats.additions}</Text>
@@ -150,25 +141,20 @@ function FilesTab({ spaceId, checkpointId, bottomInset }: { spaceId: string; che
   const { t } = useTranslation();
   const { client } = useAppActions();
   const [path, setPath] = useState("");
-  const [listing, setListing] = useState<{ path: string; entries: SpaceFsEntry[] } | null>(null);
-  const [error, setError] = useState<{ path: string; message: string } | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!client) return;
-    let active = true;
-    void client.space(spaceId).checkpoints(checkpointId).files.list(path || undefined)
-      .then((result) => { if (active) setListing({ path, entries: [...result.entries].sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.localeCompare(b.name)) }); })
-      .catch((caught: unknown) => { if (active) setError({ path, message: caught instanceof Error ? caught.message : t("files.loadError") }); });
-    return () => { active = false; };
-  }, [attempt, checkpointId, client, path, spaceId, t]);
-  const entries = listing?.path === path ? listing.entries : null;
-  const failure = error?.path === path && !entries ? error.message : null;
+  const listingQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:save`, checkpointId, "files", path],
+    queryFn: async (): Promise<SpaceFsEntry[]> => [...(await client!.space(spaceId).checkpoints(checkpointId).files.list(path || undefined)).entries].sort((a, b) => Number(b.type === "dir") - Number(a.type === "dir") || a.name.localeCompare(b.name)),
+    enabled: Boolean(client),
+    staleTime: Infinity,
+  });
+  const entries = listingQuery.data ?? null;
+  const failure = listingQuery.error && !entries ? listingQuery.error.message || t("files.loadError") : null;
   return <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: bottomInset + 32 }}>
     {path ? <Pressable accessibilityRole="button" accessibilityLabel={t("files.backToParent")} onPress={() => setPath(parentSpacePath(path))} className="mx-4 mb-2 min-h-11 flex-row items-center gap-2 rounded-sm px-2 active:bg-surface-pressed">
       <AppIcon name="arrow-left" size={16} tone="accent" />
       <Text numberOfLines={1} ellipsizeMode="head" className="min-w-0 flex-1 text-subhead text-fg-secondary">/{path}</Text>
     </Pressable> : null}
-    {failure ? <DataError message={failure} onRetry={() => setAttempt((value) => value + 1)} /> : !entries ? <View className="py-6"><Loader /></View>
+    {failure ? <DataError message={failure} onRetry={() => void listingQuery.refetch()} /> : !entries ? <View className="py-6"><Loader /></View>
       : entries.length === 0 ? <Text className="px-4 py-6 text-center text-subhead text-fg-muted">{t("files.emptyFolder")}</Text>
       : <View className="mx-4 overflow-hidden rounded-md bg-surface" style={{ borderCurve: "continuous" }}>
         {entries.map((entry) => <SpaceFileRow key={entry.path || joinSavePath(path, entry.name)} entry={entry} compact onPress={() => {
@@ -182,21 +168,13 @@ function FilesTab({ spaceId, checkpointId, bottomInset }: { spaceId: string; che
 function CompareSheet({ visible, spaceId, save, base, onClose, onPick }: { visible: boolean; spaceId: string; save: CheckpointRecord; base: string | null; onClose: () => void; onPick: (base: string | null) => void }) {
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [options, setOptions] = useState<CheckpointRecord[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const requested = useRef(false);
-  const load = useCallback(() => {
-    if (!client) return;
-    setError(null);
-    void client.space(spaceId).checkpoints.list({ limit: 30 })
-      .then((result) => setOptions(result.checkpoints.filter((item) => item.id !== save.id)))
-      .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : t("save.loadFailed")));
-  }, [client, save.id, spaceId, t]);
-  useEffect(() => {
-    if (!visible || requested.current) return;
-    requested.current = true;
-    load();
-  }, [load, visible]);
+  const optionsQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:saves`, "compare"],
+    queryFn: async (): Promise<CheckpointRecord[]> => (await client!.space(spaceId).checkpoints.list({ limit: 30 })).checkpoints,
+    enabled: Boolean(client) && visible,
+  });
+  const options = optionsQuery.data?.filter((item) => item.id !== save.id) ?? null;
+  const error = optionsQuery.error ? optionsQuery.error.message || t("save.loadFailed") : null;
   const current = base && base !== save.parentCheckpointId ? base : null;
   return <AdaptiveSheet visible={visible} title={t("save.compareTitle")} onClose={onClose}>
     <View className="overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>

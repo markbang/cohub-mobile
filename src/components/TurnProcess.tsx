@@ -1,5 +1,6 @@
 import type { CohubClient, ContentBlock, SessionTurnRecord } from "@neta-art/cohub";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { MessageContent } from "@/src/components/MessageContent";
 import { thinkingBlocks } from "@/src/data/chat-rendering";
@@ -10,24 +11,15 @@ import { AppIcon, Loader } from "@/src/ui";
 export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  const [loaded, setLoaded] = useState<{ key: string; content: ContentBlock[] } | null>(null);
-  const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const objectKey = turn.intermediateIndex?.messagesObjectKey;
-  const loadKey = `${turn.sessionId}:${turn.id}:${objectKey ?? ""}:${attempt}`;
-  const content = loaded?.key === loadKey ? loaded.content : null;
-  const errorMessage = expanded && objectKey && !client
-    ? t("turn.connect")
-    : error?.key === loadKey ? error.message : null;
-  useEffect(() => {
-    if (!expanded || !objectKey || !client) return;
-    let active = true;
-    const controller = new AbortController();
-    const api = client.space(spaceId).session(turn.sessionId).turns.intermediate;
-    void (async () => {
-      const file = await api.get(turn.id, objectKey, { signal: controller.signal });
+  // Archived steps never change for an object key, so one read serves every later expansion.
+  const steps = useQuery({
+    queryKey: ["turn-steps", turn.sessionId, turn.id, objectKey],
+    queryFn: async ({ signal }): Promise<ContentBlock[]> => {
+      const api = client!.space(spaceId).session(turn.sessionId).turns.intermediate;
+      const file = await api.get(turn.id, objectKey!, { signal });
       const blocks = await Promise.all((file?.messages ?? []).map(async (message) => {
-        const tools = message.toolCallsObjectKey ? await api.getToolCalls(turn.id, message, { signal: controller.signal }) : null;
+        const tools = message.toolCallsObjectKey ? await api.getToolCalls(turn.id, message, { signal }) : null;
         const body: ContentBlock[] = message.content.length ? message.content : message.text ? [{ type: "text", text: message.text }] : [];
         if (!tools) return body;
         return [...body.filter((block) => block.type !== "tool_use" && block.type !== "tool_result"), ...tools.toolCalls.flatMap((tool): ContentBlock[] => [
@@ -35,10 +27,15 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
           ...(tool.result ? [{ type: "tool_result" as const, tool_use_id: tool.id, content: tool.result.content ?? "", is_error: tool.result.isError }] : []),
         ])];
       }));
-      if (active) setLoaded({ key: loadKey, content: blocks.flat() });
-    })().catch((cause: unknown) => { if (active) setError({ key: loadKey, message: cause instanceof Error ? cause.message : t("turn.loadError") }); });
-    return () => { active = false; controller.abort(); };
-  }, [client, expanded, loadKey, objectKey, spaceId, t, turn.id, turn.sessionId]);
+      return blocks.flat();
+    },
+    enabled: expanded && Boolean(objectKey && client),
+    staleTime: Infinity,
+  });
+  const content = steps.data ?? null;
+  const errorMessage = expanded && objectKey && !client
+    ? t("turn.connect")
+    : steps.error && !steps.isFetching ? steps.error.message || t("turn.loadError") : null;
   // The reply shows only its answer; the thinking behind it closes the steps.
   const thinking = useMemo(() => thinkingBlocks(turn.assistantContent), [turn.assistantContent]);
   const summary = turn.intermediateSummary;
@@ -46,7 +43,7 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
   if (!hasSteps && thinking.length === 0) return null;
   const label = `${hasSteps ? summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails") : t("turn.thinking")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
   return <ProcessDisclosure label={label} expanded={expanded} onToggle={() => setExpanded(!expanded)}>
-    {!hasSteps ? null : errorMessage ? <Pressable accessibilityRole="button" onPress={() => setAttempt(attempt + 1)}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
+    {!hasSteps ? null : errorMessage ? <Pressable accessibilityRole="button" onPress={() => void steps.refetch()}><Text className="text-caption text-danger">{errorMessage} {t("common.retry")}</Text></Pressable> : !objectKey ? <Text className="text-caption text-fg-muted">{t("turn.notArchived")}</Text> : content === null ? <Loader /> : content.length ? <MessageContent content={content} /> : thinking.length ? null : <Text className="text-caption text-fg-muted">{t("turn.none")}</Text>}
     {thinking.length ? <MessageContent content={thinking} /> : null}
   </ProcessDisclosure>;
 }

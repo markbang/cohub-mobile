@@ -1,14 +1,14 @@
 import * as Clipboard from "expo-clipboard";
 import type { SpaceFsEntry } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { LegendList } from "@legendapp/list/react-native";
 import { Alert, Pressable, Share, Text, View } from "react-native";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { SpaceFileRow } from "@/src/components/SpaceFileRow";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions, useAppSelector } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useSpaceDirectory } from "@/src/data/use-space-directory";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
@@ -37,48 +37,9 @@ export default function FilesScreen() {
   const showToast = useToast();
   const { client } = useAppActions();
   const space = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId));
-  const [entries, setEntries] = useState<SpaceFsEntry[]>([]);
-  const requestIdRef = useRef(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshToken, setRefreshToken] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const inFlightRef = useRef(false);
-
-  const loadEntries = useCallback(async (options: { silent?: boolean } = {}) => {
-    if (inFlightRef.current) return;
-    const requestId = ++requestIdRef.current;
-    if (!client || !spaceId) {
-      setEntries([]);
-      setLoading(false);
-      setError(spaceId ? t("files.connect") : t("files.spaceUnavailable"));
-      return;
-    }
-
-    inFlightRef.current = true;
-    if (!options.silent) { setLoading(true); setError(null); setEntries([]); }
-    try {
-      const result = await client.space(spaceId).files.list(currentPath || undefined);
-      if (requestId === requestIdRef.current) { setEntries(result.entries); setError(null); }
-    } catch (caught) {
-      if (requestId === requestIdRef.current) setError(caught instanceof Error ? caught.message : t("files.loadError"));
-      if (options.silent) throw caught;
-    } finally {
-      if (requestId === requestIdRef.current) { inFlightRef.current = false; setLoading(false); }
-    }
-  }, [client, currentPath, spaceId, t]);
-
-  useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (active) void loadEntries();
-    });
-    return () => {
-      active = false;
-      requestIdRef.current += 1;
-      inFlightRef.current = false;
-    };
-  }, [loadEntries, refreshToken]);
-  useSyncScope(`space:${spaceId}:files:${currentPath}`, () => loadEntries({ silent: true }), 30_000, Boolean(spaceId));
+  const directory = useSpaceDirectory(client, spaceId, currentPath);
+  const { entries, loading } = directory;
+  const error = !spaceId ? t("files.spaceUnavailable") : !client ? t("files.connect") : directory.error ? directory.error.message || t("files.loadError") : null;
 
   const openPath = useCallback(
     (path: string) => {
@@ -170,8 +131,8 @@ export default function FilesScreen() {
             name="refresh"
             label={t("files.refresh")}
             size={40}
-            onPress={() => setRefreshToken((value) => value + 1)}
-            disabled={loading}
+            onPress={() => void directory.refetch()}
+            disabled={directory.fetching}
           />
         }
       />
@@ -185,7 +146,7 @@ export default function FilesScreen() {
       {loading ? (
         <View className="pt-3"><LoadingFlatRows count={8} /></View>
       ) : error && entries.length === 0 ? (
-        <FilesError message={error} onRetry={() => setRefreshToken((value) => value + 1)} />
+        <FilesError message={error} onRetry={() => void directory.refetch()} />
       ) : (
         <LegendList
           estimatedItemSize={56}

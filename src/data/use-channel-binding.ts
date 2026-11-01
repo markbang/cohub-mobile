@@ -1,49 +1,43 @@
 import type { Channel, CohubClient, SpaceRecord } from "@neta-art/cohub";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useTranslation } from "@/src/i18n";
+import { useScreenQuery } from "./query";
 import { listAllSpaces } from "./space-list";
 
 export function useChannelBinding(client: CohubClient | null, channel: Channel, onChanged: () => void) {
   const { t } = useTranslation();
-  const [spaces, setSpaces] = useState<SpaceRecord[]>([]);
-  const [loading, setLoading] = useState(!channel.boundSpace);
+  const queryClient = useQueryClient();
+  const spacesQuery = useScreenQuery({
+    queryKey: ["space-list", "all"],
+    queryFn: (): Promise<SpaceRecord[]> => listAllSpaces(client!),
+    enabled: Boolean(client) && !channel.boundSpace,
+  });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const generation = useRef(0);
-  const load = useCallback(async () => {
-    const current = ++generation.current;
-    if (!client) { setError(t("settings.channels.connect")); setLoading(false); return; }
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await listAllSpaces(client);
-      if (current === generation.current) setSpaces(next);
-    } catch (caught) {
-      if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.channels.bindingError"));
-    } finally {
-      if (current === generation.current) setLoading(false);
-    }
-  }, [client, t]);
-  useEffect(() => {
-    let active = true;
-    if (!channel.boundSpace) void Promise.resolve().then(() => { if (active) void load(); });
-    return () => { active = false; generation.current += 1; };
-  }, [channel.boundSpace, load]);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const loadError = !client ? t("settings.channels.connect") : spacesQuery.error ? spacesQuery.error.message || t("settings.channels.bindingError") : null;
 
   const save = async (spaceId: string): Promise<void> => {
     if (!client || saving) return;
     setSaving(true);
-    setError(null);
-    const current = generation.current;
+    setSaveError(null);
     try {
       if (channel.boundSpace) await client.space(channel.boundSpace.id).channels.unbind(channel.id);
       else await client.space(spaceId).channels.bind(channel.id);
-      if (current === generation.current) onChanged();
+      void queryClient.invalidateQueries({ queryKey: ["channels"] });
+      onChanged();
     } catch (caught) {
-      if (current === generation.current) setError(caught instanceof Error ? caught.message : t("settings.channels.bindingError"));
+      setSaveError(caught instanceof Error ? caught.message : t("settings.channels.bindingError"));
     } finally {
-      if (current === generation.current) setSaving(false);
+      setSaving(false);
     }
   };
-  return { spaces, loading, saving, error, load, save };
+  return {
+    spaces: spacesQuery.data ?? [],
+    loading: Boolean(client) && !channel.boundSpace && spacesQuery.isPending,
+    saving,
+    error: saveError ?? loadError,
+    load: async () => { setSaveError(null); await spacesQuery.refetch(); },
+    save,
+  };
 }

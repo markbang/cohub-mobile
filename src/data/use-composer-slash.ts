@@ -2,6 +2,7 @@ import type { PromptTemplateCatalogEntry, SkillCatalogEntry } from "@neta-art/co
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TextInput } from "react-native";
 import { useAppActions } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
 import {
   detectSlashCommandTrigger,
   insertSlashCommand,
@@ -18,19 +19,9 @@ export type SlashCommandMenuState = {
 };
 
 type Catalog = {
-  userUuid: string;
-  spaceId: string;
   prompts: PromptTemplateCatalogEntry[];
   skills: SkillCatalogEntry[];
 };
-
-// Catalogs are per user and Space, and never survive a sign-out: the cache key
-// includes the authenticated user so a different account cannot read it.
-let cachedCatalog: Catalog | null = null;
-
-export function clearSlashCommandCache() {
-  cachedCatalog = null;
-}
 
 /**
  * Composer `/` commands. Detection and insertion are text-only — the server
@@ -43,58 +34,35 @@ export function useComposerSlashCommands({ value, onChange, spaceId, composer }:
   spaceId: string | null;
   composer: { current: { input: TextInput | null } };
 }) {
-  const { client, userUuid } = useAppActions();
-  const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const { client } = useAppActions();
   const [focused, setFocused] = useState(false);
   // Set when the user picks a command or closes the menu; cleared by the next edit.
   const [dismissedText, setDismissedText] = useState<string | null>(null);
   const valueRef = useRef(value);
-  const requestRef = useRef(0);
   useEffect(() => { valueRef.current = value; }, [value]);
-
-  const scope = spaceId ? `${userUuid}:${spaceId}` : `${userUuid}:`;
-  const scoped = catalog?.userUuid === userUuid && catalog.spaceId === (spaceId ?? "") ? catalog : null;
-
-  const load = useCallback(async () => {
-    if (!client || !spaceId) return;
-    const key = `${userUuid}:${spaceId}`;
-    if (cachedCatalog && `${cachedCatalog.userUuid}:${cachedCatalog.spaceId}` === key) {
-      setCatalog(cachedCatalog);
-      return;
-    }
-    const generation = ++requestRef.current;
-    setLoading(true);
-    setFailed(false);
-    try {
-      const options = { spaceId };
-      const [prompts, skills] = await Promise.all([client.prompts.list(options), client.skills.list(options)]);
-      if (generation !== requestRef.current) return;
-      const next: Catalog = { userUuid, spaceId, prompts: prompts.prompts, skills: skills.skills };
-      cachedCatalog = next;
-      setCatalog(next);
-    } catch {
-      if (generation !== requestRef.current) return;
-      // Missing permission or a network failure leaves typing and sending intact.
-      setFailed(true);
-    } finally {
-      if (generation === requestRef.current) setLoading(false);
-    }
-  }, [client, spaceId, userUuid]);
 
   const trigger = useMemo<SlashCommandTrigger | null>(() => (focused ? detectSlashCommandTrigger(value) : null), [focused, value]);
   const open = trigger !== null && value !== dismissedText;
   // Any edit re-arms a dismissed menu, matching the web composer's slash state.
   if (dismissedText !== null && dismissedText !== value) setDismissedText(null);
 
-  useEffect(() => {
-    if (!open) return;
-    // Deferred so opening the menu does not set state during the effect body.
-    queueMicrotask(() => { void load().catch(() => undefined); });
-  }, [load, open, scope]);
+  // The account-scoped query cache keeps catalogs per Space for the session; opening the menu loads one.
+  const catalogQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:slash-commands`],
+    queryFn: async (): Promise<Catalog> => {
+      const options = { spaceId: spaceId! };
+      const [prompts, skills] = await Promise.all([client!.prompts.list(options), client!.skills.list(options)]);
+      return { prompts: prompts.prompts, skills: skills.skills };
+    },
+    enabled: open && Boolean(client && spaceId),
+    staleTime: Infinity,
+    retry: 0,
+  });
+  const scoped = catalogQuery.data ?? null;
+  const loading = catalogQuery.isFetching;
+  // Missing permission or a network failure leaves typing and sending intact.
+  const failed = catalogQuery.isError;
 
-  // Drafts restore asynchronously; a cached catalog for this scope shows up before the request lands.
   const menu = useMemo<SlashCommandMenuState | null>(() => {
     if (!open || !trigger) return null;
     return {

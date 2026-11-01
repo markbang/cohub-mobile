@@ -1,9 +1,10 @@
 import type { BillingCatalogProduct, SpaceWalletActivity, SpaceWalletSummary } from "@neta-art/cohub";
 import { randomUUID } from "expo-crypto";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useAppActions } from "./context";
 import { appendWalletActivity } from "./space-wallet";
-import { useSyncScope } from "./use-sync-scope";
+import { usePagedQuery, useScreenQuery } from "./query";
+import { useQueryClient } from "@tanstack/react-query";
 
 type WalletCatalog = { supported: boolean; paymentAvailable: boolean; products: BillingCatalogProduct[] };
 export type WalletPayment = "pending" | "settled" | "failed";
@@ -12,21 +13,16 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 
 /** Checkout runs in the browser, so a pending payment is confirmed on refresh and polled meanwhile. */
 export function useSpaceWallet(spaceId: string) {
-  const { client, sync } = useAppActions();
-  const key = `space:${spaceId}:wallet`;
-  const [summary, setSummary] = useState<SpaceWalletSummary | null>(null);
-  const [catalog, setCatalog] = useState<WalletCatalog | null>(null);
-  const [activity, setActivity] = useState<{ items: SpaceWalletActivity[]; page: number; hasMore: boolean } | null>(null);
-  const [errors, setErrors] = useState<{ summary: string | null; catalog: string | null; activity: string | null }>({ summary: null, catalog: null, activity: null });
-  const [loadingMore, setLoadingMore] = useState(false);
+  const { client } = useAppActions();
+  const queryClient = useQueryClient();
+  const scope = `space:${spaceId}:wallet`;
+  const enabled = Boolean(client && spaceId);
   const [buying, setBuying] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [payment, setPayment] = useState<WalletPayment | null>(null);
   // An unsettled order per product is reused, so a retried checkout continues the same order.
   const orders = useRef(new Map<string, string>());
   const pendingOrder = useRef<string | null>(null);
-  const generation = useRef(0);
-  useEffect(() => () => { generation.current += 1; }, [client, spaceId]);
 
   const confirm = useCallback(async () => {
     const orderId = pendingOrder.current;
@@ -39,42 +35,45 @@ export function useSpaceWallet(spaceId: string) {
     setPayment(result.settled ? "settled" : "failed");
   }, [client, spaceId]);
 
-  const load = useCallback(async () => {
-    if (!client) return;
-    const request = generation.current;
-    const wallet = client.space(spaceId).wallet;
-    if (pendingOrder.current) await confirm().catch(() => undefined);
-    const [nextSummary, firstPage, nextCatalog] = await Promise.allSettled([wallet.get(), wallet.activities(1), wallet.catalog()]);
-    if (request !== generation.current) return;
-    if (nextSummary.status === "fulfilled") setSummary(nextSummary.value);
-    if (firstPage.status === "fulfilled") setActivity((current) => current && current.page > 1
-      ? { ...current, items: appendWalletActivity(firstPage.value.items, { items: current.items, hasMore: current.hasMore }) }
-      : { items: firstPage.value.items, page: 1, hasMore: firstPage.value.hasMore });
-    if (nextCatalog.status === "fulfilled") setCatalog(nextCatalog.value);
-    setErrors({
-      summary: nextSummary.status === "rejected" ? message(nextSummary.reason) : null,
-      catalog: nextCatalog.status === "rejected" ? message(nextCatalog.reason) : null,
-      activity: firstPage.status === "rejected" ? message(firstPage.reason) : null,
-    });
-    if (nextSummary.status === "rejected") throw nextSummary.reason;
-  }, [client, confirm, spaceId]);
-  useSyncScope(key, load, payment === "pending" ? 15_000 : 60_000);
-
-  const loadMore = async () => {
-    if (!client || !activity?.hasMore || loadingMore) return;
-    const request = generation.current;
-    setLoadingMore(true);
-    try {
-      const next = await client.space(spaceId).wallet.activities(activity.page + 1);
-      if (request !== generation.current) return;
-      setActivity((current) => current ? { items: appendWalletActivity(current.items, next), page: current.page + 1, hasMore: next.hasMore } : current);
-      setErrors((current) => ({ ...current, activity: null }));
-    } catch (error) {
-      if (request === generation.current) setErrors((current) => ({ ...current, activity: message(error) }));
-    } finally {
-      if (request === generation.current) setLoadingMore(false);
-    }
+  const summaryQuery = useScreenQuery({
+    queryKey: [scope, "summary"],
+    queryFn: async (): Promise<SpaceWalletSummary> => {
+      // A pending checkout is confirmed before the balance is read, so a settled payment shows at once.
+      if (pendingOrder.current) await confirm().catch(() => undefined);
+      return client!.space(spaceId).wallet.get();
+    },
+    enabled,
+    intervalMs: payment === "pending" ? 15_000 : 60_000,
+  });
+  const catalogQuery = useScreenQuery({
+    queryKey: [scope, "catalog"],
+    queryFn: (): Promise<WalletCatalog> => client!.space(spaceId).wallet.catalog(),
+    enabled,
+  });
+  const activityList = usePagedQuery<SpaceWalletActivity>({
+    queryKey: [scope, "activity"],
+    enabled,
+    intervalMs: 60_000,
+    id: (item) => item.id,
+    fetchPage: async (cursor) => {
+      const page = cursor ? Number(cursor) : 1;
+      const result = await client!.space(spaceId).wallet.activities(page);
+      return { items: result.items, cursor: result.hasMore ? String(page + 1) : null };
+    },
+    // Later pages stay loaded under a refreshed first page.
+    mergeHead: (loaded, head) => loaded.items.length > head.items.length
+      ? { items: appendWalletActivity(head.items, { items: loaded.items, hasMore: loaded.cursor !== null }), cursor: loaded.cursor }
+      : head,
+  });
+  const activity = activityList.items ? { items: activityList.items, hasMore: activityList.hasMore } : null;
+  const errors = {
+    summary: summaryQuery.error ? message(summaryQuery.error) : null,
+    catalog: catalogQuery.error ? message(catalogQuery.error) : null,
+    activity: activityList.loadMoreError ? message(activityList.loadMoreError) : activityList.query.error ? message(activityList.query.error) : null,
   };
+  // Failures land in each section's error, so a pull-to-refresh only waits for the reads.
+  const refresh = useCallback(() => queryClient.refetchQueries({ queryKey: [scope] }, { throwOnError: false }), [queryClient, scope]);
+  const loadMore = () => activityList.loadMore().catch(() => undefined);
 
   const startCheckout = async (product: BillingCatalogProduct): Promise<string | null> => {
     if (!client || buying) return null;
@@ -108,16 +107,16 @@ export function useSpaceWallet(spaceId: string) {
   };
 
   return {
-    summary,
-    catalog,
+    summary: summaryQuery.data ?? null,
+    catalog: catalogQuery.data ?? null,
     activity,
     errors,
-    loadingMore,
+    loadingMore: activityList.loadingMore,
     buying,
     checkoutError,
     payment,
-    reload: () => sync.invalidate(key),
-    refresh: load,
+    reload: () => void queryClient.invalidateQueries({ queryKey: [scope] }),
+    refresh,
     loadMore,
     startCheckout,
     dismissPayment: () => setPayment(null),

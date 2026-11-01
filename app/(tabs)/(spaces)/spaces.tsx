@@ -15,10 +15,9 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
-import { shallowEqual, useAppActions, useAppSelector, usePersonalSpaceActivity } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector, usePersonalSpaceActivity, useSpaceList } from "@/src/data/context";
 import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
-import { useSyncScope } from "@/src/data/use-sync-scope";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
@@ -45,7 +44,7 @@ export default function SpacesScreen() {
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
-  const spaceList = useAppSelector((app) => app.spaceList);
+  const spaceList = useSpaceList({ intervalMs: 60_000 });
   const personalActivity = usePersonalSpaceActivity(userUuid);
   const dataError = state.error ?? state.spacesError ?? spaceList.error;
   const refreshSpaceList = spaceList.refresh;
@@ -64,10 +63,8 @@ export default function SpacesScreen() {
     setNow(Date.now());
     void refreshSpaceList();
   }, [refreshSpaceList]));
-  useSyncScope("spaces-overview", async () => {
-    setNow(Date.now());
-    await refreshSpaceList({ silent: true });
-  }, 60_000);
+  // Recent-activity buckets are time-relative, so each overview read re-anchors the clock.
+  if (spaceList.updatedAt > now) setNow(spaceList.updatedAt);
   const [query, setQuery] = useState("");
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);

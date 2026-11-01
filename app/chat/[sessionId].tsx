@@ -32,8 +32,8 @@ import { SessionLabelSheet } from "@/src/components/SessionLabelSheet";
 import { fetchSessionLabels, toUserSessionLabels, type SessionLabel } from "@/src/data/session-labels";
 import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
-import { selectModelCatalog, shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useSession, useSessionStream } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useModelCatalog, useSession, useSessionStream } from "@/src/data/context";
+import { useScreenQuery, useSyncQuery } from "@/src/data/query";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
 import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -205,7 +205,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const showToast = useToast();
   const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const latestTurnStatus = useAppSelector((app) => app.state.sessionLatestTurns[sessionId]?.status);
   const parentSessionId = useAppSelector((app) => app.state.sessionForks[sessionId]?.parentSessionId ?? null);
@@ -215,7 +215,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const session = view.session ?? sessionSummary;
   const spaceId = view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
   const runtime = useSpaceRuntime(spaceId);
-  useSyncScope(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
+  useSyncQuery(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
   const composerRef = useRef<View>(null);
   const [sendTransition, setSendTransition] = useState<SendBubbleTransition | null>(() => initialSendTransition ?? null);
@@ -1448,34 +1448,31 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
   const { t } = useTranslation();
   const showToast = useToast();
   const { client, sendNewMessage, upsertSpace, getAccessToken, loadModels, loadModelStatus, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useAppSelector(selectModelCatalog, shallowEqual);
+  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const runtime = useSpaceRuntime(spaceId);
   const listedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);
   // `space.id` is always `spaceId` once the screen renders a Space.
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
-  const [fetchedSpace, setFetchedSpace] = useState<SpaceRecord | null>(null);
-  const [spaceLookup, setSpaceLookup] = useState<{ spaceId: string; missing: boolean; message: string } | null>(null);
-  const [spaceLookupAttempt, setSpaceLookupAttempt] = useState(0);
-  const spaceLookupError = spaceLookup?.spaceId === spaceId ? spaceLookup : null;
-  const space = listedSpace ?? (fetchedSpace?.id === spaceId ? fetchedSpace : null);
   const spaceListed = listedSpace !== null;
   // A cold start can open this before the Space list arrives. Only the server saying it is gone or
   // off-limits means unavailable; an offline or failed request can be retried.
-  useEffect(() => {
-    if (spaceListed || !client) return;
-    let active = true;
-    client.spaces.get(spaceId).then((remote) => {
-      if (!active) return;
-      setFetchedSpace(remote);
+  const spaceLookup = useScreenQuery({
+    queryKey: [`space:${spaceId}:detail`],
+    queryFn: async (): Promise<SpaceRecord> => {
+      const remote = await client!.spaces.get(spaceId);
       upsertSpace(remote);
-    }, (error: unknown) => {
-      if (!active) return;
-      const missing = error instanceof HttpError && (error.status === 404 || error.status === 403);
-      setSpaceLookup({ spaceId, missing, message: error instanceof Error && error.message.trim() ? error.message : t("chat.draft.loadSpaceFailed") });
-    });
-    return () => { active = false; };
-  }, [client, spaceId, spaceListed, spaceLookupAttempt, t, upsertSpace]);
+      return remote;
+    },
+    enabled: !spaceListed && Boolean(client && spaceId),
+    retry: 0,
+  });
+  const space = listedSpace ?? spaceLookup.data ?? null;
+  const lookupFailure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
+  const spaceLookupError = lookupFailure ? {
+    missing: lookupFailure instanceof HttpError && (lookupFailure.status === 404 || lookupFailure.status === 403),
+    message: lookupFailure.message.trim() || t("chat.draft.loadSpaceFailed"),
+  } : null;
   const { headerHeight, onHeaderLayout } = useEdgeChrome();
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const composerRef = useRef<View>(null);
@@ -1591,7 +1588,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
     }
   };
   if (!space && !spaceLookupError) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
-  if (!space && !spaceLookupError?.missing) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={spaceLookupError?.message ?? t("chat.draft.loadSpaceFailed")} onRetry={() => { setSpaceLookup(null); setSpaceLookupAttempt((value) => value + 1); }} /></View></Screen>;
+  if (!space && !spaceLookupError?.missing) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={spaceLookupError?.message ?? t("chat.draft.loadSpaceFailed")} onRetry={() => void spaceLookup.refetch()} /></View></Screen>;
   if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
   const spaceName = displaySpaceName(space);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;

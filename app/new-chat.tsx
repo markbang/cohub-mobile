@@ -20,7 +20,7 @@ export default function NewChatScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { refreshHome } = useAppActions();
-  const visits = useAppSelector((app) => app.spaceList.visits);
+  const visits = useAppSelector((app) => app.spaceVisits);
   const state = useAppSelector((app) => ({ spaces: app.state.spaces, sessions: app.state.sessions, spacesError: app.state.spacesError, error: app.state.error, booting: app.state.booting, refreshing: app.state.refreshing }), shallowEqual);
   const error = state.spacesError ?? state.error;
   const [selectedSpaceId, setSelectedSpaceId] = useState(initialSpaceId || "");

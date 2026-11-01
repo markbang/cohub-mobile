@@ -1,10 +1,11 @@
 import type { CohubClient, UserSessionListItem } from "@neta-art/cohub";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { translate } from "@/src/i18n/core";
 import { sessionPageState, type SessionPageBoundary } from "@/src/data/session-status";
 import { sessionSourceFilterKeys, type SessionSourceFilter } from "@/src/data/session-source";
 import { mergeSessionPages, reconcileSessionHead } from "./session-list-sync";
-import { useSyncScope } from "./use-sync-scope";
+import { useScreenQuery } from "./query";
 import { sortByRecent } from "@/src/utils";
 
 const PAGE_SIZE = 60;
@@ -30,114 +31,70 @@ function errorMessage(error: unknown) {
   return error instanceof Error && error.message.trim() ? error.message : translate("data.chatsLoadFailed");
 }
 
+type SourcePages = { sessions: UserSessionListItem[]; cursor: string | null; boundary: SessionPageBoundary | null; hasMore: boolean; pagesLoaded: number };
+
 /**
  * Server-filtered global Chats list for a source filter. The shared home list stays
  * unfiltered for cache hydration and cross-screen lookups, so this keeps its own
  * pages and cursor. `all` resolves to the empty state; callers use the home list.
  */
 export function useSourceSessions(client: CohubClient | null, filter: SessionSourceFilter) {
-  const enabled = filter !== "all";
-  const [state, setState] = useState(EMPTY);
-  const requestIdRef = useRef(0);
-  const cursorRef = useRef<string | null>(null);
-  const boundaryRef = useRef<SessionPageBoundary | null>(null);
-  const hasMoreRef = useRef(false);
+  const keys = sessionSourceFilterKeys(filter);
+  const enabled = filter !== "all" && Boolean(client && keys);
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => [`chats:source:${filter}`], [filter]);
+  const query = useScreenQuery({
+    queryKey,
+    queryFn: async (): Promise<SourcePages> => {
+      const requestStartedAt = Date.now();
+      const response = await withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, source: keys! }));
+      const loaded = queryClient.getQueryData<SourcePages>(queryKey);
+      const page = sessionPageState(response, null, loaded?.boundary ?? null);
+      if (!loaded) return { sessions: response.sessions ?? [], cursor: page.cursor, boundary: page.boundary, hasMore: page.hasMore, pagesLoaded: 1 };
+      // A head refresh reconciles into loaded pages; their tail cursor survives while the head still has more.
+      const sessions = sortByRecent(reconcileSessionHead(loaded.sessions, response.sessions, page.hasMore, requestStartedAt));
+      return loaded.pagesLoaded > 1 && page.hasMore
+        ? { ...loaded, sessions }
+        : { sessions, cursor: page.cursor, boundary: page.boundary, hasMore: page.hasMore, pagesLoaded: 1 };
+    },
+    enabled,
+    intervalMs: 15_000,
+  });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<unknown>(null);
   const loadingMoreRef = useRef(false);
-  const loadedFilterRef = useRef<SessionSourceFilter | null>(null);
-  const pagesLoadedRef = useRef(0);
-  const headRequestRef = useRef<Promise<void> | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  const fetchPage = useCallback(async (requestId: number, cursor: string | null, head = false) => {
-    if (!client) return;
-    const keys = sessionSourceFilterKeys(filter);
-    if (!keys) return;
-    const requestStartedAt = Date.now();
-    const response = await withTimeout(client.user.listSessions({ limit: PAGE_SIZE, ...(cursor ? { cursor } : {}), source: keys }));
-    if (requestId !== requestIdRef.current) return;
-    if (cursor && pagesLoadedRef.current === 1 && !hasMoreRef.current) {
-      setState((current) => ({ ...current, loadingMore: false }));
-      return;
-    }
-    const page = sessionPageState(response, cursor, boundaryRef.current);
-    const keepTail = head && pagesLoadedRef.current > 1 && page.hasMore;
-    if (!keepTail) {
-      cursorRef.current = page.cursor;
-      boundaryRef.current = page.boundary;
-      hasMoreRef.current = page.hasMore;
-    }
-    if (cursor) pagesLoadedRef.current += 1;
-    else if (!keepTail) pagesLoadedRef.current = 1;
-    setState((current) => ({
-      sessions: head ? sortByRecent(reconcileSessionHead(current.sessions, response.sessions, page.hasMore, requestStartedAt)) : cursor ? sortByRecent(mergeSessionPages(current.sessions, response.sessions ?? [])) : response.sessions ?? [],
-      loading: false,
-      loadingMore: head ? current.loadingMore : false,
-      error: null,
-      hasMore: hasMoreRef.current,
-      initialized: true,
-    }));
-  }, [client, filter]);
-
-  useEffect(() => {
-    const requestId = ++requestIdRef.current;
-    // A reload keeps the current page on screen; a new filter starts clean.
-    const sameFilter = loadedFilterRef.current === filter;
-    loadedFilterRef.current = filter;
-    cursorRef.current = null;
-    pagesLoadedRef.current = 0;
-    headRequestRef.current = null;
-    boundaryRef.current = null;
-    hasMoreRef.current = false;
-    loadingMoreRef.current = false;
-    if (!enabled || !client) {
-      // Defer so the effect never synchronously cascades a render (see react-hooks/set-state-in-effect).
-      void Promise.resolve().then(() => {
-        if (requestId === requestIdRef.current) setState(EMPTY);
-      });
-      return;
-    }
-    void Promise.resolve().then(() => {
-      if (requestId !== requestIdRef.current) return;
-      setState((current) => sameFilter ? { ...current, loading: current.sessions.length === 0, loadingMore: false, error: null, hasMore: false } : { ...EMPTY, loading: true });
-    });
-    const request = fetchPage(requestId, null);
-    headRequestRef.current = request;
-    void request.catch((error: unknown) => {
-      if (requestId !== requestIdRef.current) return;
-      setState((current) => ({ ...current, loading: false, loadingMore: false, error: errorMessage(error), hasMore: false, initialized: true }));
-    }).finally(() => { if (headRequestRef.current === request) headRequestRef.current = null; });
-    return () => { requestIdRef.current += 1; };
-  }, [client, enabled, fetchPage, filter, reloadToken]);
-
-  const refresh = useCallback((): Promise<void> => {
-    if (headRequestRef.current) return headRequestRef.current;
-    const requestId = requestIdRef.current;
-    const request = fetchPage(requestId, null, true).catch((error: unknown) => {
-      if (requestId === requestIdRef.current) setState((current) => ({ ...current, error: errorMessage(error) }));
-      throw error;
-    });
-    headRequestRef.current = request;
-    void request.finally(() => { if (headRequestRef.current === request) headRequestRef.current = null; }).catch(() => undefined);
-    return request;
-  }, [fetchPage]);
-  useSyncScope(`chats:source:${filter}`, refresh, 15_000, enabled && state.initialized && !state.loading);
 
   const loadMore = useCallback(() => {
-    if (!enabled || loadingMoreRef.current || !hasMoreRef.current) return;
-    const cursor = cursorRef.current;
-    if (!cursor) return;
+    const start = queryClient.getQueryData<SourcePages>(queryKey);
+    if (!enabled || loadingMoreRef.current || !start?.hasMore || !start.cursor) return;
     loadingMoreRef.current = true;
-    const requestId = requestIdRef.current;
-    setState((current) => ({ ...current, loadingMore: true, error: null }));
-    void fetchPage(requestId, cursor).catch((error: unknown) => {
-      if (requestId !== requestIdRef.current) return;
-      setState((current) => ({ ...current, loadingMore: false, error: errorMessage(error) }));
-    }).finally(() => {
-      if (requestId === requestIdRef.current) loadingMoreRef.current = false;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    void withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, cursor: start.cursor, source: keys! })).then((response) => {
+      queryClient.setQueryData<SourcePages>(queryKey, (current) => {
+        if (!current || current.cursor !== start.cursor) return current;
+        const page = sessionPageState(response, start.cursor, current.boundary);
+        return { sessions: sortByRecent(mergeSessionPages(current.sessions, response.sessions ?? [])), cursor: page.cursor, boundary: page.boundary, hasMore: page.hasMore, pagesLoaded: current.pagesLoaded + 1 };
+      });
+    }).catch(setLoadMoreError).finally(() => {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
     });
-  }, [enabled, fetchPage]);
+  }, [client, enabled, keys, queryClient, queryKey]);
 
-  const reload = useCallback(() => setReloadToken((value) => value + 1), []);
+  const refetch = query.refetch;
+  const reload = useCallback(() => { setLoadMoreError(null); void refetch(); }, [refetch]);
+  const failure = loadMoreError ?? query.error;
 
-  return { ...state, loadMore, reload };
+  if (!enabled) return { ...EMPTY, loadMore, reload };
+  return {
+    sessions: query.data?.sessions ?? EMPTY.sessions,
+    loading: query.isPending && query.isFetching,
+    loadingMore,
+    error: failure ? errorMessage(failure) : null,
+    hasMore: query.data?.hasMore ?? false,
+    initialized: query.data !== undefined || query.isError,
+    loadMore,
+    reload,
+  };
 }

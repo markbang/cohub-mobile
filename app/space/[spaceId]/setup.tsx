@@ -1,13 +1,13 @@
 import type { SpaceSandboxRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus, type SandboxSetupInfo } from "@/src/data/sandbox-setup";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useScreenQuery } from "@/src/data/query";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, StatusPill, TopBar } from "@/src/ui";
 
@@ -22,8 +22,17 @@ export default function SpaceSetupScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [sandbox, setSandbox] = useState<SpaceSandboxRecord | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
+  const sandboxQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:sandbox-setup`],
+    queryFn: async (): Promise<SpaceSandboxRecord | null> => (await client!.space(spaceId).sandbox.get()).sandbox,
+    enabled: Boolean(client && spaceId),
+    refetchInterval: (query) => {
+      const current = sandboxSetupStatus(sandboxSetupInfo(query.state.data?.meta));
+      return current === "running" || current === "waiting" ? 4_000 : 60_000;
+    },
+  });
+  const sandbox = sandboxQuery.data;
+  const error = sandboxQuery.error ? sandboxQuery.error.message || t("space.setup.loadFailed") : null;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -31,18 +40,7 @@ export default function SpaceSetupScreen() {
   const status = sandboxSetupStatus(setup);
   const local = sandbox?.provider === "local";
 
-  const load = useCallback(async () => {
-    if (!client || !spaceId) return;
-    try {
-      const result = await client.space(spaceId).sandbox.get();
-      setSandbox(result.sandbox);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("space.setup.loadFailed"));
-      throw caught;
-    }
-  }, [client, spaceId, t]);
-  useSyncScope(`space:${spaceId}:sandbox-setup`, load, status === "running" || status === "waiting" ? 4_000 : 60_000);
+  const load = () => sandboxQuery.refetch();
 
   const restart = async () => {
     if (!client || restarting) return;
@@ -51,7 +49,7 @@ export default function SpaceSetupScreen() {
       await client.space(spaceId).sandbox.recreate();
       setConfirming(false);
       toast({ title: t("space.settings.sandbox.restarted"), tone: "success" });
-      await load().catch(() => undefined);
+      await load();
     } catch (caught) {
       toast({ title: t("space.settings.sandbox.restartFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
     } finally {
@@ -63,7 +61,7 @@ export default function SpaceSetupScreen() {
 
   return <Screen>
     <TopBar title={t("space.setup.title")} onBack={() => router.back()} />
-    {error && sandbox === undefined ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
+    {error && sandbox === undefined ? <DataError message={error} onRetry={() => void load()} /> : null}
     {sandbox === undefined ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 1 }, { kind: "caption" }, { kind: "group", rows: 3, label: true }]} />) : (
       <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
         <SettingsGroup>

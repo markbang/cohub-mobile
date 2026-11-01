@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import type { AppPromotionProviderStatus, AppPromotionRecord, AppPromotionStatsResponse } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -9,7 +9,8 @@ import { FilterChip } from "@/src/components/FilterChip";
 import { useToast } from "@/src/components/Toast";
 import { promotionUrl } from "@/src/data/app-manage";
 import { useAppActions } from "@/src/data/context";
-import { useSyncScope } from "@/src/data/use-sync-scope";
+import { useScreenQuery } from "@/src/data/query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
@@ -39,22 +40,18 @@ export default function WorkPromotionsScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const [data, setData] = useState<{ promotions: AppPromotionRecord[]; providers: AppPromotionProviderStatus[] } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = [`app:${appId}:promotions`];
+  const promotionsQuery = useScreenQuery({
+    queryKey,
+    queryFn: (): Promise<{ promotions: AppPromotionRecord[]; providers: AppPromotionProviderStatus[] }> => client!.apps.listPromotions(appId),
+    enabled: Boolean(client && appId),
+    intervalMs: 60_000,
+  });
+  const data = promotionsQuery.data ?? null;
+  const error = promotionsQuery.error ? promotionsQuery.error.message || t("app.promo.error") : null;
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<AppPromotionRecord | null>(null);
-
-  const load = useCallback(async () => {
-    if (!client || !appId) return;
-    try {
-      setData(await client.apps.listPromotions(appId));
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : t("app.promo.error"));
-      throw caught;
-    }
-  }, [appId, client, t]);
-  useSyncScope(`app:${appId}:promotions`, load, 60_000, Boolean(appId));
 
   const copy = async (promotion: AppPromotionRecord) => {
     try {
@@ -67,7 +64,7 @@ export default function WorkPromotionsScreen() {
 
   return <Screen>
     <TopBar title={t("app.promo.title")} onBack={() => router.back()} actions={data ? <IconButton name="plus" label={t("app.promo.new")} onPress={() => setCreating(true)} /> : undefined} />
-    {error && !data ? <DataError message={error} onRetry={() => void load().catch(() => undefined)} /> : null}
+    {error && !data ? <DataError message={error} onRetry={() => void promotionsQuery.refetch()} /> : null}
     {!data ? (error ? null : <LoadingSections sections={[{ kind: "group", rows: 3 }]} />) : data.promotions.length === 0
       ? <EmptyState icon="megaphone" title={t("app.promo.title")} description={t("app.promo.empty")} action={{ icon: "plus", label: t("app.promo.new"), onPress: () => setCreating(true) }} />
       : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
@@ -82,7 +79,7 @@ export default function WorkPromotionsScreen() {
           </View>)}
         </SettingsGroup>
       </ScrollView>}
-    {creating && data ? <CreatePromotionSheet appId={appId} providers={data.providers} onClose={() => setCreating(false)} onCreated={(promotion) => { setCreating(false); setData((current) => current ? { ...current, promotions: [...current.promotions, promotion] } : current); setSelected(promotion); }} /> : null}
+    {creating && data ? <CreatePromotionSheet appId={appId} providers={data.providers} onClose={() => setCreating(false)} onCreated={(promotion) => { setCreating(false); queryClient.setQueryData<{ promotions: AppPromotionRecord[]; providers: AppPromotionProviderStatus[] }>(queryKey, (current) => current ? { ...current, promotions: [...current.promotions, promotion] } : current); setSelected(promotion); }} /> : null}
     {selected ? <PromotionStatsSheet appId={appId} promotion={selected} link={promotionUrl(publicUrl, selected)} onCopy={() => void copy(selected)} onClose={() => setSelected(null)} /> : null}
   </Screen>;
 }
@@ -132,14 +129,13 @@ function CreatePromotionSheet({ appId, providers, onClose, onCreated }: { appId:
 function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appId: string; promotion: AppPromotionRecord; link: string; onCopy: () => void; onClose: () => void }) {
   const { t } = useTranslation();
   const { client } = useAppActions();
-  const [stats, setStats] = useState<AppPromotionStatsResponse | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!client) return;
-    let active = true;
-    void client.apps.getPromotionStats(appId, promotion.id).then((result) => { if (active) setStats(result); }).catch(() => { if (active) setFailed(true); });
-    return () => { active = false; };
-  }, [appId, client, promotion.id]);
+  const statsQuery = useScreenQuery({
+    queryKey: [`app:${appId}:promotions`, promotion.id, "stats"],
+    queryFn: (): Promise<AppPromotionStatsResponse> => client!.apps.getPromotionStats(appId, promotion.id),
+    enabled: Boolean(client),
+  });
+  const stats = statsQuery.data ?? null;
+  const failed = statsQuery.isError;
   return <AdaptiveSheet visible title={promotion.name} subtitle={promotion.provider} onClose={onClose}>
     <View className="gap-4">
       <Pressable accessibilityRole="button" accessibilityLabel={t("app.promo.copyLink")} onPress={onCopy} className="flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-3 active:bg-surface-pressed" style={{ borderCurve: "continuous" }}>

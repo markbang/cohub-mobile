@@ -31,9 +31,11 @@ import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/sessio
 import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
-import { createSyncScheduler } from "../src/data/sync-scheduler.ts";
 import { reconcileSessionHead } from "../src/data/session-list-sync.ts";
+import { invalidateScopes } from "../src/data/query-scopes.ts";
 import { mergeTaskRuns, refreshTaskRuns } from "../src/data/task-sync.ts";
+import { createStore } from "zustand/vanilla";
+import { keepPreviousData, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionCandidates } from "../src/data/running-sessions.ts";
 import { createSpaceRealtime } from "../src/data/space-realtime.ts";
 import { spaceRealtimeChange, userSessionRealtimeChange } from "../src/data/space-realtime-events.ts";
@@ -44,7 +46,7 @@ import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-langua
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, withSettledClose } from "../src/data/session-reconnect.ts";
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget } from "../src/data/space-panel-pager.ts";
-import { getSpaceSessionCount, loadSpaceSessionCounts, publishSpaceSessionCount } from "../src/data/space-session-counts.ts";
+import { createLimiter } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
 import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
@@ -71,103 +73,6 @@ import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "..
 import { RELEASE_GRACE_MS, ToastClock } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
-mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
-try {
-  const requests = [];
-  const scheduler = createSyncScheduler({ random: () => 0.5 });
-  const task = { intervalMs: () => 1000, run: () => { const request = Promise.withResolvers(); requests.push(request); return request.promise; } };
-  const stop = scheduler.watch("chats", task);
-  const stopSecondReader = scheduler.watch("chats", task);
-  mock.timers.tick(5000);
-  await flushSync();
-  assert.equal(requests.length, 0, "background scopes do not start polling");
-  scheduler.setActive(true);
-  scheduler.invalidate();
-  scheduler.invalidate("chats");
-  mock.timers.tick(250);
-  await flushSync();
-  assert.equal(requests.length, 1, "focus/foreground/reconnect and multiple readers share one request");
-  scheduler.invalidate("chats");
-  scheduler.invalidate("chats");
-  requests[0].resolve();
-  await flushSync();
-  mock.timers.tick(250);
-  await flushSync();
-  assert.equal(requests.length, 2, "invalidation during a read queues exactly one follow-up");
-  scheduler.setActive(false);
-  requests[1].resolve();
-  await flushSync();
-  mock.timers.tick(10000);
-  await flushSync();
-  assert.equal(requests.length, 2, "finishing in the background does not restart a timer");
-  scheduler.setActive(true);
-  mock.timers.tick(250);
-  await flushSync();
-  assert.equal(requests.length, 3);
-  stop();
-  stopSecondReader();
-  scheduler.dispose();
-  requests[2].resolve();
-  await flushSync();
-  mock.timers.tick(10000);
-  await flushSync();
-  assert.equal(requests.length, 3, "late old-account completions cannot revive disposed work");
-
-  let attempts = 0;
-  const retrying = createSyncScheduler({ active: true, random: () => 0.5 });
-  retrying.watch("failed", { intervalMs: () => 1000, run: async () => { attempts++; throw new Error("offline"); } });
-  mock.timers.tick(250);
-  await flushSync();
-  mock.timers.tick(1999);
-  await flushSync();
-  assert.equal(attempts, 1);
-  mock.timers.tick(1);
-  await flushSync();
-  assert.equal(attempts, 2, "first failure doubles the request interval");
-  mock.timers.tick(3999);
-  await flushSync();
-  assert.equal(attempts, 2);
-  retrying.dispose();
-
-  const admitted = [];
-  const limited = createSyncScheduler({ active: true, random: () => 0.5 });
-  for (let id = 0; id < 6; id++) limited.watch(String(id), { intervalMs: () => 1000, run: () => {
-    const request = Promise.withResolvers(); admitted.push(request); return request.promise;
-  } });
-  mock.timers.tick(250);
-  await flushSync();
-  assert.equal(admitted.length, 4, "at most four automatic resource operations are admitted");
-  admitted[0].resolve();
-  await flushSync();
-  assert.equal(admitted.length, 5, "queued resources are not starved");
-  limited.dispose();
-  for (const request of admitted) request.resolve();
-  await flushSync();
-
-  let deniedReads = 0;
-  const denied = createSyncScheduler({ active: true, random: () => 0.5 });
-  denied.watch("denied", { intervalMs: () => 1000, run: async () => { deniedReads++; throw new Error("status batch failed", { cause: { status: 403 } }); } });
-  mock.timers.tick(250);
-  await flushSync();
-  mock.timers.tick(120000);
-  await flushSync();
-  assert.equal(deniedReads, 1, "permission failures do not retry indefinitely");
-  denied.invalidate();
-  mock.timers.tick(250);
-  await flushSync();
-  assert.equal(deniedReads, 2, "explicit invalidation can retry after access changes");
-  denied.dispose();
-
-  let suspendedReads = 0;
-  const suspended = createSyncScheduler({ active: true });
-  suspended.watch("suspended", { intervalMs: () => 1000, run: async () => { suspendedReads++; } });
-  mock.timers.tick(250);
-  suspended.setActive(false);
-  await flushSync();
-  assert.equal(suspendedReads, 0, "backgrounding between timer admission and execution suppresses the read");
-  suspended.dispose();
-} finally { mock.timers.reset(); }
-
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
 try {
   const expired = [];
@@ -288,7 +193,7 @@ realtime.dispose();
 assert.equal(roomJoins.length, roomLeaves.length);
 assert.deepEqual(spaceRealtimeChange({ type: "session.turn.patch", spaceId: "space", sessionId: "chat", payload: {} }), { exact: [], prefixes: [] }, "token patches never trigger HTTP invalidations");
 const fileChange = spaceRealtimeChange({ type: "space.fs.changed", spaceId: "space", payload: {} });
-assert.deepEqual(fileChange.prefixes, ["space:space:files:", "space:space:files-panel:"]);
+assert.deepEqual(fileChange.prefixes, ["space:space:files:"]);
 assert.equal(fileChange.exact.length, 0, "file changes do not refetch unrelated task/resource sections");
 const finishedTask = spaceRealtimeChange({ type: "task.updated", spaceId: "space", payload: { task: { id: "task", status: "completed" } } });
 assert.ok(finishedTask.exact.includes("task:task") && finishedTask.exact.includes("space:space:resources"));
@@ -322,21 +227,6 @@ const activeTurnPatch = { type: "session.updated", spaceId: "unwatched", session
 assert.equal(spaceRealtimeChange(activeTurnPatch).session, undefined, "an activeTurn-only update has no revision to order metadata");
 assert.deepEqual(userSessionRealtimeChange(activeTurnPatch, () => true), { exact: [], prefixes: [], sessionId: "chat" }, "an activeTurn-only update is accepted, not reported as invalid metadata");
 assert.throws(() => spaceRealtimeChange({ ...activeTurnPatch, payload: { session: { ...activeTurnPatch.payload.session, updatedAt: "not-a-date" } } }), /Invalid realtime Chat metadata/);
-
-mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
-try {
-  let scans = 0;
-  const boundedSync = createSyncScheduler({ active: true, random: () => 0.5 });
-  boundedSync.watch("running:all", { intervalMs: () => 120000, minRefreshMs: 30000, run: async () => { scans++; } });
-  mock.timers.tick(250);
-  await flushSync();
-  for (let index = 0; index < 29; index++) { boundedSync.invalidatePrefix("running:"); mock.timers.tick(1000); await flushSync(); }
-  assert.equal(scans, 1, "event bursts never cause repeated full-account scans within the cooldown");
-  mock.timers.tick(1000);
-  await flushSync();
-  assert.equal(scans, 2, "continuous invalidations do not postpone the pending scan indefinitely");
-  boundedSync.dispose();
-} finally { mock.timers.reset(); }
 
 const syncRows = Array.from({ length: 120 }, (_, index) => ({ id: String(1000 - index), spaceId: "space", lastMessageAt: new Date(200000 - index * 1000).toISOString(), updatedAt: new Date(200000 - index * 1000).toISOString() }));
 const newHeadRow = { ...syncRows[0], id: "new", lastMessageAt: new Date(201000).toISOString(), updatedAt: new Date(201000).toISOString() };
@@ -452,10 +342,12 @@ let contextHelpers;
 function appHooks(read) {
   contextHelpers ??= {
     shallowEqual: loadChromeComponent("../src/data/context.tsx", "shallowEqual", {}),
-    selectModelCatalog: loadChromeComponent("../src/data/context.tsx", "selectModelCatalog", {}),
   };
   return {
     ...contextHelpers,
+    useModelCatalog: () => { const app = read(); return { models: app.models, modelsLoading: app.modelsLoading, modelsError: app.modelsError, modelStatus: app.modelStatus, modelStatusLoading: app.modelStatusLoading, modelStatusError: app.modelStatusError }; },
+    useSpaceList: () => read().spaceList,
+    useSyncQuery: () => {},
     useAppActions: () => read(),
     useAppSelector: (select) => select(read()),
     useAppStateGetter: () => () => read().state,
@@ -525,7 +417,23 @@ function createScreenHooks() {
   const slots = [];
   const effects = [];
   const changed = (previous, deps) => !previous || !deps || deps.some((value, index) => value !== previous.deps[index]);
+  // Real query-core observers, so migrated screens run against actual cache, dedupe, and invalidation semantics.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: 2_000 } } });
+  const observe = (Observer, options) => {
+    const index = cursor++;
+    const defaulted = queryClient.defaultQueryOptions(options);
+    const slot = slots[index] ??= { observer: new Observer(queryClient, defaulted) };
+    slot.observer.setOptions(defaulted);
+    slot.cleanup ??= slot.observer.subscribe(() => {});
+    return slot.observer.getOptimisticResult(defaulted);
+  };
+  // Intervals are recorded, not run, so assertions drive refreshes explicitly.
+  const screenOptions = ({ intervalMs, ...options }) => ({ ...options, refetchInterval: undefined, _interval: intervalMs });
   const hooks = {
+    useQueryClient: () => queryClient,
+    useScreenQuery: (options) => observe(QueryObserver, screenOptions(options)),
+    useSyncQuery: (key, run, _interval, enabled = true) => { observe(QueryObserver, { queryKey: [key], queryFn: async () => { await run(); return Date.now(); }, enabled }); },
+    keepPreviousData,
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) {
@@ -553,7 +461,8 @@ function createScreenHooks() {
   return {
     hooks,
     render(run) { cursor = 0; const result = run(); while (effects.length) effects.shift()(); return result; },
-    unmount() { for (const slot of slots) slot?.cleanup?.(); },
+    unmount() { for (const slot of slots) slot?.cleanup?.(); queryClient.clear(); },
+    queryClient,
   };
 }
 const translateForScreen = (key) => key;
@@ -720,7 +629,7 @@ for (const [tab, component, expectedRequests] of [
       if (!(index in slots)) slots[index] = { current: initial };
       return slots[index];
     },
-    useCallback: (callback) => callback, useMemo: (factory) => factory(), useEffect: () => {}, useFocusEffect: () => {}, useSyncScope: () => {}, useSpaceRealtime: () => {},
+    useCallback: (callback) => callback, useMemo: (factory) => factory(), useEffect: () => {}, useFocusEffect: () => {}, useSpaceRealtime: () => {},
     useRouter: () => ({}), useIsFocused: () => true, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useEdgeChrome: () => ({ headerHeight: 103, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, spaceList, userUuid: "user", client: {}, connectionState: "open", refreshHome: () => request("home") })),
@@ -848,7 +757,7 @@ for (const [tab, component, expectedRequests] of [
     billing: { getFeatureEntitlement: async () => ({ enabled: true }) },
     cronJobs: { list: async () => ({ jobs: [] }) },
   };
-  const useSettings = loadChromeComponent("../src/data/use-space-settings.ts", "useSpaceSettings", { ...formScope, ...runner.hooks, RESOURCE_KEYS: resourceKeys });
+  const useSettings = loadChromeComponent("../src/data/use-space-settings.ts", "useSpaceSettings", { ...formScope, ...runner.hooks, spaceSettingsKey: (spaceId, key) => [`space:${spaceId}:settings:${key}`], NO_ENV: [], NO_PORTS: {}, NO_MEMBERS: [], NO_INVITATIONS: [], NO_MODS: [], NO_SCHEDULES: [] });
   const render = () => runner.render(() => useSettings(client, "space"));
   render(); await flushSync();
   assert.equal(render().resources.members.loaded, true, "a slow port read does not delay members");
@@ -870,10 +779,30 @@ for (const [tab, component, expectedRequests] of [
   ports.resolve({ endpoints: { app: { port: 4000 } } }); await second;
   older.resolve({ endpoints: { app: { port: 2000 } } }); await first;
   assert.equal(render().ports.app.port, 4000, "a late read cannot overwrite a newer retry");
-  ports = Promise.withResolvers();
-  const abandoned = render().loadResource("ports"); runner.unmount();
-  ports.resolve({ endpoints: { app: { port: 5000 } } }); await abandoned;
-  assert.equal(render().ports.app.port, 4000, "unmount invalidates pending reads");
+  runner.unmount();
+}
+
+// Paged lists: a refresh reads only the head, and a page that started before a refresh cannot append.
+{
+  const runner = createScreenHooks();
+  const usePagedQuery = loadChromeComponent("../src/data/query.ts", "usePagedQuery", { ...runner.hooks, useLayoutEffect: (callback) => callback() });
+  const pages = { null: { items: ["a", "b"], cursor: "2" }, 2: { items: ["c"], cursor: "3" }, 3: { items: ["d"], cursor: null } };
+  const reads = [];
+  let gate = null;
+  const fetchPage = async (cursor) => { reads.push(cursor); if (gate) await gate.promise; return pages[cursor]; };
+  const render = () => runner.render(() => usePagedQuery({ queryKey: ["paged"], enabled: true, fetchPage, id: (item) => item, mergeHead: (loaded, head) => ({ items: [...head.items, ...loaded.items.filter((item) => !head.items.includes(item))], cursor: loaded.cursor }) }));
+  render(); await flushSync();
+  await render().loadMore();
+  assert.deepEqual(render().items, ["a", "b", "c"]);
+  pages.null = { items: ["new", "a", "b"], cursor: "2" };
+  await runner.queryClient.refetchQueries({ queryKey: ["paged"] });
+  assert.deepEqual([render().items, reads.at(-1)], [["new", "a", "b", "c"], null], "a refresh reconciles the head into loaded pages without re-walking them");
+  gate = Promise.withResolvers();
+  const stale = render().loadMore();
+  runner.queryClient.setQueryData(["paged"], { items: ["x"], cursor: "9" });
+  gate.resolve(); await stale;
+  assert.deepEqual(render().items, ["x"], "a page whose cursor was replaced is discarded");
+  runner.unmount();
 }
 
 // Navigation-level file protection shares the toolbar's editing/confirmation behavior.
@@ -937,7 +866,7 @@ for (const [tab, component, expectedRequests] of [
   const getClaims = async () => ({});
   const showNotice = () => {};
   const renderProfile = loadChromeComponent("../src/components/SettingsScreen.tsx", "ProfileSection", {
-    ...formScope, ...runner.hooks, useProfileSession: () => ({ getClaims }),
+    ...formScope, ...runner.hooks, useProfileSession: () => ({ getClaims }), PROFILE_KEY: ["profile"], EMPTY_PROFILE: { profile: null, email: null, uuid: "" },
   });
   const render = () => chromeNodes(runner.render(() => renderProfile({ client, onNotice: showNotice })));
   render(); await flushSync();
@@ -953,55 +882,31 @@ for (const [tab, component, expectedRequests] of [
   runner.unmount();
 }
 
-// Range changes must isolate data, errors, and loading state from older requests.
-{
-  const runner = createScreenHooks();
-  const requests = [];
-  const client = { user: { getActivity: ({ days }) => { const pending = Promise.withResolvers(); requests.push({ days, ...pending }); return pending.promise; } } };
-  const renderActivity = loadChromeComponent("../src/components/SettingsScreen.tsx", "ActivitySection", { ...formScope, ...runner.hooks, formatNumber: String });
-  const render = () => chromeNodes(runner.render(() => renderActivity({ client })));
-  const data = (tokens) => ({ summary: { totalTokens: tokens }, rankings: { llmModels: [] } });
-  render(); await flushSync();
-  render().filter((node) => node.type === "Pressable")[0].props.onPress(); render(); await flushSync();
-  assert.deepEqual(requests.map((request) => request.days), [30, 7]);
-  requests[1].resolve(data(7)); await flushSync();
-  requests[0].resolve(data(30)); await flushSync();
-  assert.equal(render().find((node) => node.type === "Metric").props.value, "7");
-  render().filter((node) => node.type === "Pressable")[2].props.onPress(); render(); await flushSync();
-  render().filter((node) => node.type === "Pressable")[0].props.onPress(); render(); await flushSync();
-  requests[2].reject(new Error("old range failed")); await flushSync();
-  assert.ok(render().some((node) => node.type === "LoadingBlock"), "a superseded request cannot stop the current spinner");
-  requests[3].resolve(data(77)); await flushSync();
-  assert.equal(render().find((node) => node.type === "Metric").props.value, "77");
-  assert.equal(render().some((node) => node.type === "InlineError"), false);
-  runner.unmount();
-}
-
 // Returning from Work editing reloads authoritative metadata, retaining content if refresh fails.
 {
   const runner = createScreenHooks();
-  let focus;
   const requests = [];
   const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } } };
   const renderWork = loadChromeComponent("../app/work/[appId].tsx", "WorkScreen", {
-    ...formScope, ...runner.hooks, useFocusEffect: (callback) => { focus = callback; },
+    ...formScope, ...runner.hooks,
     useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), ...appHooks(() => ({ client })), AppHostWebView: "AppHostWebView", LoadingState: "LoadingState",
   });
   const render = () => chromeNodes(runner.render(renderWork));
   const detail = (title) => ({ app: { id: "work", meta: { title } }, space: { name: "Space" }, content: { url: "https://example.com/work" } });
-  render(); let blur = focus();
+  const edited = () => runner.queryClient.invalidateQueries({ queryKey: ["app:work:detail"] });
+  render();
   requests[0].resolve(detail("Old title")); await flushSync(); render();
-  blur(); blur = focus();
+  void edited(); await flushSync();
   requests[1].resolve(detail("Saved title")); await flushSync();
   assert.equal(render().find((node) => node.type === "TopBar").props.title, "Saved title");
-  blur(); blur = focus();
+  void edited(); await flushSync();
   requests[2].reject(new Error("offline")); await flushSync();
   assert.ok(render().some((node) => node.type === "AppHostWebView"), "refresh errors do not hide cached Work content");
-  render().find((node) => node.type === "DataError").props.onRetry();
+  render().find((node) => node.type === "DataError").props.onRetry(); await flushSync();
   requests[3].resolve(detail("Retried title")); await flushSync();
   assert.equal(render().some((node) => node.type === "DataError"), false);
   assert.equal(render().find((node) => node.type === "TopBar").props.title, "Retried title");
-  blur(); runner.unmount();
+  runner.unmount();
 }
 
 // The real refresh entry point must bootstrap discovery after an uncached Chat failed to open.
@@ -1069,7 +974,7 @@ for (const [tab, component, expectedRequests] of [
   const renderNewChat = loadChromeComponent("../app/new-chat.tsx", "NewChatScreen", {
     ...formScope, ...runner.hooks, EmptyState: "EmptyState", SearchField: "SearchField", FlatList: "FlatList",
     useLocalSearchParams: () => ({}), useRouter: () => ({ dismissTo: (path) => { destination = path; } }),
-    ...appHooks(() => ({ state, refreshHome: async () => { retries++; }, spaceList: { visits } })), displaySpaceName: (space) => space.name,
+    ...appHooks(() => ({ state, refreshHome: async () => { retries++; }, spaceVisits: visits })), displaySpaceName: (space) => space.name,
     selectSpaceList, normalizeSearchQuery, useSafeAreaInsets: () => ({ bottom: 0 }),
   });
   const render = () => {
@@ -1166,59 +1071,45 @@ for (const [tab, component, expectedRequests] of [
 
 // Real ChatPanel refresh callbacks: server-created label filters and memberships update while open.
 {
-  let cursor = 0;
-  const slots = [];
-  const effects = [];
-  const jobs = new Map();
+  const runner = createScreenHooks();
   let remoteLabels = [];
   let remoteMembers = [];
   let labelsFetches = 0;
-  const client = { space: () => ({ labels: {
-    list: async () => { labelsFetches++; return { labels: remoteLabels }; },
-    listItems: async () => ({ items: remoteMembers.map((resourceRef) => ({ resourceRef })) }),
-  } }) };
-  const renderPanel = loadChromeComponent("../src/components/SpacePanels.tsx", "ChatPanel", {
-    ...chromeScope,
-    useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }]; },
-    useRef: (current) => { const index = cursor++; if (!(index in slots)) slots[index] = { current }; return slots[index]; },
-    useCallback: (callback) => callback, useMemo: (factory) => factory(),
-    useEffect: (callback, deps) => {
-      const index = cursor++;
-      const previous = slots[index];
-      if (!previous || deps.some((value, index) => value !== previous.deps[index])) {
-        effects.push(() => { previous?.cleanup?.(); slots[index] = { deps, cleanup: callback() }; });
-      }
+  const client = { space: () => ({
+    labels: {
+      list: async () => { labelsFetches++; return { labels: remoteLabels }; },
+      listItems: async () => ({ items: remoteMembers.map((resourceRef) => ({ resourceRef })) }),
     },
-    useSyncScope: (key, run, interval, enabled = true) => { if (enabled) jobs.set(key, { run, interval }); },
-    ...appHooks(() => ({ state: { sessionForks: {} }, sync: { invalidate() {}, invalidatePrefix() {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} })),
+    sessions: { list: async () => ({ sessions: [], pageInfo: { hasMore: false, nextCursor: null } }) },
+  }) };
+  const renderPanel = loadChromeComponent("../src/components/SpacePanels.tsx", "ChatPanel", {
+    ...chromeScope, ...runner.hooks,
+    invalidateScopes, EMPTY_LABELS: [], EMPTY_IDS: new Set(), EMPTY_SESSIONS: [], reconcileSessionHead,
+    ...appHooks(() => ({ state: { sessionForks: {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} })),
     useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader", KeyboardAvoidingView: "KeyboardAvoidingView", PANEL_FILL: {},
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
-  const render = () => { cursor = 0; const nodes = chromeNodes(renderPanel(props)); while (effects.length) effects.shift()(); return nodes; };
-  render();
-  const labelsJob = jobs.get("space:space:labels");
-  assert.equal(labelsJob.interval, 15000, "label definitions participate in foreground polling");
-  await labelsJob.run();
+  const render = () => chromeNodes(runner.render(() => renderPanel(props)));
+  const interval = (key) => runner.queryClient.getQueryCache().find({ queryKey: [key] })?.observers[0]?.options._interval;
+  const realtime = async (event) => { invalidateScopes(runner.queryClient, spaceRealtimeChange(event)); await flushSync(); };
+  render(); await flushSync();
+  assert.equal(interval("space:space:labels"), 15000, "label definitions participate in foreground polling");
   remoteLabels = [{ id: "web-label", name: "Created on web", source: "user", systemKey: null }];
-  render();
-  await jobs.get("space:space:labels").run();
+  await realtime({ type: "label.assignments.updated", spaceId: "space", payload: {} });
   const chip = render().find((node) => node.type === "FilterChip" && node.props.label === "Created on web");
   assert.ok(chip, "new remote filters appear without closing the panel or pulling to refresh");
   assert.equal(labelsFetches, 2);
   chip.props.onPress();
-  render();
-  assert.equal(jobs.get("space:space:label-members:Created on web").interval, 15000);
-  await jobs.get("space:space:label-members:Created on web").run();
+  render(); await flushSync();
+  assert.equal(interval("space:space:label-members:Created on web"), 15000);
   assert.equal(render().find((node) => node.type === "LegendList").props.data.length, 0);
   remoteMembers = [runningFixture.id];
-  await jobs.get("space:space:label-members:Created on web").run();
+  await realtime({ type: "label.assignments.updated", spaceId: "space", payload: {} });
   assert.equal(render().find((node) => node.type === "LegendList").props.data[0].session.id, runningFixture.id, "label assignments made on the web update the current filtered list");
-  const change = spaceRealtimeChange({ type: "label.assignments.updated", spaceId: "space", payload: {} });
-  assert.ok(change.exact.includes("space:space:labels"));
-  assert.ok(change.prefixes.includes("space:space:label-members:"));
+  runner.unmount();
 }
 
 for (const success of ["#238552", "#62c994"]) {
@@ -1490,7 +1381,7 @@ for (const [path, labels, chips] of [
   let startDevice = async () => null;
   const renderSpaces = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "SpacesScreen", {
     ...chromeScope, ...screen.hooks,
-    useFocusEffect: () => {}, useSyncScope: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
+    useFocusEffect: () => {}, useScrollToTop: () => {}, useFloatingTabBarInset: () => 80,
     useRouter: () => ({ push: (route) => pushes.push(route) }),
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, spaceList: { loading: false, overview: { spaces: [] }, visits: [], refresh: async () => {} }, userUuid: "user", client: {}, refreshHome: async () => {}, createSpace: async (name) => { created.push(name); return { id: `space-new-${created.length}`, name }; } })),
@@ -1551,7 +1442,7 @@ try {
   const state = { booting: false, spaces: [], sessions: ["a", "b", "c"].map(chat), sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
-    useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSyncScope: () => {}, useSpaceRealtime: () => {},
+    useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
     useFocusEffect: (callback) => { focusEffect = callback; },
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} })),
@@ -1842,7 +1733,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.deepEqual([thoughtOnly.some((node) => node.type === "TextBlock" || node.type === "MessageContent"), thoughtOnly.find((node) => node.type === "ReplyMeta").props.copyText], [false, ""], "a history row's text derived from the thinking does not bring it back");
   assert.equal(chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "$ ls", content: [{ type: "shell_command", command: "ls" }], meta: {} } })).find((node) => node.type === "TextBlock")?.props.value, "$ ls", "a reply that did not think keeps its text fallback");
   const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
-    ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {}, useMemo: (factory) => factory(),
+    ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useQuery: () => ({ data: undefined, error: null, isFetching: false }), useMemo: (factory) => factory(),
     thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
   });
   const thoughtTurn = { id: "turn", sessionId: "session", intermediateIndex: null, intermediateSummary: null, durationMs: 12_000, assistantContent: [thought, answer] };
@@ -2356,7 +2247,7 @@ function inspectPagination(node) {
   if (ts.isVariableDeclaration(node) && node.name.getText(contextSource) === "refreshChats") refreshChatsCallback = node.initializer.arguments[0].getText(contextSource);
   if (ts.isCallExpression(node) && ["useEffect", "useLayoutEffect"].includes(node.expression.getText(contextSource)) && node.arguments[0]?.getText(contextSource).includes("stateRef.current = state;")) stateSyncHook = node.expression.getText(contextSource);
   // The provider stages its snapshot during render; `stateRef` reads that staged state.
-  if (ts.isFunctionDeclaration(node) && node.name?.text === "AppProvider" && node.body.statements.some((statement) => statement.getText(contextSource) === "store.stage(snapshot);") && /const \[stateRef\] = useState\(\(\) => \(\{ get current\(\) \{ return store\.getSnapshot\(\)\.state; \} \}\)\);/.test(node.getText(contextSource))) stateSyncHook = "render";
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "AppProvider" && /store\.setState\(\(current\) => \(\{ state: reducer\(current\.state, action\) \}\)\)/.test(node.getText(contextSource)) && /const \[stateRef\] = useState\(\(\) => \(\{ get current\(\) \{ return store\.getState\(\)\.state; \} \}\)\);/.test(node.getText(contextSource))) stateSyncHook = "store";
   if (ts.isFunctionDeclaration(node) && node.name?.text === "withTimeout") timeoutSource = node.getText(contextSource);
   ts.forEachChild(node, inspectPagination);
 }
@@ -2438,34 +2329,15 @@ function paginationHarness(listSessions) {
   return { load, calls, actions, requestRef, generationRef, stateRef };
 }
 // Provider effects can be cleaned up and restarted without recreating useState controllers.
-const syncEffects = [];
 let spaceRealtimeEffect;
 function inspectSyncEffects(node) {
-  if (ts.isCallExpression(node) && node.expression.getText(contextSource) === "useEffect" && node.arguments[1]?.getText(contextSource) === "[sync]") syncEffects.push(node.arguments[0].getText(contextSource));
   if (ts.isCallExpression(node) && node.expression.getText(contextSource) === "useEffect" && node.arguments[1]?.getText(contextSource) === "[spaceRealtime]") spaceRealtimeEffect = node.arguments[0].getText(contextSource);
   ts.forEachChild(node, inspectSyncEffects);
 }
 inspectSyncEffects(contextSource);
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
 try {
-  const sync = createSyncScheduler({ active: true, random: () => 0.5 });
-  const scope = {
-    sync, NativeAppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) },
-    runningDiscoveryControllers: { current: new Set() }, subscriptions: { current: new Map() }, resyncCoordinatorRef: { current: { request: () => {} } },
-  };
-  const effects = syncEffects.map((effect) => new Function(...Object.keys(scope), `return (${effect});`)(...Object.values(scope)));
-  for (const cleanup of effects.map((effect) => effect())) cleanup?.();
-  const cleanups = effects.map((effect) => effect());
-  let reads = 0;
-  const stop = sync.watch("chats", { intervalMs: () => 15000, run: async () => { reads++; } });
-  mock.timers.tick(250);
-  await flushSync();
-  mock.timers.tick(15000);
-  await flushSync();
-  assert.equal(reads, 2, "effect cleanup/restart must not permanently disable the account scheduler");
-  stop();
-  for (const cleanup of cleanups) cleanup?.();
-  sync.dispose();
+  const scope = { NativeAppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) } };
 
   let events = 0;
   let listener;
@@ -2486,7 +2358,7 @@ try {
   assert.equal(subscribed, 0, "unmount releases native room listeners");
 } finally { mock.timers.reset(); }
 
-// Exercise the actual provider callback through its scheduler, not just isolated timers.
+// Exercise the actual provider callback across consecutive scheduled reads.
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
 try {
   for (const statusFailure of ["forbidden", "slow"]) {
@@ -2504,16 +2376,13 @@ try {
       },
     };
     const refresh = new Function(...Object.keys(scope), ts.transpileModule(`return (${refreshChatsCallback});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
-    const scheduler = createSyncScheduler({ active: true, random: () => 0.5 });
-    scheduler.watch("chats", { run: refresh, intervalMs: () => 15000 });
-    mock.timers.tick(250);
+    await refresh().catch(() => undefined);
     await flushSync();
-    mock.timers.tick(15000);
+    await refresh().catch(() => undefined);
     await flushSync();
     assert.equal(reads, 2, `${statusFailure}: status enrichment must not stop discovery of new web Chats`);
     assert.equal(actions.filter((action) => action.type === "sessions-head-success").at(-1).sessions[0].id, "web-created-2");
     assert.ok(!actions.some((action) => action.type === "sessions-head-error"), "status errors do not become list errors");
-    scheduler.dispose();
     slowStatus.resolve();
     await flushSync();
   }
@@ -2521,7 +2390,7 @@ try {
 
 const handoff = paginationHarness(async () => ({ sessions: [], pageInfo: { hasMore: false, nextCursor: null } }));
 const nextPageState = { ...handoff.stateRef.current, sessionsLoadingMore: false, sessionsCursor: "next-page" };
-if (stateSyncHook === "useLayoutEffect" || stateSyncHook === "render") handoff.stateRef.current = nextPageState;
+if (stateSyncHook === "useLayoutEffect" || stateSyncHook === "store") handoff.stateRef.current = nextPageState;
 await handoff.load();
 if (stateSyncHook === "useEffect") handoff.stateRef.current = nextPageState;
 assert.deepEqual(handoff.calls, ["next-page"], "a completed page must request the next page instead of leaving a spinner with no active request");
@@ -2552,55 +2421,29 @@ assert.deepEqual(stalePage.actions.map((action) => action.type), ["sessions-more
 
 // Space first paint must not wait for optional pin metadata or the slowest resource endpoint.
 const spaceScreenSource = ts.createSourceFile("space.tsx", readFileSync(new URL("../app/space/[spaceId]/index.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const spaceCallbacks = {};
-function inspectSpaceCallbacks(node) {
-  if (ts.isVariableDeclaration(node) && ["loadSpace", "loadResources"].includes(node.name.getText(spaceScreenSource))) {
-    spaceCallbacks[node.name.getText(spaceScreenSource)] = node.initializer.arguments[0].getText(spaceScreenSource);
+const spaceQueries = new Map();
+function inspectSpaceQueries(node) {
+  if (ts.isCallExpression(node) && ["useScreenQuery", "usePagedQuery"].includes(node.expression.getText(spaceScreenSource)) && ts.isObjectLiteralExpression(node.arguments[0])) {
+    const props = Object.fromEntries(node.arguments[0].properties.filter(ts.isPropertyAssignment).map((prop) => [prop.name.getText(spaceScreenSource), prop.initializer.getText(spaceScreenSource)]));
+    spaceQueries.set(props.queryKey, props);
   }
-  ts.forEachChild(node, inspectSpaceCallbacks);
+  ts.forEachChild(node, inspectSpaceQueries);
 }
-inspectSpaceCallbacks(spaceScreenSource);
-const compileSpaceCallback = (name, scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${spaceCallbacks[name]});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
+inspectSpaceQueries(spaceScreenSource);
+const spaceDetail = spaceQueries.get("[`space:${spaceId}:detail`]");
+assert.equal(spaceDetail.enabled, "ready && !cachedSpace", "a cached Space does not block its first render on a duplicate metadata request");
 const slowPin = Promise.withResolvers();
 const paintedSpaces = [];
-const loadSpaceImmediately = compileSpaceCallback("loadSpace", {
-  client: { spaces: { get: async () => ({ id: "space", name: "Fast Space" }) } }, spaceId: "space",
-  spaceRefreshInFlightRef: { current: null }, spaceRefreshAtRef: { current: null }, cachedSpaceRef: { current: null }, SPACE_REFRESH_INTERVAL_MS: 60_000,
-  spaceRefreshTokenRef: { current: 0 }, setSpaceLoading() {}, setSpaceError() {}, refreshSpacePin: () => slowPin.promise,
-  setLoadedSpace: (space) => paintedSpaces.push(space), upsertSpace() {}, t: (key) => key, console,
-});
-const pendingSpacePaint = loadSpaceImmediately();
-await flushSync();
-assert.equal(paintedSpaces.length, 1, "Space shell paints when its detail request resolves, without waiting for pin metadata");
-let cachedSpaceGets = 0;
-const loadCachedSpace = compileSpaceCallback("loadSpace", {
-  client: { spaces: { get: async () => { cachedSpaceGets++; return { id: "space" }; } } }, spaceId: "space",
-  spaceRefreshInFlightRef: { current: null }, spaceRefreshAtRef: { current: null }, cachedSpaceRef: { current: { id: "space", name: "Cached", isPinned: true } }, SPACE_REFRESH_INTERVAL_MS: 60_000,
-  spaceRefreshTokenRef: { current: 0 }, setSpaceLoading() {}, setSpaceError() {}, refreshSpacePin: async () => false,
-  setLoadedSpace() {}, upsertSpace() {}, t: (key) => key, console,
-});
-await loadCachedSpace();
-assert.equal(cachedSpaceGets, 0, "a cached Space does not block its first render on a duplicate metadata request");
-slowPin.resolve(false);
-await pendingSpacePaint;
-const slowApps = Promise.withResolvers();
-const resourcePaints = [];
-const loadResourcesProgressively = compileSpaceCallback("loadResources", {
-  client: {
-    space: () => ({ checkpoints: { list: async () => ({ checkpoints: [{ id: "save" }] }) } }),
-    apps: { listBySpace: () => slowApps.promise }, tasks: { list: async () => ({ runs: [{ id: "task" }] }) },
-  },
-  spaceId: "space", resourcesInFlightRef: { current: false }, resourcesRefreshAtRef: { current: 0 }, SPACE_REFRESH_INTERVAL_MS: 60_000,
-  resourcesRequestRef: { current: 0 }, tasksRequestRef: { current: 0 }, allResourcesLoading: { checkpoints: true, apps: true, tasks: true },
-  setResourceLoading() {}, setResources: (update) => resourcePaints.push(update({ checkpoints: [], apps: [], tasks: [] })), setResourceFailures() {}, setTaskCursor() {},
-  mergeTaskRuns: (current, incoming) => [...current, ...incoming],
-});
-const pendingResourcePaint = loadResourcesProgressively();
-await flushSync();
-assert.ok(resourcePaints.some((resource) => resource.checkpoints.length === 1), "Saves render before a slower Works request settles");
-assert.ok(resourcePaints.some((resource) => resource.tasks.length === 1), "Tasks render before a slower Works request settles");
-slowApps.resolve({ apps: [] });
-await pendingResourcePaint;
+const loadSpaceDetail = new Function("client", "spaceId", "refreshSpacePin", "upsertSpace", "console", ts.transpileModule(`return (${spaceDetail.queryFn});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+  { spaces: { get: async () => ({ id: "space", name: "Fast Space" }) } }, "space", () => slowPin.promise, (space) => paintedSpaces.push(space), console,
+);
+const detail = await loadSpaceDetail();
+assert.deepEqual([detail.name, paintedSpaces.length], ["Fast Space", 1], "Space shell paints when its detail request resolves, without waiting for pin metadata");
+slowPin.resolve(false); await flushSync();
+assert.equal(paintedSpaces.at(-1).isPinned, false, "late pin metadata still lands on the Space");
+for (const key of ["[`space:${spaceId}:resources`, \"checkpoints\"]", "[`space:${spaceId}:resources`, \"apps\"]", "[`space:${spaceId}:resources`, \"activity\"]", "[`space:${spaceId}:tasks`]"]) {
+  assert.ok(spaceQueries.has(key), `${key}: each Space resource is its own query, so Saves and Tasks render before a slower Works request settles`);
+}
 
 // Reopening hydrated history must not read and replace it with the older disk cache.
 const reopenActions = [];
@@ -3443,39 +3286,10 @@ const countClient = {
     },
   }),
 };
-await loadSpaceSessionCounts(countClient, Array.from({ length: 9 }, (_, index) => `space-${index}`));
+const countLimit = createLimiter(4);
+await Promise.all(Array.from({ length: 9 }, (_, index) => countLimit(() => countClient.space(`space-${index}`).sessions.list())));
 assert.ok(countMaxInFlight <= 4, "Space count probes must stay within the concurrency cap");
-await loadSpaceSessionCounts(countClient, ["small", "big"]);
-assert.deepEqual(getSpaceSessionCount(countClient, "small"), { count: 3, hasMore: false });
-assert.deepEqual(getSpaceSessionCount(countClient, "big"), { count: 20, hasMore: true });
-const countCallsAfterProbe = countListCalls.length;
-await loadSpaceSessionCounts(countClient, ["small", "big"]);
-assert.equal(countListCalls.length, countCallsAfterProbe, "Fresh Space counts must be reused");
-await loadSpaceSessionCounts(countClient, ["small"], { force: true });
-assert.equal(countListCalls.length, countCallsAfterProbe + 1);
-publishSpaceSessionCount(countClient, "published", 7, false);
-assert.deepEqual(getSpaceSessionCount(countClient, "published"), { count: 7, hasMore: false });
-const failingCountClient = { space: () => ({ sessions: { list: async () => { throw new Error("offline"); } } }) };
-await loadSpaceSessionCounts(failingCountClient, ["broken"]);
-assert.equal(getSpaceSessionCount(failingCountClient, "broken"), null, "Failed probes must not be cached");
-const sharedProbes = [];
-const shareCountClient = {
-  space: (spaceId) => ({
-    sessions: {
-      list: async () => {
-        sharedProbes.push(spaceId);
-        await new Promise((resolve) => setTimeout(resolve, 1));
-        return { sessions: [{ id: "shared-session" }], pageInfo: { hasMore: false, nextCursor: null } };
-      },
-    },
-  }),
-};
-await Promise.all([
-  loadSpaceSessionCounts(shareCountClient, ["shared"]),
-  loadSpaceSessionCounts(shareCountClient, ["shared"]),
-]);
-assert.equal(sharedProbes.length, 1, "Concurrent probes for the same Space must be shared");
-assert.deepEqual(getSpaceSessionCount(shareCountClient, "shared"), { count: 1, hasMore: false });
+assert.equal(countListCalls.length, 9, "queued probes are not starved");
 
 // Cache retention prunes by cache write time; the default window is one week.
 assert.equal(DEFAULT_CACHE_RETENTION, "7d");
@@ -4117,7 +3931,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4158,7 +3972,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4190,7 +4004,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action),
       saveMessages: async (_user, _session, rows) => { saved.push(rows); }, deleteMessages: async (_user, _session, ids) => { deleted.push(...ids); }, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4222,7 +4036,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: () => {},
       saveMessages: write, deleteMessages: remove, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, sync: { invalidate: () => {} },
+      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4330,8 +4144,8 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   assert.equal(reduceView(tailView, { type: "turn-upsert", sessionId: "fixture", turn: running }).sessionViews.fixture.turns.at(-1).sequence, 101, "a window at the tail grows with new Turns");
 
   // Selector subscriptions: a token batch may only reach this Chat's stream subscribers.
-  const storeSource = ["shallowEqual", "sameSessionViewSummary", "summarizeSessionView", "sameViewHistories", "createAppStore", "createSelectionCache"].map((name) => contextFunction(name).replace(/^export /, "")).join("\n");
-  const { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache } = new Function("LOADING_VIEW", "translate", ts.transpileModule(`${storeSource}\nreturn { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createAppStore, createSelectionCache };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ loading: true }, (key) => key);
+  const storeSource = ["shallowEqual", "sameSessionViewSummary", "summarizeSessionView", "sameViewHistories", "createSelectionCache"].map((name) => contextFunction(name).replace(/^export /, "")).join("\n");
+  const { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createSelectionCache } = new Function("LOADING_VIEW", "translate", ts.transpileModule(`${storeSource}\nreturn { shallowEqual, sameSessionViewSummary, summarizeSessionView, sameViewHistories, createSelectionCache };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)({ loading: true }, (key) => key);
   const streamScope = { ...viewScope, liveStreamStatusFromPatch, hasFinalAssistantForTurn, displaySpaceName: (item) => item.name };
   const reduceStream = new Function(...Object.keys(streamScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${contextFunction("mergeSessionItem")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(streamScope));
   const liveStream = { status: "streaming", turnId: "turn-live", messageId: null, contentBlocks: [{ type: "text", text: "Hel" }], intermediateMessages: [], runtimePhase: null, runtimeProvider: null, runtimeModel: null };
@@ -4351,52 +4165,39 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   assert.equal(sameViewHistories(batch.sessionViews, grown.sessionViews), false);
   assert.equal(summarizeSessionView(undefined).loading, true, "an unopened Chat renders as loading");
 
-  const store = createAppStore();
-  assert.throws(() => store.getSnapshot(), /data\.useAppProvider/, "nothing reads the store before the provider's first render");
-  store.stage({ state: before });
-  store.notify();
+  const store = createStore(() => ({ state: before }));
   let notified = 0;
   const unsubscribe = store.subscribe(() => notified++);
   const cache = createSelectionCache();
   const selectRow = ({ state }) => ({ latest: state.sessionLatestTurns.fixture, live: state.sessionViews.fixture?.stream?.status ?? null });
-  const read = cache.reader(store, selectRow, shallowEqual);
-  const first = read();
+  const read = cache.reader(selectRow, shallowEqual);
+  const first = read(store.getState());
   cache.commit(first);
-  store.stage({ state: batch });
-  assert.equal(notified, 0, "staging during render never notifies");
-  store.notify();
+  store.setState({ state: batch });
   assert.equal(notified, 1);
-  assert.equal(read(), first, "an equal selection keeps its reference, so useSyncExternalStore skips the render");
-  assert.equal(cache.reader(store, (app) => selectRow(app), shallowEqual)(), first, "a re-created inline selector reuses the committed selection");
-  store.stage({ state: settled });
-  store.notify();
-  assert.notEqual(read(), first, "a changed slice produces a new selection");
-  store.notify();
-  assert.equal(notified, 2, "notifying the same staged snapshot again is a no-op");
+  assert.equal(read(store.getState()), first, "an equal selection keeps its reference, so the store hook skips the render");
+  assert.equal(cache.reader((app) => selectRow(app), shallowEqual)(store.getState()), first, "a re-created inline selector reuses the committed selection");
+  store.setState({ state: settled });
+  assert.notEqual(read(store.getState()), first, "a changed slice produces a new selection");
   unsubscribe();
 
   // New Chat hand-off: `sendNewMessage` seeds the view, and the ChatContent mounted in the same
   // commit opens it from `useSession`'s layout effect, which runs before any provider layout effect.
-  assert.equal(stateSyncHook, "render", "the provider stages its snapshot and `stateRef` during render");
-  const handoffStore = createAppStore();
-  const providerStateRef = { get current() { return handoffStore.getSnapshot().state; } };
+  assert.equal(stateSyncHook, "store", "reducer updates land in the store synchronously and `stateRef` reads it");
   const space = { id: "space", name: "Space", slug: "space" };
+  const handoffStore = createStore(() => ({ state: { sessions: [], spaces: [space], sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {}, sessionForks: {} } }));
+  const providerStateRef = { get current() { return handoffStore.getState().state; } };
   const userTurn = { ...turnRange(1, 1)[0], id: "turn-new", status: "running", userText: "hi" };
-  handoffStore.stage({ state: { sessions: [], spaces: [space], sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {}, sessionForks: {} } });
-  handoffStore.notify();
-  const seeded = [];
   const sendNewScope = {
     client: { space: () => ({ prompt: async () => ({ mode: "immediate", session: { id: "new-chat", spaceId: "space" }, turn: userTurn }) }) },
-    stateRef: providerStateRef, dispatch: (action) => seeded.push(action), translate: (key) => key, newId: () => "client-message",
+    stateRef: providerStateRef, dispatch: (action) => handoffStore.setState(({ state }) => ({ state: reduceStream(state, action) })), translate: (key) => key, newId: () => "client-message",
     buildPromptContent: async () => [{ type: "text", text: "hi" }], displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
     messagesFromTurns: (turns) => turns.map((turn) => ({ id: `${turn.id}:user`, role: "user", sequence: turn.sequence, meta: { turnId: turn.id, turnSequence: turn.sequence } })),
-    saveSessions: async () => {}, saveMessages: async () => {}, sync: { invalidate() {} }, userKey: "test-user",
+    saveSessions: async () => {}, saveMessages: async () => {}, queryClient: { invalidateQueries: async () => {} }, userKey: "test-user",
   };
   const sendNew = new Function(...Object.keys(sendNewScope), ts.transpileModule(`return (${sessionCallbacks.sendNewMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendNewScope));
   await sendNew("space", "hi");
-  // The provider's render: React folds the seeded dispatches and the draft's `setCreatedChat` into one pass.
-  handoffStore.stage({ state: seeded.reduce(reduceStream, handoffStore.getSnapshot().state) });
-  const mountedView = createSelectionCache().reader(handoffStore, (app) => summarizeSessionView(app.state.sessionViews["new-chat"]), sameSessionViewSummary)();
+  const mountedView = createSelectionCache().reader((app) => summarizeSessionView(app.state.sessionViews["new-chat"]), sameSessionViewSummary)(handoffStore.getState());
   assert.deepEqual([mountedView.loading, Boolean(mountedView.session), mountedView.historyLoaded, mountedView.messages.length], [false, true, true, 1], "the Chat mounted with the new id paints the seeded turn, not the opening placeholder");
   const opened = [];
   const refreshes = [];
