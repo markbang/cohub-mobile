@@ -15,6 +15,7 @@ Search for `cohub:` to find each one.
 - Android and iOS code blocks and tables claim a horizontal drag only while they can scroll that way (`NestedHorizontalScrollView.kt`, `ENRMNestedHorizontalScrollView`).
 - md4c: a non-ASCII neighbour delimits a permissive autolink, so `通过：https://…。` links as in the web client.
 - Android: block bottom margins are a separate spacer line, so selecting a paragraph does not highlight the gap below it.
+- Android: a list's line height runs before its items' margin spans (`ListRenderer`), so the measuring layout and the TextView agree on spacer-line heights. Without it a long reply that contains a list is measured shorter than it draws, and its last line is drawn below the view's bottom edge (upstream issue #1060, pull request #1102).
 - Android: wrapped inline code ends each fragment at its line's text and hugs the glyph box.
 - Android: `consumer-rules.pro` keeps `segments.MathContainerView`, so display math survives R8.
 - `markdownStyle.contextMenu`: the long-press block menu (`ContextMenuPopup`) reads its colors, radius, and sizes from JS. iOS keeps the system menu and ignores it.
