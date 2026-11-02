@@ -23,6 +23,8 @@ import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.records.Field
+import expo.modules.kotlin.records.Record
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +41,29 @@ private class NotServingException :
 
 private class GatewayOriginException(origin: String) :
     CodedException("ERR_GATEWAY_ORIGIN", "Gateway origin must be a wss:// origin without a path, received: $origin", null)
+
+private class CliManifestException(reason: String) :
+    CodedException("ERR_CLI_MANIFEST", "Invalid CLI manifest: $reason", null)
+
+class CliManifestRecord : Record {
+    @Field val version: String = ""
+    @Field val nodeUrl: String = ""
+    @Field val nodeSha256: String = ""
+    @Field val cliUrl: String = ""
+    @Field val cliSha256: String = ""
+
+    fun validated(): CliManifest {
+        if (!CLI_VERSION.matches(version)) throw CliManifestException("version must match ${CLI_VERSION.pattern}")
+        for (url in listOf(nodeUrl, cliUrl)) if (!url.startsWith("https://")) throw CliManifestException("$url is not https")
+        for (sha in listOf(nodeSha256, cliSha256)) if (!SHA256.matches(sha)) throw CliManifestException("$sha is not a SHA-256")
+        return CliManifest(version, nodeUrl, nodeSha256, cliUrl, cliSha256)
+    }
+
+    private companion object {
+        val CLI_VERSION = Regex("^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$")
+        val SHA256 = Regex("^[0-9a-fA-F]{64}$")
+    }
+}
 
 private class PairingCodeException :
     CodedException("ERR_PAIRING_CODE", "The pairing code must be six digits", null)
@@ -98,7 +123,7 @@ class DeviceRuntimeModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("CohubDeviceRuntime")
-        Events("onChange", "onDisplayChange", "onDisplayInterrupt", "onTokenRequest")
+        Events("onChange", "onDisplayChange", "onDisplayInterrupt", "onCliChange", "onTokenRequest")
 
         OnCreate {
             val runtime = deviceRuntime
@@ -115,6 +140,9 @@ class DeviceRuntimeModule : Module() {
                 }
             }
             if (!runtime.available) return@OnCreate
+            scope.launch {
+                runtime.cli.state.collect { state -> sendEvent("onCliChange", state.toMap()) }
+            }
             scope.launch {
                 runtime.display.status.collect { status -> sendEvent("onDisplayChange", status.toMap()) }
             }
@@ -212,6 +240,15 @@ class DeviceRuntimeModule : Module() {
         }
 
         Function("stop") { spaceId: String -> deviceRuntime.stop(spaceId) }
+
+        Function("cliStatus") { deviceRuntime.cli.state.value.toMap() }
+
+        // Downloads and verifies what the manifest pins; resolves with the state after, failures in its `error`.
+        AsyncFunction("installCli") Coroutine { manifest: CliManifestRecord ->
+            deviceRuntime.cli.install(manifest.validated()).toMap()
+        }
+
+        AsyncFunction("removeCli") Coroutine { -> deviceRuntime.cli.remove().toMap() }
 
         Function("displayStatus") { deviceRuntime.display.current().toMap() }
 

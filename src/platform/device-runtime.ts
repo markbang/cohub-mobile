@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { AppState, PermissionsAndroid, Platform } from "react-native";
 import nativeDeviceRuntime from "@/modules/cohub-device-runtime";
 import { config } from "@/src/config";
+import { DEVICE_CLI, shouldInstallDeviceCli, type DeviceCliState } from "@/src/data/device-cli";
 import {
   accessTokenExpiresAt,
   conflictedDeviceRuntimes,
@@ -87,7 +88,23 @@ export function useDeviceRuntimeSession(account: string, getAccessToken: GetAcce
     });
     return () => subscription.remove();
   }, []);
+  useEffect(() => {
+    if (!native) return;
+    const runtime = native;
+    const check = () => {
+      const serving = runtime.list().some((instance) => instance.state === "ready");
+      if (cliAttempted || !shouldInstallDeviceCli(runtime.cliStatus(), serving)) return;
+      // Once per app session: a failed download waits for Retry or the next launch instead of looping.
+      cliAttempted = true;
+      void runtime.installCli(DEVICE_CLI).catch((error: unknown) => console.warn("[device-runtime] could not install the Cohub CLI", error));
+    };
+    const subscription = runtime.addListener("onChange", check);
+    check();
+    return () => subscription.remove();
+  }, []);
 }
+
+let cliAttempted = false;
 
 /** Disconnects every folder; called when the account signs out. */
 export function signOutDeviceRuntime() {
@@ -204,4 +221,35 @@ export function useDeviceDisplayInterrupts(onInterrupt: ((event: DisplayInterrup
     const subscription = native.addListener("onDisplayInterrupt", onInterrupt);
     return () => subscription.remove();
   }, [onInterrupt]);
+}
+
+let cliState: DeviceCliState | null = null;
+let cliChanges: { remove(): void } | null = null;
+const cliListeners = new Set<() => void>();
+
+function subscribeCli(listener: () => void) {
+  if (!native) return () => undefined;
+  cliListeners.add(listener);
+  if (!cliChanges) {
+    cliChanges = native.addListener("onCliChange", (event) => {
+      cliState = event;
+      cliListeners.forEach((notify) => notify());
+    });
+    cliState = native.cliStatus();
+  }
+  return () => {
+    cliListeners.delete(listener);
+    if (cliListeners.size > 0) return;
+    cliChanges?.remove();
+    cliChanges = null;
+  };
+}
+
+/** `cohub` on this device for what its Runtimes run, live; null where the device cannot serve Spaces. */
+export function useDeviceCliState(): DeviceCliState | null {
+  return useSyncExternalStore(subscribeCli, () => cliState);
+}
+
+export async function installDeviceCli(): Promise<DeviceCliState> {
+  return requireNative().installCli(DEVICE_CLI);
 }

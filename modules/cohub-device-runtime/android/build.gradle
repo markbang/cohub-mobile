@@ -113,8 +113,40 @@ def buildSandboxd = tasks.register("buildSandboxd", BuildSandboxd) {
   outputDirectory.set(layout.buildDirectory.dir("generated/sandboxd"))
 }
 
+// `cohub` for what a Runtime runs: only its launcher ships, as lib/arm64-v8a/libcohub_cli.so (Node is
+// built for arm64 alone); DeviceCli downloads Node and the CLI when JS asks.
+abstract class StageCliLauncher extends DefaultTask {
+  @InputFile
+  @PathSensitive(PathSensitivity.NONE)
+  abstract RegularFileProperty getLauncher()
+
+  @Input
+  abstract Property<Boolean> getArm64()
+
+  @OutputDirectory
+  abstract DirectoryProperty getOutputDirectory()
+
+  @TaskAction
+  void stage() {
+    def output = outputDirectory.get().asFile
+    output.deleteDir()
+    if (!arm64.get()) return
+    def target = new File(output, "arm64-v8a/libcohub_cli.so")
+    target.parentFile.mkdirs()
+    target.bytes = launcher.get().asFile.bytes
+    target.setExecutable(true, false)
+  }
+}
+
+def stageCliLauncher = tasks.register("stageCliLauncher", StageCliLauncher) {
+  launcher.set(layout.projectDirectory.file("src/main/cli/cohub"))
+  arm64.set(requestedAbis.contains("arm64-v8a"))
+  outputDirectory.set(layout.buildDirectory.dir("generated/cliLauncher"))
+}
+
 androidComponents {
   onVariants(selector().all()) { variant ->
     variant.sources.jniLibs?.addGeneratedSourceDirectory(buildSandboxd) { it.outputDirectory }
+    variant.sources.jniLibs?.addGeneratedSourceDirectory(stageCliLauncher) { it.outputDirectory }
   }
 }

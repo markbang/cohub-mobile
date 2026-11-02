@@ -207,6 +207,7 @@ class RuntimeService : Service() {
             relayUrl = "$gateway/sandbox/relay",
             runtimeId = runtimeId,
             displaySocket = displaySocket,
+            bin = runCatching { runtime.cli.bin() }.onFailure { Log.w(TAG, "cohub cannot be linked onto PATH", it) }.getOrNull(),
             token = { tokens.get(false) },
         )
         runtime.publish(spaceId, RuntimeInstance.State.CONNECTING)

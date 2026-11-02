@@ -13,7 +13,8 @@ import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useAppActions } from "@/src/data/context";
 import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, phoneControlErrorKey, phoneControlStageKey, phoneControlSteps, type DeviceRuntimeRefusal, type PhoneControlState } from "@/src/data/device-runtime";
-import { deviceRuntimeSupported, openDeviceControlSettings, pairPhoneControl, phoneControlSupported, setupPhoneControl, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
+import { deviceCliStateKey } from "@/src/data/device-cli";
+import { deviceRuntimeSupported, installDeviceCli, openDeviceControlSettings, pairPhoneControl, phoneControlSupported, setupPhoneControl, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceCliState, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus } from "@/src/data/sandbox-setup";
 import { formatUsd } from "@/src/data/space-wallet";
@@ -612,6 +613,7 @@ function DeviceRuntimeSection({ spaceId }: { spaceId: string }) {
         {busy || instance?.state === "connecting" ? <Loader /> : null}
       </View>
       {hint ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{hint}</Text> : null}
+      <DeviceCliLine />
       <View className="flex-row gap-2 mt-3">
         {running ? (
           <ActionButton label={t("deviceRuntime.disconnect")} icon="x" disabled={busy} onPress={() => void update(() => stopDeviceRuntime(spaceId))} />
@@ -688,6 +690,25 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
       </View>
       {!sharingHere && !phoneReady ? <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.display.shareRecordingHint")}</Text> : null}
       {sharingHere && !status.control ? <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.display.controlHint")}</Text> : null}
+    </View>
+  );
+}
+
+function DeviceCliLine() {
+  const { t } = useTranslation();
+  const state = useDeviceCliState();
+  const key = state ? deviceCliStateKey(state) : null;
+  if (!state || !key) return null;
+  return (
+    <View className="flex-row flex-wrap items-center gap-x-2 mt-2">
+      <Text className={`text-caption ${state.error && state.status !== "installing" ? "text-danger" : "text-fg-muted"}`}>
+        {t(key, { version: state.version ?? "", percent: String(Math.round((state.progress ?? 0) * 100)) })}
+      </Text>
+      {state.error && state.status !== "installing" ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={t("deviceRuntime.cli.retry")} hitSlop={12} onPress={() => void installDeviceCli().catch(() => undefined)}>
+          <Text className="text-caption font-semibold text-accent">{t("deviceRuntime.cli.retry")}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
