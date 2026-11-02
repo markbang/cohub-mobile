@@ -22,7 +22,8 @@ type MorphMenuSurfaceProps = Omit<ViewProps, "style" | "children"> & {
 };
 
 /**
- * A menu panel that grows out of its anchor's bounds and collapses back into them. The backdrop is a
+ * A menu panel that takes the place of its trigger: it grows out of the trigger's bounds and collapses back
+ * into them, while the owner hides the trigger for as long as the menu is open. The backdrop is a
  * childless absolute layer, so animating its frame re-lays out nothing else; the rows keep their final
  * layout and only fade and scale, so hit-testing matches what is drawn once the menu settles.
  */
@@ -64,7 +65,8 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
     // Reduce Motion keeps the panel in place and only crossfades it.
     const g = reduced ? 1 : p;
     return {
-      opacity: reduced ? p : interpolate(p, [0, 0.15], [0, 1], Extrapolation.CLAMP),
+      // The trigger hides as the menu opens, so the panel stands in for it almost at once.
+      opacity: reduced ? p : interpolate(p, [0, 0.06], [0, 1], Extrapolation.CLAMP),
       left: from.x * (1 - g),
       top: from.y * (1 - g),
       width: Math.max(0, from.width + (box.width - from.width) * g),

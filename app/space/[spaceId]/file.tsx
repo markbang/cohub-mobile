@@ -5,6 +5,7 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Keyboard, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { CodeBlock } from "@/src/components/CodeBlock";
 import { CodeEditor } from "@/src/components/CodeEditor";
 import { UrlFilePreview } from "@/src/components/MediaViewers";
@@ -283,13 +284,13 @@ export default function FileScreen() {
           </ScrollView>
         )
       ) : null}
-      {pathMenuOpen ? <AnchoredActionMenu
+      <MenuPresence open={pathMenuOpen}><AnchoredActionMenu
         anchorRef={pathTitleRef}
         title={title}
         testID="file-path-actions-menu"
         onClose={() => setPathMenuOpen(false)}
         actions={[{ icon: "copy", title: t("file.copyPath"), onPress: () => void copyPath() }]}
-      /> : null}
+      /></MenuPresence>
     </Screen>
   );
 }

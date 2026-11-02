@@ -777,7 +777,7 @@ for (const [tab, component, expectedRequests] of [
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
     EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
-    AnchoredActionMenu: "AnchoredActionMenu", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
+    AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
@@ -947,7 +947,7 @@ for (const [tab, component, expectedRequests] of [
     firstParam: (value) => value ?? "", ...appHooks(() => ({ client })), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
     Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict, isMarkdownFile,
-    MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    MenuPresence: "MenuPresence", AnchoredActionMenu: "AnchoredActionMenu", MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const render = () => chromeNodes(runner.render(renderFile));
   const actions = () => chromeNodes(render().find((node) => node.type === "TopBar").props.actions);
@@ -1361,16 +1361,16 @@ visibilityCleanups.forEach((cleanup) => cleanup());
 measureRequests.shift()();
 assert.equal(visibleRowEvents.length, previousVisibilityEvents + 1, "unmount cancels pending visibility callbacks");
 
-const chatMenuInput = { anchor: { x: 338, y: 53, width: 44, height: 44 }, viewport: { x: 0, y: 47, width: 390, height: 763 }, bottomInset: 34 };
+const chatMenuInput = { anchor: { x: 338, y: 63, width: 44, height: 44 }, viewport: { x: 0, y: 47, width: 390, height: 763 }, bottomInset: 34 };
 const chatMenuLayout = getAnchoredMenuLayout(chatMenuInput);
-assert.deepEqual(chatMenuLayout, { left: 202, top: 54, width: 180, maxHeight: 667 });
+assert.deepEqual(chatMenuLayout, { left: 202, top: 16, width: 180, maxHeight: 705 });
 assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 140 }).width, 180, "short menus retain the minimum width");
 assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 230 }).width, 230, "menus expand to their content width");
 assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 400 }).width, 280, "long menus respect the maximum width");
 assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 230, viewport: { ...chatMenuInput.viewport, width: 160 } }).width, 144, "narrow screens take precedence over the minimum width");
 assert.equal(chatMenuLayout.left + chatMenuLayout.width, chatMenuInput.anchor.x + chatMenuInput.anchor.width, "menu aligns to the trigger's right edge");
-assert.equal(chatMenuLayout.top + chatMenuInput.viewport.y, chatMenuInput.anchor.y + chatMenuInput.anchor.height + 4, "menu opens below the trigger, not from the bottom");
-assert.deepEqual(getAnchoredMenuLayout({ ...chatMenuInput, anchor: { ...chatMenuInput.anchor, x: 358, y: 83 }, viewport: { ...chatMenuInput.viewport, x: 20, y: 77 } }), chatMenuLayout, "screen-local coordinates account for safe areas and window offsets");
+assert.equal(chatMenuLayout.top + chatMenuInput.viewport.y, chatMenuInput.anchor.y, "the menu opens over its trigger, which it replaces");
+assert.deepEqual(getAnchoredMenuLayout({ ...chatMenuInput, anchor: { ...chatMenuInput.anchor, x: 358, y: 93 }, viewport: { ...chatMenuInput.viewport, x: 20, y: 77 } }), chatMenuLayout, "screen-local coordinates account for safe areas and window offsets");
 for (const width of [240, 320, 390, 844]) {
   for (const height of [180, 260, 763]) {
     const layout = getAnchoredMenuLayout({ anchor: { x: width - 52, y: 6, width: 44, height: 44 }, viewport: { x: 0, y: 0, width, height }, bottomInset: 0 });
@@ -1381,7 +1381,7 @@ for (const width of [240, 320, 390, 844]) {
   }
 }
 const chatMenuEvents = [];
-let menuEventSink = chatMenuEvents;
+const menuExited = () => undefined;
 let menuBackHandler;
 let menuBackRemoved = false;
 let menuFocused = true;
@@ -1391,8 +1391,8 @@ const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu
   ScrollView: "ScrollView",
   MorphMenuSurface: "MorphMenuSurface",
   useRef: () => ({ current: null }),
-  // `open` is the only boolean state; setting it false starts the shrink back into the anchor.
-  useState: (initial) => typeof initial === "boolean" ? [initial, (next) => { if (!next) menuEventSink.push("dismiss"); }] : [chatMenuLayout, () => undefined],
+  useState: () => [chatMenuLayout, () => undefined],
+  useMenuPresence: () => ({ open: true, onExited: menuExited }),
   useCallback: (callback) => callback,
   useLayoutEffect: () => undefined,
   useEffect: (effect) => { menuCleanups.push(effect()); },
@@ -1418,14 +1418,14 @@ assert.equal(menuItems.length, 2);
 assert.equal(menuItems[1].props.disabled, true);
 assert.equal(menuItems[1].props.accessibilityState.disabled, true);
 menuItems[0].props.onPress();
-assert.deepEqual(chatMenuEvents.splice(0), ["dismiss", "share"], "start closing the menu before executing Share or opening another surface");
+assert.deepEqual(chatMenuEvents.splice(0), ["close", "share"], "close the menu before executing Share or opening another surface");
 menuNodes.find((node) => node.props?.accessibilityRole === "button").props.onPress();
-assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"]);
+assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
 menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onAccessibilityEscape();
-assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"]);
+assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
 assert.equal(menuBackHandler(), true);
-assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"], "Android back dismisses the menu without navigating away");
-assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, chatMenuProps.onClose, "the owner unmounts the menu once it has shrunk back into its anchor");
+assert.deepEqual(chatMenuEvents.splice(0), ["close"], "Android back dismisses the menu without navigating away");
+assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, menuExited, "the menu unmounts once it has shrunk back into its trigger");
 assert.equal(menuNodes.find((node) => node.type === "ScrollView").props.keyboardShouldPersistTaps, "always");
 assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native share sheet must not compete with another Modal");
 menuCleanups[0]();
@@ -1479,20 +1479,19 @@ for (const isPinned of [false, true]) {
     assert.equal(actions[2].title, isPinned ? "space.unpin" : "space.pin");
     assert.equal(actions[2].disabled, pinning);
     menuFocused = true;
-    menuEventSink = events;
     const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), actions });
     assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
     const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
     items[0].props.onPress();
-    assert.deepEqual(events.splice(0), ["dismiss", "chat"]);
+    assert.deepEqual(events.splice(0), ["close", "chat"]);
     items[1].props.onPress();
-    assert.deepEqual(events.splice(0), ["dismiss", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
+    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
     if (!pinning) {
       items[2].props.onPress();
-      assert.deepEqual(events.splice(0), ["dismiss", "togglePin"]);
+      assert.deepEqual(events.splice(0), ["close", "togglePin"]);
     } else assert.equal(items[2].props.disabled, true);
     items[3].props.onPress();
-    assert.deepEqual(events.splice(0), ["dismiss", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
+    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
   }
 }
 
@@ -1548,7 +1547,7 @@ for (const [path, labels, chips] of [
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
     EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
-    nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu",
+    nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence",
   });
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
@@ -1604,7 +1603,7 @@ try {
     useSessionSourcePreference: () => ({ filter: "all", error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
     useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
     Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
-    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu",
+    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence",
   });
   const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
   const order = () => list().props.data.map((item) => item.session.id);
@@ -3641,17 +3640,17 @@ assert.equal(keyboardOverlap({ screenY: 0, height: 956 }, 956), 0, "a zero-origi
 assert.equal(isUsableKeyboardFrame({ screenY: 0, height: 336 }), false);
 assert.equal(isUsableKeyboardFrame(undefined), false);
 assert.equal(keyboardOverlap({ screenY: 900, height: 336 }, 956), 56, "overlap stops at the window edge");
-const composerMenuInput = { anchor: { x: 12, y: 680, width: 366, height: 114 }, windowWidth: 390, windowHeight: 844, topInset: 47, bottomInset: 34, keyboardTop: null, preferredWidth: 360 };
-assert.deepEqual(getComposerMenuLayout(composerMenuInput), { left: 12, bottom: 172, width: 360, maxHeight: 480 });
+const composerMenuInput = { anchor: { x: 20, y: 740, width: 44, height: 44 }, windowWidth: 390, windowHeight: 844, topInset: 47, bottomInset: 34, keyboardTop: null, preferredWidth: 360 };
+assert.deepEqual(getComposerMenuLayout(composerMenuInput), { left: 18, bottom: 60, width: 360, maxHeight: 480 }, "the menu covers the button that opened it, growing up from its bottom edge");
 assert.equal(getComposerMenuLayout({ ...composerMenuInput, preferredWidth: 240 }).width, 240, "attachments use a compact menu");
 assert.equal(getComposerMenuLayout({ ...composerMenuInput, windowWidth: 320 }).width, 296, "menu fits narrow screens");
 assert.equal(getComposerMenuLayout({ ...composerMenuInput, anchor: { ...composerMenuInput.anchor, x: 300 } }).left, 18, "menu stays inside the right edge");
 const iosKeyboardMenu = getComposerMenuLayout({ ...composerMenuInput, keyboardTop: 500, bottomInset: 0 });
-assert.deepEqual(iosKeyboardMenu, { left: 12, bottom: 352, width: 360, maxHeight: 433 }, "iOS menu clears the keyboard without resizing the modal window");
+assert.deepEqual(iosKeyboardMenu, { left: 18, bottom: 344, width: 360, maxHeight: 441 }, "iOS menu clears the keyboard without resizing the modal window");
 const androidKeyboardMenu = getComposerMenuLayout({ ...composerMenuInput, windowHeight: 500, keyboardTop: 500, bottomInset: 0 });
-assert.deepEqual(androidKeyboardMenu, { left: 12, bottom: 12, width: 360, maxHeight: 429 }, "Android uses the resized modal height without double-subtracting the keyboard");
+assert.deepEqual(androidKeyboardMenu, { left: 18, bottom: 12, width: 360, maxHeight: 429 }, "Android uses the resized modal height without double-subtracting the keyboard");
 const tallDraftMenu = getComposerMenuLayout({ ...composerMenuInput, anchor: { ...composerMenuInput.anchor, y: 280 }, windowHeight: 400, keyboardTop: 400, bottomInset: 0 });
-assert.equal(tallDraftMenu.maxHeight, 213, "a tall draft constrains the menu above it");
+assert.equal(tallDraftMenu.maxHeight, 265, "a tall draft constrains the menu above its button");
 assert.ok(400 - tallDraftMenu.bottom - tallDraftMenu.maxHeight >= composerMenuInput.topInset + 12);
 assert.equal(nextChatTailFollowing({ currentlyFollowing: true, distanceToBottom: 420, userInteracting: false, pendingTarget: false }), true);
 assert.equal(nextChatTailFollowing({ currentlyFollowing: false, distanceToBottom: 420, userInteracting: false, pendingTarget: false }), false);

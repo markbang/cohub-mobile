@@ -121,8 +121,8 @@ export default function DebugComposerScreen() {
         disabled={disabled}
         hasAttachment={attach}
       />
-      <MenuPresence open={attachmentOpen}><AttachmentMenu anchorRef={composerRef} sourceRef={composerMenuSourceRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /></MenuPresence>
-      <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerRef} sourceRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
+      <MenuPresence open={attachmentOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /></MenuPresence>
+      <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
     </Screen>
   );
 }

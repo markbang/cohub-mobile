@@ -4,6 +4,7 @@ import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/
 import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
+import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
@@ -231,7 +232,7 @@ export default function SpacesScreen() {
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
     <LargeTitleBar title={t("tabs.spaces")} actions={<>
-      <View ref={filterButtonRef} collapsable={false}>
+      <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
       </View>
       <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
@@ -269,7 +270,7 @@ export default function SpacesScreen() {
       ListEmptyComponent={listLoading ? <LoadingRows count={4} /> : emptyError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : searchEmpty}
     />
     </BrandRefreshArea>
-    {filterMenuOpen ? <AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /> : null}
+    <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
     <AdaptiveSheet
       visible={createOpen}
       title={pickingFolder ? t("deviceRuntime.chooseFolder") : t("spaces.create.title")}

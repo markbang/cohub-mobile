@@ -24,7 +24,6 @@ import { AppIcon, IconButton, Loader } from "@/src/ui";
 
 export type ModelSelectorMenuProps = {
   anchorRef: RefObject<View | null>;
-  sourceRef: RefObject<View | null>;
   models: ModelCatalogEntry[];
   loading: boolean;
   error: string | null;
@@ -77,7 +76,7 @@ function makeSelection(entry: ModelCatalogEntry, level?: ChatModelSelection["thi
   return { provider: entry.provider, id: entry.id, name: modelDisplayName(entry), ...(level ? { thinkingLevel: level } : {}) };
 }
 
-export function ModelSelectorMenu({ anchorRef, sourceRef, models, loading, error, modelStatus = null, modelStatusLoading = false, currentModel, title, automaticLabel, automaticDetail, onClose, onRetry, onSelect }: ModelSelectorMenuProps) {
+export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStatus = null, modelStatusLoading = false, currentModel, title, automaticLabel, automaticDetail, onClose, onRetry, onSelect }: ModelSelectorMenuProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -158,7 +157,7 @@ export function ModelSelectorMenu({ anchorRef, sourceRef, models, loading, error
     </View>;
   };
 
-  return <ComposerMenu anchorRef={anchorRef} sourceRef={sourceRef} title={title ?? t("model.title")} onClose={onClose} preferredWidth={360} fillHeight testID="chat-model-selector-menu">
+  return <ComposerMenu anchorRef={anchorRef} title={title ?? t("model.title")} onClose={onClose} preferredWidth={360} fillHeight testID="chat-model-selector-menu">
     <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-2 border-b border-border">
       <AppIcon name="search" size={18} tone="muted" />
       <TextInput accessibilityLabel={t("model.search")} value={query} onChangeText={setQuery} placeholder={t("model.search")} placeholderTextColor={theme.colors.textFaint} className="text-body flex-1 min-w-0 text-fg py-2" returnKeyType="search" autoCorrect={false} autoCapitalize="none" />

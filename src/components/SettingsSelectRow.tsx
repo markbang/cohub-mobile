@@ -23,15 +23,15 @@ const PRESS_DELAY_MS = 120;
 const TOUCH_SLOP = 8;
 
 type PressState = { timer: ReturnType<typeof setTimeout> | null; x: number; y: number; sliding: boolean; held: boolean };
-type MenuLayout = { left: number; top: number; width: number; height: number; above: boolean; anchor: MorphRect };
+type MenuLayout = { left: number; top: number; width: number; height: number; anchor: MorphRect };
 
-/** Places the menu under the anchor's trailing edge, or above it when the space below runs out. */
+/** Places the menu over the value it replaces, trailing edges aligned; it grows upward when the space below runs out. */
 function menuLayout(anchor: MorphRect, window: { width: number; height: number }, insets: { top: number; bottom: number }, width: number, count: number): MenuLayout {
   const height = count * ROW_HEIGHT + MENU_PADDING * 2;
   const left = Math.min(Math.max(MARGIN, anchor.x + anchor.width - width), window.width - MARGIN - width);
-  const below = anchor.y + anchor.height + 6;
-  const above = below + height > window.height - insets.bottom - MARGIN && anchor.y - 6 - height >= insets.top + MARGIN;
-  return { left, top: above ? anchor.y - 6 - height : below, width, height, above, anchor };
+  const upward = anchor.y + height > window.height - insets.bottom - MARGIN;
+  const top = upward ? Math.max(insets.top + MARGIN, anchor.y + anchor.height - height) : anchor.y;
+  return { left, top, width, height, anchor };
 }
 
 /**
@@ -183,7 +183,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         testID={testID}
       >
         <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
-          <View ref={setAnchor} collapsable={false} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
+          <View ref={setAnchor} collapsable={false} className={`shrink flex-row items-center gap-1 ${menuOpen ? "opacity-0" : ""}`} style={{ maxWidth: "50%" }}>
             <Text numberOfLines={1} className="shrink text-body text-fg-muted">{current?.label}</Text>
             <AppIcon name="chevrons-up-down" size={16} tone="muted" />
           </View>

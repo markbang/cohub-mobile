@@ -36,7 +36,6 @@ export function harnessMenuSections({ value, status, t, onSelect, onRefresh }: {
 
 export function HarnessPicker({
   anchorRef,
-  sourceRef,
   value,
   status,
   open,
@@ -45,7 +44,6 @@ export function HarnessPicker({
   onSelect,
 }: {
   anchorRef: RefObject<View | null>;
-  sourceRef: RefObject<View | null>;
   value: RuntimeHarness;
   status: SpaceRuntimeStatus | null;
   open: boolean;
@@ -58,7 +56,7 @@ export function HarnessPicker({
   const online = localSpace && status.online;
   const options = useMemo(() => harnessOptions(status), [status]);
 
-  return <MenuPresence open={open}><ComposerMenu anchorRef={anchorRef} sourceRef={sourceRef} title={t("runtime.harness.title")} onClose={onClose} preferredWidth={300} testID="chat-harness-selector-menu">
+  return <MenuPresence open={open}><ComposerMenu anchorRef={anchorRef} title={t("runtime.harness.title")} onClose={onClose} preferredWidth={300} testID="chat-harness-selector-menu">
       <View className="px-4 pt-3 pb-2">
         <Text className="text-caption text-fg-muted">{t("runtime.harness.title")}</Text>
       </View>

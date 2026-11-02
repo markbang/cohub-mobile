@@ -12,7 +12,8 @@ export function getAnchoredMenuLayout({ anchor, viewport, bottomInset, contentWi
   const availableWidth = Math.max(0, viewport.width - margin * 2);
   const width = Math.min(availableWidth, Math.max(minWidth, Math.min(maxWidth, contentWidth)));
   const bottom = Math.max(margin, viewport.height - bottomInset - margin);
-  const top = Math.min(bottom, Math.max(margin, anchor.y - viewport.y + anchor.height + 4));
+  // The menu replaces its trigger: it opens over the trigger's top edge, not below it.
+  const top = Math.min(bottom, Math.max(margin, anchor.y - viewport.y));
   return {
     left: Math.max(margin, Math.min(anchor.x - viewport.x + anchor.width - width, viewport.width - margin - width)),
     top,
