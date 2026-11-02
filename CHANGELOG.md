@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.7](https://github.com/markbang/cohub-mobile/compare/v2.3.6...v2.3.7) (2026-11-02)
+
+
+### Fixes
+
+* **android:** keep the phone control helper alive past its adb launch ([#164](https://github.com/markbang/cohub-mobile/issues/164)) ([774c054](https://github.com/markbang/cohub-mobile/commit/774c0543ef9cadbd84a3f0dfd90bdf7efe87674b))
+* **chat:** follow a reply sent from the tail and yield to scrolling away ([93d1d20](https://github.com/markbang/cohub-mobile/commit/93d1d20fe9e6e31411955d592a966fba7211c4cb))
+* **chat:** keep live thinking steady and clip tool details ([67fa036](https://github.com/markbang/cohub-mobile/commit/67fa0368cf6594763a4ba9722724fb02f7f88e1a))
+
 ## [2.3.6](https://github.com/markbang/cohub-mobile/compare/v2.3.5...v2.3.6) (2026-11-02)
 
 
