@@ -52,6 +52,7 @@ class ChatTimelineView(
   private var viewportTop = 0f
   private var viewportBottom = 0f
   private var followThreshold = 60f
+  private var leaveThreshold = 1f
   private var pageThreshold = 180f
   private var visibleFraction = 0.2f
   private var scrollThrottleMs = 100L
@@ -150,6 +151,7 @@ class ChatTimelineView(
 
   fun setThresholds(value: Map<String, Any?>) {
     value.float("follow")?.let { followThreshold = it }
+    value.float("leave")?.let { leaveThreshold = it }
     value.float("page")?.let { pageThreshold = it }
     value.float("visibleFraction")?.let { visibleFraction = it }
     value.float("scrollEventThrottle")?.let { scrollThrottleMs = it.toLong() }
@@ -245,11 +247,11 @@ class ChatTimelineView(
       if (distance != null) list.scrollBy(0, distance) else layoutManager.scrollToPosition(last)
       return
     }
-    commandScrolling = true
     val distance = distanceToLatestPx()
     if (distance != null) {
-      list.smoothScrollBy(0, distance)
+      commandScrollBy(distance)
     } else {
+      commandScrolling = true
       list.smoothScrollToPosition(last)
     }
   }
@@ -319,12 +321,18 @@ class ChatTimelineView(
     // across rows nobody has measured cannot know where to stop.
     val attached = layoutManager.findViewByPosition(position)
     if (target.animated && attached != null) {
-      commandScrolling = true
-      list.smoothScrollBy(0, attached.top - top)
+      commandScrollBy(attached.top - top)
       return
     }
     list.stopScroll()
     layoutManager.scrollToPositionWithOffset(position, top - list.paddingTop)
+  }
+
+  // RecyclerView ignores a zero-distance smooth scroll and never reports idle, which would leave the flag set.
+  private fun commandScrollBy(dy: Int) {
+    if (dy == 0) return
+    commandScrolling = true
+    list.smoothScrollBy(0, dy)
   }
 
   private fun placeInitially() {
@@ -414,7 +422,7 @@ class ChatTimelineView(
         if (wasDragging) onScrollPhase(mapOf("phase" to "dragEnd", "momentum" to false))
         if (wasFlinging) onScrollPhase(mapOf("phase" to "momentumEnd"))
         val distance = distanceToLatestPx()
-        if ((wasDragging || wasFlinging) && !detached && distance != null && distance <= followThreshold * density) setFollowing(true)
+        if ((wasDragging || wasFlinging) && !detached && distance != null && distance <= leaveThreshold * density) setFollowing(true)
         if (following && (wasCommand || wasDragging || wasFlinging)) pinTail()
         emitScroll(force = true)
       }
@@ -438,8 +446,9 @@ class ChatTimelineView(
   private fun followScroll(dy: Int) {
     if (dragging || flinging) {
       val distance = distanceToLatestPx()
+      val atTail = !detached && distance != null && distance <= leaveThreshold * density
       val near = !detached && distance != null && distance <= followThreshold * density
-      if (dy < 0 && !near) {
+      if (dy < 0 && !atTail) {
         setFollowing(false)
       } else if (dy > 0 && near) {
         setFollowing(true)
