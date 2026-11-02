@@ -375,43 +375,99 @@ class EnrichedMarkdown(
     val renderId = ++currentRenderId
 
     executor.execute {
-      try {
-        val filtered =
-          if (isStreaming) {
-            StreamingMarkdownFilter.renderableMarkdownForStreaming(markdown, tableMode, codeBlockMode)
+      val (segments, hasPendingCodeBlock) = renderSegments(markdown, style, isStreaming, tableMode, codeBlockMode)
+      postToMain(renderId) { applyRenderedSegments(segments, hasPendingCodeBlock) }
+    }
+  }
+
+  // cohub: hosts outside Fabric (the native chat timeline) render on bind, so a recycled row is
+  // measured and drawn with its content in the same frame instead of after an executor round trip.
+  fun commitPropsSynchronously() {
+    MeasurementStore.updateStreamingTableMode(id, tableStreamingMode)
+    MeasurementStore.updateStreamingCodeBlockMode(id, codeBlockStreamingMode)
+    if (!renderPending) return
+    renderPending = false
+    val style = markdownStyle ?: return
+    ++currentRenderId
+    if (currentMarkdown.isEmpty()) {
+      applyRenderedSegments(emptyList(), false)
+      return
+    }
+    val (segments, hasPendingCodeBlock) =
+      renderSegments(currentMarkdown, style, streamingAnimation, tableStreamingMode, codeBlockStreamingMode)
+    applyRenderedSegments(segments, hasPendingCodeBlock)
+  }
+
+  // cohub: Fabric sizes this view through MeasurementStore. A host using Android layout sets this
+  // so the view measures its own segments; AT_MOST shrinks to the widest text line, like the store.
+  var measuresContent: Boolean = false
+
+  override fun onMeasure(
+    widthMeasureSpec: Int,
+    heightMeasureSpec: Int,
+  ) {
+    if (!measuresContent) {
+      super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+      return
+    }
+    val available = MeasureSpec.getSize(widthMeasureSpec)
+    var width = available
+    if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.AT_MOST) {
+      val inner = (available - paddingLeft - paddingRight).coerceAtLeast(0)
+      val probe = MeasureSpec.makeMeasureSpec(inner, MeasureSpec.AT_MOST)
+      val unbounded = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+      var content = 0
+      for (view in segmentViews) {
+        content =
+          if (view is EnrichedMarkdownInternalText) {
+            view.measure(probe, unbounded)
+            maxOf(content, view.measuredWidth)
           } else {
-            null
+            inner
           }
-        val renderableMarkdown = filtered?.markdown ?: markdown
-        val hasPendingCodeBlock = filtered?.endsInsideOpenCodeFence ?: false
-
-        if (renderableMarkdown.isEmpty()) {
-          postToMain(renderId) { applyRenderedSegments(emptyList(), false) }
-          return@execute
-        }
-
-        val ast =
-          parser.parseMarkdown(renderableMarkdown, md4cFlags, isGFM) ?: run {
-            postToMain(renderId) { applyRenderedSegments(emptyList(), false) }
-            return@execute
-          }
-
-        val segments = splitASTIntoSegments(ast)
-        val renderedSegments =
-          MarkdownSegmentRenderer.render(
-            segments,
-            style,
-            context,
-            onLinkPressCallback,
-            onLinkLongPressCallback,
-            onLatexError = latexErrorReporter,
-          )
-
-        postToMain(renderId) { applyRenderedSegments(renderedSegments, hasPendingCodeBlock) }
-      } catch (e: Exception) {
-        Log.e(TAG, "Render failed", e)
-        postToMain(renderId) { applyRenderedSegments(emptyList(), false) }
+        if (content >= inner) break
       }
+      width = (content + paddingLeft + paddingRight).coerceAtMost(available)
+    }
+    measureSegmentChildren(width)
+    setMeasuredDimension(width, if (segmentViews.isEmpty()) 0 else computeSegmentsTotalHeight())
+  }
+
+  private fun renderSegments(
+    markdown: String,
+    style: StyleConfig,
+    isStreaming: Boolean,
+    tableMode: TableStreamingMode,
+    codeBlockMode: CodeBlockStreamingMode,
+  ): Pair<List<RenderedSegment>, Boolean> {
+    try {
+      val filtered =
+        if (isStreaming) {
+          StreamingMarkdownFilter.renderableMarkdownForStreaming(markdown, tableMode, codeBlockMode)
+        } else {
+          null
+        }
+      val renderableMarkdown = filtered?.markdown ?: markdown
+      val hasPendingCodeBlock = filtered?.endsInsideOpenCodeFence ?: false
+
+      if (renderableMarkdown.isEmpty()) return emptyList<RenderedSegment>() to false
+
+      val ast = parser.parseMarkdown(renderableMarkdown, md4cFlags, isGFM) ?: return emptyList<RenderedSegment>() to false
+
+      val segments = splitASTIntoSegments(ast)
+      val renderedSegments =
+        MarkdownSegmentRenderer.render(
+          segments,
+          style,
+          context,
+          onLinkPressCallback,
+          onLinkLongPressCallback,
+          onLatexError = latexErrorReporter,
+        )
+      return renderedSegments to hasPendingCodeBlock
+    } catch (e: Exception) {
+      Log.e(TAG, "Render failed", e)
+      return emptyList<RenderedSegment>() to false
     }
   }
 

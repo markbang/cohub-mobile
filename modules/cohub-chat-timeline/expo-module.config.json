@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ChatTimelineModule"]
+  },
+  "android": {
+    "modules": ["io.github.markbang.cohubmobile.chattimeline.ChatTimelineModule"]
+  }
+}

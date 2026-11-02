@@ -22,6 +22,9 @@ Search for `cohub:` to find each one.
 - `table.columnDividers`, `table.maxColumnWidth`: rows-only grid and a JS-set wrap width. The table frame stays on the viewport while content scrolls.
 - `codeBlock.header*`: tinted header band with its own padding, a 44pt copy target, and a checkmark after copying. A block without a language has no header; the copy button floats over the code.
 - `android/generated` and `ios/generated` are regenerated for these spec fields.
+- Android `EnrichedMarkdown`: `commitPropsSynchronously()` renders on the calling thread and `measuresContent` lets the view measure its own segments, for the native chat timeline (`modules/cohub-chat-timeline`), which binds rows outside Fabric.
+- iOS `EnrichedMarkdown`: `cohub_applyProps:renderInline:`, `cohub_measureWidth:`, `cohub_setFrame:`, and `cohub_setLinkHandler:…` let the native chat timeline host the view outside Fabric. Props go through the generated props class; link and height events go to the host's blocks instead of the event emitter.
+- Android `CodeBlockHighlighter`: highlight tokens are cached per code and language, so rebinding a recycled row does not parse its code again.
 - `src/`: two type casts for React Native 0.88 types (`styleUtils.ts`, `native/EnrichedMarkdownText.tsx`). The app's lint skips this directory; its typecheck covers it.
 
 Every change here is native: it changes the fingerprint and ships only in a new binary.
