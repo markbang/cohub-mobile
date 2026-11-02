@@ -65,6 +65,15 @@ export const popover = {
   typingFromScale: 0.98,
 } as const;
 
+/**
+ * A drawn menu grows out of the control that opened it and shrinks back into it, as iOS 26 menus do.
+ * The open carries a trace of overshoot so the panel lands; the close settles straight into the control.
+ */
+export const menuMorph = {
+  open: { duration: 360, dampingRatio: 0.84 },
+  close: { duration: 280, dampingRatio: 1 },
+} as const;
+
 /** Drawn Android alerts and action sheets. */
 export const dialog = {
   enter: { duration: 220 },

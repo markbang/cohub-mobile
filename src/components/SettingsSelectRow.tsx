@@ -5,12 +5,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { RADIUS } from "@/src/design/tokens";
 import { traceAction } from "@/src/data/interaction-trace";
 import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
-import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
-import { PopoverSurface } from "@/src/ui/PopoverSurface";
+import { MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
@@ -25,16 +23,15 @@ const PRESS_DELAY_MS = 120;
 const TOUCH_SLOP = 8;
 
 type PressState = { timer: ReturnType<typeof setTimeout> | null; x: number; y: number; sliding: boolean; held: boolean };
-type MenuLayout = { left: number; top: number; width: number; height: number; above: boolean };
-type Rect = { x: number; y: number; width: number; height: number };
+type MenuLayout = { left: number; top: number; width: number; height: number; above: boolean; anchor: MorphRect };
 
 /** Places the menu under the anchor's trailing edge, or above it when the space below runs out. */
-function menuLayout(anchor: Rect, window: { width: number; height: number }, insets: { top: number; bottom: number }, width: number, count: number): MenuLayout {
+function menuLayout(anchor: MorphRect, window: { width: number; height: number }, insets: { top: number; bottom: number }, width: number, count: number): MenuLayout {
   const height = count * ROW_HEIGHT + MENU_PADDING * 2;
   const left = Math.min(Math.max(MARGIN, anchor.x + anchor.width - width), window.width - MARGIN - width);
   const below = anchor.y + anchor.height + 6;
   const above = below + height > window.height - insets.bottom - MARGIN && anchor.y - 6 - height >= insets.top + MARGIN;
-  return { left, top: above ? anchor.y - 6 - height : below, width, height, above };
+  return { left, top: above ? anchor.y - 6 - height : below, width, height, above, anchor };
 }
 
 /**
@@ -61,6 +58,8 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   // Held in state rather than a ref: touch callbacks measure it, and they are built during render.
   const [anchor, setAnchor] = useState<View | null>(null);
   const [menu, setMenu] = useState<MenuLayout | null>(null);
+  // The menu stays mounted while it shrinks back into the value; `menuOpen` is false for that stretch.
+  const [menuOpen, setMenuOpen] = useState(false);
   const [highlight, setHighlight] = useState<number | null>(null);
   // Touch callbacks read the latest menu and press through shared values: a press outlives the render that began it.
   const menuRef = useSharedValue<MenuLayout | null>(null);
@@ -78,6 +77,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
       const layout = menuLayout({ x, y, width: anchorWidth, height: anchorHeight }, window, insets, width, options.length);
       menuRef.set(layout);
       setMenu(layout);
+      setMenuOpen(true);
       setHighlight(null);
       onOpenChange?.(true);
     });
@@ -85,7 +85,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   const close = () => {
     menuRef.set(null);
     highlightRef.set(null);
-    setMenu(null);
+    setMenuOpen(false);
     setHighlight(null);
     onOpenChange?.(false);
   };
@@ -177,7 +177,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         accessibilityRole="button"
         accessibilityLabel={title}
         accessibilityValue={{ text: current?.label }}
-        accessibilityState={{ expanded: menu !== null, disabled }}
+        accessibilityState={{ expanded: menuOpen, disabled }}
         accessibilityActions={[{ name: "activate" }]}
         onAccessibilityAction={open}
         testID={testID}
@@ -190,37 +190,39 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         </SettingsRow>
       </View>
     </GestureDetector>
-    {menu ? <SelectMenu menu={menu} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} /> : null}
+    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} /> : null}
   </>;
 }
 
-function SelectMenu<T extends string>({ menu, title, options, value, highlight, onChoose, onClose }: {
+function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed }: {
   menu: MenuLayout;
+  open: boolean;
   title: string;
   options: readonly SelectOption<T>[];
   value: T;
   highlight: number | null;
   onChoose: (value: T) => void;
   onClose: () => void;
+  onClosed: () => void;
 }) {
-  const material = useGlassMaterial();
   const rootRef = useRef<View>(null);
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
-    <View ref={rootRef} collapsable={false} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
+    <View ref={rootRef} collapsable={false} pointerEvents={open ? "auto" : "none"} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} style={StyleSheet.absoluteFill} onPress={onClose} />
-      <PopoverSurface
+      <MorphMenuSurface
         accessibilityRole="menu"
         accessibilityLabel={title}
         accessibilityViewIsModal
         onAccessibilityEscape={onClose}
-        // It springs out of the value it replaces: the trailing corner nearest the row.
-        origin={["100%", menu.above ? "100%" : 0, 0]}
-        className={`absolute overflow-hidden rounded-md ${material === "liquid" ? "" : "shadow-float"}`}
-        style={{ left: menu.left - origin.x, top: menu.top - origin.y, width: menu.width, paddingVertical: MENU_PADDING, borderCurve: "continuous" }}
+        // It grows out of the value it replaces and shrinks back into it.
+        anchor={{ ...menu.anchor, x: menu.anchor.x - origin.x, y: menu.anchor.y - origin.y }}
+        style={{ left: menu.left - origin.x, top: menu.top - origin.y, width: menu.width }}
+        open={open}
+        onClosed={onClosed}
       >
-        <GlassBackground radius={RADIUS.md} />
+        <View style={{ paddingVertical: MENU_PADDING }}>
         {options.map((option, index) => {
           const selected = option.value === value;
           return <Pressable
@@ -236,7 +238,8 @@ function SelectMenu<T extends string>({ menu, title, options, value, highlight, 
             {selected ? <AppIcon name="check" size={18} tone="fg" strokeWidth={2.1} /> : null}
           </Pressable>;
         })}
-      </PopoverSurface>
+        </View>
+      </MorphMenuSurface>
     </View>
     <ToastViewport />
   </Modal>;

@@ -3,14 +3,13 @@ import { Keyboard, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "@/src/i18n";
 import { getComposerMenuLayout, type ComposerMenuAnchor } from "@/src/ui/composer-menu-layout";
-import { PopoverSurface, type PopoverOrigin } from "@/src/ui/PopoverSurface";
+import { MorphMenuSurface, useMenuPresence, type MorphRect } from "@/src/ui/MorphMenuSurface";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
-
-// The layout stacks the menu above the composer, starting at its leading edge.
-const MENU_ORIGIN: PopoverOrigin = [0, "100%", 0];
 
 export type ComposerMenuProps = {
   anchorRef: RefObject<View | null>;
+  /** The composer button that opened the menu; the menu grows out of it and shrinks back into it. */
+  sourceRef: RefObject<View | null>;
   title: string;
   onClose: () => void;
   children: ReactNode;
@@ -19,18 +18,24 @@ export type ComposerMenuProps = {
   testID: string;
 };
 
-export function ComposerMenu({ anchorRef, title, onClose, children, preferredWidth, fillHeight = false, testID }: ComposerMenuProps) {
+export function ComposerMenu({ anchorRef, sourceRef, title, onClose, children, preferredWidth, fillHeight = false, testID }: ComposerMenuProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [viewport, setViewport] = useState({ width, height });
   const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null);
   const [anchor, setAnchor] = useState<ComposerMenuAnchor | null>(null);
+  const [source, setSource] = useState<MorphRect | null>(null);
+  const presence = useMenuPresence();
   const measureAnchor = useCallback(() => {
     anchorRef.current?.measureInWindow((x, y, anchorWidth, anchorHeight) => {
       setAnchor({ x, y, width: anchorWidth, height: anchorHeight });
     });
-  }, [anchorRef]);
+    // The composer moves with the keyboard, so the button is re-measured with it.
+    sourceRef.current?.measureInWindow((x, y, sourceWidth, sourceHeight) => {
+      setSource({ x, y, width: sourceWidth, height: sourceHeight });
+    });
+  }, [anchorRef, sourceRef]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(measureAnchor);
@@ -47,17 +52,20 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
 
   const layout = anchor ? getComposerMenuLayout({ anchor, windowWidth: viewport.width, windowHeight: viewport.height, topInset: insets.top, bottomInset: keyboardTop === null ? insets.bottom : 0, keyboardTop, preferredWidth }) : null;
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent hardwareAccelerated onShow={() => { measureAnchor(); raiseToastOverlay(); }} onRequestClose={onClose}>
-    <View className="flex-1" onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
+    <View className="flex-1" pointerEvents={presence.open ? "auto" : "none"} onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
       <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
-      {layout ? <PopoverSurface
+      {layout && source ? <MorphMenuSurface
         testID={testID}
-        origin={MENU_ORIGIN}
+        material="panel"
+        anchor={source}
+        open={presence.open}
+        onClosed={presence.onExited}
         accessibilityViewIsModal
         onAccessibilityEscape={onClose}
         accessibilityLabel={title}
         role="dialog"
-        className="absolute min-h-0 overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[layout, { height: fillHeight ? layout.maxHeight : undefined, borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }]}
-      >{children}</PopoverSurface> : null}
+        style={[layout, { height: fillHeight ? layout.maxHeight : undefined }]}
+      >{children}</MorphMenuSurface> : null}
       <ToastViewport />
     </View>
   </Modal>;

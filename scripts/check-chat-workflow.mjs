@@ -1381,6 +1381,7 @@ for (const width of [240, 320, 390, 844]) {
   }
 }
 const chatMenuEvents = [];
+let menuEventSink = chatMenuEvents;
 let menuBackHandler;
 let menuBackRemoved = false;
 let menuFocused = true;
@@ -1388,12 +1389,10 @@ const menuCleanups = [];
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
   ScrollView: "ScrollView",
-  PopoverSurface: "PopoverSurface",
-  GlassBackground: "GlassBackground",
-  useGlassMaterial: () => "solid",
-  RADIUS,
+  MorphMenuSurface: "MorphMenuSurface",
   useRef: () => ({ current: null }),
-  useState: () => [chatMenuLayout, () => undefined],
+  // `open` is the only boolean state; setting it false starts the shrink back into the anchor.
+  useState: (initial) => typeof initial === "boolean" ? [initial, (next) => { if (!next) menuEventSink.push("dismiss"); }] : [chatMenuLayout, () => undefined],
   useCallback: (callback) => callback,
   useLayoutEffect: () => undefined,
   useEffect: (effect) => { menuCleanups.push(effect()); },
@@ -1419,13 +1418,14 @@ assert.equal(menuItems.length, 2);
 assert.equal(menuItems[1].props.disabled, true);
 assert.equal(menuItems[1].props.accessibilityState.disabled, true);
 menuItems[0].props.onPress();
-assert.deepEqual(chatMenuEvents.splice(0), ["close", "share"], "close the menu before executing Share or opening another surface");
+assert.deepEqual(chatMenuEvents.splice(0), ["dismiss", "share"], "start closing the menu before executing Share or opening another surface");
 menuNodes.find((node) => node.props?.accessibilityRole === "button").props.onPress();
-assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
+assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"]);
 menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onAccessibilityEscape();
-assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
+assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"]);
 assert.equal(menuBackHandler(), true);
-assert.deepEqual(chatMenuEvents.splice(0), ["close"], "Android back dismisses the menu without navigating away");
+assert.deepEqual(chatMenuEvents.splice(0), ["dismiss"], "Android back dismisses the menu without navigating away");
+assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, chatMenuProps.onClose, "the owner unmounts the menu once it has shrunk back into its anchor");
 assert.equal(menuNodes.find((node) => node.type === "ScrollView").props.keyboardShouldPersistTaps, "always");
 assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native share sheet must not compete with another Modal");
 menuCleanups[0]();
@@ -1433,6 +1433,24 @@ assert.equal(menuBackRemoved, true);
 menuFocused = false;
 renderChatMenu(chatMenuProps);
 assert.deepEqual(chatMenuEvents.splice(0), ["close"], "leaving the chat must dismiss its menu");
+
+// A composer menu stays mounted after its owner closes it, until it has shrunk back into its button.
+let presenceMounted;
+const renderPresence = loadChromeComponent("../src/ui/MorphMenuSurface.tsx", "MenuPresence", {
+  ...chromeScope,
+  useState: (initial) => { presenceMounted ??= initial; return [presenceMounted, (next) => { presenceMounted = next; }]; },
+  useMemo: (factory) => factory(),
+  PresenceContext: { Provider: "PresenceProvider" },
+});
+// A render-phase state update re-renders at once, as React does.
+const presence = (open) => { renderPresence({ open, children: "menu" }); return renderPresence({ open, children: "menu" }); };
+assert.equal(presence(false), null);
+assert.equal(presence(true).props.value.open, true);
+const closingPresence = presence(false);
+assert.equal(closingPresence?.props.value.open, false, "a closed menu stays mounted while it shrinks back");
+assert.deepEqual([closingPresence.props.children].flat(), ["menu"]);
+closingPresence.props.value.onExited();
+assert.equal(presence(false), null, "the menu unmounts once it is back in its button");
 
 // Read the actual Space menu declaration so the migration cannot silently drop an operation.
 const spaceMenuSource = ts.createSourceFile("space.tsx", readFileSync(new URL("../app/space/[spaceId]/index.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -1461,19 +1479,20 @@ for (const isPinned of [false, true]) {
     assert.equal(actions[2].title, isPinned ? "space.unpin" : "space.pin");
     assert.equal(actions[2].disabled, pinning);
     menuFocused = true;
+    menuEventSink = events;
     const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), actions });
     assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
     const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
     items[0].props.onPress();
-    assert.deepEqual(events.splice(0), ["close", "chat"]);
+    assert.deepEqual(events.splice(0), ["dismiss", "chat"]);
     items[1].props.onPress();
-    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
+    assert.deepEqual(events.splice(0), ["dismiss", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
     if (!pinning) {
       items[2].props.onPress();
-      assert.deepEqual(events.splice(0), ["close", "togglePin"]);
+      assert.deepEqual(events.splice(0), ["dismiss", "togglePin"]);
     } else assert.equal(items[2].props.disabled, true);
     items[3].props.onPress();
-    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
+    assert.deepEqual(events.splice(0), ["dismiss", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
   }
 }
 

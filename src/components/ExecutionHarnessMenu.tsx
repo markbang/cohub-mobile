@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 import { harnessLabel } from "@neta-art/cohub";
 import { harnessOptions, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
+import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, HarnessIcon, IconButton } from "@/src/ui";
 import type { NativeMenuSection } from "@/src/components/NativeMenu";
@@ -35,6 +36,7 @@ export function harnessMenuSections({ value, status, t, onSelect, onRefresh }: {
 
 export function HarnessPicker({
   anchorRef,
+  sourceRef,
   value,
   status,
   open,
@@ -43,6 +45,7 @@ export function HarnessPicker({
   onSelect,
 }: {
   anchorRef: RefObject<View | null>;
+  sourceRef: RefObject<View | null>;
   value: RuntimeHarness;
   status: SpaceRuntimeStatus | null;
   open: boolean;
@@ -55,7 +58,7 @@ export function HarnessPicker({
   const online = localSpace && status.online;
   const options = useMemo(() => harnessOptions(status), [status]);
 
-  return open ? <ComposerMenu anchorRef={anchorRef} title={t("runtime.harness.title")} onClose={onClose} preferredWidth={300} testID="chat-harness-selector-menu">
+  return <MenuPresence open={open}><ComposerMenu anchorRef={anchorRef} sourceRef={sourceRef} title={t("runtime.harness.title")} onClose={onClose} preferredWidth={300} testID="chat-harness-selector-menu">
       <View className="px-4 pt-3 pb-2">
         <Text className="text-caption text-fg-muted">{t("runtime.harness.title")}</Text>
       </View>
@@ -97,5 +100,5 @@ export function HarnessPicker({
         {!localSpace ? <Text className="text-micro font-semibold px-2 pt-2 pb-2 text-fg-faint">{t("runtime.localOnly")}</Text> : null}
         {localSpace && !online ? <View className="px-2 pt-1"><IconButton name="refresh" label={t("common.retry")} onPress={onRefresh} /></View> : null}
       </ScrollView>
-    </ComposerMenu> : null;
+    </ComposerMenu></MenuPresence>;
 }

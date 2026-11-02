@@ -6,9 +6,7 @@ import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
 import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
-import { PopoverSurface } from "@/src/ui/PopoverSurface";
-import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
-import { RADIUS } from "@/src/design/tokens";
+import { MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
 
 export type AnchoredMenuAction = {
   icon: IconName;
@@ -30,13 +28,17 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const focused = useIsFocused();
-  const material = useGlassMaterial();
   const contentWidth = Math.max(...actions.map((action) => Array.from(action.title).length * 9 + 16 * 2 + 22 + 12), 0);
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
+  const [anchor, setAnchor] = useState<MorphRect | null>(null);
+  // Dismissing shrinks the menu back into its button first; the owner unmounts it once it is there.
+  const [open, setOpen] = useState(true);
+  const dismiss = useCallback(() => setOpen(false), []);
   const measure = useCallback(() => {
     overlayRef.current?.measureInWindow((x, y, viewportWidth, viewportHeight) => {
       anchorRef.current?.measureInWindow((anchorX, anchorY, anchorWidth, anchorHeight) => {
+        setAnchor({ x: anchorX - x, y: anchorY - y, width: anchorWidth, height: anchorHeight });
         setLayout(getAnchoredMenuLayout({
           anchor: { x: anchorX, y: anchorY, width: anchorWidth, height: anchorHeight },
           viewport: { x, y, width: viewportWidth, height: viewportHeight },
@@ -55,24 +57,24 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
   useEffect(() => {
     if (!focused) { onClose(); return; }
     setDialogOpen(`menu:${testID}`, true);
-    const back = BackHandler.addEventListener("hardwareBackPress", () => { onClose(); return true; });
+    const back = BackHandler.addEventListener("hardwareBackPress", () => { dismiss(); return true; });
     return () => { setDialogOpen(`menu:${testID}`, false); back.remove(); };
-  }, [focused, onClose, testID]);
+  }, [dismiss, focused, onClose, testID]);
 
   // Keep this in the screen, not a native Modal, so actions can immediately open their own surface.
-  return <View ref={overlayRef} collapsable={false} onLayout={measure} style={styles.overlay}>
-    <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
-    {layout ? <PopoverSurface
+  return <View ref={overlayRef} collapsable={false} pointerEvents={open ? "auto" : "none"} onLayout={measure} style={styles.overlay}>
+    <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={dismiss} />
+    {layout && anchor ? <MorphMenuSurface
       testID={testID}
       accessibilityViewIsModal
       accessibilityRole="menu"
       accessibilityLabel={title}
-      onAccessibilityEscape={onClose}
-      // The layout opens the menu below its anchor, aligned to the anchor's trailing edge.
-      origin={["100%", 0, 0]}
-      className={`absolute overflow-hidden rounded-md ${material === "liquid" ? "" : "shadow-float"}`} style={[layout, { borderCurve: "continuous" }]}
+      onAccessibilityEscape={dismiss}
+      anchor={anchor}
+      style={layout}
+      open={open}
+      onClosed={onClose}
     >
-      <GlassBackground radius={RADIUS.md} />
       <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-2">
         {actions.map((action) => <Pressable
           key={action.title}
@@ -80,14 +82,14 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           accessibilityLabel={action.title}
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
-          onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
+          onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); dismiss(); action.onPress(); }}
           className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
         >
           <AppIcon name={action.icon} size={22} tone="secondary" />
           <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
         </Pressable>)}
       </ScrollView>
-    </PopoverSurface> : null}
+    </MorphMenuSurface> : null}
   </View>;
 }
 

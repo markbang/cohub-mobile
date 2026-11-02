@@ -6,6 +6,7 @@ import {
 } from "@/src/data/composer-state";
 import { AttachmentMenu } from "@/src/components/AttachmentMenu";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
+import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { useAppActions, useModelCatalog } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
 import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
@@ -36,6 +37,7 @@ export default function DebugComposerScreen() {
   const { loadModels, loadModelStatus } = useAppActions();
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const composerRef = useRef<View>(null);
+  const composerMenuSourceRef = useRef<View>(null);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
@@ -100,7 +102,7 @@ export default function DebugComposerScreen() {
           })}
         </View>
       </ScrollView>
-      <ComposerInput
+      <ComposerInput menuSourceRef={composerMenuSourceRef}
         anchorRef={composerRef}
         attachmentMenuOpen={attachmentOpen}
         modelMenuOpen={modelOpen}
@@ -119,8 +121,8 @@ export default function DebugComposerScreen() {
         disabled={disabled}
         hasAttachment={attach}
       />
-      {attachmentOpen ? <AttachmentMenu anchorRef={composerRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /> : null}
-      {modelOpen ? <ModelSelectorMenu anchorRef={composerRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /> : null}
+      <MenuPresence open={attachmentOpen}><AttachmentMenu anchorRef={composerRef} sourceRef={composerMenuSourceRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /></MenuPresence>
+      <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerRef} sourceRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
     </Screen>
   );
 }
