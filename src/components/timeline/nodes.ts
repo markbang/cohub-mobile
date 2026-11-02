@@ -174,7 +174,8 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
       ],
     });
   }
-  return { type: "view", id, style: { width }, children };
+  // Android scroll views clip only inside a clipping parent.
+  return { type: "view", id, style: { width, overflow: "hidden" }, children };
 }
 
 function gallery(ctx: NodeContext, uris: string[], maxWidth: number): TimelineNode {
@@ -210,7 +211,7 @@ export function contentNodes(ctx: NodeContext, scope: string, content: ContentBl
       nodes.push(markdown(ctx, value, { id: `text:${index}`, color: tint, linkColor: options.linkColor, onUser: options.onUser, streaming: options.active && index === lastText }));
     } else if (block.type === "thinking") {
       if (!block.thinking.trim()) return;
-      nodes.push(markdown(ctx, block.thinking, { id: `thinking:${index}`, color: ctx.theme.colors.textMuted, onUser: options.onUser, streaming: options.active }));
+      nodes.push(markdown(ctx, block.thinking, { id: `thinking:${scope}:${index}`, color: ctx.theme.colors.textMuted, onUser: options.onUser, streaming: options.active }));
     } else if (block.type === "tool_use") {
       nodes.push(toolCall(ctx, scope, block, results.get(block.id), options.active ?? false, options.width));
     } else if (block.type === "image") {
