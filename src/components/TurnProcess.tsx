@@ -8,14 +8,12 @@ import type { StreamView } from "@/src/data/types";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, Loader } from "@/src/ui";
 
-export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
-  const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
+/** Archived steps never change for an object key, so one read serves every later expansion. */
+export function turnStepsQuery(client: CohubClient | null, spaceId: string, turn: SessionTurnRecord) {
   const objectKey = turn.intermediateIndex?.messagesObjectKey;
-  // Archived steps never change for an object key, so one read serves every later expansion.
-  const steps = useQuery({
+  return {
     queryKey: ["turn-steps", turn.sessionId, turn.id, objectKey],
-    queryFn: async ({ signal }): Promise<ContentBlock[]> => {
+    queryFn: async ({ signal }: { signal: AbortSignal }): Promise<ContentBlock[]> => {
       const api = client!.space(spaceId).session(turn.sessionId).turns.intermediate;
       const file = await api.get(turn.id, objectKey!, { signal });
       const blocks = await Promise.all((file?.messages ?? []).map(async (message) => {
@@ -29,9 +27,15 @@ export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord
       }));
       return blocks.flat();
     },
-    enabled: expanded && Boolean(objectKey && client),
     staleTime: Infinity,
-  });
+  };
+}
+
+export function TurnProcess({ turn, client, spaceId }: { turn: SessionTurnRecord; client: CohubClient | null; spaceId: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const objectKey = turn.intermediateIndex?.messagesObjectKey;
+  const steps = useQuery({ ...turnStepsQuery(client, spaceId, turn), enabled: expanded && Boolean(objectKey && client) });
   const content = steps.data ?? null;
   const errorMessage = expanded && objectKey && !client
     ? t("turn.connect")

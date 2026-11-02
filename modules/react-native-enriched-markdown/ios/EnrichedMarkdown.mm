@@ -64,6 +64,7 @@
 #import <React/RCTConversions.h>
 #import <React/RCTFont.h>
 #import <React/RCTI18nUtil.h>
+#import <react/utils/FollyConvert.h>
 
 using namespace facebook::react;
 
@@ -141,6 +142,12 @@ static char kENRMSegmentFadeAnimatorKey;
   NSWritingDirection _resolvedLayoutDirection;
 
   ENRMAtomicSize _lastCommittedSize;
+
+  // cohub: set when a host outside Fabric (the native chat timeline) drives this view.
+  void (^_cohubOnLink)(NSString *url);
+  void (^_cohubOnLinkLongPress)(NSString *url);
+  void (^_cohubOnHeightChange)(void);
+  BOOL _cohubRenderInline;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -675,6 +682,8 @@ static char kENRMSegmentFadeAnimatorKey;
 
 - (void)requestHeightUpdate
 {
+  if (_cohubOnHeightChange)
+    _cohubOnHeightChange();
   ENRMRequestHeightUpdate<EnrichedMarkdownState>(_state, _heightUpdateCounter, self);
 }
 
@@ -724,39 +733,49 @@ static char kENRMSegmentFadeAnimatorKey;
   __block NSString *renderableMarkdown = nil;
   __block BOOL endsInsideOpenCodeFence = NO;
 
-  [_renderCoordinator
-      scheduleRender:^BOOL {
-        renderableMarkdown = streamingAnimation
-                                 ? ENRMRenderableMarkdownForStreaming(markdownString, tableStreamingMode,
-                                                                      codeBlockStreamingMode, &endsInsideOpenCodeFence)
-                                 : markdownString;
+  BOOL (^work)(void) = ^BOOL {
+    renderableMarkdown = streamingAnimation
+                             ? ENRMRenderableMarkdownForStreaming(markdownString, tableStreamingMode,
+                                                                  codeBlockStreamingMode, &endsInsideOpenCodeFence)
+                             : markdownString;
 
-        if (renderableMarkdown.length == 0) {
-          renderedSegments = @[];
-          return YES;
-        }
+    if (renderableMarkdown.length == 0) {
+      renderedSegments = @[];
+      return YES;
+    }
 
-        MarkdownASTNode *ast = [parser parseMarkdown:renderableMarkdown flags:md4cFlags isGFM:isGFM];
-        if (!ast)
-          return NO;
+    MarkdownASTNode *ast = [parser parseMarkdown:renderableMarkdown flags:md4cFlags isGFM:isGFM];
+    if (!ast)
+      return NO;
 
-        renderedSegments = ENRMRenderSegmentsFromAST(ast, config, allowTrailingMargin, allowFontScaling,
-                                                     maxFontSizeMultiplier, lineBreakStrategy,
-                                                     /*blockquoteContent*/ NO);
-        for (ENRMRenderedSegment *segment in renderedSegments) {
-          if (segment.kind == ENRMSegmentKindText && segment.textResult) {
-            ENRMApplyWritingDirectionMode(segment.textResult.attributedText, writingDirectionMode,
-                                          resolvedLayoutDirection);
-          }
-        }
-        return YES;
+    renderedSegments = ENRMRenderSegmentsFromAST(ast, config, allowTrailingMargin, allowFontScaling,
+                                                 maxFontSizeMultiplier, lineBreakStrategy,
+                                                 /*blockquoteContent*/ NO);
+    for (ENRMRenderedSegment *segment in renderedSegments) {
+      if (segment.kind == ENRMSegmentKindText && segment.textResult) {
+        ENRMApplyWritingDirectionMode(segment.textResult.attributedText, writingDirectionMode,
+                                      resolvedLayoutDirection);
       }
-      apply:^{
-        self->_renderedStyleFingerprint = self->_pendingStyleFingerprint;
-        [self applyRenderedSegments:renderedSegments
-                   renderedMarkdown:renderableMarkdown
-            endsInsideOpenCodeFence:endsInsideOpenCodeFence];
-      }];
+    }
+    return YES;
+  };
+  dispatch_block_t apply = ^{
+    self->_renderedStyleFingerprint = self->_pendingStyleFingerprint;
+    [self applyRenderedSegments:renderedSegments
+               renderedMarkdown:renderableMarkdown
+        endsInsideOpenCodeFence:endsInsideOpenCodeFence];
+  };
+
+  // cohub: a recycled timeline row is measured right after it is bound, so settled text renders
+  // on the calling thread; any render still in flight is superseded.
+  if (_cohubRenderInline && !streamingAnimation) {
+    [_renderCoordinator invalidate];
+    if (work())
+      apply();
+    return;
+  }
+
+  [_renderCoordinator scheduleRender:work apply:apply];
 }
 
 - (NSArray *)parseAndRenderSegments:(NSString *)markdownString
@@ -1406,6 +1425,10 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
 
 - (void)emitLinkPress:(NSString *)url
 {
+  if (_cohubOnLink) {
+    _cohubOnLink(url);
+    return;
+  }
   auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(_eventEmitter);
   if (emitter)
     emitter->onLinkPress({.url = std::string(url.UTF8String)});
@@ -1420,6 +1443,10 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
 
 - (void)emitLinkLongPress:(NSString *)url
 {
+  if (_cohubOnLinkLongPress) {
+    _cohubOnLinkLongPress(url);
+    return;
+  }
   auto emitter = std::static_pointer_cast<EnrichedMarkdownEventEmitter const>(_eventEmitter);
   if (emitter)
     emitter->onLinkLongPress({.url = std::string(url.UTF8String)});
@@ -1586,5 +1613,64 @@ Class<RCTComponentViewProtocol> EnrichedMarkdownCls(void)
                                                                labels:_accessibilityLabels];
 }
 #endif
+
+#pragma mark - cohub: standalone host
+
+// The native chat timeline (modules/cohub-chat-timeline) mounts this view outside Fabric. It
+// hands over the same props the JS component sends, parsed by the generated props class, so
+// every Markdown feature behaves as it does in a React tree.
+
+static const RawPropsParser &ENRMCohubPropsParser()
+{
+  static RawPropsParser *parser = nullptr;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    parser = new RawPropsParser();
+    parser->prepare<EnrichedMarkdownProps>();
+  });
+  return *parser;
+}
+
+- (void)cohub_applyProps:(NSDictionary *)props renderInline:(BOOL)renderInline
+{
+  static ContextContainer contextContainer{};
+  PropsParserContext context{-1, contextContainer};
+  RawProps rawProps(convertIdToFollyDynamic(props));
+  rawProps.parse(ENRMCohubPropsParser());
+  const auto &current = *std::static_pointer_cast<EnrichedMarkdownProps const>(_props);
+  auto next = std::make_shared<const EnrichedMarkdownProps>(context, current, rawProps);
+  _cohubRenderInline = renderInline;
+  [self updateProps:next oldProps:_props];
+  _cohubRenderInline = NO;
+}
+
+- (CGSize)cohub_measureWidth:(CGFloat)width
+{
+  if (_segmentViews.count == 0)
+    return CGSizeZero;
+  return [self measureSize:width];
+}
+
+- (void)cohub_setFrame:(CGRect)frame
+{
+  LayoutMetrics metrics = _layoutMetrics;
+  metrics.frame = RCTRectFromCGRect(frame);
+  metrics.contentInsets = EdgeInsets{0, 0, 0, 0};
+  metrics.borderWidth = EdgeInsets{0, 0, 0, 0};
+  metrics.displayType = DisplayType::Flex;
+  metrics.layoutDirection = LayoutDirection::LeftToRight;
+  metrics.pointScaleFactor = RCTScreenScale();
+  [self updateLayoutMetrics:metrics oldLayoutMetrics:_layoutMetrics];
+  [self setNeedsLayout];
+}
+
+- (void)cohub_setLinkHandler:(void (^)(NSString *))onLink
+            longPressHandler:(void (^)(NSString *))onLongPress
+               heightHandler:(void (^)(void))onHeightChange
+{
+  _cohubOnLink = [onLink copy];
+  _cohubOnLinkLongPress = [onLongPress copy];
+  _cohubOnHeightChange = [onHeightChange copy];
+}
 
 @end

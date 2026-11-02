@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'io.github.markbang.cohubmobile'
+version = '1.0.0'
+
+android {
+  namespace "io.github.markbang.cohubmobile.chattimeline"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // Yoga lays rows out with React Native's flexbox; Fresco loads images as React Native's Image does.
+  implementation "com.facebook.react:react-android"
+  implementation "androidx.core:core-ktx:1.17.0"
+  implementation "androidx.recyclerview:recyclerview:1.3.0"
+  // Message bodies render with the vendored Markdown renderer's views.
+  implementation project(':react-native-enriched-markdown')
+}

@@ -28,7 +28,7 @@ import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
-function formatTokenCount(value: number) {
+export function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 100_000_000 ? 0 : 1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}K`;
   return String(value);
@@ -40,7 +40,7 @@ const BubbleContext = createContext<{ onUser: boolean; spaceId: string | null }>
  * Resolves a message URL into an in-app route or system browser. Sandbox file
  * paths need the owning Space; when it is unknown the path falls through as text.
  */
-function useOpenMessageLink(spaceId: string | null) {
+export function useOpenMessageLink(spaceId: string | null) {
   const router = useRouter();
   return (url: string) => {
     const target = resolveMessageLink(url);
@@ -64,7 +64,7 @@ function useOpenMessageLink(spaceId: string | null) {
 }
 
 // design-system-begin: react-native-enriched-markdown is a native renderer that takes JS style objects, so it reads tokens through the theme.
-function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false, onSurface = false): MarkdownStyle {
+export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false, onSurface = false): MarkdownStyle {
   const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color };
   // Wells step up from their backdrop: the page under replies, a surface in bubbles and cards.
   const well = onUserBubble || onSurface ? theme.colors.surfaceRaised : theme.colors.surface;
@@ -242,7 +242,7 @@ export function MarkdownDocument({ markdown, spaceId }: { markdown: string; spac
   />;
 }
 
-function imageUri(block: Extract<ContentBlock, { type: "image" }>) {
+export function imageUri(block: Extract<ContentBlock, { type: "image" }>) {
   if (block.source?.type === "url") return block.source.url;
   if (block.source?.type === "base64") return `data:${block.source.media_type};base64,${block.source.data}`;
   return null;
@@ -356,7 +356,7 @@ function CompactionNotice({ info }: { info: CompactionInfo }) {
   </View>;
 }
 
-function toolIcon(name: string): IconName {
+export function toolIcon(name: string): IconName {
   const key = name.toLowerCase();
   if (key.includes("skill")) return "book-open";
   if (key.includes("bash") || key.includes("terminal") || key.includes("shell") || key.includes("command")) return "terminal";
@@ -511,10 +511,10 @@ function BubbleMeta({ clock, local = false, failed = false, t }: { clock?: strin
   </View>;
 }
 
-const DETAIL_SEPARATOR = " · ";
+export const DETAIL_SEPARATOR = " · ";
 
 /** A reply's details by priority: the identity always shows, usage parts drop from the end. */
-function replyDetailParts(message: MessageRecord, t: Translate) {
+export function replyDetailParts(message: MessageRecord, t: Translate) {
   const turn = turnSequenceForMessage(message);
   const thinkingLevel = requestedThinkingLevel(message.meta);
   const usage = message.usage;
@@ -536,7 +536,7 @@ function replyDetailParts(message: MessageRecord, t: Translate) {
 }
 
 /** Glyph widths in em, rounded up for semibold system fonts so an estimate never runs short. */
-function estimateTextWidth(text: string, fontSize: number) {
+export function estimateTextWidth(text: string, fontSize: number) {
   let em = 0;
   for (const char of text) {
     if ((char.codePointAt(0) ?? 0) >= 0x2e80) em += 1;
@@ -549,7 +549,7 @@ function estimateTextWidth(text: string, fontSize: number) {
 }
 
 /** The identity, then each usage part that still fits whole within `width`. */
-function fitReplyDetails(identity: string, parts: readonly string[], width: number, fontSize: number) {
+export function fitReplyDetails(identity: string, parts: readonly string[], width: number, fontSize: number) {
   let line = identity;
   for (const part of parts) {
     const next = line ? `${line}${DETAIL_SEPARATOR}${part}` : part;

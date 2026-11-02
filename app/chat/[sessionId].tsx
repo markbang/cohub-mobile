@@ -65,6 +65,8 @@ import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, DataError, FI
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
+import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
+import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
 type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
@@ -363,6 +365,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const pendingScrollSequence = useRef<number | null>(null);
   const handledDeepLinkTarget = useRef<string | null>(null);
   const listRef = useRef<LegendListRef>(null);
+  const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const listContainerRef = useRef<View>(null);
   const initialScrollDone = useRef(false);
   const initialUnreadIndexRef = useRef<number | null>(null);
@@ -388,6 +391,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   // keyboard handling holds from opening a menu over a hidden keyboard until the dismissal replay has passed.
   const listKeyboardFrozen = useSharedValue(false);
   const listKeyboardFrozenRef = useRef(false);
+  const [keyboardFrozen, setKeyboardFrozen] = useState(false);
   const composerMenuOpenRef = useRef(false);
   const composerMenuOpen = attachmentMenuOpen || modelSelectorOpen || harnessMenuOpen;
   useLayoutEffect(() => { composerMenuOpenRef.current = composerMenuOpen; }, [composerMenuOpen]);
@@ -395,6 +399,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     if (listKeyboardFrozenRef.current === frozen) return;
     listKeyboardFrozenRef.current = frozen;
     listKeyboardFrozen.set(frozen);
+    setKeyboardFrozen(frozen);
   }, [listKeyboardFrozen]);
   // Called on press, ahead of the Modal: the list reads `freeze` through a derived value a frame later.
   const freezeListForComposerMenu = useCallback(() => {
@@ -472,6 +477,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [trace]);
   const requestFollowTail = useCallback((animated = false) => {
     trace("tail.request", { animated });
+    // The native timeline pins its tail itself; asking for the tail is an explicit return to it.
+    if (nativeChatTimeline) {
+      if (pendingScrollSequence.current === null && turnScrollTargetRef.current === null) timelineRef.current?.scrollToEnd(animated);
+      return;
+    }
     // A list still placing itself owns the scroll; a command would race it.
     if (!listPlacedRef.current || !followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
     if (followTailFrameRef.current !== null) cancelAnimationFrame(followTailFrameRef.current);
@@ -747,6 +757,22 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       pendingScrollSequence.current = sequence;
       return;
     }
+    if (nativeChatTimeline) {
+      const timeline = timelineRef.current;
+      const message = messages[index];
+      if (!timeline || !message) {
+        pendingScrollSequence.current = sequence;
+        return;
+      }
+      pendingScrollSequence.current = null;
+      initialScrollDone.current = true;
+      // The native list lands on the row exactly, so there is nothing to retry.
+      void timeline.scrollToMessage(messageRowKey(message), retry === 0).then((found) => {
+        if (!found) pendingScrollSequence.current = sequence;
+      });
+      setCurrentTurnSequence(sequence);
+      return;
+    }
     if (!listRef.current) {
       pendingScrollSequence.current = sequence;
       return;
@@ -756,7 +782,13 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     scrollToMessageIndex("turn.scrollToTurn", index, retry === 0);
     scheduleTurnScrollRetry(sequence, retry);
     setCurrentTurnSequence(sequence);
-  }, [messages.length, scheduleTurnScrollRetry, scrollToMessageIndex, setFollowingTail, targetMessageIndex, trace]);
+  }, [messages, scheduleTurnScrollRetry, scrollToMessageIndex, setFollowingTail, targetMessageIndex, trace]);
+
+  // A turn requested before its rows existed lands once they arrive; the JS list does this on content size.
+  useEffect(() => {
+    if (!nativeChatTimeline || pendingScrollSequence.current === null || !listLoaded) return;
+    scrollToTurn(pendingScrollSequence.current);
+  }, [listLoaded, messages, scrollToTurn]);
 
   const handleTurnJump = async (sequence: number) => {
     const requestId = ++traceRequestId.current;
@@ -1288,6 +1320,26 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh, scrollEventThrottle: 100 });
   const { onScroll: trackPull, onScrollBeginDrag: trackPullStart, onScrollEndDrag: trackPullEnd } = pullRefresh;
   const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
+  const timelineVisible = useCallback((visible: VisibleMessage[]) => {
+    onVisibleRows({ viewableItems: visible.map(({ message, index, key }) => ({ item: message, index, key, isViewable: true })) });
+  }, [onVisibleRows]);
+  const timelineNearEdge = useCallback((edge: "older" | "newer") => {
+    if (edge === "older" && initialScrollDone.current && view.hasMoreOlder && !view.loadingOlder) void loadOlderTurns(sessionId);
+    if (edge === "newer" && view.hasMoreNewer && !view.loadingNewer) void loadNewerTurns(sessionId);
+  }, [loadNewerTurns, loadOlderTurns, sessionId, view.hasMoreNewer, view.hasMoreOlder, view.loadingNewer, view.loadingOlder]);
+  const timelineDragBegin = useCallback(() => {
+    traceAction("chat_list_drag_begin");
+    cancelTurnScroll();
+  }, [cancelTurnScroll]);
+  const timelineScrollOffset = useCallback((offsetY: number) => trackPull({ nativeEvent: { contentOffset: { y: offsetY } } }), [trackPull]);
+  const timelineFlight = useMemo(() => {
+    if (!sendTransition || sendTransition.destination !== "bubble" || queueTransitionActive) return null;
+    const sent = sendTransition.message;
+    return { matches: (message: MessageRecord) => isSendBubbleMessage(message, sent), source: sendTransition.source };
+  }, [queueTransitionActive, sendTransition]);
+  const timelineFlightEnd = useCallback(() => setSendTransition(null), []);
+  const timelineLoadOlder = useCallback(() => { void loadOlderTurns(sessionId); }, [loadOlderTurns, sessionId]);
+  const timelineLoadNewer = useCallback(() => { void loadNewerTurns(sessionId); }, [loadNewerTurns, sessionId]);
   const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
   const handleListDragEnd = useCallback((event: ChatScrollEvent) => { trackPullEnd(); handleScrollEndDrag(event); }, [handleScrollEndDrag, trackPullEnd]);
   const renderMessage = useCallback(({ item, index }: { item: MessageRecord; index: number }) => {
@@ -1317,7 +1369,51 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
-        {timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><KeyboardAwareLegendList
+        {timelineReady && nativeChatTimeline ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><NativeChatTimeline
+          key={listGeneration}
+          ref={timelineRef}
+          sessionId={sessionId}
+          spaceId={spaceId}
+          client={client}
+          messages={messages}
+          turnsById={turnsById}
+          turnsBySequence={turnsBySequence}
+          streamTurnId={streamTurnId}
+          replyAnchor={replyAnchor}
+          liveStream={liveStream}
+          forkOrigin={forkOrigin}
+          hasMoreOlder={view.hasMoreOlder}
+          hasMoreNewer={view.hasMoreNewer}
+          loadingOlder={view.loadingOlder}
+          loadingNewer={view.loadingNewer}
+          historyLoaded={view.historyLoaded}
+          arrivalBaseline={arrivalBaseline}
+          forkingTurnId={forkingTurnId}
+          flight={timelineFlight}
+          headerHeight={headerHeight}
+          footerHeight={footerHeight}
+          keyboardCoveredInset={keyboardCoveredInset}
+          keyboardFrozen={keyboardFrozen}
+          reducedMotion={reducedMotion}
+          lookupSession={lookupSession}
+          onOpenRelated={openRelatedSession}
+          onCopy={handleCopyMessage}
+          onRetry={retrySend}
+          onDiscard={discardSend}
+          onFork={forkMessage}
+          onLoadOlder={timelineLoadOlder}
+          onLoadNewer={timelineLoadNewer}
+          onFollowingChange={setFollowingTail}
+          onVisibleMessages={timelineVisible}
+          onNearEdge={timelineNearEdge}
+          onLoad={handleListLoad}
+          onDragBegin={timelineDragBegin}
+          onFlightEnd={timelineFlightEnd}
+          onScrollOffset={timelineScrollOffset}
+          onWidth={setListWidth}
+          refreshing={view.refreshing}
+          onRefresh={handleListRefresh}
+        /></BrandRefreshArea> : timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><KeyboardAwareLegendList
           key={listGeneration}
           {...traceTouches}
           ref={listRef}
@@ -1387,7 +1483,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={FOOTER_MENU} /> : null}
         </EdgeFooterOverlay> : null}
-        {sendTransition && transitionMessage && (sendTransition.destination === "bubble" || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || windowWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
+        {sendTransition && transitionMessage && ((sendTransition.destination === "bubble" && !nativeChatTimeline) || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || windowWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
         {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => setLabelSheetOpen(false)} onChanged={() => undefined} /> : null}
         <MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence>
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => setTurnNavigatorOpen(false)} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />

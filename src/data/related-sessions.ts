@@ -39,8 +39,10 @@ export function createRelatedSessionStore(client: CohubClient) {
   const settled = new Map<string, RelatedSessionView>();
   const pending = new Set<string>();
   const listeners = new Set<() => void>();
-  const notify = () => { for (const listener of listeners) listener(); };
+  let version = 0;
+  const notify = () => { version += 1; for (const listener of listeners) listener(); };
   return {
+    version: () => version,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };

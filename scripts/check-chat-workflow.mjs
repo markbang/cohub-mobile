@@ -1887,7 +1887,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "$ ls", content: [{ type: "shell_command", command: "ls" }], meta: {} } })).find((node) => node.type === "TextBlock")?.props.value, "$ ls", "a reply that did not think keeps its text fallback");
   const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
     ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useQuery: () => ({ data: undefined, error: null, isFetching: false }), useMemo: (factory) => factory(),
-    thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
+    turnStepsQuery: () => ({}), thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
   });
   const thoughtTurn = { id: "turn", sessionId: "session", intermediateIndex: null, intermediateSummary: null, durationMs: 12_000, assistantContent: [thought, answer] };
   const capsule = TurnProcess({ turn: thoughtTurn, client: null, spaceId: "space" });
@@ -3739,6 +3739,26 @@ assert.equal(liveReplyAnchor(runningRowMessages, null), "queued-b", "a send with
 assert.equal(liveReplyAnchor([], "turn-a"), null);
 assert.equal(liveReplyAnchor(runningRowMessages, "not-yet-loaded", false), "queued-b", "unloaded history retains the live reply at the loaded tail");
 assert.equal(liveReplyAnchor(runningRowMessages, "not-yet-loaded", true), null, "a window paged away from the tail does not show the tail's running reply under its last Turn");
+
+// The native timeline splits a message's attachments into rows that still belong to it.
+const timelineScope = { messageRowKey, turnSequenceForMessage };
+const timelineRows = loadChromeComponent("../src/data/chat-timeline-rows.ts", "timelineRows", timelineScope);
+const visibleTimelineMessages = loadChromeComponent("../src/data/chat-timeline-rows.ts", "visibleTimelineMessages", timelineScope);
+const timelineTargetKey = loadChromeComponent("../src/data/chat-timeline-rows.ts", "timelineTargetKey", timelineScope);
+const forwardedTurn = { id: "turn-a", sequence: 1, status: "running", meta: {} };
+const timelineMessages = [
+  { id: "user-a", role: "user", meta: { turnId: "turn-a", turnSequence: 1 } },
+  { id: "reply-a", role: "assistant", meta: { turnId: "turn-a", turnSequence: 1 } },
+];
+const timelineInput = { messages: timelineMessages, turnsBySequence: new Map([[1, [forwardedTurn]]]), forkSequence: 1, replyAnchor: "user-a", streamTurnId: "turn-a", isActiveTurn: () => true, hasMoreOlder: true, hasMoreNewer: false };
+const builtRows = timelineRows(timelineInput);
+assert.deepEqual(builtRows.map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a turn's rows follow its user message, the live reply sits under its steps, and the fork boundary closes the turn");
+assert.equal(builtRows.find((row) => row.kind === "live").processInRow, true, "the streaming turn's steps render in their own row, not twice");
+assert.equal(builtRows.find((row) => row.kind === "process").live, true);
+assert.equal(timelineTargetKey(builtRows, "1:user"), "from:1:user", "a turn jump lands on the first row of the message, above its sent-from link");
+assert.deepEqual(visibleTimelineMessages(builtRows, ["live", "process:turn-a", "1:assistant"]).map((item) => item.key), ["1:user", "1:assistant"], "visible attachment rows report their message once, in order");
+assert.deepEqual(timelineRows({ ...timelineInput, messages: [], replyAnchor: null }).map((row) => row.key), ["older", "live"], "an empty Chat still has a live row for its first reply");
+assert.ok(!timelineRows({ ...timelineInput, hasMoreNewer: true }).some((row) => row.key === "live" && row.owner === null), "a detached window does not append an ownerless live row");
 
 // Execute the production renderItem: the reply must be a normal-flow sibling of
 // the user bubble inside the SAME measured row, including after tool expansion.

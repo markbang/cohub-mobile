@@ -3,6 +3,7 @@ package com.swmansion.enriched.markdown.utils.common
 import android.text.Spannable
 import android.text.style.ForegroundColorSpan
 import android.util.Log
+import android.util.LruCache
 import com.swmansion.enriched.markdown.styles.CodeBlockStyle
 import com.swmansion.enriched.markdown.utils.text.span.SPAN_FLAGS_EXCLUSIVE_EXCLUSIVE
 
@@ -49,6 +50,28 @@ object CodeBlockHighlighter {
     }
   }
 
+  // cohub: a recycled chat row highlights the same blocks again on every bind; tokens depend only on
+  // the code and language, so they are kept for the most recent blocks. Unavailable results are not kept.
+  private val tokenCache = LruCache<String, IntArray>(TOKEN_CACHE_SIZE)
+
+  private fun tokensFor(
+    code: String,
+    language: String,
+  ): IntArray? {
+    val key = language + '\u0000' + code
+    tokenCache.get(key)?.let { return it }
+    val tokens =
+      try {
+        nativeHighlightCode(code, language)
+      } catch (e: UnsatisfiedLinkError) {
+        null
+      } ?: return null
+    tokenCache.put(key, tokens)
+    return tokens
+  }
+
+  private const val TOKEN_CACHE_SIZE = 128
+
   private external fun nativeHighlightCode(
     code: String,
     language: String,
@@ -68,12 +91,7 @@ object CodeBlockHighlighter {
     style: CodeBlockStyle,
     offset: Int = 0,
   ) {
-    val tokens =
-      try {
-        nativeHighlightCode(code, language.orEmpty())
-      } catch (e: UnsatisfiedLinkError) {
-        null
-      } ?: return
+    val tokens = tokensFor(code, language.orEmpty()) ?: return
 
     val colors = style.syntaxColors
     var i = 0
