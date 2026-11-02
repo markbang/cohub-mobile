@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.5](https://github.com/markbang/cohub-mobile/compare/v2.3.4...v2.3.5) (2026-11-02)
+
+
+### Features
+
+* **about:** list open-source licenses with full texts ([e93b008](https://github.com/markbang/cohub-mobile/commit/e93b0087307bdee887c3da641fc305d5570ea90b))
+* **chat:** draw the Chat timeline natively ([#160](https://github.com/markbang/cohub-mobile/issues/160)) ([5ec569b](https://github.com/markbang/cohub-mobile/commit/5ec569beda9ec38799f4d306f4c2ccad59619f68))
+* **space:** edit the Space avatar from Space settings ([#155](https://github.com/markbang/cohub-mobile/issues/155)) ([0f7e58f](https://github.com/markbang/cohub-mobile/commit/0f7e58f1421fc2fc5abe996520b8c05541de4992))
+* **ui:** grow drawn menus out of the control that opens them ([e4710bf](https://github.com/markbang/cohub-mobile/commit/e4710bf128d3463876e1b581c1739257357e51f3))
+
+
+### Fixes
+
+* **chat:** keep the timeline still while composer menus open and close ([#159](https://github.com/markbang/cohub-mobile/issues/159)) ([59beff7](https://github.com/markbang/cohub-mobile/commit/59beff7e7422bac5c31b57a1e5b7874e9be7771b))
+* **chat:** let the title capsule use the space beside the back button ([#158](https://github.com/markbang/cohub-mobile/issues/158)) ([288fad1](https://github.com/markbang/cohub-mobile/commit/288fad18434c3076097c110faf2053036926ae34))
+* **files:** render Markdown files with the native Markdown renderer ([#157](https://github.com/markbang/cohub-mobile/issues/157)) ([c88ea53](https://github.com/markbang/cohub-mobile/commit/c88ea53fef361acccfde003d1247fb3829df7b21))
+* **markdown:** measure list spacer lines as tall as they are drawn ([#156](https://github.com/markbang/cohub-mobile/issues/156)) ([3c8d3ca](https://github.com/markbang/cohub-mobile/commit/3c8d3caef78f96096ec7d6018e94a0de24593d6f))
+* **ui:** open drawn menus in place of the control that opens them ([03c0104](https://github.com/markbang/cohub-mobile/commit/03c0104f79980254aa15cc89efa6e1ef2e279a43))
+
 ## [2.3.4](https://github.com/markbang/cohub-mobile/compare/v2.3.3...v2.3.4) (2026-11-01)
 
 
