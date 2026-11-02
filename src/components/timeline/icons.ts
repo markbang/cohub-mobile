@@ -15,6 +15,7 @@ import { __iconData as fileText } from "lucide-react-native/icons/file-text";
 import { __iconData as folder } from "lucide-react-native/icons/folder";
 import { __iconData as gitFork } from "lucide-react-native/icons/git-fork";
 import { __iconData as globe } from "lucide-react-native/icons/globe";
+import { __iconData as images } from "lucide-react-native/icons/images";
 import { __iconData as refresh } from "lucide-react-native/icons/refresh-cw";
 import { __iconData as search } from "lucide-react-native/icons/search";
 import { __iconData as squarePen } from "lucide-react-native/icons/square-pen";
@@ -26,7 +27,7 @@ import type { IconName } from "@/src/icons";
 const ICONS = {
   alert, archive, "book-open": bookOpen, brain, check, "check-check": checkCheck, "chevron-down": chevronDown,
   "chevron-right": chevronRight, "chevrons-down": chevronsDown, "chevrons-up": chevronsUp, code, copy,
-  "file-text": fileText, folder, "git-fork": gitFork, globe, refresh, search, "square-pen": squarePen, terminal, trash,
+  "file-text": fileText, folder, "git-fork": gitFork, globe, images, refresh, search, "square-pen": squarePen, terminal, trash,
 } satisfies Partial<Record<IconName, LucideIconData>>;
 
 export type TimelineIconName = keyof typeof ICONS;

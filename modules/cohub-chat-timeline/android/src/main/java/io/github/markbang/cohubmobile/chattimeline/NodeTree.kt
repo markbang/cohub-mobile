@@ -772,14 +772,26 @@ internal class NodeTextView(
   ): Boolean = false
 }
 
-/** A remote image cropped into a rounded box; `fallbackUri` loads when the variant fails. */
+/**
+ * A remote or `data:` image cropped into a rounded box; `fallbackUri` loads when the variant fails.
+ * The background covers whatever the node's siblings draw beneath it (the failure glyph) until
+ * both sources have failed; a tap on a failed image loads it again.
+ */
 internal class NodeImageView(
   context: Context,
 ) : SimpleDraweeView(context) {
-  private var uri: String? = null
+  private var source: String? = null
+  private var fallback: String? = null
+  private var background: android.graphics.drawable.Drawable? = null
+  private var failed = false
+  private var events: NodeEvents? = null
+  private var nodeId: String? = null
 
   init {
     ensureFresco(context)
+    // As React Native's Image does: a view attached inside a row the recycler holds detached is
+    // never "shown", so the platform keeps its drawable hidden and Fresco never starts the load.
+    setLegacyVisibilityHandlingEnabled(true)
   }
 
   fun applyNode(
@@ -787,31 +799,121 @@ internal class NodeImageView(
     events: NodeEvents,
   ) {
     val raw = node.raw
+    this.events = events
+    nodeId = node.id
     val radius = node.style.float("borderRadius")?.let(::dp) ?: 0f
     hierarchy.roundingParams = RoundingParams.fromCornersRadius(radius)
-    node.style.color("backgroundColor")?.let { hierarchy.setPlaceholderImage(android.graphics.drawable.ColorDrawable(it)) }
+    background = node.style.color("backgroundColor")?.let { android.graphics.drawable.ColorDrawable(it) }
+    if (!failed) hierarchy.setBackgroundImage(background)
     val next = raw.string("uri") ?: return
-    if (next == uri) return
-    uri = next
-    val fallback = raw.string("fallbackUri")
+    val nextFallback = raw.string("fallbackUri")?.takeIf { it != next }
+    if (next == source && nextFallback == fallback) return
+    source = next
+    fallback = nextFallback
+    load(next)
+  }
+
+  private fun load(uri: String) {
+    failed = false
+    hierarchy.setBackgroundImage(background)
     controller =
       Fresco
         .newDraweeControllerBuilder()
-        .setUri(Uri.parse(next))
+        .setUri(Uri.parse(uri))
         .setOldController(controller)
         .setControllerListener(
           object : BaseControllerListener<ImageInfo>() {
+            override fun onFinalImageSet(
+              id: String?,
+              imageInfo: ImageInfo?,
+              animatable: android.graphics.drawable.Animatable?,
+            ) {
+              // Fresco submits again when a failed view is attached anew.
+              if (!failed) return
+              failed = false
+              hierarchy.setBackgroundImage(background)
+            }
+
             override fun onFailure(
               id: String?,
               throwable: Throwable?,
-            ) {
-              if (fallback == null || uri == fallback) return
-              uri = fallback
-              controller = Fresco.newDraweeControllerBuilder().setUri(Uri.parse(fallback)).setOldController(controller).build()
-              events.onNodeAction("imageFallback", node.id, null)
-            }
+            ) = failedLoading(uri, throwable)
           },
         ).build()
+  }
+
+  private fun failedLoading(
+    uri: String,
+    throwable: Throwable?,
+  ) {
+    val next = fallback?.takeIf { uri == source }
+    if (next != null) {
+      report(uri, throwable, "variant")
+      load(next)
+      return
+    }
+    // Fresco submits a failed request again whenever the row is reattached; that is not news.
+    if (failed) return
+    report(uri, throwable, "final")
+    failed = true
+    hierarchy.setBackgroundImage(null)
+  }
+
+  /** The scheme, host, HTTP status, and error class only: URLs can be presigned, `data:` URIs are the image. */
+  private fun report(
+    uri: String,
+    throwable: Throwable?,
+    stage: String,
+  ) {
+    val parsed = Uri.parse(uri)
+    val status = throwable?.message?.let { Regex("""\bcode=(\d{3})\b""").find(it)?.groupValues?.get(1)?.toIntOrNull() }
+    events?.onNodeAction(
+      "imageError",
+      nodeId,
+      mapOf(
+        "stage" to stage,
+        "scheme" to parsed.scheme,
+        "host" to parsed.host,
+        "status" to status,
+        "error" to throwable?.javaClass?.simpleName,
+      ),
+    )
+  }
+
+  private var ownsGesture = false
+  private var downX = 0f
+  private var downY = 0f
+
+  /**
+   * A tap on a failed thumbnail loads it again and still opens the viewer through the pressable
+   * parent. A gesture that starts on a failed image stays this view's to the end, even if a load
+   * lands meanwhile. Scrolls are taken by the lists, which cancel the gesture before it ends here.
+   */
+  override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+    if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) ownsGesture = failed
+    if (!ownsGesture) return super.onTouchEvent(event)
+    val pressable = parent as? View
+    when (event.actionMasked) {
+      android.view.MotionEvent.ACTION_DOWN -> {
+        downX = event.x
+        downY = event.y
+        pressable?.isPressed = true
+      }
+      android.view.MotionEvent.ACTION_UP -> {
+        ownsGesture = false
+        pressable?.isPressed = false
+        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+        if (kotlin.math.abs(event.x - downX) <= slop && kotlin.math.abs(event.y - downY) <= slop) {
+          if (failed) source?.let(::load)
+          pressable?.performClick()
+        }
+      }
+      android.view.MotionEvent.ACTION_CANCEL -> {
+        ownsGesture = false
+        pressable?.isPressed = false
+      }
+    }
+    return true
   }
 
   companion object {

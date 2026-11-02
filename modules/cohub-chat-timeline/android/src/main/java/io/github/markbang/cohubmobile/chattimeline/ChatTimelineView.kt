@@ -194,7 +194,8 @@ class ChatTimelineView(
           flights[key] = PendingFlight(flight, SystemClock.uptimeMillis() + FLIGHT_WAIT_MS)
         }
       }
-      if (adapter.specs[key] != null) changed += key
+      // A key native already lists may have had no spec (a batch failed); it must rebind either way.
+      if (key in previousSet) changed += key
       adapter.specs[key] = spec
     }
     val nextSet = keys.toHashSet()
@@ -383,7 +384,7 @@ class ChatTimelineView(
   }
 
   private fun syncStackFromEnd() {
-    if (layoutManager.stackFromEnd != following) layoutManager.stackFromEnd = following
+    layoutManager.restack(following)
   }
 
   private fun handleScrollState(state: Int) {
@@ -704,6 +705,61 @@ class ChatTimelineView(
   private inner class TimelineLayoutManager(
     context: Context,
   ) : LinearLayoutManager(context) {
+    private var keepOnRestack = false
+    private var placementPending = false
+
+    /**
+     * LinearLayoutManager ignores its children as the anchor for the first layout after
+     * `stackFromEnd` changes and restarts from the first or last row, which threw a reader leaving
+     * the tail to the oldest loaded row. That layout instead keeps the first attached row where it is,
+     * unless a command already placed the list.
+     */
+    fun restack(fromEnd: Boolean) {
+      if (stackFromEnd == fromEnd) return
+      keepOnRestack = true
+      stackFromEnd = fromEnd
+    }
+
+    override fun scrollToPosition(position: Int) {
+      placementPending = true
+      super.scrollToPosition(position)
+    }
+
+    override fun scrollToPositionWithOffset(
+      position: Int,
+      offset: Int,
+    ) {
+      placementPending = true
+      super.scrollToPositionWithOffset(position, offset)
+    }
+
+    // Read inside the layout, so scrolling between the flip and this pass is kept too.
+    override fun onLayoutChildren(
+      recycler: RecyclerView.Recycler,
+      state: RecyclerView.State,
+    ) {
+      if (keepOnRestack && !state.isPreLayout) {
+        keepOnRestack = false
+        if (!placementPending) {
+          for (index in 0 until childCount) {
+            val child = getChildAt(index) ?: continue
+            val params = child.layoutParams as RecyclerView.LayoutParams
+            val position = getPosition(child)
+            if (params.isItemRemoved || position < 0 || position >= state.itemCount) continue
+            // Called inside the layout pass, so the relayout it requests is absorbed and the position applies now.
+            super.scrollToPositionWithOffset(position, getDecoratedTop(child) - paddingTop)
+            break
+          }
+        }
+      }
+      super.onLayoutChildren(recycler, state)
+    }
+
+    override fun onLayoutCompleted(state: RecyclerView.State) {
+      super.onLayoutCompleted(state)
+      placementPending = false
+    }
+
     override fun requestChildRectangleOnScreen(
       parent: RecyclerView,
       child: View,

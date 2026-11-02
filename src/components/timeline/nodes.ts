@@ -180,10 +180,12 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
 function gallery(ctx: NodeContext, uris: string[], maxWidth: number): TimelineNode {
   const size = Math.max(0, Math.min(164, ctx.width * 0.42, maxWidth));
   const scale = PixelRatio.get();
+  // Android's image covers this glyph with its background until both sources have failed.
+  const failed: TimelineNode[] = Platform.OS === "android" ? [{ type: "view", style: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" }, children: [icon("images", 22, ctx.theme.colors.textMuted)] }] : [];
   const thumb = (uri: string, index: number): TimelineNode => pressable({
     id: `image:${index}`, action: "openImage", payload: { uris, index }, accessibilityLabel: ctx.t("message.openImage", { index: index + 1, total: uris.length }), pressedOpacity: 0.78,
     style: { width: size, height: size, borderRadius: 12, overflow: "hidden", backgroundColor: color(ctx.theme.colors.surfaceRaised) },
-    children: [{ type: "image", uri: imageThumbnailUrl(uri, size, scale), fallbackUri: uri, style: { width: size, height: size, borderRadius: 12, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
+    children: [...failed, { type: "image", uri: imageThumbnailUrl(uri, size, scale), fallbackUri: uri, style: { width: size, height: size, borderRadius: 12, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
   });
   if (uris.length === 1) return thumb(uris[0]!, 0);
   return { type: "scroll", horizontal: true, style: { width: maxWidth, height: size }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
