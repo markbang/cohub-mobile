@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.6](https://github.com/markbang/cohub-mobile/compare/v2.3.5...v2.3.6) (2026-11-02)
+
+
+### Features
+
+* **android:** add phone control alongside screen recording ([#163](https://github.com/markbang/cohub-mobile/issues/163)) ([77b955b](https://github.com/markbang/cohub-mobile/commit/77b955b2be2e001f2cee1917cb10c6601194b425))
+
+
+### Fixes
+
+* **chat:** keep the Android timeline's place and draw reply images ([#161](https://github.com/markbang/cohub-mobile/issues/161)) ([625a3e0](https://github.com/markbang/cohub-mobile/commit/625a3e0959f0b0eb4598fee12bf024c2fa3825d4))
+
 ## [2.3.5](https://github.com/markbang/cohub-mobile/compare/v2.3.4...v2.3.5) (2026-11-02)
 
 
