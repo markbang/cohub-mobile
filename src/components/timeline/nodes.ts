@@ -357,6 +357,7 @@ export function compactionNode(ctx: NodeContext, key: string, info: CompactionIn
         ...(expanded && hasSummary ? [{
           type: "scroll" as const, style: { maxHeight: COMPACTION_SUMMARY_MAX_HEIGHT, borderTopWidth: 1, borderColor: color(theme.colors.border) },
           contentStyle: { paddingHorizontal: 12, paddingVertical: 10 },
+          // design-system: native timeline nodes take resolved colors; there is no className outside React views.
           children: [markdown(ctx, info.summary, { color: theme.colors.textSecondary, onSurface: true })],
         }] : []),
       ],
