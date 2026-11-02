@@ -176,8 +176,10 @@ class PhoneControl(private val context: Context, private val scope: CoroutineSco
         val next = token()
         nonce = next
         val info = context.applicationInfo
+        // The trailing sleep keeps the exec stream open until setsid has moved the helper out of the shell's
+        // process group: some adbds (HyperOS) kill that group the moment the stream closes, before it can.
         val command = "CLASSPATH=${info.sourceDir} setsid app_process /system/bin --nice-name=${context.packageName}:helper " +
-            "${HelperMain::class.java.name} ${context.packageName} ${info.uid} $next </dev/null >/dev/null 2>&1 &"
+            "${HelperMain::class.java.name} ${context.packageName} ${info.uid} $next </dev/null >/dev/null 2>&1 & sleep 1"
         val last = prefs.getInt(PORT, 0)
         val ran = (last > 0 && exec(key, last, command)) || connectPort(last)?.let { exec(key, it, command) } == true
         if (!ran) return when {
