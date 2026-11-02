@@ -1909,6 +1909,8 @@ assert.equal(maintainThresholdProp.initializer.expression?.getText(focusPolicySo
 const focusScrollProp = timelineProp("scrollsChildToFocus");
 assert.ok(focusScrollProp && ts.isJsxExpression(focusScrollProp.initializer), "timeline must explicitly disable native focus scrolling");
 assert.equal(focusScrollProp.initializer.expression.kind, ts.SyntaxKind.FalseKeyword);
+assert.equal(timelineProp("freeze")?.initializer.expression?.getText(focusPolicySource), "listKeyboardFrozen", "composer menu Modals replay a keyboard close on Android; the timeline must hold its keyboard lift meanwhile");
+for (const trigger of ["onAttach", "onModelPress", "onHarnessPress"]) assert.match(focusPolicySource.text, new RegExp(`${trigger}=\\{\\(\\) => \\{ freezeListForComposerMenu\\(\\);`), `${trigger} freezes the timeline before its menu Modal mounts`);
 
 const scrollDebugSource = ts.createSourceFile("chat-scroll.tsx", readFileSync(new URL("../app/debug/chat-scroll.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let scrollFixtureFunction;
