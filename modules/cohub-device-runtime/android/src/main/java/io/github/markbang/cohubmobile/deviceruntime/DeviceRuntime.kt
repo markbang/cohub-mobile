@@ -7,13 +7,18 @@ import android.os.Environment
 import android.os.storage.StorageManager
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import io.github.markbang.cohubmobile.deviceruntime.display.Activity
 import io.github.markbang.cohubmobile.deviceruntime.display.DeviceDisplay
 import io.github.markbang.cohubmobile.deviceruntime.display.DisplayControl
+import io.github.markbang.cohubmobile.deviceruntime.helper.PhoneControl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -106,8 +111,17 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     val tokens = AccessTokens()
 
-    /** This screen, shared with at most one Space this device serves. */
-    val display: DeviceDisplay by lazy { DeviceDisplay(context, CoroutineScope(SupervisorJob() + Dispatchers.Default)) }
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    private val stoppedTurns = MutableSharedFlow<Pair<String, Activity>>(extraBufferCapacity = 8)
+
+    /** A person stopped an agent on this phone; JS stops that Turn, as only it holds the API client. */
+    val interrupts: SharedFlow<Pair<String, Activity>> = stoppedTurns.asSharedFlow()
+
+    /** This screen, shared with at most one Space this device serves, and the agent screens phone control gives Spaces. */
+    val display: DeviceDisplay by lazy {
+        DeviceDisplay(context, scope, PhoneControl(context, scope)) { spaceId, activity -> stoppedTurns.emit(spaceId to activity) }
+    }
 
     /** Gateway origin (`wss://host`) of the signed-in environment. */
     @Volatile
@@ -152,7 +166,7 @@ class DeviceRuntime private constructor(private val context: Context) {
 
     /** Sign-out disconnects every folder; they stay bound and can be reconnected after signing in. */
     fun signOut() {
-        display.stop()
+        if (available) display.stop()
         synchronized(lock) {
             account = null
             gatewayOrigin = null
@@ -222,7 +236,7 @@ class DeviceRuntime private constructor(private val context: Context) {
     }
 
     fun stopAll() {
-        display.stop()
+        if (available) display.stop()
         synchronized(lock) {
             bindings = bindings.map { it.copy(enabled = false) }
             live.clear()

@@ -12,7 +12,10 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.app.OnMultiWindowModeChangedProvider
+import androidx.core.app.MultiWindowModeChangedInfo
 import androidx.core.net.toUri
+import androidx.core.util.Consumer
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.exception.Exceptions
@@ -25,7 +28,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -37,6 +39,9 @@ private class NotServingException :
 
 private class GatewayOriginException(origin: String) :
     CodedException("ERR_GATEWAY_ORIGIN", "Gateway origin must be a wss:// origin without a path, received: $origin", null)
+
+private class PairingCodeException :
+    CodedException("ERR_PAIRING_CODE", "The pairing code must be six digits", null)
 
 /**
  * Why the previous runs of this package ended. Android records this per package, so it survives a
@@ -81,6 +86,9 @@ class DeviceRuntimeModule : Module() {
     private val requester: (Boolean) -> Unit = { forceRefresh ->
         sendEvent("onTokenRequest", mapOf("forceRefresh" to forceRefresh))
     }
+    private var multiWindowSource: OnMultiWindowModeChangedProvider? = null
+    // Beside Settings (split screen or a window) the app takes the pairing code itself.
+    private val multiWindow = Consumer<MultiWindowModeChangedInfo> { deviceRuntime.display.phone.multiWindow = it.isInMultiWindowMode }
 
     private val context: Context
         get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -90,7 +98,7 @@ class DeviceRuntimeModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("CohubDeviceRuntime")
-        Events("onChange", "onDisplayChange", "onTokenRequest")
+        Events("onChange", "onDisplayChange", "onDisplayInterrupt", "onTokenRequest")
 
         OnCreate {
             val runtime = deviceRuntime
@@ -106,8 +114,15 @@ class DeviceRuntimeModule : Module() {
                     sendEvent("onChange", mapOf("instances" to instances.map(RuntimeInstance::toMap)))
                 }
             }
+            if (!runtime.available) return@OnCreate
             scope.launch {
                 runtime.display.status.collect { status -> sendEvent("onDisplayChange", status.toMap()) }
+            }
+            scope.launch {
+                runtime.interrupts.collect { (spaceId, activity) ->
+                    val sessionId = activity.sessionId ?: return@collect
+                    sendEvent("onDisplayInterrupt", mapOf("spaceId" to spaceId, "sessionId" to sessionId, "turnId" to activity.turnId))
+                }
             }
         }
 
@@ -118,6 +133,8 @@ class DeviceRuntimeModule : Module() {
             storageAccess = null
             screenCapture?.complete(null)
             screenCapture = null
+            multiWindowSource?.removeOnMultiWindowModeChangedListener(multiWindow)
+            multiWindowSource = null
             scope.cancel()
         }
 
@@ -126,6 +143,16 @@ class DeviceRuntimeModule : Module() {
             storageAccess?.resolve(deviceRuntime.hasStorageAccess())
             storageAccess = null
             deviceRuntime.resume()
+            val activity = appContext.currentActivity
+            if (deviceRuntime.available && activity != null) {
+                deviceRuntime.display.phone.multiWindow = activity.isInMultiWindowMode
+                val source = activity as? OnMultiWindowModeChangedProvider
+                if (source !== multiWindowSource) {
+                    multiWindowSource?.removeOnMultiWindowModeChangedListener(multiWindow)
+                    source?.addOnMultiWindowModeChangedListener(multiWindow)
+                    multiWindowSource = source
+                }
+            }
         }
 
         OnActivityResult { _, payload ->
@@ -186,27 +213,48 @@ class DeviceRuntimeModule : Module() {
 
         Function("stop") { spaceId: String -> deviceRuntime.stop(spaceId) }
 
-        Function("displayStatus") { deviceRuntime.display.status.value.toMap() }
+        Function("displayStatus") { deviceRuntime.display.current().toMap() }
 
-        // Resolves "declined" when the user refuses the system capture dialog, "failed" when sharing
-        // could not start, and null once this screen is shared with the Space.
+        // With phone control the helper mirrors the screen without asking; otherwise Android asks to
+        // record it. Resolves "declined" when the user refuses that, "failed" when sharing could not
+        // start, and null once this screen is shared with the Space.
         AsyncFunction("shareDisplay") Coroutine { spaceId: String ->
             val runtime = deviceRuntime
             if (!runtime.serving(spaceId)) throw NotServingException()
-            val (resultCode, data) = requestScreenCapture() ?: return@Coroutine "declined"
-            try {
-                val status = runtime.display.awaitShare(spaceId) { RuntimeService.share(context, spaceId, resultCode, data) }
-                if (status.sharedWith == spaceId) null else "failed"
-            } catch (_: TimeoutCancellationException) {
-                "failed"
+            val display = runtime.display
+            if (display.phone.helper.value != null) {
+                return@Coroutine if (display.share(spaceId).sharedWith == spaceId) null else "failed"
             }
+            val (resultCode, data) = requestScreenCapture() ?: return@Coroutine "declined"
+            if (display.awaitShare(spaceId) { RuntimeService.share(context, spaceId, resultCode, data) }.sharedWith == spaceId) null else "failed"
+        }
+
+        // Starts phone control: once paired it connects, otherwise it guides pairing in Settings and a notification.
+        AsyncFunction("setupPhoneControl") {
+            val display = deviceRuntime.display
+            val phone = display.phone.setup()
+            if (phone.guiding) {
+                val intent = display.phone.settingsIntent()
+                val activity = appContext.currentActivity
+                if (activity?.isInMultiWindowMode == true) intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
+                runCatching { (activity ?: context).startActivity(intent) }
+            }
+            display.current().copy(phoneControl = phone).toMap()
+        }.runOnQueue(Queues.MAIN)
+
+        AsyncFunction("pairPhoneControl") Coroutine { code: String ->
+            if (!PAIRING_CODE.matches(code)) throw PairingCodeException()
+            val display = deviceRuntime.display
+            display.current().copy(phoneControl = display.phone.pair(code).await()).toMap()
         }
 
         Function("stopDisplay") { deviceRuntime.display.stop() }
 
         AsyncFunction("openControlSettings") {
             val context = context
-            if (isControlRestricted(context)) {
+            if (deviceRuntime.display.phone.enableControl()) {
+                // Phone control granted secure settings, so Accessibility turned on without a trip to Settings.
+            } else if (isControlRestricted(context)) {
                 // Refused once as a restricted setting: App info now offers Allow restricted settings.
                 context.startActivity(
                     Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri())
@@ -248,5 +296,6 @@ class DeviceRuntimeModule : Module() {
         const val SCREEN_CAPTURE_REQUEST = 0x0C0B
         const val OP_ACCESS_RESTRICTED_SETTINGS = "android:access_restricted_settings"
         val GATEWAY_ORIGIN = Regex("^wss://[^/?#\\s]+$")
+        val PAIRING_CODE = Regex("^\\d{6}$")
     }
 }

@@ -27,16 +27,33 @@ export type DeviceFolderListing = {
   volumes: DeviceVolume[];
 };
 
-/** This screen: the Space it is shared with, whether Accessibility control is on, and the last sharing failure. */
+/** Phone control setup, in order: Developer options, the pairing dialog, its code, then the helper starting. */
+export type PhoneControlStage = "off" | "developer" | "pairing" | "code" | "starting" | "ready" | "stopped";
+
+/** Phone control: a shell helper started through Wireless debugging that gives agents a screen of their own. */
+export type PhoneControlState = {
+  stage: PhoneControlStage;
+  /** Why setup or starting last stopped, e.g. `wifi_off`, `pairing_wrong`, `unsupported` below Android 14. */
+  error: string | null;
+  /** The pairing code can be typed in the app, which shares the screen with Settings. */
+  codeInput: boolean;
+  /** What last went wrong, in English, for diagnostics. */
+  detail: string | null;
+};
+
+/** This screen: the Space it is shared with, whether Accessibility control is on, phone control, and the last sharing failure. */
 export type DeviceDisplayStatus = {
   sharedWith: string | null;
   control: boolean;
   error: string | null;
+  phoneControl: PhoneControlState;
 };
 
 type DeviceRuntimeEvents = {
   onChange(event: { instances: DeviceRuntimeInstance[] }): void;
   onDisplayChange(event: DeviceDisplayStatus): void;
+  /** A person pressed Stop on the phone; the Turn acting there should stop. */
+  onDisplayInterrupt(event: { spaceId: string; sessionId: string; turnId: string | null }): void;
   onTokenRequest(event: { forceRefresh: boolean }): void;
 };
 
@@ -58,11 +75,15 @@ declare class CohubDeviceRuntimeModule extends NativeModule<DeviceRuntimeEvents>
   start(spaceId: string, root: string): Promise<DeviceRuntimeRefusal | null>;
   stop(spaceId: string): void;
   displayStatus(): DeviceDisplayStatus;
-  /** Asks for the system capture consent; rejects with `ERR_NOT_SERVING` unless this device serves the Space. */
+  /** Shares through phone control when it is ready, otherwise after the system recording consent; rejects with `ERR_NOT_SERVING` unless this device serves the Space. */
   shareDisplay(spaceId: string): Promise<"declined" | "failed" | null>;
   stopDisplay(): void;
-  /** Opens Accessibility settings, or App info once Android has blocked them as restricted settings. */
+  /** Turns Accessibility on through phone control, or opens its settings (App info once Android blocked them as restricted settings). */
   openControlSettings(): Promise<void>;
+  /** Starts phone control once paired; otherwise opens Developer options and guides pairing there and in a notification. */
+  setupPhoneControl(): Promise<DeviceDisplayStatus>;
+  /** Pairs with the code the Wireless debugging dialog shows; rejects with `ERR_PAIRING_CODE` unless it is six digits. */
+  pairPhoneControl(code: string): Promise<DeviceDisplayStatus>;
 }
 
 /** Null on iOS: only the Android app can serve device folders. */
