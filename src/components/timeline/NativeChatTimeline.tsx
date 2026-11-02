@@ -8,7 +8,7 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
@@ -20,6 +20,7 @@ import { isOptimisticFollowup } from "@/src/data/followup-queue";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
 import { useRelatedSessions } from "@/src/data/use-related-session";
+import { useSandboxImageUrls } from "@/src/data/use-message-images";
 import { useTranslation } from "@/src/i18n";
 import { ChatTimelineView } from "@/src/platform/chat-timeline";
 import { motion } from "@/src/motion";
@@ -174,6 +175,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   }, [forkOrigin, rows, spaceId]);
   const relatedView = useRelatedSessions(client, relatedRefs, lookupSession);
 
+  const imagePaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const row of rows) if (row.kind === "message" && row.message.role !== "user") for (const path of replyImagePaths(row.message)) paths.add(path);
+    return [...paths];
+  }, [rows]);
+  const sandboxImages = useSandboxImageUrls(client, spaceId || null, imagePaths);
+
   const expandedTurns = useMemo(() => [...expanded].flatMap((id) => {
     if (!id.startsWith("steps:")) return [];
     const turn = turnsById.get(id.slice("steps:".length));
@@ -248,12 +256,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
             const canFork = Boolean(turn && isTerminalTurnStatus(turn.status));
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking], () => {
+            const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
+            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images], () => {
               const compaction = compactionFromMessage(message);
               if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
               if (!hasRenderableMessage(message)) return { type: "empty", node: null };
               if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
-              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking }) };
+              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };
             });
           }
           break;
@@ -308,7 +317,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: rows.map((row) => row.key), rows: out };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, historyLoaded, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById]);
+  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, historyLoaded, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());

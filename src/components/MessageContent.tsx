@@ -14,7 +14,9 @@ import { imageThumbnailUrl } from "@/src/data/media";
 import { toolCallPreview } from "@/src/data/tool-call";
 import { compactionFromMessage, compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { isWebLink, openWebLink } from "@/src/platform/browser";
-import { resolveMessageLink } from "@/src/data/message-links";
+import { messageMarkdownImages, resolveMessageLink } from "@/src/data/message-links";
+import { useAppActions } from "@/src/data/context";
+import { useSandboxImageUrls } from "@/src/data/use-message-images";
 import type { StreamView } from "@/src/data/types";
 import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
@@ -202,26 +204,35 @@ export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor 
 }
 // design-system-end
 
-function TextBlock({ value, muted = false, color, linkColor, streaming = false, footer }: { value: string; muted?: boolean; color?: string; linkColor?: string; streaming?: boolean; footer?: ReactNode }) {
+const NO_PATHS: string[] = [];
+
+function TextBlock({ value, muted = false, color, linkColor, streaming = false, sandboxImages = false, footer }: { value: string; muted?: boolean; color?: string; linkColor?: string; streaming?: boolean; sandboxImages?: boolean; footer?: ReactNode }) {
   const theme = useAppTheme();
   const { onUser, spaceId } = useContext(BubbleContext);
+  const { client } = useAppActions();
+  const contentWidth = useContext(BubbleContentWidth);
   const openLink = useOpenMessageLink(spaceId);
   const textColor = muted ? theme.colors.textMuted : (color ?? theme.colors.text);
   const markdownStyle = useMemo(() => enrichedMarkdownStyle(theme, textColor, linkColor, onUser), [linkColor, onUser, theme, textColor]);
   // Paced prefix: the renderer is native, so this only decides how much Markdown it has been given.
   const paced = useRevealedStreamText(value, streaming);
+  const parsed = useMemo(() => sandboxImages ? messageMarkdownImages(paced) : null, [paced, sandboxImages]);
+  // A streaming reply keeps rewriting its paths; images resolve once it is complete.
+  const imageUrls = useSandboxImageUrls(client, spaceId, !streaming && parsed ? parsed.images : NO_PATHS);
+  const images = parsed ? parsed.images.flatMap((path) => imageUrls.get(path) ?? []) : NO_PATHS;
   // Native Markdown has no onTextLayout. A hidden Text measuring the source wraps differently
   // than the native view, so tucking the clock from those metrics made minWidth/marginTop
   // oscillate and the bubble jitter after opening a Chat.
   return <View className="min-w-0">
     <EnrichedMarkdownText
-      markdown={paced}
+      markdown={parsed?.markdown ?? paced}
       markdownStyle={markdownStyle}
       selectable
       flavor="github"
       streamingAnimation={streaming}
       onLinkPress={(event) => { openLink(event.url); }}
     />
+    {images.length > 0 ? <View className="mt-1"><ImageGallery uris={images} maxWidth={contentWidth} /></View> : null}
     {footer ? <View className="self-end mt-0.5">{footer}</View> : null}
   </View>;
 }
@@ -309,8 +320,8 @@ function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number })
   );
 }
 
-function Block({ block, color, linkColor, streaming = false, footer }: { block: ContentBlock; color?: string; linkColor?: string; streaming?: boolean; footer?: ReactNode }) {
-  if (block.type === "text") return <TextBlock value={block.text} color={color} linkColor={linkColor} streaming={streaming} footer={footer} />;
+function Block({ block, color, linkColor, streaming = false, sandboxImages = false, footer }: { block: ContentBlock; color?: string; linkColor?: string; streaming?: boolean; sandboxImages?: boolean; footer?: ReactNode }) {
+  if (block.type === "text") return <TextBlock value={block.text} color={color} linkColor={linkColor} streaming={streaming} sandboxImages={sandboxImages} footer={footer} />;
   if (block.type === "thinking") return <TextBlock value={block.thinking} muted streaming={streaming} footer={footer} />;
   if (block.type === "system_note") return <SystemNoteRow block={block} />;
   return null;
@@ -421,7 +432,8 @@ function ToolCall({ block, result, active = false }: { block: Extract<ContentBlo
   </View>;
 }
 
-export function MessageContent({ content, active = false, color, linkColor, imageMaxWidth, footer }: { content: ContentBlock[] | null | undefined; active?: boolean; color?: string; linkColor?: string; imageMaxWidth?: number; footer?: ReactNode }) {
+/** `sandboxImages`: draw the sandbox images a reply's text references, as the web client does. */
+export function MessageContent({ content, active = false, color, linkColor, imageMaxWidth, sandboxImages = false, footer }: { content: ContentBlock[] | null | undefined; active?: boolean; color?: string; linkColor?: string; imageMaxWidth?: number; sandboxImages?: boolean; footer?: ReactNode }) {
   const blocks = content ?? [];
   const contentWidth = useContext(BubbleContentWidth);
   // Pairing tool calls with their results by scanning the block list per tool_use was O(n^2);
@@ -451,7 +463,7 @@ export function MessageContent({ content, active = false, color, linkColor, imag
       if (index !== firstImageIndex) return null;
       return imageUris.length > 0 ? <ImageGallery key="image-gallery" uris={imageUris} maxWidth={imageMaxWidth ?? contentWidth} /> : null;
     }
-    return <Block key={`${block.type}-${index}`} block={block} color={color} linkColor={linkColor} streaming={active} footer={index === lastVisibleIndex && textFooter ? footer : undefined} />;
+    return <Block key={`${block.type}-${index}`} block={block} color={color} linkColor={linkColor} streaming={active} sandboxImages={sandboxImages} footer={index === lastVisibleIndex && textFooter ? footer : undefined} />;
   })}{footer && !textFooter ? <View className="self-end mt-0.5">{footer}</View> : null}</View>;
 }
 
@@ -632,7 +644,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
     // thinking when there was no answer, so it stands in only for replies that did not think.
     const answer = answerBlocks(message.content);
     const thought = thinkingBlocks(message.content).length > 0;
-    const body = hasRenderableContent(answer) ? <MessageContent content={answer} color={textColor} imageMaxWidth={contentWidth} /> : !thought && message.text?.trim() ? <TextBlock value={message.text} color={textColor} /> : null;
+    const body = hasRenderableContent(answer) ? <MessageContent content={answer} color={textColor} imageMaxWidth={contentWidth} sandboxImages /> : !thought && message.text?.trim() ? <TextBlock value={message.text} color={textColor} sandboxImages /> : null;
     return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: "100%", opacity: hidden ? 0 : 1, paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
       <BubbleTraceMessage.Provider value={message}><BubbleContentWidth.Provider value={contentWidth}>
         {body}
@@ -686,7 +698,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   const live = status === "pending" || status === "streaming";
   const hasContent = hasLivePreview || hasRenderableLive;
   return <View style={{ width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
-    {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} /></BubbleContentWidth.Provider> : null}
+    {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} sandboxImages /></BubbleContentWidth.Provider> : null}
     <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
       {statusLabel ? <Text className={`min-w-0 flex-1 text-caption ${status === "failed" ? "text-danger" : "text-fg-muted"}`}>{statusLabel}</Text>
         : runtimeLabel ? <><LiveDot /><Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{runtimeLabel}</Text></>

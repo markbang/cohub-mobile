@@ -35,7 +35,7 @@ import { reconcileSessionHead } from "../src/data/session-list-sync.ts";
 import { invalidateScopes } from "../src/data/query-scopes.ts";
 import { mergeTaskRuns, refreshTaskRuns } from "../src/data/task-sync.ts";
 import { createStore } from "zustand/vanilla";
-import { keepPreviousData, QueryClient, QueryObserver } from "@tanstack/react-query";
+import { focusManager, keepPreviousData, onlineManager, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionCandidates } from "../src/data/running-sessions.ts";
 import { createSpaceRealtime } from "../src/data/space-realtime.ts";
 import { spaceRealtimeChange, userSessionRealtimeChange } from "../src/data/space-realtime-events.ts";
@@ -58,7 +58,8 @@ import { appDevicesRequest, appHostScript, appNavigationRequest, appRuntimeSigna
 import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
-import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, resolveMessageLink } from "../src/data/message-links.ts";
+import { resolveSandboxImage, sandboxImageQuery } from "../src/data/sandbox-images.ts";
+import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, messageMarkdownImages, resolveMessageLink, sandboxFilePath } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
 import { androidUpdateApkUrl, selectYaotaAndroidUpdate, validateAndroidUpdateAsset, verifyAndroidUpdateIntegrity } from "../src/data/update-assets.ts";
 import { isSettingsSection, settingsMenu } from "../src/data/settings-navigation.ts";
@@ -1771,6 +1772,10 @@ const bubbleScope = {
   EnrichedMarkdownText: "EnrichedMarkdownText",
   useOpenMessageLink: () => () => {},
   useRevealedStreamText: (text) => text,
+  useAppActions: () => ({ client: null }),
+  useSandboxImageUrls: () => new Map(),
+  messageMarkdownImages,
+  NO_PATHS: [],
   BubbleContext: null,
   BubbleContentWidth: null,
   View: "View", Text: "Text", BubbleText: "BubbleText",
@@ -4534,6 +4539,95 @@ for (const origin of ["https://cohub.run", "https://dev.cohub.live", "https://ww
 }
 assert.deepEqual(resolveMessageLink("https://cohub.live.evil.example/spaces/241ec263-bd4f-47d6-b459-35b4219e0c23"), { kind: "external", url: "https://cohub.live.evil.example/spaces/241ec263-bd4f-47d6-b459-35b4219e0c23" }, "lookalike hosts stay external");
 assert.deepEqual(resolveMessageLink("cohub://apps/alice/studio/pulsewall?view=board"), { kind: "external", url: "https://cohub.live/alice/studio/w/pulsewall?view=board" });
+assert.equal(resolveMessageLink("out/a.png"), null, "relative links keep their dispatch; only image targets resolve against the Space root");
+assert.equal(sandboxFilePath("out/a.png"), "/workspace/out/a.png");
+assert.equal(sandboxFilePath("~/notes.md"), "/home/node/notes.md");
+for (const notFile of ["#top", "//cdn.example/a.png", "www.example.com/a.png", "name@example.com", "../etc/passwd", "data:image/png;base64,AA"]) assert.equal(sandboxFilePath(notFile), null, notFile);
+
+// Sandbox images in a reply: both `![]()` and `[]()` resolve; code, URLs, and non-images do not.
+{
+  const reply = "![商品页](/workspace/tb7.jpg)\n[酷态科15号 SE SKU](/workspace/tb11.jpg) and [again](tb7.jpg)\n`![x](/workspace/code.png)` [doc](/workspace/a.pdf) ![web](https://example.com/w.png) /workspace/plain.png\n```\n![x](/workspace/fenced.png)\n```\n![](<out/my shot.webp> \"t\") \\[x](/workspace/escaped.png)";
+  const parsed = messageMarkdownImages(reply);
+  assert.deepEqual(parsed.images, ["/workspace/tb7.jpg", "/workspace/tb11.jpg", "/workspace/out/my shot.webp"]);
+  assert.equal(parsed.markdown, "[商品页](/workspace/tb7.jpg)\n[酷态科15号 SE SKU](/workspace/tb11.jpg) and [again](tb7.jpg)\n`![x](/workspace/code.png)` [doc](/workspace/a.pdf) ![web](https://example.com/w.png) /workspace/plain.png\n```\n![x](/workspace/fenced.png)\n```\n[my shot.webp](<out/my shot.webp> \"t\") \\[x](/workspace/escaped.png)", "sandbox images become links; everything else is untouched");
+  assert.deepEqual(messageMarkdownImages("![商品页](/workspace/tb").images, [], "a half-streamed path is not an image");
+  assert.deepEqual(messageMarkdownImages("``a ` ![x](/workspace/in.png) ``").images, [], "a code span closes on a matching run");
+  assert.deepEqual(messageMarkdownImages("- Example:\n    ```md\n    ![x](/workspace/a.png)\n    ```\n> ```\n> ![y](/workspace/b.png)\n> ```\n```js```\n![z](/workspace/run_(1).png)").images, ["/workspace/run_(1).png"], "fences in lists and quotes are code; balanced parentheses stay in the path");
+  assert.equal(sandboxFilePath("/workspace/out/../a.png"), "/workspace/a.png");
+  assert.deepEqual(messageMarkdownImages("Example:\n\n    ![x](/workspace/indented.png)\n\n- item\n\n    ![y](/workspace/continued.png)\n\n> text\n>\n>     ![q](/workspace/quoted-code.png)").images, ["/workspace/continued.png"], "indented code is code; a list item's continuation is not");
+  const nested = messageMarkdownImages("![x](/workspace/a_(1_(2)).png) ![e](/workspace/b\\(1\\).png (title))");
+  assert.deepEqual(nested.images, ["/workspace/a_(1_(2)).png", "/workspace/b(1).png"]);
+  assert.equal(nested.markdown, "[x](/workspace/a_(1_(2)).png) [e](/workspace/b\\(1\\).png (title))");
+  const multilineCode = "Inline example: `some code\n![x](/workspace/a.png)\nmore code` then ![y](/workspace/b.avif)\n\n`open\n\n![z](/workspace/c.png)";
+  const multiline = messageMarkdownImages(multilineCode);
+  assert.deepEqual(multiline.images, ["/workspace/b.avif", "/workspace/c.png"], "a code span runs across a paragraph's lines and ends with it");
+  assert.equal(multiline.markdown, "Inline example: `some code\n![x](/workspace/a.png)\nmore code` then [y](/workspace/b.avif)\n\n`open\n\n[z](/workspace/c.png)");
+  const escaped = messageMarkdownImages("\\` literal `some code\n![x](/workspace/a.png)\nmore code`");
+  assert.deepEqual(escaped.images, [], "an escaped backtick does not open a code span");
+  const labels = messageMarkdownImages("[![`screen`](/workspace/a.png)](https://example.com) ![a [b]](/workspace/b.png) Note [draft: ![x](/workspace/c.png)");
+  assert.deepEqual(labels.images, ["/workspace/a.png", "/workspace/b.png", "/workspace/c.png"]);
+  assert.equal(labels.markdown, "[`screen`](https://example.com) [a [b]](/workspace/b.png) Note [draft: [x](/workspace/c.png)", "labels with code or brackets are whole; an unclosed bracket is not a link");
+  const titled = messageMarkdownImages("![web](https://example.com/a.png \"Example: [file](/workspace/private.png)\") ![![a](/workspace/x.png)](/workspace/y.png)\n\n![x](/workspace/a.png \"title `\")\n[![y](/workspace/b.png \"title `\")](https://example.com)");
+  assert.deepEqual(titled.images, ["/workspace/y.png", "/workspace/x.png"], "titles are not content; a code span opened in a title breaks the link as md4c parses it");
+  assert.equal(titled.markdown, "![web](https://example.com/a.png \"Example: [file](/workspace/private.png)\") [a](/workspace/y.png)\n\n![x](/workspace/a.png \"title `\")\n[![y](/workspace/b.png \"title `\")](https://example.com)", "an image in an image's label flattens to text when the outer one becomes a link");
+  const contained = messageMarkdownImages("![shot](/workspace/a.png \"the `main` view\") [![plot](/workspace/plot.png \"by `plot()`\")](https://example.com)");
+  assert.deepEqual(contained.images, ["/workspace/a.png", "/workspace/plot.png"], "a code span wholly inside a title leaves the image intact");
+  assert.equal(contained.markdown, "[shot](/workspace/a.png \"the `main` view\") [plot](https://example.com)");
+  const linked = messageMarkdownImages("[![a](/workspace/x.png)](https://example.com) [![](/workspace/y.png) more](https://example.com/2)");
+  assert.deepEqual(linked.images, ["/workspace/x.png", "/workspace/y.png"]);
+  assert.equal(linked.markdown, "[a](https://example.com) [y.png more](https://example.com/2)", "an image inside a link's text becomes text, never a nested link or an image box");
+}
+
+// Sandbox image loading: one read per path; every unresolved outcome is final.
+{
+  const reads = [];
+  const responses = {
+    "/workspace/a.png": { content: "", delivery: "url", url: "https://cdn.example/a.png", mimeType: "image/png", encoding: "base64" },
+    "/workspace/small.png": { content: "AAAA", delivery: "inline", mimeType: "image/png", encoding: "base64" },
+    "/workspace/big.png": { path: "/workspace/big.png", mimeType: "image/png", retryAfterMs: 2000 },
+    "/workspace/photo.heic": { content: "AAAA", delivery: "inline", mimeType: null, encoding: "base64" },
+    "/workspace/fake.png": { content: "hi", delivery: "inline", mimeType: "text/plain", encoding: "utf-8" },
+  };
+  const client = { space: (spaceId) => ({ files: { read: async (path) => { reads.push(`${spaceId}:${path}`); if (!(path in responses)) throw Object.assign(new Error("not found"), { status: 404 }); return responses[path]; } } }) };
+  assert.equal(await resolveSandboxImage(client, "s", "/workspace/a.png"), "https://cdn.example/a.png");
+  assert.equal(await resolveSandboxImage(client, "s", "/workspace/small.png"), "data:image/png;base64,AAAA");
+  for (const path of ["/workspace/big.png", "/workspace/photo.heic", "/workspace/fake.png", "/workspace/missing.png"]) assert.equal(await resolveSandboxImage(client, "s", path), null, path);
+  reads.length = 0;
+  // Mounted like the app's provider, with createAppQueryClient's defaults, so focus and online changes reach the cache.
+  mock.timers.enable({ apis: ["setTimeout"] });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 2_000, gcTime: 10 * 60_000, retry: 1 } } });
+  queryClient.mount();
+  const paths = ["/workspace/a.png", "/workspace/big.png", "/workspace/missing.png"];
+  const observe = () => paths.map((path) => {
+    const observer = new QueryObserver(queryClient, sandboxImageQuery(client, "s", path));
+    return observer.subscribe(() => {});
+  });
+  let unsubscribe = observe();
+  await flushSync();
+  assert.deepEqual(reads, paths.map((path) => `s:${path}`), "each path is read once");
+  focusManager.setFocused(false);
+  focusManager.setFocused(true);
+  onlineManager.setOnline(false);
+  onlineManager.setOnline(true);
+  // The provider invalidates everything on foreground and transport recovery.
+  await queryClient.invalidateQueries();
+  await flushSync();
+  unsubscribe.forEach((stop) => stop());
+  mock.timers.tick(60 * 60_000);
+  unsubscribe = observe();
+  await flushSync();
+  assert.equal(reads.length, paths.length, "foreground, reconnect, invalidation, and a remount after the app's GC interval read nothing again, including a preparing or missing file");
+  assert.equal(queryClient.getQueryData(sandboxImageQuery(client, "s", "/workspace/big.png").queryKey), null, "a preparing file is cached as unavailable");
+  unsubscribe.forEach((stop) => stop());
+  focusManager.setFocused(undefined);
+  queryClient.unmount();
+  queryClient.clear();
+  mock.timers.reset();
+  reads.length = 0;
+  new QueryObserver(new QueryClient(), sandboxImageQuery(null, "s", "/workspace/a.png")).subscribe(() => {})();
+  await flushSync();
+  assert.deepEqual(reads, [], "no read without a client");
+}
 
 // Composer @Space mentions: drafts keep server-parsed markup while the input shows `@Label`.
 {
