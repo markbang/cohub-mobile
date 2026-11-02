@@ -79,7 +79,8 @@ type Event<T> = { nativeEvent: T };
 export type ChatTimelineViewProps = ViewProps & {
   contentInset: { top: number; bottom: number };
   viewportInset: { top: number; bottom: number };
-  thresholds: { follow: number; page: number; visibleFraction: number; scrollEventThrottle: number };
+  /** `follow`: scrolling toward newer within this resumes following. `leave`: scrolling toward older past this stops it. */
+  thresholds: { follow: number; leave: number; page: number; visibleFraction: number; scrollEventThrottle: number };
   detached: boolean;
   keyboard: { enabled: boolean; coveredInset: number };
   initialTarget?: { key: string; viewPosition: number; viewOffset: number } | null;

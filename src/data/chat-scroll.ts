@@ -1,4 +1,5 @@
 export const CHAT_TAIL_THRESHOLD = 60;
+export const CHAT_TAIL_LEAVE_THRESHOLD = 1;
 export const CHAT_PAGE_THRESHOLD = 180;
 /**
  * Legend only keeps pinning while the viewport is within this many screen-heights of the

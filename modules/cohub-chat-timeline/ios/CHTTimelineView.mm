@@ -76,6 +76,7 @@ static NSNumber *CHTNum(id value)
   CGFloat _viewTop;
   CGFloat _viewBottom;
   CGFloat _followThreshold;
+  CGFloat _leaveThreshold;
   CGFloat _pageThreshold;
   CGFloat _visibleFraction;
   NSTimeInterval _scrollThrottle;
@@ -131,6 +132,7 @@ static NSNumber *CHTNum(id value)
     _flightViews = [NSMutableDictionary dictionary];
     _offsetsDirty = YES;
     _followThreshold = 60;
+    _leaveThreshold = 1;
     _pageThreshold = 180;
     _visibleFraction = 0.2;
     _scrollThrottle = 0.1;
@@ -186,6 +188,8 @@ static NSNumber *CHTNum(id value)
 {
   if (CHTNum(value[@"follow"]))
     _followThreshold = CHTNum(value[@"follow"]).doubleValue;
+  if (CHTNum(value[@"leave"]))
+    _leaveThreshold = CHTNum(value[@"leave"]).doubleValue;
   if (CHTNum(value[@"page"]))
     _pageThreshold = CHTNum(value[@"page"]).doubleValue;
   if (CHTNum(value[@"visibleFraction"]))
@@ -840,8 +844,9 @@ static NSNumber *CHTNum(id value)
   _lastOffset = offset;
   if (_dragging || _decelerating) {
     CGFloat distance = [self maxOffset] - offset;
+    BOOL atTail = !_detached && distance <= _leaveThreshold;
     BOOL near = !_detached && distance <= _followThreshold;
-    if (delta < 0 && !near)
+    if (delta < 0 && !atTail)
       [self setFollowing:NO];
     else if (delta > 0 && near)
       [self setFollowing:YES];
@@ -894,7 +899,7 @@ static NSNumber *CHTNum(id value)
 - (void)endUserScroll
 {
   CGFloat distance = [self maxOffset] - _scroll.contentOffset.y;
-  if (!_detached && distance <= _followThreshold)
+  if (!_detached && distance <= _leaveThreshold)
     [self setFollowing:YES];
   [self pass:nil];
   [self emitScroll:YES];

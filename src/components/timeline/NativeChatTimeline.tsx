@@ -10,7 +10,7 @@ import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_THRESHOLD } from "@/src/data/chat-scroll";
+import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
 import { compactionFromMessage } from "@/src/data/compaction";
@@ -450,7 +450,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   }, [onWidth]);
   const contentInset = useMemo(() => ({ top: props.headerHeight + 12, bottom: props.footerHeight + 12 }), [props.footerHeight, props.headerHeight]);
   const viewportInset = useMemo(() => ({ top: props.headerHeight, bottom: props.footerHeight }), [props.footerHeight, props.headerHeight]);
-  const thresholds = useMemo(() => ({ follow: CHAT_TAIL_THRESHOLD, page: CHAT_PAGE_THRESHOLD, visibleFraction: 0.2, scrollEventThrottle: 100 }), []);
+  const thresholds = useMemo(() => ({ follow: CHAT_TAIL_THRESHOLD, leave: CHAT_TAIL_LEAVE_THRESHOLD, page: CHAT_PAGE_THRESHOLD, visibleFraction: 0.2, scrollEventThrottle: 100 }), []);
   const keyboard = useMemo(() => ({ enabled: !props.keyboardFrozen, coveredInset: props.keyboardCoveredInset }), [props.keyboardCoveredInset, props.keyboardFrozen]);
 
   return <View className="flex-1" onLayout={handleLayout} collapsable={false}>
