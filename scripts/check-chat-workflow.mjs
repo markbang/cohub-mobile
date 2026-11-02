@@ -3760,6 +3760,53 @@ assert.deepEqual(visibleTimelineMessages(builtRows, ["live", "process:turn-a", "
 assert.deepEqual(timelineRows({ ...timelineInput, messages: [], replyAnchor: null }).map((row) => row.key), ["older", "live"], "an empty Chat still has a live row for its first reply");
 assert.ok(!timelineRows({ ...timelineInput, hasMoreNewer: true }).some((row) => row.key === "live" && row.owner === null), "a detached window does not append an ownerless live row");
 
+// Gallery thumbnails: CDN variant with the original as fallback, data: URIs as is, and on Android a glyph the image covers until it fails.
+for (const OS of ["android", "ios"]) {
+  const pressable = loadChromeComponent("../src/components/timeline/nodes.ts", "pressable", {});
+  const gallery = loadChromeComponent("../src/components/timeline/nodes.ts", "gallery", { pressable, Platform: { OS }, PixelRatio: { get: () => 3 }, color: (value) => value, icon: (name) => ({ type: "vector", name }), imageThumbnailUrl: (uri) => uri.startsWith("https:") ? `${uri}?variant` : uri });
+  const uris = ["https://cdn.example/a.png", "data:image/png;base64,AAAA"];
+  const thumbs = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300).children;
+  assert.deepEqual(thumbs.map((thumb) => [thumb.action, thumb.payload.index]), [["openImage", 0], ["openImage", 1]], "every thumbnail opens the viewer at its own image");
+  const images = thumbs.map((thumb) => thumb.children.at(-1));
+  assert.deepEqual(images.map((image) => [image.type, image.uri, image.fallbackUri]), [["image", "https://cdn.example/a.png?variant", uris[0]], ["image", uris[1], uris[1]]]);
+  assert.equal(thumbs[0].children.length, OS === "android" ? 2 : 1, "only Android draws the failure glyph, under the image");
+}
+
+// Row delivery: a rejected setRows (the view tag not resolvable yet) resends every row until one lands, with nothing else changing.
+{
+  const timelineSource = ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let deliverySource;
+  (function find(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(timelineSource) === "useEffect" && node.arguments[1]?.getText(timelineSource) === "[specs, resend]") deliverySource = node.arguments[0].getText(timelineSource);
+    ts.forEachChild(node, find);
+  })(timelineSource);
+  assert.ok(deliverySource, "the row delivery effect retries on its own resend counter");
+  const calls = [];
+  let failures = 9;
+  let resends = 0;
+  const view = { setRows: (keys, rows) => { calls.push([keys, Object.keys(rows)]); return failures-- > 0 ? Promise.reject(new Error("tag")) : Promise.resolve(); } };
+  const specs = { keys: ["a", "b"], rows: { a: { type: "user" }, b: { type: "assistant" } } };
+  const scope = { nativeRef: { current: view }, sentRef: { current: new Map() }, sentKeysRef: { current: [] }, rowsFailuresRef: { current: 0 }, rowsRetryRef: { current: null }, setResend: () => { resends += 1; }, withoutUndefined: (value) => value, recordDebugEvent: () => {}, ROWS_RETRY_MAX_MS: 1000, specs };
+  const deliver = new Function(...Object.keys(scope), ts.transpileModule(`return (${deliverySource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    deliver();
+    for (let attempt = 0; attempt < 20 && resends < 9; attempt += 1) {
+      const before = resends;
+      await new Promise((resolve) => queueMicrotask(resolve));
+      await new Promise((resolve) => queueMicrotask(resolve));
+      mock.timers.tick(1000);
+      if (resends > before) deliver();
+    }
+    await new Promise((resolve) => queueMicrotask(resolve));
+    assert.equal(calls.length, 10, "delivery keeps retrying past any fixed budget until the view accepts");
+    assert.ok(calls.every(([keys, rows]) => keys.join() === "a,b" && rows.join() === "a,b"), "every attempt sends every row");
+    assert.equal(scope.rowsRetryRef.current, null, "no retry is left pending once a call lands");
+    deliver();
+    assert.equal(calls.length, 10, "delivered rows are not sent again");
+  } finally { mock.timers.reset(); }
+}
+
 // Execute the production renderItem: the reply must be a normal-flow sibling of
 // the user bubble inside the SAME measured row, including after tool expansion.
 const chatAst = ts.createSourceFile("chat.tsx", chatSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

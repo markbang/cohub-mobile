@@ -880,26 +880,37 @@ internal class NodeImageView(
     )
   }
 
+  private var ownsGesture = false
   private var downX = 0f
   private var downY = 0f
 
   /**
    * A tap on a failed thumbnail loads it again and still opens the viewer through the pressable
-   * parent. Scrolls are taken by the lists, which cancel the gesture before it ends here.
+   * parent. A gesture that starts on a failed image stays this view's to the end, even if a load
+   * lands meanwhile. Scrolls are taken by the lists, which cancel the gesture before it ends here.
    */
   override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
-    if (!failed) return super.onTouchEvent(event)
+    if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) ownsGesture = failed
+    if (!ownsGesture) return super.onTouchEvent(event)
+    val pressable = parent as? View
     when (event.actionMasked) {
       android.view.MotionEvent.ACTION_DOWN -> {
         downX = event.x
         downY = event.y
+        pressable?.isPressed = true
       }
       android.view.MotionEvent.ACTION_UP -> {
+        ownsGesture = false
+        pressable?.isPressed = false
         val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
         if (kotlin.math.abs(event.x - downX) <= slop && kotlin.math.abs(event.y - downY) <= slop) {
-          source?.let(::load)
-          (parent as? View)?.performClick()
+          if (failed) source?.let(::load)
+          pressable?.performClick()
         }
+      }
+      android.view.MotionEvent.ACTION_CANCEL -> {
+        ownsGesture = false
+        pressable?.isPressed = false
       }
     }
     return true
