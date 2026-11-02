@@ -12,8 +12,8 @@ import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useAppActions } from "@/src/data/context";
-import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, type DeviceRuntimeRefusal } from "@/src/data/device-runtime";
-import { deviceRuntimeSupported, openDeviceControlSettings, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
+import { deviceDisplayStateKey, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, phoneControlErrorKey, phoneControlStageKey, phoneControlSteps, type DeviceRuntimeRefusal, type PhoneControlState } from "@/src/data/device-runtime";
+import { deviceRuntimeSupported, openDeviceControlSettings, pairPhoneControl, phoneControlSupported, setupPhoneControl, shareDeviceDisplay, startDeviceRuntime, stopDeviceDisplay, stopDeviceRuntime, useDeviceDisplayStatus, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus } from "@/src/data/sandbox-setup";
 import { formatUsd } from "@/src/data/space-wallet";
@@ -644,6 +644,9 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
   const [hint, setHint] = useState<string | null>(null);
   if (!status) return null;
   const sharingHere = status.sharedWith === spaceId;
+  const phone = phoneControlSupported ? status.phoneControl : null;
+  // Without phone control the screen is shared by recording, which needs the person to leave the phone to agents.
+  const phoneReady = !phone || phone.stage === "ready";
 
   const update = async (action: () => Promise<"declined" | "failed" | null> | void) => {
     if (busy) return;
@@ -661,7 +664,8 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
 
   return (
     <View className="mt-5">
-      <Text className="text-body font-semibold text-fg">{t("deviceRuntime.display.title")}</Text>
+      {phone ? <PhoneControlBlock state={phone} /> : null}
+      <Text className={`text-body font-semibold text-fg ${phone ? "mt-5" : ""}`}>{t("deviceRuntime.display.title")}</Text>
       <Text className="text-caption text-fg-muted mt-2">{t(serving ? "deviceRuntime.display.hint" : "deviceRuntime.display.connectFirst")}</Text>
       <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
         <AppIcon name="monitor" size={18} tone={sharingHere ? "success" : "muted"} />
@@ -679,10 +683,96 @@ function DeviceDisplayBlock({ spaceId, serving }: { spaceId: string; serving: bo
             {!status.control ? <ActionButton label={t("deviceRuntime.display.allowControl")} icon="settings" disabled={busy} onPress={() => void update(openDeviceControlSettings)} /> : null}
           </>
         ) : (
-          <ActionButton label={t("deviceRuntime.display.share")} icon="monitor" disabled={busy || !serving} onPress={() => void update(() => shareDeviceDisplay(spaceId))} />
+          <ActionButton label={t(phoneReady ? "deviceRuntime.display.share" : "deviceRuntime.display.shareRecording")} icon="monitor" disabled={busy || !serving} onPress={() => void update(() => shareDeviceDisplay(spaceId))} />
         )}
       </View>
+      {!sharingHere && !phoneReady ? <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.display.shareRecordingHint")}</Text> : null}
       {sharingHere && !status.control ? <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.display.controlHint")}</Text> : null}
+    </View>
+  );
+}
+
+function PhoneControlBlock({ state }: { state: PhoneControlState }) {
+  const { t } = useTranslation();
+  const theme = useAppTheme();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [code, setCode] = useState("");
+  const steps = phoneControlSteps(state);
+  const errorKey = phoneControlErrorKey(state);
+  const canSetup = state.stage !== "starting" && state.stage !== "ready";
+  const codeInput = state.stage === "code" && state.codeInput;
+
+  const run = async (action: () => Promise<null>) => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await action();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pair = (value: string) => {
+    if (value.length !== 6) return;
+    setCode("");
+    void run(() => pairPhoneControl(value));
+  };
+
+  return (
+    <View>
+      <Text className="text-body font-semibold text-fg">{t("deviceRuntime.phoneControl.title")}</Text>
+      <Text className="text-caption text-fg-muted mt-2">{t("deviceRuntime.phoneControl.hint")}</Text>
+      <View className="flex-row items-center gap-2 p-4 mt-2 rounded-md bg-surface-raised">
+        <AppIcon name="smartphone" size={18} tone={state.stage === "ready" ? "success" : "muted"} />
+        <Text className="flex-1 min-w-0 text-body font-semibold text-fg">{t(phoneControlStageKey(state))}</Text>
+        {busy || state.stage === "starting" ? <Loader /> : null}
+      </View>
+      {failed || errorKey ? <Text accessibilityRole="alert" className="text-caption text-danger mt-2">{t(failed ? "deviceRuntime.phoneControl.failed" : errorKey!)}</Text> : null}
+      {state.error && state.detail ? <Text selectable className="text-caption text-fg-faint mt-1">{state.detail}</Text> : null}
+      {steps ? (
+        <View className="gap-2 mt-3">
+          {steps.map((step, index) => (
+            <View key={step.key} accessibilityState={{ selected: step.current }} className="flex-row gap-2">
+              {step.done
+                ? <AppIcon name="check" size={16} tone="success" />
+                : <Text className={`w-4 text-center text-caption ${step.current ? "font-semibold text-fg" : "text-fg-faint"}`}>{index + 1}</Text>}
+              <Text className={`flex-1 text-caption ${step.current ? "text-fg" : "text-fg-muted"}`}>{t(step.key)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {codeInput ? (
+        <View className="flex-row gap-2 mt-3">
+          <TextInput
+            value={code}
+            onChangeText={(text) => {
+              const digits = text.replace(/\D/g, "").slice(0, 6);
+              setCode(digits);
+              if (digits.length === 6) pair(digits);
+            }}
+            accessibilityLabel={t("deviceRuntime.phoneControl.codeLabel")}
+            placeholder="······"
+            placeholderTextColor={theme.colors.textFaint}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+            textContentType="oneTimeCode"
+            maxLength={6}
+            autoFocus
+            editable={!busy}
+            onSubmitEditing={() => pair(code)}
+            className={`${FIELD_INPUT_CLASS} flex-1 tracking-widest`}
+          />
+          <ActionButton label={t("deviceRuntime.phoneControl.pair")} disabled={busy || code.length !== 6} onPress={() => pair(code)} />
+        </View>
+      ) : null}
+      {canSetup && !codeInput ? (
+        <View className="flex-row gap-2 mt-3">
+          <ActionButton label={t(steps ? "deviceRuntime.phoneControl.openSettings" : "deviceRuntime.phoneControl.setup")} icon="settings" disabled={busy} onPress={() => void run(setupPhoneControl)} />
+        </View>
+      ) : null}
     </View>
   );
 }

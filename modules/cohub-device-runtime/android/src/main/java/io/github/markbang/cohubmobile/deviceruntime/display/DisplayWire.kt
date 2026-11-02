@@ -93,15 +93,38 @@ internal object DisplayWire {
         put("name", name)
     }
 
-    fun displays(displays: List<DisplayInfo>) = buildJsonObject {
+    fun displays(displays: List<DisplayInfo>, virtual: String?) = buildJsonObject {
         put("type", "displays")
         put("displays", buildJsonArray { displays.forEach { add(it.toJson()) } })
+        if (virtual != null) put("virtual", virtual)
+    }
+
+    fun changed(display: String) = buildJsonObject {
+        put("type", "changed")
+        put("display", display)
+    }
+
+    fun hold(display: String, held: Boolean) = buildJsonObject {
+        put("type", "hold")
+        put("display", display)
+        put("held", held)
+    }
+
+    fun interrupt(display: String) = buildJsonObject {
+        put("type", "interrupt")
+        put("display", display)
     }
 
     fun ended(stream: Int, error: DisplayError?) = buildJsonObject {
         put("type", "ended")
         put("stream", stream)
         if (error != null) put("error", error.toJson())
+    }
+
+    fun focus(display: String, focus: JsonObject?) = buildJsonObject {
+        put("type", "focus")
+        put("display", display)
+        if (focus != null) put("focus", focus)
     }
 
     fun reply(id: Long, result: JsonElement?) = buildJsonObject {
@@ -126,8 +149,13 @@ data class DisplayInfo(
     val capture: Boolean,
     val input: Boolean,
     val system: List<String> = emptyList(),
+    val platform: String? = null,
     val tree: Boolean = false,
+    val focus: Boolean = false,
     val needs: List<String> = emptyList(),
+    val kind: String? = null,
+    val apps: Boolean = false,
+    val changes: Boolean = false,
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id)
@@ -138,8 +166,13 @@ data class DisplayInfo(
         put("capture", capture)
         put("input", input)
         if (system.isNotEmpty()) put("system", JsonArray(system.map(::JsonPrimitive)))
+        if (platform != null) put("platform", platform)
         if (tree) put("tree", true)
+        if (focus) put("focus", true)
         if (needs.isNotEmpty()) put("needs", JsonArray(needs.map(::JsonPrimitive)))
+        if (kind != null) put("kind", kind)
+        if (apps) put("apps", true)
+        if (changes) put("changes", true)
     }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, PermissionsAndroid, Platform } from "react-native";
 import nativeDeviceRuntime from "@/modules/cohub-device-runtime";
 import { config } from "@/src/config";
 import {
@@ -20,6 +20,9 @@ native?.setControlKeepAliveEnabled(false);
 
 /** Whether this device can serve a folder as a Space's local Runtime (Android 11+, 64-bit). */
 export const deviceRuntimeSupported = native !== null;
+
+/** Phone control needs Android 14; older phones share their screen by recording only. */
+export const phoneControlSupported = native !== null && Number(Platform.Version) >= 34;
 
 type GetAccessToken = (options?: { forceRefresh?: boolean }) => Promise<string | null>;
 
@@ -177,4 +180,28 @@ export function stopDeviceDisplay() {
 export async function openDeviceControlSettings(): Promise<null> {
   await requireNative().openControlSettings();
   return null;
+}
+
+/** Sets up or restarts phone control; pairing asks for notifications first, since its code is entered there. */
+export async function setupPhoneControl(): Promise<null> {
+  const runtime = requireNative();
+  if (Number(Platform.Version) >= 33) await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  await runtime.setupPhoneControl();
+  return null;
+}
+
+export async function pairPhoneControl(code: string): Promise<null> {
+  await requireNative().pairPhoneControl(code);
+  return null;
+}
+
+type DisplayInterrupt = { spaceId: string; sessionId: string; turnId: string | null };
+
+/** Calls [onInterrupt] when a person stops an agent from this phone's indicator. */
+export function useDeviceDisplayInterrupts(onInterrupt: ((event: DisplayInterrupt) => void) | null) {
+  useEffect(() => {
+    if (!native || !onInterrupt) return;
+    const subscription = native.addListener("onDisplayInterrupt", onInterrupt);
+    return () => subscription.remove();
+  }, [onInterrupt]);
 }

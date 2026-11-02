@@ -45,7 +45,7 @@ The app uses native screens for Chats, Spaces, Activity, Profile, session timeli
 - Native Settings sections for Profile, Appearance, Activity, Notifications, Rules (published from the Home Space), Channels, Billing, and Referrals
 - Cache-first SQLite hydration, reconnect reconciliation, and user-scoped cache clearing
 - Android device Runtime: create a Space on this device or connect an existing one, so agents work directly in a phone folder (Android 11+, 64-bit; asks for All files access)
-- Android screen sharing: share this phone's screen with a Space it serves so people can watch and steer it from the web and agents can use it; control needs Cohub enabled in Accessibility
+- Android screen sharing: share this phone's screen with a Space it serves so people can watch and steer it from the web and agents can use it; control needs Cohub enabled in Accessibility. On Android 14+, phone control (paired once with Wireless debugging) also gives agents a screen of their own and shares without a recording prompt
 - Native Logto PKCE, `cohub://` deep links, notification tap routing, APNs/FCM token acquisition, and GitHub-native build profiles
 
 ## Deployment endpoints

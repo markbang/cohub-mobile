@@ -12,5 +12,24 @@
     <string name="cohub_display_sharing_control">正在共享此屏幕，Space 可以操作它</string>
     <string name="cohub_display_stop">停止共享</string>
     <string name="cohub_display_control_restricted">点右上角 ⋮，选择「允许受限设置」，再到无障碍中开启 Cohub。</string>
-    <string name="cohub_display_control_description">允许你共享屏幕的 Space 读取屏幕上的控件，并点按、滑动和输入。仅在你共享屏幕期间生效，也只作用于你能看到的内容。</string>
+    <string name="cohub_display_control_description">让你的 Space 中的 Agent 读取它们所用屏幕上的控件：它们自己的 Agent 屏幕，或你正在共享的屏幕。同时显示它们正在做什么，方便你随时停止或接手。</string>
+    <string name="cohub_phone_control_channel">手机操作</string>
+    <string name="cohub_phone_control_pairing_title">将 Cohub 与无线调试配对</string>
+    <string name="cohub_phone_control_pairing_text">保持弹窗打开，点按“输入配对码”，填入弹窗中的六位数字。</string>
+    <string name="cohub_phone_control_pairing_wrong">配对码不对，请输入弹窗中当前显示的配对码。</string>
+    <string name="cohub_phone_control_pairing_closed">没有打开的配对弹窗。请点按“使用配对码配对设备”，再在这里输入配对码。</string>
+    <string name="cohub_phone_control_pairing_code">配对码</string>
+    <string name="cohub_phone_control_pairing_enter">输入配对码</string>
+    <string name="cohub_phone_control_guide_developer">开启开发者选项。找不到时，在“关于手机”中连续点按“版本号”七次。</string>
+    <string name="cohub_phone_control_guide_pairing">开启“无线调试”，点按“使用配对码配对设备”，然后在这里点按“输入配对码”。</string>
+    <string name="cohub_overlay_needs_you">Agent 需要你处理</string>
+    <string name="cohub_overlay_done_hint">处理完请点交还</string>
+    <string name="cohub_overlay_working">Agent 正在操作</string>
+    <string name="cohub_overlay_activity">Agent：%1$s</string>
+    <string name="cohub_overlay_held">由你操作中</string>
+    <string name="cohub_overlay_sharing">正在共享屏幕</string>
+    <string name="cohub_overlay_stop">停止</string>
+    <string name="cohub_overlay_stop_sharing">停止共享</string>
+    <string name="cohub_overlay_take_over">我来</string>
+    <string name="cohub_overlay_hand_back">交还</string>
 </resources>

@@ -18,7 +18,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import io.github.markbang.cohubmobile.deviceruntime.display.DisplayControl
 import io.github.markbang.cohubmobile.deviceruntime.display.DisplayStatus
-import io.github.markbang.cohubmobile.deviceruntime.display.launchDisplayProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,9 +27,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
@@ -74,7 +71,7 @@ class RuntimeService : Service() {
         createChannel()
         val share = intent?.takeIf { it.action == ACTION_SHARE }?.let(ShareRequest::from)
         // Android 14 requires the media projection foreground type before the projection is created.
-        if (!enterForeground(projecting = share != null || runtime.display.status.value.sharedWith != null)) {
+        if (!enterForeground(projecting = share != null || runtime.display.projecting)) {
             if (share != null) runtime.display.fail()
             stopSelf()
             return START_NOT_STICKY
@@ -89,9 +86,9 @@ class RuntimeService : Service() {
                 combine(runtime.instances, runtime.display.status, runtime.controlKeepAliveEnabled) { instances, display, _ -> instances to display }
                     .collect { (instances, display) -> showNotification(instances, display) }
             }
-            // Drop the media projection type once sharing ends, keeping the folders connected.
+            // Drop the media projection type once recording ends, keeping the folders connected.
             scope.launch(Dispatchers.Main.immediate) {
-                runtime.display.status.map { it.sharedWith != null }.distinctUntilChanged().drop(1)
+                runtime.display.projectingChanges.drop(1)
                     .collect { projecting ->
                         if (!projecting && (runtime.instances.value.any { it.running } || runtime.shouldKeepControlAlive())) {
                             enterForeground(projecting = false)
@@ -128,12 +125,11 @@ class RuntimeService : Service() {
         } else {
             null
         }
-        if (projection == null) {
+        val status = projection?.let { display.share(share.spaceId, it) }
+        if (status?.sharedWith != share.spaceId) {
             display.fail()
-            enterForeground(projecting = display.status.value.sharedWith != null)
-            return
+            enterForeground(projecting = display.projecting)
         }
-        display.start(projection, share.spaceId)
     }
 
     private class ShareRequest(val spaceId: String, val resultCode: Int, val data: Intent) {
@@ -220,8 +216,8 @@ class RuntimeService : Service() {
                     runtime.publish(spaceId, if (ready) RuntimeInstance.State.READY else RuntimeInstance.State.CONNECTING)
                 }
         }
-        // sandboxd serves this Space's displays from this socket; it lists none until the screen is shared.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) launchDisplayProvider(spaceId, displaySocket, runtime.display)
+        // sandboxd serves this Space's displays from this socket: the shared screen, and the agent screen phone control gives it.
+        runtime.display.provide(this, spaceId, displaySocket)
         launch { bridge.run(connection.ready) }
         try {
             connection.run()

@@ -73,7 +73,7 @@ import { shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
-import { useDeviceRuntimeSession } from "@/src/platform/device-runtime";
+import { useDeviceDisplayInterrupts, useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
 import {
@@ -1066,6 +1066,14 @@ export function AppProvider({
   useEffect(() => {
     clientRef.current = client;
   }, [client]);
+
+  // Stop on the phone's indicator ends the agent's Turn as well as its plan, as on the web.
+  const stopDisplayTurn = useMemo(() => client
+    ? ({ spaceId, sessionId, turnId }: { spaceId: string; sessionId: string; turnId: string | null }) => {
+      void client.space(spaceId).session(sessionId).abort({ turnId }).catch((error: unknown) => console.warn("[device-runtime] could not stop the Turn", error));
+    }
+    : null, [client]);
+  useDeviceDisplayInterrupts(stopDisplayTurn);
 
   const loadModels = useCallback(async (options: { force?: boolean } = {}) => {
     const activeClient = clientRef.current;
