@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Platform, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
-import type { ChatTimelineViewRef, TimelineFlight, TimelineNode, TimelineRowSpec } from "@/modules/cohub-chat-timeline";
+import type { ChatTimelineViewRef, TimelineFlight, TimelineNode, TimelineRowSpec, TimelineScrollEvent } from "@/modules/cohub-chat-timeline";
 import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
@@ -15,7 +15,7 @@ import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
 import { compactionFromMessage } from "@/src/data/compaction";
 import { useAppSelector, useSessionStream } from "@/src/data/context";
-import { record as recordDebugEvent } from "@/src/data/debug-session";
+import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { isOptimisticFollowup } from "@/src/data/followup-queue";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
@@ -30,6 +30,8 @@ const COPIED_MS = 1600;
 const TURN_START_PADDING = 8;
 const TARGET_POSITION = { viewPosition: 0.15, viewOffset: 8 };
 const IDLE_STEPS: StepsState = { status: "idle", content: null, error: null };
+const ROWS_RETRY_LIMIT = 5;
+const SCROLL_LOG_MS = 250;
 
 export type NativeChatTimelineHandle = {
   scrollToEnd(animated: boolean): void;
@@ -311,6 +313,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());
   const sentKeysRef = useRef<string[]>([]);
+  // A call made before the native view mounts is rejected; nothing else may change to resend it.
+  const [resend, setResend] = useState(0);
+  const rowsFailuresRef = useRef(0);
   useEffect(() => {
     const view = nativeRef.current;
     if (!view) return;
@@ -330,13 +335,15 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     for (const key of specs.keys) sent.set(key, specs.rows[key]!);
     sentRef.current = sent;
     sentKeysRef.current = specs.keys;
-    void view.setRows(specs.keys, changed).catch((error: unknown) => {
-      // Native kept its previous rows, so the next update sends every row again.
+    view.setRows(specs.keys, changed).then(() => { rowsFailuresRef.current = 0; }, (error: unknown) => {
+      // Native kept its previous rows, so the next attempt sends every row again.
       sentRef.current = new Map();
       sentKeysRef.current = [];
-      recordDebugEvent("chat.timeline.rows_failed", { message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
+      const attempt = ++rowsFailuresRef.current;
+      recordDebugEvent("chat.timeline.rows_failed", { attempt, message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
+      if (attempt <= ROWS_RETRY_LIMIT) requestAnimationFrame(() => setResend((count) => count + 1));
     });
-  }, [specs]);
+  }, [specs, resend]);
 
   const { onCopy, onRetry, onDiscard, onFork, onOpenRelated, onLoadOlder, onLoadNewer } = props;
   const handleAction = useCallback(({ nativeEvent }: { nativeEvent: { key: string | null; action: string; payload: Record<string, unknown> | null } }) => {
@@ -387,6 +394,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           router.push("/image-viewer");
         }
         return;
+      case "imageError":
+        recordDebugEvent("chat.timeline.image_failed", { session: debugAlias("session", sessionId), stage: payload?.stage ?? null, scheme: payload?.scheme ?? null, host: payload?.host ?? null, status: payload?.status ?? null, error: payload?.error ?? null });
+        return;
       case "stepsRetry":
         // A failed query refetches when its disclosure opens again.
         if (typeof payload?.turnId === "string") {
@@ -396,7 +406,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         }
         return;
     }
-  }, [onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenRelated, onRetry, openLink, router]);
+  }, [onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenRelated, onRetry, openLink, router, sessionId]);
 
   useImperativeHandle(ref, () => ({
     scrollToEnd: (animated) => { void nativeRef.current?.scrollToEnd(animated); },
@@ -408,6 +418,25 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   }), []);
 
   const { onVisibleMessages, onFollowingChange, onNearEdge, onLoad, onDragBegin, onFlightEnd, onScrollOffset, onWidth } = props;
+  const scrollLogRef = useRef({ at: 0, y: 0 });
+  const handleScroll = useCallback(({ nativeEvent }: { nativeEvent: TimelineScrollEvent }) => {
+    onScrollOffset(nativeEvent.offsetY);
+    const now = Date.now();
+    if (now - scrollLogRef.current.at < SCROLL_LOG_MS) return;
+    // The fields of the JS list's event, so logs from before and after the native timeline compare.
+    recordDebugEvent("chat.list.scroll", {
+      session: debugAlias("session", sessionId),
+      offsetY: Math.round(nativeEvent.offsetY),
+      deltaY: Math.round(nativeEvent.offsetY - scrollLogRef.current.y),
+      contentHeight: Math.round(nativeEvent.contentHeight),
+      viewportHeight: Math.round(nativeEvent.viewportHeight),
+      following: nativeEvent.following,
+      distanceToLatest: nativeEvent.distanceToLatest === null ? null : Math.round(nativeEvent.distanceToLatest),
+      dragging: nativeEvent.dragging,
+      momentum: nativeEvent.momentum,
+    });
+    scrollLogRef.current = { at: now, y: nativeEvent.offsetY };
+  }, [onScrollOffset, sessionId]);
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     setWidth(event.nativeEvent.layout.width);
     onWidth(event.nativeEvent.layout.width);
@@ -433,7 +462,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       onTimelineLoad={() => onLoad()}
       onScrollPhase={({ nativeEvent }) => { if (nativeEvent.phase === "dragBegin") onDragBegin(); }}
       onFlightEnd={() => onFlightEnd()}
-      onTimelineScroll={({ nativeEvent }) => onScrollOffset(nativeEvent.offsetY)}
+      onTimelineScroll={handleScroll}
       {...(Platform.OS === "ios" ? { refreshEnabled: true, refreshing: props.refreshing, onRefresh: props.onRefresh } : null)}
     />
   </View>;
