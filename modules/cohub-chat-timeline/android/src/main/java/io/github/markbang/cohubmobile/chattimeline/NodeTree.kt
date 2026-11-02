@@ -847,11 +847,14 @@ internal class NodeImageView(
     throwable: Throwable?,
   ) {
     val next = fallback?.takeIf { uri == source }
-    report(uri, throwable, if (next != null) "variant" else "final")
     if (next != null) {
+      report(uri, throwable, "variant")
       load(next)
       return
     }
+    // Fresco submits a failed request again whenever the row is reattached; that is not news.
+    if (failed) return
+    report(uri, throwable, "final")
     failed = true
     hierarchy.setBackgroundImage(null)
   }
@@ -877,10 +880,29 @@ internal class NodeImageView(
     )
   }
 
-  // The tap still reaches the row node, which opens the viewer; a failed thumbnail also reloads.
+  private var downX = 0f
+  private var downY = 0f
+
+  /**
+   * A tap on a failed thumbnail loads it again and still opens the viewer through the pressable
+   * parent. Scrolls are taken by the lists, which cancel the gesture before it ends here.
+   */
   override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
-    if (failed && event.actionMasked == android.view.MotionEvent.ACTION_DOWN) source?.let(::load)
-    return super.onTouchEvent(event)
+    if (!failed) return super.onTouchEvent(event)
+    when (event.actionMasked) {
+      android.view.MotionEvent.ACTION_DOWN -> {
+        downX = event.x
+        downY = event.y
+      }
+      android.view.MotionEvent.ACTION_UP -> {
+        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+        if (kotlin.math.abs(event.x - downX) <= slop && kotlin.math.abs(event.y - downY) <= slop) {
+          source?.let(::load)
+          (parent as? View)?.performClick()
+        }
+      }
+    }
+    return true
   }
 
   companion object {

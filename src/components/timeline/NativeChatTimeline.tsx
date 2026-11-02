@@ -30,7 +30,7 @@ const COPIED_MS = 1600;
 const TURN_START_PADDING = 8;
 const TARGET_POSITION = { viewPosition: 0.15, viewOffset: 8 };
 const IDLE_STEPS: StepsState = { status: "idle", content: null, error: null };
-const ROWS_RETRY_LIMIT = 5;
+const ROWS_RETRY_MAX_MS = 1000;
 const SCROLL_LOG_MS = 250;
 
 export type NativeChatTimelineHandle = {
@@ -316,6 +316,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   // A call made before the native view mounts is rejected; nothing else may change to resend it.
   const [resend, setResend] = useState(0);
   const rowsFailuresRef = useRef(0);
+  const rowsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (rowsRetryRef.current) clearTimeout(rowsRetryRef.current); }, []);
   useEffect(() => {
     const view = nativeRef.current;
     if (!view) return;
@@ -340,8 +342,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       sentRef.current = new Map();
       sentKeysRef.current = [];
       const attempt = ++rowsFailuresRef.current;
-      recordDebugEvent("chat.timeline.rows_failed", { attempt, message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
-      if (attempt <= ROWS_RETRY_LIMIT) requestAnimationFrame(() => setResend((count) => count + 1));
+      // The first failures are logged, then every tenth: a long stall retries once a second.
+      if (attempt <= 3 || attempt % 10 === 0) recordDebugEvent("chat.timeline.rows_failed", { attempt, message: error instanceof Error ? error.message.slice(0, 200) : "unknown" });
+      if (rowsRetryRef.current) clearTimeout(rowsRetryRef.current);
+      rowsRetryRef.current = setTimeout(() => {
+        rowsRetryRef.current = null;
+        setResend((count) => count + 1);
+      }, Math.min(ROWS_RETRY_MAX_MS, 16 * 2 ** (attempt - 1)));
     });
   }, [specs, resend]);
 
