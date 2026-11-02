@@ -16,8 +16,6 @@
 * **chat:** keep the timeline still while composer menus open and close ([#159](https://github.com/markbang/cohub-mobile/issues/159)) ([59beff7](https://github.com/markbang/cohub-mobile/commit/59beff7e7422bac5c31b57a1e5b7874e9be7771b))
 * **chat:** let the title capsule use the space beside the back button ([#158](https://github.com/markbang/cohub-mobile/issues/158)) ([288fad1](https://github.com/markbang/cohub-mobile/commit/288fad18434c3076097c110faf2053036926ae34))
 * **files:** render Markdown files with the native Markdown renderer ([#157](https://github.com/markbang/cohub-mobile/issues/157)) ([c88ea53](https://github.com/markbang/cohub-mobile/commit/c88ea53fef361acccfde003d1247fb3829df7b21))
-* **markdown:** measure list spacer lines as tall as they are drawn ([#153](https://github.com/markbang/cohub-mobile/issues/153)) ([3c8d3ca](https://github.com/markbang/cohub-mobile/commit/3c8d3caef78f96096ec7d6018e94a0de24593d6f))
-* **markdown:** measure list spacer lines as tall as they are drawn ([#153](https://github.com/markbang/cohub-mobile/issues/153)) ([3dd23a3](https://github.com/markbang/cohub-mobile/commit/3dd23a368490a92b8b1eb54478853cc4836938b8))
 * **markdown:** measure list spacer lines as tall as they are drawn ([#156](https://github.com/markbang/cohub-mobile/issues/156)) ([3c8d3ca](https://github.com/markbang/cohub-mobile/commit/3c8d3caef78f96096ec7d6018e94a0de24593d6f))
 * **ui:** open drawn menus in place of the control that opens them ([03c0104](https://github.com/markbang/cohub-mobile/commit/03c0104f79980254aa15cc89efa6e1ef2e279a43))
 
