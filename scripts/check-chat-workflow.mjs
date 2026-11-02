@@ -28,6 +28,7 @@ import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendM
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
+import { DEVICE_CLI, deviceCliStateKey, shouldInstallDeviceCli } from "../src/data/device-cli.ts";
 import { accessTokenExpiresAt, conflictedDeviceRuntimes, deviceDisplayStateKey, deviceFolderName, deviceRuntimeRefusalKey, deviceRuntimeStateKey, isDeviceRuntimeRunning, runtimeGatewayOrigin } from "../src/data/device-runtime.ts";
 import { applySpaceToSessionSummaries, listAllSpaces, selectSpaceList, recentSpaceVisits, SPACE_VISIT_MAX_AGE_MS } from "../src/data/space-list.ts";
 import { createSessionLifecycle } from "../src/data/session-lifecycle.ts";
@@ -4005,6 +4006,7 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
       "@/modules/cohub-device-runtime": { __esModule: true, default: runtime },
       "@/src/config": { config: {} },
       "@/src/data/device-runtime": {},
+      "@/src/data/device-cli": { DEVICE_CLI, shouldInstallDeviceCli },
     };
     new Function("require", "exports", source)((name) => {
       assert.ok(name in dependencies, `Unexpected device Runtime dependency: ${name}`);
@@ -4025,6 +4027,19 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   assert.equal(ios.deviceRuntimeSupported, false);
   assert.throws(() => ios.isDeviceControlKeepAliveEnabled(), /cannot serve a Space/);
   assert.deepEqual(calls, [false, true, false], "unsupported platforms do not configure native services");
+}
+{
+  const cli = (status, version = null, error = null) => ({ status, version, progress: null, error });
+  assert.equal(shouldInstallDeviceCli(cli("absent"), false), false, "the CLI downloads only while this device serves a Space");
+  assert.equal(shouldInstallDeviceCli(cli("absent"), true), true);
+  assert.equal(shouldInstallDeviceCli(cli("ready", DEVICE_CLI.version), true), false, "the pinned version is not downloaded again");
+  assert.equal(shouldInstallDeviceCli(cli("ready", "0.0.1"), true), true, "a new pin replaces the installed version");
+  assert.equal(shouldInstallDeviceCli(cli("installing"), true), false);
+  assert.equal(shouldInstallDeviceCli(cli("unsupported"), true), false, "phones without the launcher (not arm64) never download");
+  assert.equal(deviceCliStateKey(cli("ready", "0.0.1", "checksum_mismatch")), "deviceRuntime.cli.failed", "a failed update says so even with an older version in place");
+  assert.equal(deviceCliStateKey(cli("unsupported")), null);
+  for (const url of [DEVICE_CLI.nodeUrl, DEVICE_CLI.cliUrl]) assert.match(url, /^https:\/\/github\.com\/markbang\/cohub-mobile\/releases\/download\/android-cli-v/);
+  for (const sha of [DEVICE_CLI.nodeSha256, DEVICE_CLI.cliSha256]) assert.match(sha, /^[0-9a-f]{64}$/);
 }
 assert.equal(runtimeGatewayOrigin("wss://cgateway.neta.art/ws"), "wss://cgateway.neta.art");
 assert.equal(runtimeGatewayOrigin("wss://cgateway-dev.neta.art/ws/"), "wss://cgateway-dev.neta.art");
