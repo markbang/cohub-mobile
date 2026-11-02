@@ -6,11 +6,11 @@ import { clearForegroundSession, setForegroundSession } from "@/src/platform/not
 import { useFocusEffect, useLocalSearchParams, useNavigation, useNavigationContainerRef, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Alert, Dimensions, KeyboardAvoidingView as RNKeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, Text, TextInput, View, useWindowDimensions, type LayoutChangeEvent, type ViewToken } from "react-native";
-import Animated, { cubicBezier, Easing, FadeIn, FadeOut, ReduceMotion, useAnimatedRef, useReducedMotion, withTiming } from "react-native-reanimated";
+import Animated, { cubicBezier, Easing, FadeIn, FadeOut, ReduceMotion, useAnimatedRef, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { curves, motion } from "@/src/motion";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
-import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-controller";
+import { KeyboardAvoidingView, KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
 import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
@@ -381,12 +381,35 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const lastScrollRef = useRef({ y: 0, height: 0, viewport: 0 });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const keyboardInsetRef = useRef(0);
+  // On Android a composer menu's Modal replays the keyboard state when it shows and again when it is dismissed.
+  // The list takes each zero-height replay for a fresh close and scrolls back by its last keyboard lift, so its
+  // keyboard handling holds from opening a menu over a hidden keyboard until the dismissal replay has passed.
+  const listKeyboardFrozen = useSharedValue(false);
+  const listKeyboardFrozenRef = useRef(false);
+  const composerMenuOpenRef = useRef(false);
+  const composerMenuOpen = attachmentMenuOpen || modelSelectorOpen || harnessMenuOpen;
+  useLayoutEffect(() => { composerMenuOpenRef.current = composerMenuOpen; }, [composerMenuOpen]);
+  const setListKeyboardFrozen = useCallback((frozen: boolean) => {
+    if (listKeyboardFrozenRef.current === frozen) return;
+    listKeyboardFrozenRef.current = frozen;
+    listKeyboardFrozen.set(frozen);
+  }, [listKeyboardFrozen]);
+  // Called on press, ahead of the Modal: the list reads `freeze` through a derived value a frame later.
+  const freezeListForComposerMenu = useCallback(() => {
+    if (Platform.OS === "android" && !KeyboardController.isVisible()) setListKeyboardFrozen(true);
+  }, [setListKeyboardFrozen]);
   useEffect(() => {
-    // Only the settled inset counts; see `chatListDistances`.
-    const shown = KeyboardEvents.addListener("keyboardDidShow", (event) => { keyboardInsetRef.current = Math.max(0, event.height - keyboardCoveredInset); });
+    // Each replay ends in a JS keyboard event after its list handlers already ran, so release on the first one with no menu open.
+    const settle = () => { if (Platform.OS === "android") setListKeyboardFrozen(composerMenuOpenRef.current); };
+    // Only the settled inset counts; see `chatListDistances`. A frozen list does not lift for the model search keyboard.
+    const shown = KeyboardEvents.addListener("keyboardDidShow", (event) => {
+      keyboardInsetRef.current = listKeyboardFrozenRef.current ? 0 : Math.max(0, event.height - keyboardCoveredInset);
+      settle();
+    });
     const hiding = KeyboardEvents.addListener("keyboardWillHide", () => { keyboardInsetRef.current = 0; });
-    return () => { shown.remove(); hiding.remove(); };
-  }, [keyboardCoveredInset]);
+    const hidden = KeyboardEvents.addListener("keyboardDidHide", settle);
+    return () => { shown.remove(); hiding.remove(); hidden.remove(); };
+  }, [keyboardCoveredInset, setListKeyboardFrozen]);
   const alwaysScrollLogRef = useRef({ at: 0, y: 0 });
   const traceRequestId = useRef(0);
   const traceCancelGeneration = useRef(0);
@@ -1301,6 +1324,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           alignItemsAtEnd
           keyboardLiftBehavior="always"
           keyboardOffset={keyboardCoveredInset}
+          freeze={listKeyboardFrozen}
           maintainScrollAtEnd={maintainScrollAtEnd}
           maintainScrollAtEndThreshold={CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD}
           estimatedItemSize={FALLBACK_ROW_HEIGHT}
@@ -1351,11 +1375,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </Animated.View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-        <ComposerInput harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
+        <ComposerInput harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
