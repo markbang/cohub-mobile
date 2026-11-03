@@ -192,7 +192,9 @@ function gallery(ctx: NodeContext, uris: string[], maxWidth: number, idPrefix = 
   if (uris.length === 1) return thumb(uris[0]!, 0);
   // No fixed height: Yoga skips the measure function of a node sized on both axes, and Android lays
   // out a scroll view's content only there, so the thumbnails would be 0×0.
-  return { type: "scroll", horizontal: true, style: { width: maxWidth }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
+  const strip: TimelineNode = { type: "scroll", horizontal: true, style: { width: maxWidth }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
+  // Android scroll views clip only inside a clipping parent; a bubble does not clip, so scrolled thumbnails would spill out of it.
+  return { type: "view", style: { width: maxWidth, overflow: "hidden" }, children: [strip] };
 }
 
 /** Resolved sandbox images by path. A reply's text draws the ones it references; the rest stay links. */
