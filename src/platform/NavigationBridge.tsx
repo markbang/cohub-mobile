@@ -1,6 +1,7 @@
 import * as ExpoLinking from "expo-linking";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect } from "react";
+import { usePathname, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef } from "react";
+import { chatLinkNavigation } from "@/src/data/chat-link-navigation";
 import {
   getInitialNotificationUrl,
   subscribeToNotificationResponses,
@@ -23,6 +24,10 @@ function routeFromUrl(rawUrl: string) {
 
 export function NativeInteractionBridge() {
   const router = useRouter();
+  // A ref, so navigating does not re-run the listener effect and replay the initial URL.
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
   const openUrl = useCallback((rawUrl: string | null | undefined) => {
     if (!rawUrl) return;
@@ -33,6 +38,12 @@ export function NativeInteractionBridge() {
     if (resource === "chat") {
       const turn = result.parsed.searchParams.get("turn");
       const turnId = result.parsed.searchParams.get("turnId");
+      const navigation = chatLinkNavigation(pathnameRef.current, { sessionId: id, turn, turnId });
+      if (navigation.kind === "none") return;
+      if (navigation.kind === "setParams") {
+        router.setParams(navigation.params);
+        return;
+      }
       router.push({
         pathname: "/chat/[sessionId]",
         params: { sessionId: id, ...(turn ? { turn } : {}), ...(turnId ? { turnId } : {}) },

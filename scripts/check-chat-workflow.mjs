@@ -11,6 +11,7 @@ import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
+import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
@@ -4953,5 +4954,12 @@ const pickerRuntime = { kind: "local", online: true, capabilities: { harnesses: 
 assert.deepEqual(harnessView(pickerRuntime), ["cohub:ready", "codex:ready", "claude:ready", "pi:missing", "workbuddy:missing", "cursor:missing"]);
 // Cached capabilities of an offline Runtime are not connected harnesses.
 assert.deepEqual(harnessView({ ...pickerRuntime, online: false }), ["cohub:ready", "pi:offline", "codex:offline", "claude:offline", "workbuddy:offline", "cursor:offline"]);
+
+assert.deepEqual(chatLinkNavigation("/", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" });
+assert.deepEqual(chatLinkNavigation("/chat/s2", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" }, "a link to another Chat drills in over the current one");
+assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, turnId: null }), { kind: "none" }, "a link to the Chat on screen must not stack a copy of it");
+assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, turnId: "t9" }), { kind: "setParams", params: { turn: undefined, turnId: "t9" } }, "a turn link to the Chat on screen retargets it in place");
+assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: "4", turnId: null }), { kind: "setParams", params: { turn: "4", turnId: undefined } }, "the previous turn target is cleared");
+assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" });
 
 console.log("Chat workflow checks passed");
