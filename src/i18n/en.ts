@@ -97,6 +97,7 @@ export const en = {
   "ui.composer.voiceStart": "Start voice input",
   "ui.composer.voiceStop": "Stop voice input",
   "ui.composer.send": "Send message",
+  "ui.composer.queue": "Queue follow-up",
   "ui.composer.stop": "Stop generation",
   "ui.composer.expand": "Expand message input",
   "ui.composer.collapse": "Collapse message input",

@@ -3576,20 +3576,23 @@ const searchResult = (overrides = {}) => ({
 
 assert.deepEqual(
   getComposerActionState({ text: "follow up", hasAttachment: false, disabled: false, sending: false, running: true, hasStopHandler: true }),
-  { blocked: false, hasDraft: true, canSend: true, canStop: false },
+  { blocked: false, hasDraft: true, canSend: true, canStop: false, queues: true, glyph: "send" },
 );
 assert.deepEqual(
   getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: true, hasStopHandler: true }),
-  { blocked: false, hasDraft: false, canSend: false, canStop: true },
+  { blocked: false, hasDraft: false, canSend: false, canStop: true, queues: false, glyph: "stop" },
 );
 assert.deepEqual(
   getComposerActionState({ text: "", hasAttachment: true, disabled: false, sending: false, running: true, hasStopHandler: true }),
-  { blocked: false, hasDraft: true, canSend: true, canStop: false },
+  { blocked: false, hasDraft: true, canSend: true, canStop: false, queues: true, glyph: "send" },
 );
 assert.deepEqual(
   getComposerActionState({ text: "follow up", hasAttachment: false, disabled: false, sending: true, running: true, hasStopHandler: true }),
-  { blocked: true, hasDraft: true, canSend: false, canStop: false },
+  { blocked: true, hasDraft: true, canSend: false, canStop: false, queues: false, glyph: "sending" },
 );
+assert.equal(getComposerActionState({ text: "hi", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true }).queues, false, "an idle Chat sends instead of queueing");
+assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true, sendFeedback: "success" }).glyph, "sent");
+assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: true, hasStopHandler: true, sendFeedback: "success" }).glyph, "stop", "a running turn shows stop over the sent check");
 const composerLayoutInput = { text: "hello", contentHeight: 30, lineHeight: 22, availableHeight: 800, expanded: false };
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "" }), {
   expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,

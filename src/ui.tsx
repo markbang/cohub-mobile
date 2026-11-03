@@ -550,7 +550,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
     if (autoExpandedFor !== null) setAutoExpandedFor(null);
     if (expanded) setExpanded(false);
   }
-  const { blocked, canSend, canStop } = getComposerActionState({ text: value, hasAttachment, disabled, sending, running, hasStopHandler: Boolean(onStop) });
+  const { blocked, canSend, canStop, queues, glyph } = getComposerActionState({ text: value, hasAttachment, disabled, sending, running, hasStopHandler: Boolean(onStop), sendFeedback });
   // A JS-driven append is invisible to the native measurement (Android's watcher reads a
   // stale layout and never re-fires; iOS defers the event until the height prop changes),
   // so the width-aware estimate stands in for it; a later real measurement still wins.
@@ -661,9 +661,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           </Pressable> : null}
           <View className="flex-1 min-w-0" />
           {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={22} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
-            <Animated.View key={canStop ? "stop" : sendFeedback === "success" ? "sent" : sending ? "sending" : "send"} entering={controlIconEntering} exiting={controlIconExiting}>
-              {canStop ? <AppIcon name="stop" size={18} color={theme.colors.background} fill={theme.colors.background} /> : sendFeedback === "success" ? <AppIcon name="check" size={22} tone="onAccent" /> : sending ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : queues ? t("ui.composer.queue") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
+            <Animated.View key={glyph} entering={controlIconEntering} exiting={controlIconExiting}>
+              {glyph === "stop" ? <AppIcon name="stop" size={18} color={theme.colors.background} fill={theme.colors.background} /> : glyph === "sent" ? <AppIcon name="check" size={22} tone="onAccent" /> : glyph === "sending" ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
             </Animated.View>
           </Pressable>
         </View>

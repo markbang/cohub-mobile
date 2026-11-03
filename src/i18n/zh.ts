@@ -96,6 +96,7 @@ export const zh: Record<TranslationKey, string> = {
   "ui.composer.voiceStart": "开始语音输入",
   "ui.composer.voiceStop": "停止语音输入",
   "ui.composer.send": "发送消息",
+  "ui.composer.queue": "排队发送后续消息",
   "ui.composer.stop": "停止生成",
   "ui.composer.expand": "放大输入框",
   "ui.composer.collapse": "收起输入框",
