@@ -18,7 +18,6 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
 import { config } from "@/src/config";
@@ -75,6 +74,7 @@ import { shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
+import { isAppActive, subscribeAppActive } from "@/src/platform/app-lifecycle";
 import { useDeviceDisplayInterrupts, useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
@@ -1118,7 +1118,7 @@ export function AppProvider({
         turnStatuses: stateRef.current.sessionTurnStatuses,
         cached: options.silent,
         activeOnly: options.activeOnly,
-        shouldContinue: () => generation === statusGenerationRef.current && (!options.silent || NativeAppState.currentState === "active"),
+        shouldContinue: () => generation === statusGenerationRef.current && (!options.silent || isAppActive()),
       });
     } catch (error) {
       statusError = errorMessage(error, "Unable to refresh Chat statuses. Check your connection and retry.");
@@ -1272,7 +1272,7 @@ export function AppProvider({
   const discoverRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
     const pending = runningDiscoveryRequests.current.get(source);
     if (pending) return pending;
-    if (!client || NativeAppState.currentState !== "active") return Promise.resolve();
+    if (!client || !isAppActive()) return Promise.resolve();
     const generation = statusGenerationRef.current;
     const revision = sessionEventRevision.current;
     const controller = new AbortController();
@@ -1435,13 +1435,13 @@ export function AppProvider({
       // The SDK exposes no reconnect; subscribing restarts a stopped socket.
       reconnect: () => client.onUserEvent(() => undefined)(),
       onUnavailableChange: setConnectionUnavailable,
-      isActive: () => NativeAppState.currentState === "active",
+      isActive: isAppActive,
       graceMs: REALTIME_UNAVAILABLE_GRACE_MS,
       retryBaseMs: REALTIME_RETRY_BASE_MS,
       retryMaxMs: REALTIME_RETRY_MAX_MS,
     });
-    const appState = NativeAppState.addEventListener("change", (next) => {
-      if (next === "active") recovery.foreground();
+    const stopAppActive = subscribeAppActive((active) => {
+      if (active) recovery.foreground();
     });
     const stopConnection = client.onConnection((snapshot) => {
       const previous = connectionStateRef.current;
@@ -1463,15 +1463,15 @@ export function AppProvider({
     });
     return () => {
       stopConnection();
-      appState.remove();
+      stopAppActive();
       recovery.dispose();
       setConnectionUnavailable(false);
     };
   }, [client, queryClient, setConnectionState, setConnectionUnavailable]);
 
   useEffect(() => {
-    const subscription = NativeAppState.addEventListener("change", (next) => {
-      if (next !== "active") {
+    return subscribeAppActive((active) => {
+      if (!active) {
         for (const controller of runningDiscoveryControllers.current.values()) controller.abort();
         runningDiscoveryControllers.current.clear();
         runningDiscoveryRequests.current.clear();
@@ -1481,7 +1481,6 @@ export function AppProvider({
       for (const sessionId of subscriptions.current.keys()) resyncCoordinatorRef.current.request(sessionId, "foreground");
       void queryClient.invalidateQueries();
     });
-    return () => subscription.remove();
   }, [queryClient]);
 
   // These queries schedule reducer-owned reads; their data is only a completion stamp.
@@ -1608,9 +1607,9 @@ export function AppProvider({
 
   useEffect(() => {
     if (!spaceRealtime) return;
-    spaceRealtime.setActive(NativeAppState.currentState === "active");
-    const subscription = NativeAppState.addEventListener("change", (next) => spaceRealtime.setActive(next === "active"));
-    return () => { subscription.remove(); spaceRealtime.setActive(false); };
+    spaceRealtime.setActive(isAppActive());
+    const stopAppActive = subscribeAppActive((active) => spaceRealtime.setActive(active));
+    return () => { stopAppActive(); spaceRealtime.setActive(false); };
   }, [spaceRealtime]);
 
   useEffect(() => {

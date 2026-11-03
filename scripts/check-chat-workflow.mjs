@@ -12,6 +12,7 @@ import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
+import { createForegroundGate } from "../src/data/foreground-handoff.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -586,6 +587,7 @@ const formScope = {
     useAppTheme: () => ({ colors: {} }),
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", Screen: "Screen", TopBar: "TopBar", FIELD_INPUT_CLASS: "", Loader: "Loader",
     ScrollView: "ScrollView", View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable",
+    withForegroundHandoff: (task) => task(),
     ImagePicker: { requestMediaLibraryPermissionsAsync: async () => ({ granted: permissionGranted }), launchImageLibraryAsync: async () => pickerResult },
     ExpoFile: MockAvatarFile, Paths: { cache: "/cache" },
     toUint8Array: () => ({ byteLength }),
@@ -2509,7 +2511,7 @@ function inspectSyncEffects(node) {
 inspectSyncEffects(contextSource);
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
 try {
-  const scope = { NativeAppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) } };
+  const scope = { isAppActive: () => true, subscribeAppActive: () => () => {} };
 
   let events = 0;
   let listener;
@@ -2518,7 +2520,7 @@ try {
     subscribe: (_id, callback) => { listener = callback; subscribed++; return () => { subscribed--; }; },
     event: () => { events++; }, error: () => {},
   });
-  const restartEffect = new Function("spaceRealtime", "NativeAppState", `return (${spaceRealtimeEffect});`)(spaceRealtime, scope.NativeAppState);
+  const restartEffect = new Function("spaceRealtime", "isAppActive", "subscribeAppActive", `return (${spaceRealtimeEffect});`)(spaceRealtime, scope.isAppActive, scope.subscribeAppActive);
   restartEffect()();
   const stopEffect = restartEffect();
   const stopRoom = spaceRealtime.watch(["visible-space"]);
@@ -5005,6 +5007,31 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(msUntilRelativeTimeChange(ago(59 * 60_000 + 30_000), now), 30_000, "59m becomes 1h at the hour");
   assert.equal(msUntilRelativeTimeChange(ago(3 * 3_600_000), now), 3_600_000);
   assert.equal(msUntilRelativeTimeChange(ago(8 * 86_400_000), now), null, "a date label never changes, so nothing waits on it");
+}
+
+{
+  let clock = 0;
+  const gate = createForegroundGate(() => clock, 60_000);
+  assert.deepEqual(gate.next(false), [false], "leaving without a handoff tears live work down");
+  assert.deepEqual(gate.next(true), [true]);
+  const end = gate.begin();
+  assert.deepEqual(gate.next(false), [], "a picker the app opened is not a background trip");
+  assert.equal(gate.active(), true);
+  end();
+  end();
+  clock = 5_000;
+  assert.deepEqual(gate.next(true), [], "returning from the picker refetches nothing, even when its result resolved first");
+  const endLong = gate.begin();
+  gate.next(false);
+  endLong();
+  clock = 70_001;
+  assert.deepEqual(gate.next(true), [false, true], "a long trip may have suspended the process, so it refreshes like a real background");
+  const endHome = gate.begin();
+  gate.next(false);
+  endHome();
+  assert.equal(gate.holding(), true);
+  assert.deepEqual(gate.next(false), [false], "settling a held report while still away delivers the background");
+  assert.deepEqual(gate.next(true), [true]);
 }
 
 console.log("Chat workflow checks passed");

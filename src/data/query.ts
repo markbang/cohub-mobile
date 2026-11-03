@@ -1,15 +1,13 @@
 import { focusManager, QueryClient, useQuery, useQueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 import { useIsFocused } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { subscribeAppActive } from "@/src/platform/app-lifecycle";
 
 export { createScopeInvalidator, invalidateScopes } from "./query-scopes";
 
 // Foregrounding the app counts as window focus, so stale queries refetch and polling pauses in the background.
-focusManager.setEventListener((setFocused) => {
-  const subscription = AppState.addEventListener("change", (state) => setFocused(state === "active"));
-  return () => subscription.remove();
-});
+// A picker or share sheet the app opened is not a background trip.
+focusManager.setEventListener((setFocused) => subscribeAppActive(setFocused));
 
 function isAccessDenied(error: unknown) {
   const cause = error instanceof Error && error.cause ? error.cause : error;

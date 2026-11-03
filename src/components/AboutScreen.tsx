@@ -17,6 +17,7 @@ import { ROUNDED_TITLE } from "@/src/ui/rounded";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme, MAX_FONT_SCALE } from "@/src/theme";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
 const REPOSITORY_URL = "https://github.com/markbang/cohub-mobile";
 const RELEASES_URL = `${REPOSITORY_URL}/releases`;
@@ -67,7 +68,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
 
   const pickFeedbackFiles = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true });
+      const result = await withForegroundHandoff(() => DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true }));
       if (result.canceled) return;
       appendAttachments(result.assets.map((asset) => ({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream", size: asset.size ?? 0 })));
     } catch (error) {
@@ -77,12 +78,12 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
 
   const pickFeedbackPhotos = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync());
       if (!permission.granted) {
         setFeedbackError(t("about.feedback.photoOff"));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 });
+      const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 }));
       if (result.canceled) return;
       appendAttachments(result.assets.map((asset, index) => ({ uri: asset.uri, name: asset.fileName || `image-${index + 1}.jpg`, mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 })));
     } catch (error) {
