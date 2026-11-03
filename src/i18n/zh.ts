@@ -117,6 +117,10 @@ export const zh: Record<TranslationKey, string> = {
   "ui.openNamed": "打开{name}",
   "ui.active": "活跃",
   "ui.activeAgo": "{time}前活跃",
+  "time.now": "刚刚",
+  "time.minutes": "{count} 分钟前",
+  "time.hours": "{count} 小时前",
+  "time.days": "{count} 天前",
   "ui.status.queued": "排队中",
 
   // Authentication

@@ -3,7 +3,8 @@ import { useEffect, useReducer, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
 import { AvatarStatus, LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
-import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/utils";
+import { displayForkSessionTitle, previewText } from "@/src/utils";
+import { useRelativeTime } from "@/src/data/use-relative-time";
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
@@ -109,6 +110,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const shownLabels = labels.slice(0, 2);
   // A hold peeks at the last exchange; rows whose hold already manages labels keep it.
   const peek = !onLongPress;
+  const age = useRelativeTime(session.lastMessageAt ?? session.updatedAt);
   const toggleRead = () => {
     const write = unread ? markSessionSeen(session.id, session.lastMessageId) : markSessionUnread(session.id);
     void write.catch(() => toast({ title: t("session.readState.saveFailed"), tone: "danger" }));
@@ -117,13 +119,13 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     ? { icon: "check-check", title: t("session.markRead"), onPress: toggleRead } as const
     : { icon: "message-square", title: t("session.markUnread"), onPress: toggleRead } as const;
   const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }, readAction] as const;
-  const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? formatRelativeTime(session.lastMessageAt ?? session.updatedAt) };
+  const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? age };
   const row = <ListRow
     leading={leading}
     compact={branch}
     title={title}
     titlePrefix={titlePrefix}
-    meta={formatRelativeTime(session.lastMessageAt ?? session.updatedAt)}
+    meta={age}
     subtitle={subtitleNode}
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
     // A fork tree reads as one item: its guide lines run unbroken and only its end draws a separator.

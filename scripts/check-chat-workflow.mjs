@@ -11,6 +11,7 @@ import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
+import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -667,7 +668,7 @@ const formScope = {
     ContextMenu: "ContextMenu", NativeContextMenu: "NativeContextMenu", SwipeActions: "SwipeActions",
     haptics: { longPress() {} }, debugAlias: (_kind, id) => id,
     sessionListStatus, sessionActivity,
-    displayForkSessionTitle: () => "Chat", formatRelativeTime: () => "now", previewText: () => "",
+    displayForkSessionTitle: () => "Chat", useRelativeTime: () => "now", previewText: () => "",
   });
   const staleSession = {
     id: "chat", spaceId: "space", title: "Chat", updatedAt: "2026-01-01T00:00:00Z", lastMessageAt: "2026-01-01T00:00:00Z",
@@ -4992,5 +4993,18 @@ assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, t
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, turnId: "t9" }), { kind: "setParams", params: { turn: undefined, turnId: "t9" } }, "a turn link to the Chat on screen retargets it in place");
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: "4", turnId: null }), { kind: "setParams", params: { turn: "4", turnId: undefined } }, "the previous turn target is cleared");
 assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" });
+
+{
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const ago = (ms) => now - ms;
+  assert.deepEqual(relativeTime(ago(59_000), now), { unit: "now" });
+  assert.deepEqual(relativeTime(now + 5_000, now), { unit: "now" }, "a clock running ahead of the server reads as now");
+  assert.deepEqual(relativeTime(ago(61 * 60_000), now), { unit: "hours", count: 1 });
+  assert.deepEqual(relativeTime(ago(8 * 86_400_000), now), { unit: "date" });
+  assert.equal(msUntilRelativeTimeChange(ago(20_000), now), 40_000, "now becomes 1m at the minute");
+  assert.equal(msUntilRelativeTimeChange(ago(59 * 60_000 + 30_000), now), 30_000, "59m becomes 1h at the hour");
+  assert.equal(msUntilRelativeTimeChange(ago(3 * 3_600_000), now), 3_600_000);
+  assert.equal(msUntilRelativeTimeChange(ago(8 * 86_400_000), now), null, "a date label never changes, so nothing waits on it");
+}
 
 console.log("Chat workflow checks passed");

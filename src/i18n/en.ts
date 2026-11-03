@@ -118,6 +118,10 @@ export const en = {
   "ui.openNamed": "Open {name}",
   "ui.active": "Active",
   "ui.activeAgo": "Active {time} ago",
+  "time.now": "now",
+  "time.minutes": "{count}m",
+  "time.hours": "{count}h",
+  "time.days": "{count}d",
   "ui.status.queued": "Queued",
 
   // Authentication
