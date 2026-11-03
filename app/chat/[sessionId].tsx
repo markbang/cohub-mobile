@@ -67,6 +67,7 @@ import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistan
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
+import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
@@ -1376,6 +1377,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
+        <RenderErrorBoundary name="chat-timeline" resetKeys={[listGeneration]} fallback={(failure) => <View className="flex-1" style={{ paddingTop: headerHeight, paddingBottom: footerHeight }}><RenderFailureView {...failure} title={t("ui.renderFailed.chatTitle")} /></View>}>
         {timelineReady && nativeChatTimeline ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><NativeChatTimeline
           key={listGeneration}
           ref={timelineRef}
@@ -1461,6 +1463,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
+        </RenderErrorBoundary>
         {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
 
         </View>
