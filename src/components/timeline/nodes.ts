@@ -8,6 +8,7 @@ import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { formatMessageClock } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { imageThumbnailUrl } from "@/src/data/media";
+import { messageMarkdownImages } from "@/src/data/message-links";
 import type { RelatedSessionView } from "@/src/data/related-sessions";
 import { isFailedSend } from "@/src/data/session-history";
 import { toolCallPreview } from "@/src/data/tool-call";
@@ -178,13 +179,13 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
   return { type: "view", id, style: { width, overflow: "hidden" }, children };
 }
 
-function gallery(ctx: NodeContext, uris: string[], maxWidth: number): TimelineNode {
+function gallery(ctx: NodeContext, uris: string[], maxWidth: number, idPrefix = "image"): TimelineNode {
   const size = Math.max(0, Math.min(164, ctx.width * 0.42, maxWidth));
   const scale = PixelRatio.get();
   // Android's image covers this glyph with its background until both sources have failed.
   const failed: TimelineNode[] = Platform.OS === "android" ? [{ type: "view", style: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" }, children: [icon("images", 22, ctx.theme.colors.textMuted)] }] : [];
   const thumb = (uri: string, index: number): TimelineNode => pressable({
-    id: `image:${index}`, action: "openImage", payload: { uris, index }, accessibilityLabel: ctx.t("message.openImage", { index: index + 1, total: uris.length }), pressedOpacity: 0.78,
+    id: `${idPrefix}:${index}`, action: "openImage", payload: { uris, index }, accessibilityLabel: ctx.t("message.openImage", { index: index + 1, total: uris.length }), pressedOpacity: 0.78,
     style: { width: size, height: size, borderRadius: 12, overflow: "hidden", backgroundColor: color(ctx.theme.colors.surfaceRaised) },
     children: [...failed, { type: "image", uri: imageThumbnailUrl(uri, size, scale), fallbackUri: uri, style: { width: size, height: size, borderRadius: 12, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
   });
@@ -192,8 +193,36 @@ function gallery(ctx: NodeContext, uris: string[], maxWidth: number): TimelineNo
   return { type: "scroll", horizontal: true, style: { width: maxWidth, height: size }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
 }
 
+/** Resolved sandbox images by path. A reply's text draws the ones it references; the rest stay links. */
+export type SandboxImages = ReadonlyMap<string, string>;
+
+export const NO_SANDBOX_IMAGES: SandboxImages = new Map();
+
+/** `TextBlock` with `sandboxImages`: the reply's Markdown, then the sandbox images it references. */
+function replyMarkdown(ctx: NodeContext, value: string, images: SandboxImages, width: number, options: Parameters<typeof markdown>[2]): TimelineNode[] {
+  const parsed = messageMarkdownImages(value);
+  const uris = parsed.images.flatMap((path) => images.get(path) ?? []);
+  const node = markdown(ctx, parsed.markdown, options);
+  return uris.length ? [node, gallery(ctx, uris, width, `sandbox:${options.id ?? "text"}`)] : [node];
+}
+
+const replyImagePathsCache = new WeakMap<MessageRecord, string[]>();
+
+/** Sandbox image paths a finished reply's answer references, in the order `assistantMessageNode` draws them. */
+export function replyImagePaths(message: MessageRecord): string[] {
+  const cached = replyImagePathsCache.get(message);
+  if (cached) return cached;
+  const answer = answerBlocks(message.content);
+  const texts = hasRenderableContent(answer)
+    ? answer.flatMap((block) => block.type === "text" ? [block.text] : [])
+    : thinkingBlocks(message.content).length === 0 && message.text?.trim() ? [message.text] : [];
+  const paths = [...new Set(texts.flatMap((value) => messageMarkdownImages(value).images))];
+  replyImagePathsCache.set(message, paths);
+  return paths;
+}
+
 /** `MessageContent`: the blocks of one message or step list, in order. */
-export function contentNodes(ctx: NodeContext, scope: string, content: ContentBlock[] | null | undefined, options: { width: number; color?: string; linkColor?: string; onUser?: boolean; active?: boolean; streamingText?: string | null }): TimelineNode[] {
+export function contentNodes(ctx: NodeContext, scope: string, content: ContentBlock[] | null | undefined, options: { width: number; color?: string; linkColor?: string; onUser?: boolean; active?: boolean; streamingText?: string | null; sandboxImages?: SandboxImages }): TimelineNode[] {
   const blocks = content ?? [];
   const results = new Map<string, Extract<ContentBlock, { type: "tool_result" }>>();
   for (const block of blocks) if (block.type === "tool_result" && block.tool_use_id) results.set(block.tool_use_id, block);
@@ -208,7 +237,9 @@ export function contentNodes(ctx: NodeContext, scope: string, content: ContentBl
       if (!block.text.trim()) return;
       // Only the trailing text block is still being written; it gets the paced prefix.
       const value = options.active && index === lastText && options.streamingText != null ? options.streamingText : block.text;
-      nodes.push(markdown(ctx, value, { id: `text:${index}`, color: tint, linkColor: options.linkColor, onUser: options.onUser, streaming: options.active && index === lastText }));
+      const textOptions = { id: `text:${index}`, color: tint, linkColor: options.linkColor, onUser: options.onUser, streaming: options.active && index === lastText };
+      if (options.sandboxImages) nodes.push(...replyMarkdown(ctx, value, options.sandboxImages, options.width, textOptions));
+      else nodes.push(markdown(ctx, value, textOptions));
     } else if (block.type === "thinking") {
       if (!block.thinking.trim()) return;
       nodes.push(markdown(ctx, block.thinking, { id: `thinking:${scope}:${index}`, color: ctx.theme.colors.textMuted, onUser: options.onUser, streaming: options.active }));
@@ -308,15 +339,15 @@ function replyMeta(ctx: NodeContext, key: string, message: MessageRecord, option
   };
 }
 
-export function assistantMessageNode(ctx: NodeContext, key: string, message: MessageRecord, options: { copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean }): TimelineNode {
+export function assistantMessageNode(ctx: NodeContext, key: string, message: MessageRecord, options: { copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean; sandboxImages: SandboxImages }): TimelineNode {
   const { theme } = ctx;
   const contentWidth = getReplyContentWidth(ctx.width);
   const tint = theme.colors.assistantBubbleText;
   const answer = answerBlocks(message.content);
   const thought = thinkingBlocks(message.content).length > 0;
   const body = hasRenderableContent(answer)
-    ? contentNodes(ctx, message.id, answer, { width: contentWidth, color: tint })
-    : !thought && message.text?.trim() ? [markdown(ctx, message.text, { color: tint })] : [];
+    ? contentNodes(ctx, message.id, answer, { width: contentWidth, color: tint, sandboxImages: options.sandboxImages })
+    : !thought && message.text?.trim() ? replyMarkdown(ctx, message.text, options.sandboxImages, contentWidth, { color: tint }) : [];
   const meta = replyMeta(ctx, key, message, { ...options, copyText: thought ? contentText(answer).trim() : messageText(message) });
   return {
     type: "view", style: { width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
@@ -458,7 +489,7 @@ export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[
   return {
     type: "view", style: { width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
     children: [
-      ...(hasContent ? [{ type: "view" as const, style: { gap: 4, minWidth: 0 }, children: contentNodes(ctx, "live", answer, { width: getReplyContentWidth(ctx.width), active: live, streamingText: input.streamingText }) }] : []),
+      ...(hasContent ? [{ type: "view" as const, style: { gap: 4, minWidth: 0 }, children: contentNodes(ctx, "live", answer, { width: getReplyContentWidth(ctx.width), active: live, streamingText: input.streamingText, sandboxImages: NO_SANDBOX_IMAGES }) }] : []),
       {
         type: "view", style: { flexDirection: "row", alignItems: "center", gap: 8, height: REPLY_META_HEIGHT },
         children: [...statusRow, ...(live ? [text(formatMessageClock(input.startedAt) ?? "", textStyle("micro", theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { flexShrink: 0 } })] : [])],
