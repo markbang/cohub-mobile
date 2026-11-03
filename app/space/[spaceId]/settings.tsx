@@ -1,12 +1,16 @@
 import * as Clipboard from "expo-clipboard";
 import type { CronJobRecord, SandboxSpecId, SpaceMember, SpaceRole, SpaceSandboxAutoDestroyPolicy, SpaceSandboxConfig } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { DeviceFolderPickerSheet } from "@/src/components/DeviceFolderBrowser";
-import { FilterChip } from "@/src/components/FilterChip";
+import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { SettingsRow } from "@/src/components/SettingsRow";
+import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
+import { ConfirmSheet } from "@/src/components/SystemDialogs";
+import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { cronSummaryText, formatRunTime } from "@/src/components/ScheduleForm";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
@@ -31,6 +35,12 @@ const DEFAULT_IDLE_TTL_SECONDS = 12 * 3600;
 const IDLE_TTL_PRESETS = [1800, 3600, 7200, 43200, 86400, 604800] as const;
 const CUSTOM_TTL_UNITS = { minutes: 60, hours: 3600, days: 86400 } as const;
 type CustomTtlUnit = keyof typeof CUSTOM_TTL_UNITS;
+/** Matches `SettingsRow`: 52 pt rows, a 30 pt leading tile, separators inset past it (16 + 30 + 12). */
+const ROW_HEIGHT = 52;
+const TILE = 30;
+const TILE_STYLE = { width: TILE, height: TILE, borderCurve: "continuous" } as const;
+const SEPARATOR_INSET = 58;
+const CONTINUOUS = { borderCurve: "continuous" } as const;
 
 export default function SpaceSettingsScreen() {
   const { spaceId } = useLocalSearchParams<{ spaceId: string }>();
@@ -54,6 +64,8 @@ export default function SpaceSettingsScreen() {
   const [customTtlValue, setCustomTtlValue] = useState("");
   const [customTtlUnit, setCustomTtlUnit] = useState<CustomTtlUnit>("hours");
   const [customTtlError, setCustomTtlError] = useState<string | null>(null);
+  const [envOpen, setEnvOpen] = useState(false);
+  const [removing, setRemoving] = useState<{ userId: string; name: string } | null>(null);
   const idlePolicy = config?.autoDestroy.mode === "idle" ? config.autoDestroy : null;
   const sandboxBusy = busy || restarting || resources.config.loading;
 
@@ -83,6 +95,7 @@ export default function SpaceSettingsScreen() {
     try {
       const result = await client.space(spaceId).env.create({ name: name.trim(), value });
       setEnv(result.env);
+      setEnvOpen(false);
       setName("");
       setValue("");
       toast({ title: t("space.settings.saved"), tone: "success" });
@@ -206,11 +219,25 @@ export default function SpaceSettingsScreen() {
     }
   };
 
+  const sleepValue = idlePolicy ? String(idlePolicy.ttlSeconds) : "never";
+  const sleepOptions = [
+    { value: "never", label: t("space.settings.sleep.never") },
+    ...idleTtlChoices(idlePolicy?.ttlSeconds ?? DEFAULT_IDLE_TTL_SECONDS).map((seconds) => ({ value: String(seconds), label: formatIdleTtl(seconds, t) })),
+    { value: "custom", label: t("space.settings.sleep.custom") },
+  ];
+  const selectSleep = (next: string) => {
+    if (next === "custom") openCustomTtl();
+    else if (next === "never") void updateSandbox({ autoDestroy: { mode: "never" } });
+    else void updateSandbox({ autoDestroy: { mode: "idle", ttlSeconds: Number(next) } });
+  };
+  const activeInvitations = invitations.filter((item) => item.status === "active").length;
+  const portEntries = Object.entries(ports);
+
   return (
     <Screen>
       <TopBar title={t("space.settings")} onBack={() => router.back()} />
-      <ScrollView contentContainerClassName="gap-6 p-4" keyboardShouldPersistTaps="handled">
-        <View className="overflow-hidden rounded-md" style={{ borderCurve: "continuous" }}>
+      <ScrollView contentContainerClassName="pt-4 pb-8" keyboardShouldPersistTaps="handled">
+        <Section>
           <SettingsRow
             icon="wallet"
             title={t("space.wallet.title")}
@@ -218,83 +245,37 @@ export default function SpaceSettingsScreen() {
             last
             onPress={() => router.push({ pathname: "/space/[spaceId]/wallet", params: { spaceId } })}
           />
-        </View>
+        </Section>
 
-        <View>
-          <Text className="text-headline font-semibold text-fg">{t("space.settings.collaborators")}</Text>
+        <Section label={t("space.settings.collaborators")} footer={activeInvitations > 0 ? t("space.settings.inviteCount", { count: activeInvitations }) : undefined}>
           <ResourceStatus state={resources.members} onRetry={() => void loadResource("members")} />
           {members.map((member) => {
             const displayName = memberDisplayName(member, t("settings.profile.fallbackName"));
             return (
-              <View key={member.userId} className="flex-row items-center gap-2 py-2 border-b border-border">
-                <Avatar name={displayName} uri={member.profile?.avatarUrl} size={36} />
-                <View className="flex-1 min-w-0 gap-0.5">
-                  <Text numberOfLines={1} className="text-body font-semibold text-fg">{displayName}</Text>
-                  <Text className="text-caption text-fg-muted">{roleLabel(member.role, t)}</Text>
-                </View>
-                {member.role !== "host" ? (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void updateMemberRole(member.userId, member.role === "builder" ? "guest" : "builder")}
-                      hitSlop={8}
-                      className="active:opacity-60"
-                    >
-                      <Text className="text-caption text-accent">
-                        {member.role === "builder" ? t("space.settings.makeGuest") : t("space.settings.makeBuilder")}
-                      </Text>
-                    </Pressable>
-                    <IconButton name="x" label={t("space.settings.removeMember")} tone="danger" onPress={() => void removeMember(member.userId)} />
-                  </>
+              <Row
+                key={member.userId}
+                leading={<Avatar name={displayName} uri={member.profile?.avatarUrl} size={TILE} />}
+                title={displayName}
+                subtitle={roleLabel(member.role, t)}
+                trailing={member.role !== "host" ? (
+                  <MemberMenu
+                    name={displayName}
+                    actions={[
+                      { icon: "user", title: member.role === "builder" ? t("space.settings.makeGuest") : t("space.settings.makeBuilder"), onPress: () => void updateMemberRole(member.userId, member.role === "builder" ? "guest" : "builder") },
+                      { icon: "trash", title: t("space.settings.removeMember"), onPress: () => setRemoving({ userId: member.userId, name: displayName }) },
+                    ]}
+                  />
                 ) : null}
-              </View>
+              />
             );
           })}
           <ResourceStatus state={resources.invitations} onRetry={() => void loadResource("invitations")} />
-          <View className="flex-row gap-2 mt-3">
-            <ActionButton label={t("space.settings.inviteBuilder")} icon="plus" onPress={() => void createInvite("builder")} />
-            <ActionButton label={t("space.settings.inviteGuest")} icon="plus" onPress={() => void createInvite("guest")} />
-          </View>
-          {invitations.filter((item) => item.status === "active").map((item) => (
-            <Text key={item.token} className="text-micro font-semibold text-fg-muted mt-2">
-              {t("space.settings.inviteActive", { role: roleLabel(item.role, t) })}
-            </Text>
-          ))}
-        </View>
+          <AddRow label={t("space.settings.inviteBuilder")} onPress={() => void createInvite("builder")} />
+          <AddRow label={t("space.settings.inviteGuest")} onPress={() => void createInvite("guest")} last />
+        </Section>
 
-        <View>
-          <Text className="text-headline font-semibold text-fg">{t("space.settings.environment")}</Text>
+        <Section label={t("space.settings.environment")}>
           <ResourceStatus state={resources.env} onRetry={() => void loadResource("env")} />
-          <View className="flex-row gap-2 mt-3 items-center">
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="NAME"
-              placeholderTextColor={theme.colors.textFaint}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              accessibilityLabel="NAME"
-              className={`flex-1 ${FIELD_INPUT_CLASS}`}
-            />
-            <TextInput
-              value={value}
-              onChangeText={setValue}
-              placeholder="VALUE"
-              placeholderTextColor={theme.colors.textFaint}
-              autoCorrect={false}
-              accessibilityLabel="VALUE"
-              className={`flex-1 ${FIELD_INPUT_CLASS}`}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("space.settings.addEnvironment")}
-              disabled={busy || resources.env.loading || !name.trim()}
-              onPress={() => void addEnv()}
-              className="size-12 items-center justify-center rounded-sm bg-accent active:bg-accent-pressed disabled:opacity-45"
-            >
-              <AppIcon name="plus" size={18} tone="onAccent" />
-            </Pressable>
-          </View>
           {env.map((item) => (
             <EnvironmentRow
               key={item.name}
@@ -309,52 +290,50 @@ export default function SpaceSettingsScreen() {
               onCopy={() => void Clipboard.setStringAsync(item.value).then(() => toast({ title: t("space.settings.copied"), tone: "success" }))}
             />
           ))}
-        </View>
+          <AddRow label={t("space.settings.addEnvironment")} disabled={resources.env.loading} onPress={() => setEnvOpen(true)} last />
+        </Section>
 
-        {deviceRuntimeSupported && spaceId && sandbox?.provider === "local" ? <DeviceRuntimeSection spaceId={spaceId} /> : null}
+        {deviceRuntimeSupported && spaceId && sandbox?.provider === "local" ? <View className="mb-6 px-4"><DeviceRuntimeSection spaceId={spaceId} /></View> : null}
 
-        <View>
-          <Text className="text-headline font-semibold text-fg">{t("space.settings.sandbox")}</Text>
-          <ResourceStatus state={resources.config} onRetry={() => void loadResource("config")} />
-          {resources.config.loaded ? <>
-          <Text className="text-caption text-fg-muted mt-2">{t("space.settings.spec")}</Text>
-          <ResourceStatus state={resources.allowedSpec} onRetry={() => void loadResource("allowedSpec")} />
-          <SpecOptionList
-            config={config}
-            value={config?.spec ?? "standard"}
-            maxValue={allowedSpec}
-            disabled={sandboxBusy || resources.allowedSpec.loading || !resources.allowedSpec.loaded}
-            onChange={(spec) => void updateSandbox({ spec })}
-            onLocked={() => toast({ title: t("space.settings.upgradeRequired"), message: t("space.settings.upgradeRequired.body"), tone: "danger" })}
-          />
-          {specNeedsRestart(config) ? (
-            <View className="flex-row items-center flex-wrap gap-2 mt-2">
-              <View className="px-2 py-1 rounded-full bg-warning-soft">
-                <Text className="text-micro font-semibold text-warning">{t("space.settings.spec.restartToApply")}</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t("space.settings.spec.restartNow")}
+        {resources.config.loaded ? <>
+          <Section label={t("space.settings.spec")}>
+            <ResourceStatus state={resources.allowedSpec} onRetry={() => void loadResource("allowedSpec")} />
+            <SpecOptionList
+              config={config}
+              value={config?.spec ?? "standard"}
+              maxValue={allowedSpec}
+              disabled={sandboxBusy || resources.allowedSpec.loading || !resources.allowedSpec.loaded}
+              onChange={(spec) => void updateSandbox({ spec })}
+              onLocked={() => toast({ title: t("space.settings.upgradeRequired"), message: t("space.settings.upgradeRequired.body"), tone: "danger" })}
+            />
+            {specNeedsRestart(config) ? (
+              <Row
+                leading={restarting ? <View className="items-center justify-center" style={TILE_STYLE}><Loader /></View> : <Tile icon="refresh" accent />}
+                title={t("space.settings.spec.restartNow")}
+                titleClassName="text-accent"
+                subtitle={t("space.settings.spec.restartToApply")}
                 disabled={restarting || busy}
                 onPress={confirmRestart}
-                className="min-h-11 flex-row items-center gap-2 active:opacity-70 disabled:opacity-45"
-              >
-                {restarting ? <Loader /> : <AppIcon name="refresh" size={14} tone="accent" />}
-                <Text className="text-caption text-accent">{t("space.settings.spec.restartNow")}</Text>
-              </Pressable>
-            </View>
+              />
+            ) : null}
+          </Section>
+          {config?.preferences ? (
+            <Section
+              label={t("space.settings.image")}
+              footer={config.preferences.applicable && config.preferences.warnings.includes("image_unavailable") ? t("space.settings.image.unavailable") : t(config.preferences.applicable ? "space.settings.image.hint" : "space.settings.image.local")}
+            >
+              <ImageOptionList preferences={config.preferences} disabled={sandboxBusy} onChange={(image) => void updateSandbox({ image })} />
+            </Section>
           ) : null}
-          {config?.preferences ? <>
-            <Text className="text-caption text-fg-muted mt-5">{t("space.settings.image")}</Text>
-            <ImageOptionList
-              preferences={config.preferences}
+          <Section footer={idlePolicy ? t("space.settings.sleep.idleHint", { duration: formatIdleTtl(idlePolicy.ttlSeconds, t) }) : t("space.settings.sleep.neverHint")}>
+            <SettingsSelectRow
+              icon="moon"
+              title={t("space.settings.sleep")}
+              value={sleepValue}
+              options={sleepOptions}
               disabled={sandboxBusy}
-              onChange={(image) => void updateSandbox({ image })}
+              onChange={selectSleep}
             />
-            <Text className="text-caption text-fg-faint mt-1">{t(config.preferences.applicable ? "space.settings.image.hint" : "space.settings.image.local")}</Text>
-            {config.preferences.applicable && config.preferences.warnings.includes("image_unavailable") ? <Text className="text-caption text-warning mt-1">{t("space.settings.image.unavailable")}</Text> : null}
-          </> : null}
-          <View className="mt-5 overflow-hidden rounded-md" style={{ borderCurve: "continuous" }}>
             <SettingsRow
               icon="terminal"
               title={t("space.setup.title")}
@@ -362,78 +341,42 @@ export default function SpaceSettingsScreen() {
               last
               onPress={() => router.push({ pathname: "/space/[spaceId]/setup", params: { spaceId } })}
             />
-          </View>
-          <Text className="text-caption text-fg-muted mt-5">{t("space.settings.sleep")}</Text>
-          <Segmented
-            className="mt-2"
-            disabled={sandboxBusy}
-            value={idlePolicy ? "idle" : "never"}
-            options={[{ value: "idle", label: t("space.settings.sleep.afterIdle") }, { value: "never", label: t("space.settings.sleep.never") }]}
-            onChange={(mode) => void updateSandbox({ autoDestroy: mode === "never" ? { mode: "never" } : { mode: "idle", ttlSeconds: DEFAULT_IDLE_TTL_SECONDS } })}
-          />
-          {idlePolicy ? (
-            <View className={`flex-row flex-wrap mt-1 ${sandboxBusy ? "opacity-45" : ""}`}>
-              {idleTtlChoices(idlePolicy.ttlSeconds).map((seconds) => (
-                <FilterChip
-                  key={seconds}
-                  label={formatIdleTtl(seconds, t)}
-                  selected={seconds === idlePolicy.ttlSeconds}
-                  onPress={() => { if (!sandboxBusy && seconds !== idlePolicy.ttlSeconds) void updateSandbox({ autoDestroy: { mode: "idle", ttlSeconds: seconds } }); }}
-                />
-              ))}
-              <FilterChip label={t("space.settings.sleep.custom")} icon="square-pen" selected={false} onPress={() => { if (!sandboxBusy) openCustomTtl(); }} />
-            </View>
-          ) : null}
-          <Text className="text-caption text-fg-faint mt-1">
-            {idlePolicy ? t("space.settings.sleep.idleHint", { duration: formatIdleTtl(idlePolicy.ttlSeconds, t) }) : t("space.settings.sleep.neverHint")}
-          </Text>
-          </> : null}
-        </View>
+          </Section>
+        </> : resources.config.loading || resources.config.error ? (
+          <Section label={t("space.settings.sandbox")}>
+            <ResourceStatus state={resources.config} onRetry={() => void loadResource("config")} />
+          </Section>
+        ) : null}
 
-        <View>
-          <Text className="text-headline font-semibold text-fg">{t("space.settings.ports")}</Text>
-          <ResourceStatus state={resources.ports} onRetry={() => void loadResource("ports")} />
-          {Object.entries(ports).map(([key, endpoint]) => (
-            <Pressable
-              key={key}
-              accessibilityRole="button"
-              onPress={() => endpoint.url ? void openWebLink(endpoint.url).catch(() => Linking.openURL(endpoint.url!)) : undefined}
-              className="mt-2 flex-row items-center gap-3 rounded-md bg-surface-raised p-4 active:bg-surface-pressed"
-            >
-              <AppIcon name="globe" size={18} tone="accent" />
-              <View className="flex-1 min-w-0">
-                <Text className="text-body font-semibold text-fg">{t("space.settings.portLabel", { port: key })}</Text>
-                <Text numberOfLines={1} ellipsizeMode="middle" className="text-caption text-fg-muted mt-1">
-                  {endpoint.url ?? t("space.settings.portUnavailable")}
-                </Text>
-              </View>
-              <AppIcon name="external-link" size={16} tone="muted" />
-            </Pressable>
-          ))}
-        </View>
+        {portEntries.length > 0 || resources.ports.loading || resources.ports.error ? (
+          <Section label={t("space.settings.ports")}>
+            <ResourceStatus state={resources.ports} onRetry={() => void loadResource("ports")} />
+            {portEntries.map(([key, endpoint], index) => (
+              <Row
+                key={key}
+                leading={<Tile icon="globe" />}
+                title={t("space.settings.portLabel", { port: key })}
+                subtitle={endpoint.url ?? t("space.settings.portUnavailable")}
+                middleEllipsis
+                role="link"
+                trailing={endpoint.url ? <AppIcon name="external-link" size={16} tone="faint" /> : null}
+                onPress={endpoint.url ? () => void openWebLink(endpoint.url!).catch(() => Linking.openURL(endpoint.url!)) : undefined}
+                last={index === portEntries.length - 1}
+              />
+            ))}
+          </Section>
+        ) : null}
 
-        <View>
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-headline font-semibold text-fg">{t("space.settings.mods")}</Text>
-            <IconButton
-              name="plus"
-              label={t("space.settings.addMod")}
-              tone="accent"
-              disabled={!client || !spaceId || resources.mods.loading}
-              onPress={() => { setModError(null); setAddModOpen(true); }}
-            />
-          </View>
+        <Section label={t("space.settings.mods")}>
           <ResourceStatus state={resources.mods} onRetry={() => void loadResource("mods")} />
-          {mods.length === 0 ? (
-            resources.mods.loaded && !resources.mods.error && !resources.mods.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noMods")}</Text> : null
-          ) : (
-            mods.map((mod) => (
-              <View key={mod.id} className="flex-row items-center gap-3 py-3 border-b border-border">
-                <View className="flex-1 min-w-0">
-                  <Text numberOfLines={1} className="text-body font-semibold text-fg">{mod.name || mod.mountSlug}</Text>
-                  <Text numberOfLines={1} className="text-caption text-fg-muted mt-0.5">{mod.mountPath}</Text>
-                  <Text numberOfLines={1} ellipsizeMode="middle" className="text-micro text-fg-faint mt-0.5">Space: {mod.modSpaceId}</Text>
-                </View>
+          {mods.map((mod) => (
+            <Row
+              key={mod.id}
+              leading={<Tile icon="layers" />}
+              title={mod.name || mod.mountSlug}
+              subtitle={mod.mountPath}
+              detail={`Space: ${mod.modSpaceId}`}
+              trailing={
                 <AppSwitch
                   value={mod.enabled}
                   onValueChange={async (enabled) => {
@@ -451,39 +394,38 @@ export default function SpaceSettingsScreen() {
                     }
                   }}
                 />
-              </View>
-            ))
-          )}
-        </View>
+              }
+            />
+          ))}
+          <AddRow
+            label={t("space.settings.addMod")}
+            disabled={!client || !spaceId || resources.mods.loading}
+            onPress={() => { setModError(null); setAddModOpen(true); }}
+            last
+          />
+        </Section>
 
-        <View>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-headline font-semibold text-fg">{t("space.settings.schedules")}</Text>
-            <IconButton name="plus" label={t("schedule.newTitle")} tone="accent" disabled={!spaceId} onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/new", params: { spaceId } })} />
-          </View>
+        <Section label={t("space.settings.schedules")}>
           <ResourceStatus state={resources.schedules} onRetry={() => void loadResource("schedules")} />
-          {schedules.length === 0 ? (
-            resources.schedules.loaded && !resources.schedules.error && !resources.schedules.loading ? <Text className="text-body text-fg-muted mt-2">{t("space.settings.noSchedules")}</Text> : null
-          ) : (
-            schedules.map((schedule) => (
-              <ScheduleRow
-                key={schedule.id}
-                schedule={schedule}
-                onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/[jobId]", params: { spaceId, jobId: schedule.id } })}
-                onToggle={async (enabled) => {
-                  if (!client) return;
-                  try {
-                    await client.cronJobs.toggle(schedule.id, enabled);
-                    setSchedules((current) => current.map((s) => s.id === schedule.id ? { ...s, enabled } : s));
-                    toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
-                  } catch (error) {
-                    toast({ title: t("space.settings.schedule.toggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
-                  }
-                }}
-              />
-            ))
-          )}
-        </View>
+          {schedules.map((schedule) => (
+            <ScheduleRow
+              key={schedule.id}
+              schedule={schedule}
+              onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/[jobId]", params: { spaceId, jobId: schedule.id } })}
+              onToggle={async (enabled) => {
+                if (!client) return;
+                try {
+                  await client.cronJobs.toggle(schedule.id, enabled);
+                  setSchedules((current) => current.map((s) => s.id === schedule.id ? { ...s, enabled } : s));
+                  toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
+                } catch (error) {
+                  toast({ title: t("space.settings.schedule.toggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
+                }
+              }}
+            />
+          ))}
+          <AddRow label={t("schedule.newTitle")} disabled={!spaceId} onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/new", params: { spaceId } })} last />
+        </Section>
       </ScrollView>
       <AdaptiveSheet
         visible={addModOpen}
@@ -543,38 +485,139 @@ export default function SpaceSettingsScreen() {
           {customTtlError ? <Text accessibilityRole="alert" className="text-caption text-danger">{customTtlError}</Text> : null}
         </View>
       </AdaptiveSheet>
+      <AdaptiveSheet
+        visible={envOpen}
+        detent="fit"
+        title={t("space.settings.addEnvironment")}
+        onClose={() => setEnvOpen(false)}
+        dismissible={!busy}
+        confirm={{ label: t("space.settings.addEnvironment"), loading: busy, disabled: !name.trim(), onPress: () => void addEnv() }}
+        testID="space-add-env-sheet"
+      >
+        <View className="gap-3">
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="NAME"
+            placeholderTextColor={theme.colors.textFaint}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            editable={!busy}
+            accessibilityLabel={t("space.settings.env.name")}
+            className={FIELD_INPUT_CLASS}
+          />
+          <TextInput
+            value={value}
+            onChangeText={setValue}
+            placeholder={t("space.settings.env.value")}
+            placeholderTextColor={theme.colors.textFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            accessibilityLabel={t("space.settings.env.value")}
+            returnKeyType="done"
+            onSubmitEditing={() => void addEnv()}
+            className={FIELD_INPUT_CLASS}
+          />
+        </View>
+      </AdaptiveSheet>
+      <ConfirmSheet
+        visible={removing !== null}
+        title={t("space.settings.removeMember.title", { name: removing?.name ?? "" })}
+        message={t("space.settings.removeMember.body")}
+        confirmLabel={t("common.remove")}
+        confirmIcon="trash"
+        onConfirm={() => { if (removing) void removeMember(removing.userId); setRemoving(null); }}
+        onClose={() => setRemoving(null)}
+        testID="space-remove-member-sheet"
+      />
     </Screen>
   );
 }
 
 function ResourceStatus({ state, onRetry }: { state: SpaceSettingsResourceState; onRetry: () => void }) {
   const { t } = useTranslation();
-  if (state.loading) return <Text accessibilityLiveRegion="polite" className="text-caption text-fg-muted mt-2">{t("space.settings.loading")}</Text>;
+  if (state.loading) return <View className="min-h-13 flex-row items-center gap-3 px-4"><Loader /><Text accessibilityLiveRegion="polite" className="text-subhead text-fg-muted">{t("space.settings.loading")}</Text></View>;
   if (!state.error) return null;
-  return <View className="flex-row items-center gap-2"><Text selectable accessibilityRole="alert" className="text-caption flex-1 text-danger">{state.error}</Text><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} /></View>;
+  return <View className="min-h-13 flex-row items-center gap-2 pl-4 pr-1"><Text selectable accessibilityRole="alert" className="flex-1 py-3 text-subhead text-danger">{state.error}</Text><IconButton name="refresh" label={t("common.retry")} onPress={onRetry} /></View>;
+}
+
+/** An inset grouped card under a section label, as `SettingsGroup`, with an optional footnote below it. */
+function Section({ label, footer, children }: { label?: string; footer?: string; children: ReactNode }) {
+  return (
+    <View className="mb-6 px-4">
+      {label ? <Text accessibilityRole="header" className="px-4 pb-2 text-caption font-semibold text-fg-muted">{label}</Text> : null}
+      <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>{children}</View>
+      {footer ? <Text className="px-4 pt-2 text-caption text-fg-muted">{footer}</Text> : null}
+    </View>
+  );
+}
+
+/** The neutral glyph tile `SettingsRow` uses, so custom rows line up with it. */
+function Tile({ icon, accent = false }: { icon: IconName; accent?: boolean }) {
+  return <View className="items-center justify-center rounded-xs bg-surface-raised" style={TILE_STYLE}><AppIcon name={icon} size={18} tone={accent ? "accent" : "secondary"} /></View>;
+}
+
+/** A grouped row with a 30 pt leading slot, so its separator lines up with `SettingsRow`. */
+function Row({ leading, title, titleClassName = "text-fg", subtitle, detail, middleEllipsis = false, trailing, onPress, role = "button", disabled = false, last = false }: {
+  leading: ReactNode;
+  title: string;
+  titleClassName?: string;
+  subtitle?: string;
+  detail?: string;
+  middleEllipsis?: boolean;
+  trailing?: ReactNode;
+  onPress?: () => void;
+  role?: "button" | "link";
+  disabled?: boolean;
+  last?: boolean;
+}) {
+  const body = <>
+    <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
+      {leading}
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Text numberOfLines={1} className={`text-body ${titleClassName}`}>{title}</Text>
+        {subtitle ? <Text numberOfLines={1} ellipsizeMode={middleEllipsis ? "middle" : "tail"} className="text-caption text-fg-muted">{subtitle}</Text> : null}
+        {detail ? <Text numberOfLines={1} ellipsizeMode="middle" className="text-micro tabular-nums text-fg-faint">{detail}</Text> : null}
+      </View>
+      {trailing}
+    </View>
+    {last ? null : <View className="absolute bottom-0 right-0 bg-border" style={{ left: SEPARATOR_INSET, height: StyleSheet.hairlineWidth }} />}
+  </>;
+  return onPress
+    ? <Pressable accessibilityRole={role} accessibilityLabel={[title, subtitle].filter(Boolean).join(", ")} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} className="flex-row items-center bg-surface px-4 active:bg-surface-pressed disabled:opacity-55">{body}</Pressable>
+    : <View className="flex-row items-center bg-surface px-4">{body}</View>;
+}
+
+/** An action row at the end of a group, as iOS Settings closes a list with "Add…". */
+function AddRow({ label, onPress, disabled = false, last = false }: { label: string; onPress: () => void; disabled?: boolean; last?: boolean }) {
+  return <Row leading={<Tile icon="plus" accent />} title={label} titleClassName="text-accent" onPress={onPress} disabled={disabled} last={last} />;
+}
+
+function MemberMenu({ name, actions }: { name: string; actions: readonly AnchoredMenuAction[] }) {
+  const { t } = useTranslation();
+  const anchorRef = useRef<View>(null);
+  const [open, setOpen] = useState(false);
+  const label = t("space.settings.memberActions", { name });
+  if (nativeMenus) return <NativeMenuButton appearance="plain" icon="more" label={label} actions={actions} />;
+  return <>
+    <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}>
+      <IconButton name="more" label={label} onPress={() => setOpen(true)} />
+    </View>
+    <MenuPresence open={open}><AnchoredActionMenu anchorRef={anchorRef} title={name} actions={actions} onClose={() => setOpen(false)} testID="space-member-menu" /></MenuPresence>
+  </>;
 }
 
 function EnvironmentRow({ item, visible, onToggle, onCopy }: { item: SpaceEnvironmentItem; visible: boolean; onToggle: () => void; onCopy: () => void }) {
   const { t } = useTranslation();
   return (
-    <View className="py-3 border-b gap-2 border-border">
-      <Text className="text-body font-semibold text-fg">{item.name}</Text>
-      <View className="flex-row items-center gap-2">
-        <Pressable accessibilityRole="button" accessibilityLabel={t("space.settings.copyValue")} onPress={onCopy} className="flex-1">
-          <Text selectable={visible} numberOfLines={1} className="text-caption text-fg-muted">
-            {visible ? item.value : "•".repeat(Math.min(24, Math.max(8, item.value.length)))}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={visible ? t("space.settings.hideValue") : t("space.settings.showValue")}
-          onPress={onToggle}
-          hitSlop={8}
-        >
-          <AppIcon name={visible ? "eye-off" : "eye"} size={18} tone="muted" />
-        </Pressable>
-      </View>
-    </View>
+    <Row
+      leading={<Tile icon="code" />}
+      title={item.name}
+      subtitle={visible ? item.value : "•".repeat(Math.min(16, Math.max(8, item.value.length)))}
+      onPress={onCopy}
+      trailing={<IconButton name={visible ? "eye-off" : "eye"} label={visible ? t("space.settings.hideValue") : t("space.settings.showValue")} onPress={onToggle} />}
+    />
   );
 }
 
@@ -831,7 +874,7 @@ function SpecOptionList({
   const { t } = useTranslation();
   const max = Math.max(0, SPEC_OPTIONS.indexOf(maxValue));
   return (
-    <View accessibilityRole="radiogroup" className="mt-2 overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>
+    <View accessibilityRole="radiogroup">
       {SPEC_OPTIONS.map((id, index) => {
         const selected = id === value;
         // Tiers above the plan's maximum stay visible but locked, so the upgrade path reads in place.
@@ -849,11 +892,9 @@ function SpecOptionList({
               if (locked) onLocked();
               else if (!selected) onChange(id);
             }}
-            className={`min-h-16 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed ${index > 0 ? "border-t border-border" : ""} ${disabled ? "opacity-60" : ""}`}
+            className={`min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3 active:bg-surface-pressed ${disabled ? "opacity-60" : ""}`}
           >
-            <View className={`size-5 items-center justify-center rounded-full border-2 ${selected ? "border-accent" : "border-border"}`}>
-              {selected ? <View className="size-2.5 rounded-full bg-accent" /> : null}
-            </View>
+            {index > 0 ? <View className="absolute left-4 right-0 top-0 bg-border" style={{ height: StyleSheet.hairlineWidth }} /> : null}
             <View className={`flex-1 min-w-0 ${locked ? "opacity-55" : ""}`}>
               <View className="flex-row items-center gap-2">
                 <Text numberOfLines={1} className="shrink text-body font-semibold text-fg">{label}</Text>
@@ -865,7 +906,8 @@ function SpecOptionList({
               </View>
               <Text className="text-caption text-fg-muted mt-0.5">{t(`space.settings.spec.${id}.desc`)}</Text>
             </View>
-            {details.resources ? <Text className={`text-caption font-semibold tabular-nums ${selected ? "text-fg" : "text-fg-muted"} ${locked ? "opacity-55" : ""}`}>{details.resources}</Text> : null}
+            {details.resources ? <Text className={`text-caption tabular-nums ${selected ? "text-fg" : "text-fg-muted"} ${locked ? "opacity-55" : ""}`}>{details.resources}</Text> : null}
+            <View className="w-5 items-center">{selected ? <AppIcon name="check" size={18} tone="accent" strokeWidth={2.4} /> : null}</View>
           </Pressable>
         );
       })}
@@ -891,7 +933,7 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
   ];
   const locked = disabled || !preferences.applicable;
   return (
-    <View accessibilityRole="radiogroup" className="mt-2 overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>
+    <View accessibilityRole="radiogroup">
       {options.map((option, index) => {
         const selected = option.value === current;
         return (
@@ -902,12 +944,11 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
             accessibilityState={{ checked: selected, disabled: locked }}
             disabled={locked}
             onPress={() => { if (!selected) onChange(option.value); }}
-            className={`min-h-13 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed ${index > 0 ? "border-t border-border" : ""} ${locked ? "opacity-60" : ""}`}
+            className={`min-h-13 flex-row items-center gap-3 bg-surface px-4 py-3 active:bg-surface-pressed ${locked ? "opacity-60" : ""}`}
           >
-            <View className={`size-5 items-center justify-center rounded-full border-2 ${selected ? "border-accent" : "border-border"}`}>
-              {selected ? <View className="size-2.5 rounded-full bg-accent" /> : null}
-            </View>
+            {index > 0 ? <View className="absolute left-4 right-0 top-0 bg-border" style={{ height: StyleSheet.hairlineWidth }} /> : null}
             <Text className="min-w-0 flex-1 text-body text-fg">{option.label}</Text>
+            <View className="w-5 items-center">{selected ? <AppIcon name="check" size={18} tone="accent" strokeWidth={2.4} /> : null}</View>
           </Pressable>
         );
       })}
@@ -930,23 +971,16 @@ function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord;
     }
   };
 
+  const title = schedule.title || t("space.settings.schedule.unnamed");
   return (
-    <View className="flex-row items-center gap-2 border-b border-border">
-      <Pressable accessibilityRole="button" accessibilityLabel={schedule.title || t("space.settings.schedule.unnamed")} onPress={onPress} className="min-w-0 flex-1 py-3 active:opacity-70">
-        <Text numberOfLines={1} className="text-body font-semibold text-fg">{schedule.title || t("space.settings.schedule.unnamed")}</Text>
-        <Text className="text-caption text-fg-muted mt-0.5">{cronSummaryText(summarizeCron(schedule.cronExpression), schedule.cronExpression, t)}</Text>
-        {nextRun ? (
-          <Text className="text-micro font-semibold tabular-nums text-fg-faint mt-1">
-            {t("space.settings.schedule.nextRun")}: {formatRunTime(nextRun, schedule.timezone, locale)}
-          </Text>
-        ) : null}
-      </Pressable>
-      <AppSwitch
-        value={schedule.enabled}
-        onValueChange={handleToggle}
-        disabled={toggling}
-      />
-    </View>
+    <Row
+      leading={<Tile icon="clock" />}
+      title={title}
+      subtitle={cronSummaryText(summarizeCron(schedule.cronExpression), schedule.cronExpression, t)}
+      detail={nextRun ? `${t("space.settings.schedule.nextRun")}: ${formatRunTime(nextRun, schedule.timezone, locale)}` : undefined}
+      onPress={onPress}
+      trailing={<AppSwitch value={schedule.enabled} onValueChange={handleToggle} disabled={toggling} />}
+    />
   );
 }
 

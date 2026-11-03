@@ -506,6 +506,8 @@ const formScope = {
     DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
     specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
     deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
+    Section: "Section", Row: "Row", AddRow: "AddRow", Tile: "Tile", MemberMenu: "MemberMenu", ImageOptionList: "ImageOptionList", EnvironmentRow: "EnvironmentRow", ScheduleRow: "ScheduleRow",
+    SettingsSelectRow: "SettingsSelectRow", ConfirmSheet: "ConfirmSheet", TILE: 30, TILE_STYLE: {},
   });
   const render = () => { cursor = 0; return chromeNodes(renderSettings()); };
   const add = render().find((node) => node.props?.label === "space.settings.addMod" || String(node.props?.onPress).includes("Alert.prompt"));
@@ -540,7 +542,7 @@ const formScope = {
   requests[1].resolve({ item: installed, sandboxRestarting: true });
   await flushSync();
   assert.equal(sheet().props.visible, false, "successful installation closes the input sheet");
-  assert.ok(render().some((node) => node.type === "Text" && node.props.children.includes(installed.name)), "the accepted Mod appears without another list request");
+  assert.ok(render().some((node) => node.type === "Row" && node.props.title === installed.name), "the accepted Mod appears without another list request");
   assert.equal(alerts.at(-1).message, "space.settings.modRestarting");
   add.props.onPress();
   assert.equal(input().props.value, "");
