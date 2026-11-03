@@ -3771,7 +3771,10 @@ for (const OS of ["android", "ios"]) {
   const pressable = loadChromeComponent("../src/components/timeline/nodes.ts", "pressable", {});
   const gallery = loadChromeComponent("../src/components/timeline/nodes.ts", "gallery", { pressable, Platform: { OS }, PixelRatio: { get: () => 3 }, color: (value) => value, icon: (name) => ({ type: "vector", name }), imageThumbnailUrl: (uri) => uri.startsWith("https:") ? `${uri}?variant` : uri });
   const uris = ["https://cdn.example/a.png", "data:image/png;base64,AAAA"];
-  const strip = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300);
+  const frame = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300);
+  assert.equal(frame.style.overflow, "hidden", "a multi-image strip sits in a clipping frame, so scrolled thumbnails stay inside the bubble");
+  const strip = frame.children[0];
+  assert.equal(strip.type, "scroll");
   assert.equal(strip.style.height, undefined, "a multi-image strip takes its height from its content, so Android measures and lays it out");
   const thumbs = strip.children;
   assert.deepEqual(thumbs.map((thumb) => [thumb.action, thumb.payload.index]), [["openImage", 0], ["openImage", 1]], "every thumbnail opens the viewer at its own image");
