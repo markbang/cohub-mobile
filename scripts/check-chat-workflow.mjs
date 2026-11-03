@@ -4481,6 +4481,7 @@ const cachedSends = [];
 const saveQueueMessages = loadChromeComponent("../src/data/local-db.ts", "saveMessages", {
   isOptimisticFollowup,
   cachedMessageRow: loadChromeComponent("../src/data/local-db.ts", "cachedMessageRow", { turnSequenceForMessage }),
+  writeTransaction: (db, task) => db.withTransactionAsync(task),
   database: async () => ({
     withTransactionAsync: async (action) => action(),
     prepareAsync: async () => ({ executeAsync: async (...args) => cachedSends.push(args), finalizeAsync: async () => {} }),
@@ -4858,6 +4859,31 @@ for (const save of [
   assert.equal(preparedWrites.at(-1).finalized, true, "failed writes release their prepared statement");
 }
 assert.equal(schemaRuns, 1, "writes do not repeat schema setup");
+{
+  // expo-sqlite rejects a BEGIN while the shared connection already has a transaction open.
+  failCacheWrite = false;
+  let open = false;
+  cacheDatabase.runAsync = async () => {};
+  cacheDatabase.withTransactionAsync = async (task) => {
+    await Promise.resolve();
+    if (open) throw new Error("cannot start a transaction within a transaction");
+    open = true;
+    try { await task(); } finally { open = false; }
+  };
+  const launchWrites = await Promise.allSettled([
+    cacheModule.pruneDebugSessions(3),
+    cacheModule.pruneUserCache("user-a", 0),
+    cacheModule.saveHome("user-a", { spaces: [{ id: "space-a" }], sessions: [{ id: "chat-a", spaceId: "space-a" }], forks: [] }),
+    cacheModule.saveSessions("user-a", [{ id: "chat-a", spaceId: "space-a" }]),
+    cacheModule.saveMessages("user-a", "chat-a", cacheMessages),
+  ]);
+  assert.deepEqual(launchWrites.map((result) => result.reason?.message ?? result.status), Array(5).fill("fulfilled"), "launch-time cache writes take turns on the shared connection");
+  failCacheWrite = true;
+  await assert.rejects(cacheModule.saveSpaces("user-a", [{ id: "space-a" }]), /Cache write failed/);
+  failCacheWrite = false;
+  await cacheModule.saveSpaces("user-a", [{ id: "space-a" }]);
+  cacheDatabase.withTransactionAsync = async (task) => task();
+}
 
 {
   // A fatal error ends the JS runtime; it must reach the log before React Native's handler runs.

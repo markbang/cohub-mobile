@@ -119,6 +119,18 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
   return db;
 }
 
+let transactionTail: Promise<void> = Promise.resolve();
+
+/**
+ * Transactions share the one connection, so a BEGIN while another is open fails, and that caller's
+ * ROLLBACK then ends the other's transaction mid-write. They run one at a time instead.
+ */
+function writeTransaction(db: SQLiteDatabase, task: () => Promise<void>): Promise<void> {
+  const run = transactionTail.then(() => db.withTransactionAsync(task));
+  transactionTail = run.catch(() => undefined);
+  return run;
+}
+
 function parse<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T;
@@ -201,7 +213,7 @@ async function writeSessionForks(db: SQLiteDatabase, userKey: string, forks: rea
 export async function saveHome(userKey: string, home: CachedHome) {
   const db = await database();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await writeSpaces(db, userKey, home.spaces, now);
     await writeSessions(db, userKey, home.sessions, now);
     await writeSessionForks(db, userKey, home.forks, now);
@@ -213,7 +225,7 @@ export async function saveSpaces(userKey: string, spaces: readonly SpaceRecord[]
   if (spaces.length === 0) return;
   const db = await database();
   const now = Date.now();
-  await db.withTransactionAsync(() => writeSpaces(db, userKey, spaces, now));
+  await writeTransaction(db, () => writeSpaces(db, userKey, spaces, now));
 }
 
 /** Persist individual Chats without rewriting the rest of the home cache. */
@@ -221,7 +233,7 @@ export async function saveSessions(userKey: string, sessions: readonly UserSessi
   if (sessions.length === 0 && forks.length === 0) return;
   const db = await database();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await writeSessions(db, userKey, sessions, now);
     await writeSessionForks(db, userKey, forks, now);
   });
@@ -230,7 +242,7 @@ export async function saveSessions(userKey: string, sessions: readonly UserSessi
 /** Drop cached chat rows last written before the cutoff (cache retention). */
 export async function pruneUserCache(userKey: string, cutoff: number) {
   const db = await database();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
@@ -270,7 +282,7 @@ function cachedMessageRow(message: MessageRecord) {
 export async function saveMessages(userKey: string, sessionId: string, messages: MessageRecord[]) {
   const db = await database();
   const now = Date.now();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     if (messages.length === 0) return;
     const statement = await db.prepareAsync(
       `INSERT OR REPLACE INTO messages (user_key, session_id, message_id, sequence, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -392,7 +404,7 @@ export async function loadDebugEvents(sessionId: string): Promise<DebugEventRow[
 the delete, so the session rows are still all visible when events are pruned. */
 export async function pruneDebugSessions(keep: number) {
   const db = await database();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM debug_events WHERE session_id NOT IN (SELECT session_id FROM debug_sessions ORDER BY updated_at DESC LIMIT ?)", keep);
     await db.runAsync("DELETE FROM debug_sessions WHERE session_id NOT IN (SELECT session_id FROM debug_sessions ORDER BY updated_at DESC LIMIT ?)", keep);
   });
@@ -401,7 +413,7 @@ export async function pruneDebugSessions(keep: number) {
 /** Drop every session, live or retained: used when recording is turned off. */
 export async function clearAllDebugSessions() {
   const db = await database();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM debug_events");
     await db.runAsync("DELETE FROM debug_sessions");
   });
@@ -409,7 +421,7 @@ export async function clearAllDebugSessions() {
 
 export async function clearUserCache(userKey: string) {
   const db = await database();
-  await db.withTransactionAsync(async () => {
+  await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ?", userKey);
