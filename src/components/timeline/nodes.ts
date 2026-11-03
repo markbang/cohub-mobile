@@ -190,7 +190,9 @@ function gallery(ctx: NodeContext, uris: string[], maxWidth: number, idPrefix = 
     children: [...failed, { type: "image", uri: imageThumbnailUrl(uri, size, scale), fallbackUri: uri, style: { width: size, height: size, borderRadius: 12, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
   });
   if (uris.length === 1) return thumb(uris[0]!, 0);
-  return { type: "scroll", horizontal: true, style: { width: maxWidth, height: size }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
+  // No fixed height: Yoga skips the measure function of a node sized on both axes, and Android lays
+  // out a scroll view's content only there, so the thumbnails would be 0×0.
+  return { type: "scroll", horizontal: true, style: { width: maxWidth }, contentStyle: { flexDirection: "row", gap: 8, paddingRight: 4 }, children: uris.map(thumb) };
 }
 
 /** Resolved sandbox images by path. A reply's text draws the ones it references; the rest stay links. */
