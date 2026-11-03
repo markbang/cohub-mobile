@@ -119,6 +119,8 @@ export const en = {
   "ui.openNamed": "Open {name}",
   "ui.active": "Active",
   "ui.activeAgo": "Active {time} ago",
+  "ui.attachment.preview": "Preview {name}",
+  "ui.attachment.previewUnavailable": "No app on this device can preview this file",
   "ui.attachment.uploading": "Uploading {name}",
   "ui.attachment.uploadFailed": "{name} did not upload. Sending tries again.",
   "ui.renderFailed.chatTitle": "This Chat couldn't be displayed",

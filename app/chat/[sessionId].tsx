@@ -72,6 +72,7 @@ import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage 
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
+import { previewLocalFile } from "@/src/platform/file-preview";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
 type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
@@ -1847,6 +1848,14 @@ function useComposerUploads(spaceId: string, sessionId: string | undefined, atta
 }
 
 function ComposerAttachmentChip({ target, attachment, onRemove }: { target: UploadTarget | null; attachment: AttachmentDraft; onRemove: () => void }) {
+  const { t } = useTranslation();
+  const showToast = useToast();
   const upload = useAttachmentUploadState(target, attachment.uri);
-  return <AttachmentChip name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} upload={upload} onRemove={onRemove} />;
+  const preview = () => {
+    void previewLocalFile(attachment.uri, { title: attachment.name, mimeType: attachment.mimeType }).then(
+      (shown) => { if (!shown) showToast({ title: t("ui.attachment.previewUnavailable"), tone: "neutral" }); },
+      (error: unknown) => showToast({ title: t("ui.attachment.previewUnavailable"), message: error instanceof Error ? error.message : undefined, tone: "danger" }),
+    );
+  };
+  return <AttachmentChip name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} upload={upload} onPreview={preview} onRemove={onRemove} />;
 }

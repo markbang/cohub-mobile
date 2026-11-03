@@ -675,11 +675,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   );
 }
 
-export function AttachmentChip({ name, uri, mimeType, upload = null, onRemove }: { name: string; uri?: string; mimeType?: string; upload?: AttachmentUploadState | null; onRemove?: () => void }) {
+export function AttachmentChip({ name, uri, mimeType, upload = null, onPreview, onRemove }: { name: string; uri?: string; mimeType?: string; upload?: AttachmentUploadState | null; onPreview?: () => void; onRemove?: () => void }) {
   const { t } = useTranslation();
   return <View className="max-w-full flex-row items-center gap-2 rounded-sm bg-accent-soft px-2 py-1" style={{ minHeight: 44, borderCurve: "continuous" }}>
-    {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
-    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={t("ui.attachment.preview", { name })} disabled={!onPreview} onPress={onPreview} className="min-w-0 flex-1 flex-row items-center gap-2 self-stretch active:opacity-70">
+      {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    </Pressable>
     {/* Ready is the quiet default; only work in progress or a failure the send will retry is shown. */}
     {upload?.status === "uploading" ? <Loader accessibilityLabel={t("ui.attachment.uploading", { name })} /> : null}
     {upload?.status === "failed" ? <View accessible accessibilityLabel={t("ui.attachment.uploadFailed", { name })}><AppIcon name="alert" size={16} tone="danger" /></View> : null}

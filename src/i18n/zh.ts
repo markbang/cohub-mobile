@@ -118,6 +118,8 @@ export const zh: Record<TranslationKey, string> = {
   "ui.openNamed": "打开{name}",
   "ui.active": "活跃",
   "ui.activeAgo": "{time}前活跃",
+  "ui.attachment.preview": "预览 {name}",
+  "ui.attachment.previewUnavailable": "此设备上没有可预览该文件的应用",
   "ui.attachment.uploading": "正在上传 {name}",
   "ui.attachment.uploadFailed": "{name} 上传失败，发送时会重试。",
   "ui.renderFailed.chatTitle": "无法显示这个对话",
