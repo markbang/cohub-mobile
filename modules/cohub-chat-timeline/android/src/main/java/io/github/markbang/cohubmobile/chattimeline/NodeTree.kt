@@ -644,6 +644,12 @@ internal class BoxView(
     }
   }
 
+  // A reordered child is removed and added again, which throws while it is transitioning: see
+  // `TimelineRecyclerView.startViewTransition`.
+  override fun startViewTransition(view: View) = Unit
+
+  override fun endViewTransition(view: View) = Unit
+
   // Children are positioned from Yoga by the row.
   override fun onLayout(
     changed: Boolean,

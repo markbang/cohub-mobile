@@ -62,6 +62,11 @@ internal class RowView(
     return holder.content?.let { find(it, id) }
   }
 
+  // Node views are owned here, not by React: see `TimelineRecyclerView.startViewTransition`.
+  override fun startViewTransition(view: View) = Unit
+
+  override fun endViewTransition(view: View) = Unit
+
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
     root?.let { reconciler.setAnimating(it, true) }
