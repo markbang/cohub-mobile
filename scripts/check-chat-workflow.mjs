@@ -59,7 +59,7 @@ import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.t
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
 import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { resolveSandboxImage, sandboxImageQuery } from "../src/data/sandbox-images.ts";
-import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, messageMarkdownImages, resolveMessageLink, sandboxFilePath } from "../src/data/message-links.ts";
+import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, messageMarkdownImages, resolveMessageLink, workspaceFilePath } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
 import { androidUpdateApkUrl, selectYaotaAndroidUpdate, validateAndroidUpdateAsset, verifyAndroidUpdateIntegrity } from "../src/data/update-assets.ts";
 import { isSettingsSection, settingsMenu } from "../src/data/settings-navigation.ts";
@@ -4529,7 +4529,7 @@ assert.equal(followupPreviewText({ userText: null }), "Follow-up");
 assert.deepEqual(resolveMessageLink("cohub://spaces/241ec263-bd4f-47d6-b459-35b4219e0c23"), { kind: "space", spaceId: "241ec263-bd4f-47d6-b459-35b4219e0c23" });
 assert.deepEqual(resolveMessageLink("cohub://spaces/241ec263-bd4f-47d6-b459-35b4219e0c23/sessions/81816f3f-02fa-4b71-b775-ba64a5759c8f"), { kind: "session", spaceId: "241ec263-bd4f-47d6-b459-35b4219e0c23", sessionId: "81816f3f-02fa-4b71-b775-ba64a5759c8f" });
 assert.deepEqual(resolveMessageLink("https://cohub.live/spaces/241ec263-bd4f-47d6-b459-35b4219e0c23/sessions/81816f3f-02fa-4b71-b775-ba64a5759c8f?turn=3"), { kind: "session", spaceId: "241ec263-bd4f-47d6-b459-35b4219e0c23", sessionId: "81816f3f-02fa-4b71-b775-ba64a5759c8f" });
-assert.deepEqual(resolveMessageLink("/workspace/avatars/out/contact-sheet.png"), { kind: "file", path: "/workspace/avatars/out/contact-sheet.png" });
+assert.deepEqual(resolveMessageLink("/workspace/avatars/out/contact-sheet.png"), { kind: "file", path: "avatars/out/contact-sheet.png" }, "the files API takes workspace-relative paths");
 assert.deepEqual(resolveMessageLink("https://example.com/x"), { kind: "external", url: "https://example.com/x" });
 assert.equal(resolveMessageLink("javascript:alert(1)"), null);
 assert.equal(resolveMessageLink(""), null);
@@ -4540,41 +4540,50 @@ for (const origin of ["https://cohub.run", "https://dev.cohub.live", "https://ww
 assert.deepEqual(resolveMessageLink("https://cohub.live.evil.example/spaces/241ec263-bd4f-47d6-b459-35b4219e0c23"), { kind: "external", url: "https://cohub.live.evil.example/spaces/241ec263-bd4f-47d6-b459-35b4219e0c23" }, "lookalike hosts stay external");
 assert.deepEqual(resolveMessageLink("cohub://apps/alice/studio/pulsewall?view=board"), { kind: "external", url: "https://cohub.live/alice/studio/w/pulsewall?view=board" });
 assert.equal(resolveMessageLink("out/a.png"), null, "relative links keep their dispatch; only image targets resolve against the Space root");
-assert.equal(sandboxFilePath("out/a.png"), "/workspace/out/a.png");
-assert.equal(sandboxFilePath("~/notes.md"), "/home/node/notes.md");
-for (const notFile of ["#top", "//cdn.example/a.png", "www.example.com/a.png", "name@example.com", "../etc/passwd", "data:image/png;base64,AA"]) assert.equal(sandboxFilePath(notFile), null, notFile);
+assert.equal(workspaceFilePath("out/a.png"), "out/a.png");
+assert.equal(workspaceFilePath("workspace/out/./b/../a.png"), "out/a.png");
+for (const notFile of ["#top", "//cdn.example/a.png", "www.example.com/a.png", "name@example.com", "../etc/passwd", "/workspace/../x.png", "/tmp/a.png", "~/notes.png", "/workspace", "data:image/png;base64,AA"]) assert.equal(workspaceFilePath(notFile), null, notFile);
 
 // Sandbox images in a reply: both `![]()` and `[]()` resolve; code, URLs, and non-images do not.
 {
   const reply = "![商品页](/workspace/tb7.jpg)\n[酷态科15号 SE SKU](/workspace/tb11.jpg) and [again](tb7.jpg)\n`![x](/workspace/code.png)` [doc](/workspace/a.pdf) ![web](https://example.com/w.png) /workspace/plain.png\n```\n![x](/workspace/fenced.png)\n```\n![](<out/my shot.webp> \"t\") \\[x](/workspace/escaped.png)";
   const parsed = messageMarkdownImages(reply);
-  assert.deepEqual(parsed.images, ["/workspace/tb7.jpg", "/workspace/tb11.jpg", "/workspace/out/my shot.webp"]);
-  assert.equal(parsed.markdown, "[商品页](/workspace/tb7.jpg)\n[酷态科15号 SE SKU](/workspace/tb11.jpg) and [again](tb7.jpg)\n`![x](/workspace/code.png)` [doc](/workspace/a.pdf) ![web](https://example.com/w.png) /workspace/plain.png\n```\n![x](/workspace/fenced.png)\n```\n[my shot.webp](<out/my shot.webp> \"t\") \\[x](/workspace/escaped.png)", "sandbox images become links; everything else is untouched");
+  assert.deepEqual(parsed.images, ["tb7.jpg", "tb11.jpg", "out/my shot.webp"]);
+  assert.equal(parsed.markdown, "[商品页](/workspace/tb7.jpg)\n[酷态科15号 SE SKU](/workspace/tb11.jpg) and [again](tb7.jpg)\n`![x](/workspace/code.png)` [doc](/workspace/a.pdf) ![web](https://example.com/w.png) /workspace/plain.png\n```\n![x](/workspace/fenced.png)\n```\n[my shot.webp](</workspace/out/my shot.webp> \"t\") \\[x](/workspace/escaped.png)", "sandbox images become links; everything else is untouched");
   assert.deepEqual(messageMarkdownImages("![商品页](/workspace/tb").images, [], "a half-streamed path is not an image");
   assert.deepEqual(messageMarkdownImages("``a ` ![x](/workspace/in.png) ``").images, [], "a code span closes on a matching run");
-  assert.deepEqual(messageMarkdownImages("- Example:\n    ```md\n    ![x](/workspace/a.png)\n    ```\n> ```\n> ![y](/workspace/b.png)\n> ```\n```js```\n![z](/workspace/run_(1).png)").images, ["/workspace/run_(1).png"], "fences in lists and quotes are code; balanced parentheses stay in the path");
-  assert.equal(sandboxFilePath("/workspace/out/../a.png"), "/workspace/a.png");
-  assert.deepEqual(messageMarkdownImages("Example:\n\n    ![x](/workspace/indented.png)\n\n- item\n\n    ![y](/workspace/continued.png)\n\n> text\n>\n>     ![q](/workspace/quoted-code.png)").images, ["/workspace/continued.png"], "indented code is code; a list item's continuation is not");
+  assert.deepEqual(messageMarkdownImages("- Example:\n    ```md\n    ![x](/workspace/a.png)\n    ```\n> ```\n> ![y](/workspace/b.png)\n> ```\n```js```\n![z](/workspace/run_(1).png)").images, ["run_(1).png"], "fences in lists and quotes are code; balanced parentheses stay in the path");
+  assert.equal(workspaceFilePath("/workspace/out/../a.png"), "a.png");
+  assert.deepEqual(messageMarkdownImages("Example:\n\n    ![x](/workspace/indented.png)\n\n- item\n\n    ![y](/workspace/continued.png)\n\n> text\n>\n>     ![q](/workspace/quoted-code.png)").images, ["continued.png"], "indented code is code; a list item's continuation is not");
   const nested = messageMarkdownImages("![x](/workspace/a_(1_(2)).png) ![e](/workspace/b\\(1\\).png (title))");
-  assert.deepEqual(nested.images, ["/workspace/a_(1_(2)).png", "/workspace/b(1).png"]);
+  assert.deepEqual(nested.images, ["a_(1_(2)).png", "b(1).png"]);
   assert.equal(nested.markdown, "[x](/workspace/a_(1_(2)).png) [e](/workspace/b\\(1\\).png (title))");
   const multilineCode = "Inline example: `some code\n![x](/workspace/a.png)\nmore code` then ![y](/workspace/b.avif)\n\n`open\n\n![z](/workspace/c.png)";
   const multiline = messageMarkdownImages(multilineCode);
-  assert.deepEqual(multiline.images, ["/workspace/b.avif", "/workspace/c.png"], "a code span runs across a paragraph's lines and ends with it");
+  assert.deepEqual(multiline.images, ["b.avif", "c.png"], "a code span runs across a paragraph's lines and ends with it");
   assert.equal(multiline.markdown, "Inline example: `some code\n![x](/workspace/a.png)\nmore code` then [y](/workspace/b.avif)\n\n`open\n\n[z](/workspace/c.png)");
   const escaped = messageMarkdownImages("\\` literal `some code\n![x](/workspace/a.png)\nmore code`");
   assert.deepEqual(escaped.images, [], "an escaped backtick does not open a code span");
   const labels = messageMarkdownImages("[![`screen`](/workspace/a.png)](https://example.com) ![a [b]](/workspace/b.png) Note [draft: ![x](/workspace/c.png)");
-  assert.deepEqual(labels.images, ["/workspace/a.png", "/workspace/b.png", "/workspace/c.png"]);
+  assert.deepEqual(labels.images, ["a.png", "b.png", "c.png"]);
   assert.equal(labels.markdown, "[`screen`](https://example.com) [a [b]](/workspace/b.png) Note [draft: [x](/workspace/c.png)", "labels with code or brackets are whole; an unclosed bracket is not a link");
   const titled = messageMarkdownImages("![web](https://example.com/a.png \"Example: [file](/workspace/private.png)\") ![![a](/workspace/x.png)](/workspace/y.png)\n\n![x](/workspace/a.png \"title `\")\n[![y](/workspace/b.png \"title `\")](https://example.com)");
-  assert.deepEqual(titled.images, ["/workspace/y.png", "/workspace/x.png"], "titles are not content; a code span opened in a title breaks the link as md4c parses it");
+  assert.deepEqual(titled.images, ["y.png", "x.png"], "titles are not content; a code span opened in a title breaks the link as md4c parses it");
   assert.equal(titled.markdown, "![web](https://example.com/a.png \"Example: [file](/workspace/private.png)\") [a](/workspace/y.png)\n\n![x](/workspace/a.png \"title `\")\n[![y](/workspace/b.png \"title `\")](https://example.com)", "an image in an image's label flattens to text when the outer one becomes a link");
   const contained = messageMarkdownImages("![shot](/workspace/a.png \"the `main` view\") [![plot](/workspace/plot.png \"by `plot()`\")](https://example.com)");
-  assert.deepEqual(contained.images, ["/workspace/a.png", "/workspace/plot.png"], "a code span wholly inside a title leaves the image intact");
+  assert.deepEqual(contained.images, ["a.png", "plot.png"], "a code span wholly inside a title leaves the image intact");
   assert.equal(contained.markdown, "[shot](/workspace/a.png \"the `main` view\") [plot](https://example.com)");
+  // A reply as an agent wrote it: the thumbnail resolves, and an image outside the workspace still never draws a box.
+  const agent = messageMarkdownImages("当前状态：屏仍在运行。\n\n![xiaomi17 Chrome](/workspace/xiaomi17-chrome.jpg)\n\n![tmp](/tmp/shot.png) ![home](~/shot.png)");
+  assert.deepEqual(agent.images, ["xiaomi17-chrome.jpg"]);
+  assert.equal(agent.markdown, "当前状态：屏仍在运行。\n\n[xiaomi17 Chrome](/workspace/xiaomi17-chrome.jpg)\n\n[tmp](/tmp/shot.png) [home](~/shot.png)");
+  assert.deepEqual(resolveMessageLink("/workspace/xiaomi17-chrome.jpg"), { kind: "file", path: "xiaomi17-chrome.jpg" }, "tapping the fallback link opens the file page");
+  assert.deepEqual(resolveMessageLink("/workspace//out/a.png"), { kind: "file", path: "out/a.png" });
+  const odd = messageMarkdownImages("![s](/workspace//out/a.png) ![plot](out/less\\<more.png)");
+  assert.deepEqual(odd.images, ["out/a.png", "out/less<more.png"]);
+  assert.equal(odd.markdown, "[s](/workspace//out/a.png) [plot](</workspace/out/less\\<more.png>)", "a relative fallback link names the workspace file, escaped for Markdown");
   const linked = messageMarkdownImages("[![a](/workspace/x.png)](https://example.com) [![](/workspace/y.png) more](https://example.com/2)");
-  assert.deepEqual(linked.images, ["/workspace/x.png", "/workspace/y.png"]);
+  assert.deepEqual(linked.images, ["x.png", "y.png"]);
   assert.equal(linked.markdown, "[a](https://example.com) [y.png more](https://example.com/2)", "an image inside a link's text becomes text, never a nested link or an image box");
 }
 
@@ -4582,22 +4591,22 @@ for (const notFile of ["#top", "//cdn.example/a.png", "www.example.com/a.png", "
 {
   const reads = [];
   const responses = {
-    "/workspace/a.png": { content: "", delivery: "url", url: "https://cdn.example/a.png", mimeType: "image/png", encoding: "base64" },
-    "/workspace/small.png": { content: "AAAA", delivery: "inline", mimeType: "image/png", encoding: "base64" },
-    "/workspace/big.png": { path: "/workspace/big.png", mimeType: "image/png", retryAfterMs: 2000 },
-    "/workspace/photo.heic": { content: "AAAA", delivery: "inline", mimeType: null, encoding: "base64" },
-    "/workspace/fake.png": { content: "hi", delivery: "inline", mimeType: "text/plain", encoding: "utf-8" },
+    "a.png": { content: "", delivery: "url", url: "https://cdn.example/a.png", mimeType: "image/png", encoding: "base64" },
+    "small.png": { content: "AAAA", delivery: "inline", mimeType: "image/png", encoding: "base64" },
+    "big.png": { path: "big.png", mimeType: "image/png", retryAfterMs: 2000 },
+    "photo.heic": { content: "AAAA", delivery: "inline", mimeType: null, encoding: "base64" },
+    "fake.png": { content: "hi", delivery: "inline", mimeType: "text/plain", encoding: "utf-8" },
   };
-  const client = { space: (spaceId) => ({ files: { read: async (path) => { reads.push(`${spaceId}:${path}`); if (!(path in responses)) throw Object.assign(new Error("not found"), { status: 404 }); return responses[path]; } } }) };
-  assert.equal(await resolveSandboxImage(client, "s", "/workspace/a.png"), "https://cdn.example/a.png");
-  assert.equal(await resolveSandboxImage(client, "s", "/workspace/small.png"), "data:image/png;base64,AAAA");
-  for (const path of ["/workspace/big.png", "/workspace/photo.heic", "/workspace/fake.png", "/workspace/missing.png"]) assert.equal(await resolveSandboxImage(client, "s", path), null, path);
+  const client = { space: (spaceId) => ({ files: { read: async (path) => { reads.push(`${spaceId}:${path}`); if (path.startsWith("/")) throw Object.assign(new Error("invalid path"), { status: 400 }); if (!(path in responses)) throw Object.assign(new Error("not found"), { status: 404 }); return responses[path]; } } }) };
+  assert.equal(await resolveSandboxImage(client, "s", "a.png"), "https://cdn.example/a.png");
+  assert.equal(await resolveSandboxImage(client, "s", "small.png"), "data:image/png;base64,AAAA");
+  for (const path of ["big.png", "photo.heic", "fake.png", "missing.png"]) assert.equal(await resolveSandboxImage(client, "s", path), null, path);
   reads.length = 0;
   // Mounted like the app's provider, with createAppQueryClient's defaults, so focus and online changes reach the cache.
   mock.timers.enable({ apis: ["setTimeout"] });
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 2_000, gcTime: 10 * 60_000, retry: 1 } } });
   queryClient.mount();
-  const paths = ["/workspace/a.png", "/workspace/big.png", "/workspace/missing.png"];
+  const paths = ["a.png", "big.png", "missing.png"];
   const observe = () => paths.map((path) => {
     const observer = new QueryObserver(queryClient, sandboxImageQuery(client, "s", path));
     return observer.subscribe(() => {});
@@ -4617,14 +4626,14 @@ for (const notFile of ["#top", "//cdn.example/a.png", "www.example.com/a.png", "
   unsubscribe = observe();
   await flushSync();
   assert.equal(reads.length, paths.length, "foreground, reconnect, invalidation, and a remount after the app's GC interval read nothing again, including a preparing or missing file");
-  assert.equal(queryClient.getQueryData(sandboxImageQuery(client, "s", "/workspace/big.png").queryKey), null, "a preparing file is cached as unavailable");
+  assert.equal(queryClient.getQueryData(sandboxImageQuery(client, "s", "big.png").queryKey), null, "a preparing file is cached as unavailable");
   unsubscribe.forEach((stop) => stop());
   focusManager.setFocused(undefined);
   queryClient.unmount();
   queryClient.clear();
   mock.timers.reset();
   reads.length = 0;
-  new QueryObserver(new QueryClient(), sandboxImageQuery(null, "s", "/workspace/a.png")).subscribe(() => {})();
+  new QueryObserver(new QueryClient(), sandboxImageQuery(null, "s", "a.png")).subscribe(() => {})();
   await flushSync();
   assert.deepEqual(reads, [], "no read without a client");
 }
