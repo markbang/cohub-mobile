@@ -9,6 +9,7 @@ module.exports = defineConfig([
     "android/**",
     "ios/**",
     "reference/**",
+    ".agents/**",
     "coverage/**",
     "landing/vendor/**",
     "modules/react-native-enriched-markdown/**",
