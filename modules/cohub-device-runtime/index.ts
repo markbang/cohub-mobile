@@ -49,11 +49,31 @@ export type DeviceDisplayStatus = {
   phoneControl: PhoneControlState;
 };
 
+/** What `installCli` downloads, each file pinned by SHA-256. */
+export type DeviceCliManifest = {
+  version: string;
+  nodeUrl: string;
+  nodeSha256: string;
+  cliUrl: string;
+  cliSha256: string;
+};
+
+/** `cohub` and `node` for what this device's Runtimes run. `unsupported` where the APK has no launcher (not arm64). */
+export type DeviceCliState = {
+  status: "unsupported" | "absent" | "installing" | "ready";
+  version: string | null;
+  /** 0..1 while installing. */
+  progress: number | null;
+  /** Why the last install failed: `download_failed`, `checksum_mismatch`, `invalid_package` or `failed`. */
+  error: string | null;
+};
+
 type DeviceRuntimeEvents = {
   onChange(event: { instances: DeviceRuntimeInstance[] }): void;
   onDisplayChange(event: DeviceDisplayStatus): void;
   /** A person pressed Stop on the phone; the Turn acting there should stop. */
   onDisplayInterrupt(event: { spaceId: string; sessionId: string; turnId: string | null }): void;
+  onCliChange(event: DeviceCliState): void;
   onTokenRequest(event: { forceRefresh: boolean }): void;
 };
 
@@ -74,6 +94,10 @@ declare class CohubDeviceRuntimeModule extends NativeModule<DeviceRuntimeEvents>
   browse(path: string | null): Promise<DeviceFolderListing>;
   start(spaceId: string, root: string): Promise<DeviceRuntimeRefusal | null>;
   stop(spaceId: string): void;
+  cliStatus(): DeviceCliState;
+  /** Downloads, verifies and swaps in the manifest's version; a no-op when it is installed. Rejects with `ERR_CLI_MANIFEST` for a malformed manifest. */
+  installCli(manifest: DeviceCliManifest): Promise<DeviceCliState>;
+  removeCli(): Promise<DeviceCliState>;
   displayStatus(): DeviceDisplayStatus;
   /** Shares through phone control when it is ready, otherwise after the system recording consent; rejects with `ERR_NOT_SERVING` unless this device serves the Space. */
   shareDisplay(spaceId: string): Promise<"declined" | "failed" | null>;

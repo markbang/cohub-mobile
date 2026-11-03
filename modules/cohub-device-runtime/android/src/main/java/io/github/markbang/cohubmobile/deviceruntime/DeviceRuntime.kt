@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -122,6 +123,9 @@ class DeviceRuntime private constructor(private val context: Context) {
     val display: DeviceDisplay by lazy {
         DeviceDisplay(context, scope, PhoneControl(context, scope)) { spaceId, activity -> stoppedTurns.emit(spaceId to activity) }
     }
+
+    /** `cohub` and `node` for what Runtimes run, downloaded when JS asks. */
+    val cli: DeviceCli by lazy { DeviceCli(context, OkHttpClient()) }
 
     /** Gateway origin (`wss://host`) of the signed-in environment. */
     @Volatile

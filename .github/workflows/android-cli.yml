@@ -1,0 +1,47 @@
+name: Android CLI
+
+# Publishes what DeviceCli downloads for a CLI version as the `android-cli-v<version>` release. Then pin
+# its URLs and digests in src/data/device-cli.ts; that change ships over OTA.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "@neta-art/cohub-cli version, e.g. 10.18.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'markbang/cohub-mobile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Pack
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version must look like 10.18.0"; exit 1; }
+          scripts/pack-android-cli.sh "$VERSION" dist | tee digests.txt
+          { echo '```'; cat digests.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Not `v*`, so Native Tag Release ignores it, and never the latest release.
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="android-cli-v${VERSION}"
+          gh release view "$tag" >/dev/null 2>&1 && { echo "::error::$tag exists; pinned digests must not change"; exit 1; }
+          gh release create "$tag" dist/* --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "Android CLI ${VERSION}" --notes "Downloaded on demand by the device Runtime. Digests: see the run summary."

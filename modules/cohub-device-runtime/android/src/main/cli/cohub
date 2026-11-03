@@ -1,0 +1,14 @@
+#!/system/bin/sh
+# Ships as lib/arm64-v8a/libcohub_cli.so; DeviceCli links it as bin/cohub and bin/node. Android never
+# executes what an app downloads, so Node, downloaded on demand under ../current, runs through the linker.
+# The linker takes absolute paths only.
+dir=$(cd "${0%/*}/../current" 2>/dev/null && pwd -P)
+if [ -z "$dir" ] || [ ! -f "$dir/node" ] || [ ! -f "$dir/cli/node_modules/@neta-art/cohub-cli/bin/cohub.js" ]; then
+  echo "${0##*/}: the Cohub CLI is not downloaded on this phone yet; the Cohub app downloads it while this phone serves a Space." >&2
+  exit 127
+fi
+case ${0##*/} in
+  node) exec /system/bin/linker64 "$dir/node" "$@" ;;
+  # npm is not on a phone: the app updates the CLI.
+  *) COHUB_CLI_AUTO_UPDATE=0 exec /system/bin/linker64 "$dir/node" "$dir/cli/node_modules/@neta-art/cohub-cli/bin/cohub.js" "$@" ;;
+esac

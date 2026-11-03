@@ -32,6 +32,7 @@ class SandboxBridge(
     private val relayUrl: String,
     private val runtimeId: String,
     private val displaySocket: File,
+    private val bin: File?,
     private val token: suspend () -> String,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -86,6 +87,8 @@ class SandboxBridge(
                     "FS_WATCH_IGNORE" to "Android/data,Android/obb,.thumbnails",
                 ),
             )
+            // Last, so nothing the system already provides is shadowed.
+            if (bin != null) environment()["PATH"] = listOfNotNull(environment()["PATH"], bin.path).joinToString(":")
         }.start()
         try {
             coroutineScope {
