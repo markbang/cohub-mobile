@@ -30,6 +30,7 @@ import { traceAction } from "@/src/data/interaction-trace";
 import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
+import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -674,11 +675,14 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   );
 }
 
-export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string; uri?: string; mimeType?: string; onRemove?: () => void }) {
+export function AttachmentChip({ name, uri, mimeType, upload = null, onRemove }: { name: string; uri?: string; mimeType?: string; upload?: AttachmentUploadState | null; onRemove?: () => void }) {
   const { t } = useTranslation();
   return <View className="max-w-full flex-row items-center gap-2 rounded-sm bg-accent-soft px-2 py-1" style={{ minHeight: 44, borderCurve: "continuous" }}>
     {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
     <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    {/* Ready is the quiet default; only work in progress or a failure the send will retry is shown. */}
+    {upload?.status === "uploading" ? <Loader accessibilityLabel={t("ui.attachment.uploading", { name })} /> : null}
+    {upload?.status === "failed" ? <View accessible accessibilityLabel={t("ui.attachment.uploadFailed", { name })}><AppIcon name="alert" size={16} tone="danger" /></View> : null}
     {/* A 32 × 44 box flush with the chip's end keeps the glyph where it was; the left slop completes the 44 pt target inside the chip. */}
     <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={REMOVE_SLOP} className="-my-1 -mr-2 h-11 w-8 items-center justify-center"><AppIcon name="x" size={16} tone="muted" /></Pressable>
   </View>;

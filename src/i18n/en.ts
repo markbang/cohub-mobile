@@ -119,6 +119,8 @@ export const en = {
   "ui.openNamed": "Open {name}",
   "ui.active": "Active",
   "ui.activeAgo": "Active {time} ago",
+  "ui.attachment.uploading": "Uploading {name}",
+  "ui.attachment.uploadFailed": "{name} did not upload. Sending tries again.",
   "ui.renderFailed.chatTitle": "This Chat couldn't be displayed",
   "ui.renderFailed.body": "You can still send messages. Try again, or copy the details to report it.",
   "ui.renderFailed.copy": "Copy details",

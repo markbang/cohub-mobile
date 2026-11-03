@@ -51,6 +51,8 @@ import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQ
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
 import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
+import type { UploadTarget } from "@/src/data/attachment-uploads";
+import { useAttachmentUploadState } from "@/src/data/use-attachment-upload";
 import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
 import { harnessLabel, HttpError, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
@@ -291,6 +293,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const sendFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (sendFeedbackTimerRef.current !== null) clearTimeout(sendFeedbackTimerRef.current); }, []);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, sessionId, attachments);
   useEffect(() => { if (attachments.length === 0) attachmentScrollYRef.current = 0; }, [attachments.length]);
   useEffect(() => {
     let active = true;
@@ -1481,7 +1484,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
             })}
           </ScrollView>
         </Animated.View> : null}
-        {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
+        {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
         <ComposerInput menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
@@ -1634,6 +1637,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
     onSlashFocusChange(focused);
   }, [onMentionsFocusChange, onSlashFocusChange]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, undefined, attachments);
   useEffect(() => {
     let active = true;
     inputEditedRef.current = false;
@@ -1745,7 +1749,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
           </View>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
-          {attachments.length > 0 ? <View className="bg-background px-3 pt-1"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
+          {attachments.length > 0 ? <View className="bg-background px-3 pt-1"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
           {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
           <ComposerInput menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: selectedHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={selectedHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
@@ -1821,3 +1825,28 @@ function LoadMoreCapsule({ icon, label, accessibilityLabel, loading, onPress }: 
 
 // design-system: modal scrims dim whatever theme sits underneath, so they stay black.
 const SCRIM = { backgroundColor: "rgba(0,0,0,0.6)" } as const;
+
+/**
+ * Uploads composer attachments as they are added, so sending does not wait on them. Removing a chip,
+ * or leaving with attachments still in the composer, stops their unsent uploads.
+ */
+function useComposerUploads(spaceId: string, sessionId: string | undefined, attachments: AttachmentDraft[]) {
+  const { prepareAttachments, releaseAttachments } = useAppActions();
+  const target = useMemo<UploadTarget | null>(() => spaceId ? { spaceId, ...(sessionId ? { sessionId } : {}) } : null, [sessionId, spaceId]);
+  useEffect(() => {
+    if (target && attachments.length > 0) prepareAttachments(target, attachments);
+  }, [attachments, prepareAttachments, target]);
+  const latest = useRef({ target, attachments });
+  useEffect(() => { latest.current = { target, attachments }; }, [attachments, target]);
+  useEffect(() => () => {
+    const { target: current, attachments: pending } = latest.current;
+    if (current) releaseAttachments(current, pending);
+  }, [releaseAttachments]);
+  const release = (attachment: AttachmentDraft) => { if (target) releaseAttachments(target, [attachment]); };
+  return { target, release };
+}
+
+function ComposerAttachmentChip({ target, attachment, onRemove }: { target: UploadTarget | null; attachment: AttachmentDraft; onRemove: () => void }) {
+  const upload = useAttachmentUploadState(target, attachment.uri);
+  return <AttachmentChip name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} upload={upload} onRemove={onRemove} />;
+}

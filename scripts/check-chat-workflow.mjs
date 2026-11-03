@@ -14,6 +14,7 @@ import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
 import { delayedStatusDeadline, shownDelayedStatus, stepDelayedStatus } from "../src/data/delayed-status.ts";
+import { createAttachmentUploads } from "../src/data/attachment-uploads.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -4227,7 +4228,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: () => uploads.promise, attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4268,7 +4269,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4300,7 +4301,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action),
       saveMessages: async (_user, _session, rows) => { saved.push(rows); }, deleteMessages: async (_user, _session, ids) => { deleted.push(...ids); }, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4332,7 +4333,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: () => {},
       saveMessages: write, deleteMessages: remove, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4487,7 +4488,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   const sendNewScope = {
     client: { space: () => ({ prompt: async () => ({ mode: "immediate", session: { id: "new-chat", spaceId: "space" }, turn: userTurn }) }) },
     stateRef: providerStateRef, dispatch: (action) => handoffStore.setState(({ state }) => ({ state: reduceStream(state, action) })), translate: (key) => key, newId: () => "client-message",
-    buildPromptContent: async () => [{ type: "text", text: "hi" }], displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
+    buildPromptContent: async () => [{ type: "text", text: "hi" }], attachmentUploads: null, claimAttachmentUpload: () => {}, displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
     messagesFromTurns: (turns) => turns.map((turn) => ({ id: `${turn.id}:user`, role: "user", sequence: turn.sequence, meta: { turnId: turn.id, turnSequence: turn.sequence } })),
     saveSessions: async () => {}, saveMessages: async () => {}, queryClient: { invalidateQueries: async () => {} }, userKey: "test-user",
   };
@@ -5068,6 +5069,49 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(second.map((entry) => entry.key), ["b", "a"], "a toast with an action is never merged into another; each undoes its own operation");
   assert.equal(toastDuration({ tone: "neutral", action: undo }), 5000, "a toast with an action stays long enough to reach for it");
   assert.equal(toastDuration({ tone: "neutral" }), 3200);
+}
+
+{
+  const started = [];
+  const uploads = createAttachmentUploads((target, attachment, { signal, onProgress }) => {
+    const run = { attachment, signal, onProgress };
+    run.promise = new Promise((resolve, reject) => { run.resolve = resolve; run.reject = reject; });
+    started.push(run);
+    return run.promise;
+  });
+  const chat = { spaceId: "space", sessionId: "chat" };
+  const photo = { uri: "file:///photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 10 };
+  const doc = { uri: "file:///doc.pdf", name: "doc.pdf", mimeType: "application/pdf", size: 20 };
+  uploads.prepare(chat, [photo, doc]);
+  uploads.prepare(chat, [photo, doc]);
+  assert.equal(started.length, 2, "attaching starts each upload once, however often the composer re-renders");
+  started[0].onProgress(0.5);
+  assert.deepEqual(uploads.state(chat, photo), { status: "uploading", progress: 0.5 });
+  started[0].onProgress(0.52);
+  assert.deepEqual(uploads.state(chat, photo), { status: "uploading", progress: 0.5 }, "small progress steps do not redraw the chip");
+  started[0].resolve({ publicUrl: "https://cdn/photo", mimeType: "image/jpeg" });
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(uploads.state(chat, photo), { status: "ready" });
+  assert.deepEqual(await uploads.claim(chat, photo), { publicUrl: "https://cdn/photo", mimeType: "image/jpeg" }, "a send uses the finished upload instead of uploading again");
+  assert.equal(started.length, 2);
+  uploads.release(chat, [photo, doc]);
+  assert.equal(started[1].signal.aborted, true, "removing an unsent chip stops its upload");
+  assert.equal(uploads.state(chat, doc), null);
+  assert.notEqual(uploads.state(chat, photo), null, "an upload a send has claimed is not released with the composer");
+  uploads.prepare(chat, [doc]);
+  started[2].reject(new Error("offline"));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(uploads.state(chat, doc).status, "failed", "a failed pre-upload shows on the chip before sending");
+  const retried = uploads.claim(chat, doc);
+  assert.equal(started.length, 4, "sending retries a failed pre-upload once");
+  started[3].resolve({ publicUrl: "https://cdn/doc", mimeType: "application/pdf" });
+  assert.equal((await retried).publicUrl, "https://cdn/doc");
+  uploads.forget(chat, [photo, doc]);
+  assert.equal(uploads.state(chat, photo), null, "a sent upload is dropped, so attaching the file again uploads it again");
+  uploads.prepare({ spaceId: "space" }, [photo]);
+  assert.equal(started.length, 5, "a new Chat's upload is its own; it is not shared with an existing Chat");
+  uploads.dispose();
+  assert.equal(started[4].signal.aborted, true, "signing out stops every pending upload");
 }
 
 console.log("Chat workflow checks passed");

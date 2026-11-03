@@ -118,6 +118,8 @@ export const zh: Record<TranslationKey, string> = {
   "ui.openNamed": "打开{name}",
   "ui.active": "活跃",
   "ui.activeAgo": "{time}前活跃",
+  "ui.attachment.uploading": "正在上传 {name}",
+  "ui.attachment.uploadFailed": "{name} 上传失败，发送时会重试。",
   "ui.renderFailed.chatTitle": "无法显示这个对话",
   "ui.renderFailed.body": "仍可发送消息。可以重试，或复制详情用于反馈。",
   "ui.renderFailed.copy": "复制详情",
