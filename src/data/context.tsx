@@ -34,6 +34,8 @@ import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realti
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
+import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
+import { useSessionSeenOwner } from "@/src/data/use-session-seen";
 import { createStreamBatch } from "@/src/data/chat-rendering";
 import {
   clearComposerDraft as clearLocalComposerDraft,
@@ -886,6 +888,7 @@ export type AppSnapshot = {
   connectionUnavailable: boolean;
   spaceVisits: SpaceVisit[];
   spaceVisitsError: string | null;
+  sessionSeen: SessionSeenState;
 };
 
 /** Provider operations and session-scoped handles; identities change only with the client or user. */
@@ -937,6 +940,9 @@ export type AppActions = {
   applyCacheRetention: () => Promise<void>;
   loadSessionReadSequence: (sessionId: string) => Promise<number | null>;
   saveSessionReadSequence: (sessionId: string, sequence: number) => Promise<void>;
+  /** Device-local: records the Chat's latest message as seen for the Chats list unread marker. */
+  markSessionSeen: (sessionId: string, messageId: string | null) => Promise<void>;
+  markSessionUnread: (sessionId: string) => Promise<void>;
 };
 
 type AppStore = StoreApi<AppSnapshot>;
@@ -947,6 +953,7 @@ const createAppStore = (): AppStore => createStore<AppSnapshot>()(() => ({
   connectionUnavailable: false,
   spaceVisits: [],
   spaceVisitsError: null,
+  sessionSeen: EMPTY_SESSION_SEEN,
 }));
 
 const MODELS_KEY = ["models"] as const;
@@ -1062,6 +1069,7 @@ export function AppProvider({
   );
 
   const { loadOverview: loadSpaceOverview, recordVisit: recordSpaceVisit, reset: resetSpaceList } = useSpaceListOwner(client, userKey, store, queryClient);
+  const { markSeen: markSessionSeen, markUnread: markSessionUnread, reload: reloadSessionSeen } = useSessionSeenOwner(userKey, store);
 
   useEffect(() => {
     clientRef.current = client;
@@ -2459,12 +2467,14 @@ export function AppProvider({
     statusSessionsRef.current.clear();
     resetSpaceList();
     await clearUserCache(userKey);
+    // A fresh baseline keeps every cleared Chat read instead of marking them all unread.
+    await reloadSessionSeen().catch(() => undefined);
     paginationRequestsRef.current.clear();
     spacePinMutationVersionsRef.current.clear();
     spacePinPendingMutationsRef.current.clear();
     store.setState({ state: { ...initialState, booting: false, refreshing: false } });
     void queryClient.resetQueries();
-  }, [queryClient, resetSpaceList, store, userKey]);
+  }, [queryClient, reloadSessionSeen, resetSpaceList, store, userKey]);
 
   const actions = useMemo<AppActions>(
     () => ({
@@ -2511,8 +2521,12 @@ export function AppProvider({
       applyCacheRetention,
       loadSessionReadSequence: loadSessionReadSequenceForUser,
       saveSessionReadSequence: saveSessionReadSequenceForUser,
+      markSessionSeen,
+      markSessionUnread,
     }),
     [
+      markSessionSeen,
+      markSessionUnread,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,

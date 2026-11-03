@@ -7,7 +7,9 @@ import { displayForkSessionTitle, formatRelativeTime, previewText } from "@/src/
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
-import { shallowEqual, useAppSelector } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
+import { isSessionUnread } from "@/src/data/chat-read-state";
+import { useToast } from "@/src/components/Toast";
 import { useTranslation } from "@/src/i18n";
 import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -53,6 +55,9 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
       spaceAvatarUrl: canonicalSpace?.publicProfile?.avatarUrl ?? session.space?.publicProfile?.avatarUrl ?? null,
     };
   }, shallowEqual);
+  const { markSessionSeen, markSessionUnread } = useAppActions();
+  const toast = useToast();
+  const unreadMark = useAppSelector((app) => isSessionUnread(session, app.sessionSeen));
   // The running label shows elapsed minutes, which used to advance only with unrelated app re-renders.
   const [, tick] = useReducer((count: number) => count + 1, 0);
   useEffect(() => {
@@ -64,6 +69,8 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const spaceName = canonicalName || t("space.fallbackName");
   const activity = sessionActivity(session, { status, latestTurn, live: liveStatus ? { turnId: liveTurnId, status: liveStatus } : null, t });
   const glyph = status === "running" || status === "failed" || status === "stopped" ? status : null;
+  // A running Chat already shows its ring; the dot arrives once the agent has finished.
+  const unread = unreadMark && glyph !== "running";
   const depth = tree?.depth ?? 0;
   const branch = depth > 0;
   const title = displayForkSessionTitle(session, fork);
@@ -102,7 +109,14 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const shownLabels = labels.slice(0, 2);
   // A hold peeks at the last exchange; rows whose hold already manages labels keep it.
   const peek = !onLongPress;
-  const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }] as const;
+  const toggleRead = () => {
+    const write = unread ? markSessionSeen(session.id, session.lastMessageId) : markSessionUnread(session.id);
+    void write.catch(() => toast({ title: t("session.readState.saveFailed"), tone: "danger" }));
+  };
+  const readAction = unread
+    ? { icon: "check-check", title: t("session.markRead"), onPress: toggleRead } as const
+    : { icon: "message-square", title: t("session.markUnread"), onPress: toggleRead } as const;
+  const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }, readAction] as const;
   const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? formatRelativeTime(session.lastMessageAt ?? session.updatedAt) };
   const row = <ListRow
     leading={leading}
@@ -114,7 +128,10 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     trailing={shownLabels.length ? <View className="flex-row gap-1">{shownLabels.map((label) => <Tag key={label.id} label={label.name} tone={label.system ? "info" : "accent"} />)}</View> : null}
     // A fork tree reads as one item: its guide lines run unbroken and only its end draws a separator.
     group={!tree ? "single" : tree.depth === 0 ? (tree.lastInGroup ? "single" : "first") : tree.lastInGroup ? "last" : "middle"}
-    accessibilityLabel={[t("ui.openNamed", { name: title }), statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
+    unread={unread}
+    accessibilityLabel={[t("ui.openNamed", { name: title }), unread ? t("session.unread") : null, statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
+    accessibilityActions={[{ name: "toggleRead", label: readAction.title }]}
+    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "toggleRead") toggleRead(); }}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}
     onLongPress={!peek ? onLongPress : nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}

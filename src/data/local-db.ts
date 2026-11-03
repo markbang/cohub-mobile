@@ -2,6 +2,7 @@ import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
 import type { MessageRecord, SessionListFork, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 import { isOptimisticFollowup } from "./followup-queue";
 import { turnSequenceForMessage } from "./session-history";
+import type { SessionSeenEntry, SessionSeenState } from "./chat-read-state";
 
 export type CachedHome = {
   spaces: SpaceRecord[];
@@ -87,6 +88,18 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
       sequence INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (user_key, session_id)
+    );
+    CREATE TABLE IF NOT EXISTS session_seen (
+      user_key TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      message_id TEXT,
+      seen_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_key, session_id)
+    );
+    CREATE TABLE IF NOT EXISTS session_seen_baseline (
+      user_key TEXT PRIMARY KEY NOT NULL,
+      baseline INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS composer_drafts (
       user_key TEXT NOT NULL,
@@ -247,6 +260,9 @@ export async function pruneUserCache(userKey: string, cutoff: number) {
     await db.runAsync("DELETE FROM sessions WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
+    // Chats whose seen row is pruned fall back to the baseline, so it moves up to keep them read.
+    await db.runAsync("DELETE FROM session_seen WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
+    await db.runAsync("UPDATE session_seen_baseline SET baseline = MAX(baseline, ?) WHERE user_key = ?", cutoff, userKey);
   });
 }
 
@@ -329,6 +345,31 @@ export async function saveSessionReadSequence(userKey: string, sessionId: string
     userKey,
     sessionId,
     sequence,
+    Date.now(),
+  );
+}
+
+/** The first load for a user sets the baseline, so Chats from before read tracking start read. */
+export async function loadSessionSeen(userKey: string, now: number): Promise<SessionSeenState> {
+  const db = await database();
+  await db.runAsync("INSERT OR IGNORE INTO session_seen_baseline (user_key, baseline) VALUES (?, ?)", userKey, now);
+  const row = await db.getFirstAsync<{ baseline: number }>("SELECT baseline FROM session_seen_baseline WHERE user_key = ?", userKey);
+  if (!row) throw new Error("Could not load read state for Chats. Restart the app to retry.");
+  const rows = await db.getAllAsync<{ sessionId: string; messageId: string | null; seenAt: number }>(
+    "SELECT session_id AS sessionId, message_id AS messageId, seen_at AS seenAt FROM session_seen WHERE user_key = ?",
+    userKey,
+  );
+  return { baseline: row.baseline, entries: Object.fromEntries(rows.map(({ sessionId, messageId, seenAt }) => [sessionId, { messageId, seenAt }])) };
+}
+
+export async function saveSessionSeen(userKey: string, sessionId: string, entry: SessionSeenEntry) {
+  const db = await database();
+  await db.runAsync(
+    "INSERT OR REPLACE INTO session_seen (user_key, session_id, message_id, seen_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    userKey,
+    sessionId,
+    entry.messageId,
+    entry.seenAt,
     Date.now(),
   );
 }
@@ -427,6 +468,8 @@ export async function clearUserCache(userKey: string) {
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM spaces WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM session_seen WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM session_seen_baseline WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM composer_drafts WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_list_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM running_session_cache WHERE user_key = ?", userKey);

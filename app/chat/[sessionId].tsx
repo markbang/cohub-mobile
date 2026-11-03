@@ -21,6 +21,7 @@ import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
 import { isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
 import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess";
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
+import { latestMessageId } from "@/src/data/chat-read-state";
 import { forkPoint } from "@/src/data/session-fork";
 import type { RelatedSessionRef } from "@/src/data/related-sessions";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
@@ -206,7 +207,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -252,6 +253,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
     };
   }, [sessionId]));
+  // The open Chat is seen up to whichever record (thread or list) knows the newer message.
+  const seenMessageId = latestMessageId(view.session, sessionSummary);
+  useFocusEffect(useCallback(() => {
+    if (seenMessageId) void markSessionSeen(sessionId, seenMessageId).catch(() => undefined);
+  }, [markSessionSeen, seenMessageId, sessionId]));
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", () => {
       sendGenerationRef.current += 1;

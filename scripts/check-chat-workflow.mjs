@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
-import { latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
+import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
@@ -653,9 +653,11 @@ const formScope = {
     spaces: [{ id: "space", name: "Renamed Space", publicProfile: { avatarUrl: "https://new" } }],
     sessionViews: {}, sessionLatestTurns: {}, sessionTurnStatuses: {},
   };
+  let sessionSeen = { baseline: null, entries: {} };
   const renderSessionRow = loadChromeComponent("../src/components/SessionRow.tsx", "SessionRow", {
     ...chromeScope,
-    ...appHooks(() => ({ state })),
+    ...appHooks(() => ({ state, sessionSeen })),
+    useToast: () => () => {}, isSessionUnread,
     React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
     useState: () => [null, () => {}], useReducer: () => [0, () => {}], useEffect: () => {},
     Avatar: "Avatar", AvatarStatus: "AvatarStatus", ListRow: "ListRow", Tag: "Tag", AppIcon: "AppIcon",
@@ -673,6 +675,11 @@ const formScope = {
   const avatar = chromeNodes(row.props.leading).find((node) => node.type === "Avatar");
   assert.equal(avatar.props.name, "Renamed Space");
   assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
+  assert.equal(row.props.unread, false);
+  sessionSeen = { baseline: Date.parse("2025-12-31T00:00:00Z"), entries: {} };
+  const unreadRow = chromeNodes(renderSessionRow({ session: { ...staleSession, lastMessageId: "m1" }, onPress() {} })).find((node) => node.type === "ListRow");
+  assert.equal(unreadRow.props.unread, true, "a message after the baseline marks a never-opened Chat unread");
+  assert.match(unreadRow.props.accessibilityLabel, /session\.unread/, "unread is announced, not only drawn");
 }
 
 // The Space contributor renderer must show a human name, including when the API uses a UUID placeholder.
@@ -3910,6 +3917,25 @@ assert.equal(latestUnreadAssistantIndex(messages, null), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 6), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 7), -1);
 assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta: null }], null), -1);
+{
+  const at = (iso) => Date.parse(iso);
+  const chat = (lastMessageId, lastMessageAt) => ({ id: "s1", lastMessageId, lastMessageAt });
+  const seen = (entries, baseline = at("2026-11-03T08:00:00Z")) => ({ baseline, entries });
+  // Not hydrated, or no messages: never unread.
+  assert.equal(isSessionUnread(chat("m1", "2026-11-03T09:00:00Z"), { baseline: null, entries: {} }), false);
+  assert.equal(isSessionUnread(chat(null, null), seen({})), false);
+  // Never opened here: only messages after the baseline count.
+  assert.equal(isSessionUnread(chat("m1", "2026-11-03T07:00:00Z"), seen({})), false);
+  assert.equal(isSessionUnread(chat("m1", "2026-11-03T09:00:00Z"), seen({})), true);
+  // Seen message id, a newer message, and a list that learns the id after the Chat closed.
+  assert.equal(isSessionUnread(chat("m1", "2026-11-03T09:00:00Z"), seen({ s1: { messageId: "m1", seenAt: at("2026-11-03T09:01:00Z") } })), false);
+  assert.equal(isSessionUnread(chat("m2", "2026-11-03T09:05:00Z"), seen({ s1: { messageId: "m1", seenAt: at("2026-11-03T09:01:00Z") } })), true);
+  assert.equal(isSessionUnread(chat("m2", "2026-11-03T09:00:30Z"), seen({ s1: { messageId: "m1", seenAt: at("2026-11-03T09:01:00Z") } })), false);
+  // Mark as unread survives until the Chat is opened again.
+  assert.equal(isSessionUnread(chat("m1", "2026-11-03T07:00:00Z"), seen({ s1: { messageId: null, seenAt: 0 } })), true);
+  assert.equal(latestMessageId({ lastMessageId: "m1", lastMessageAt: "2026-11-03T09:00:00Z" }, { lastMessageId: "m2", lastMessageAt: "2026-11-03T09:05:00Z" }), "m2");
+  assert.equal(latestMessageId(null, { lastMessageId: null, lastMessageAt: null }), null);
+}
 
 // Accent presets replace the base accent tokens in every mode and keep the default's contrast.
 {

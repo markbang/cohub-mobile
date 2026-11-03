@@ -19,7 +19,7 @@ const FLAT_SEPARATOR_INSET = 16 + 46 + 12;
  * on line 1, context on line 2, state carried by the leading glyph. Lists are flat on both platforms, as in
  * Mail and Messages: full-width rows with a hairline inset past the avatar.
  */
-export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false }: {
+export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false, unread = false }: {
   leading?: ReactNode;
   title: string;
   titlePrefix?: ReactNode;
@@ -39,6 +39,8 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   testID?: string;
   group?: ListRowGroup;
   compact?: boolean;
+  /** A dot under the time and an accent time, as in Mail; the row's label must say it in words. */
+  unread?: boolean;
 }) {
   const body = <>
     {leading ? <View className="justify-center pr-3">{leading}</View> : null}
@@ -47,13 +49,14 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
         <View className="flex-row items-center gap-2">
           {titlePrefix}
           <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
-          {meta ? <Text className="text-caption tabular-nums text-fg-faint">{meta}</Text> : null}
+          {meta ? <Text className={`text-caption tabular-nums ${unread ? "text-accent" : "text-fg-faint"}`}>{meta}</Text> : null}
         </View>
-        {subtitle || trailing ? <View className="flex-row items-center gap-2">
+        {subtitle || trailing || unread ? <View className="flex-row items-center gap-2">
           {typeof subtitle === "string"
             ? <Text numberOfLines={1} className="min-w-0 flex-1 text-subhead text-fg-muted">{subtitle}</Text>
             : <View className="min-w-0 flex-1">{subtitle}</View>}
           {trailing}
+          {unread ? <View className="size-2.5 rounded-full bg-accent" /> : null}
         </View> : null}
       </View>
       {accessory}
