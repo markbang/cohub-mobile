@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.8](https://github.com/markbang/cohub-mobile/compare/v2.3.7...v2.3.8) (2026-11-03)
+
+
+### Features
+
+* **android:** offer cohub and node to device Runtimes, downloaded on demand ([#167](https://github.com/markbang/cohub-mobile/issues/167)) ([88c0378](https://github.com/markbang/cohub-mobile/commit/88c03787570bf9249340efec0e808740397d10ba))
+* **chat:** render sandbox images referenced in agent replies ([#168](https://github.com/markbang/cohub-mobile/issues/168)) ([16d3cc0](https://github.com/markbang/cohub-mobile/commit/16d3cc0c9ae707e84cadcc623aa745b4638f9ac2))
+
+
+### Fixes
+
+* **android:** stop the Chat timeline crashing when its screen is popped ([#172](https://github.com/markbang/cohub-mobile/issues/172)) ([def3a1b](https://github.com/markbang/cohub-mobile/commit/def3a1b7c7f3febc86979cef66847b267e786b1c))
+* **cache:** run local SQLite transactions one at a time ([#171](https://github.com/markbang/cohub-mobile/issues/171)) ([8643b9a](https://github.com/markbang/cohub-mobile/commit/8643b9a6c0882b66ce90ea786f69a53420db18af))
+* **chat:** draw multi-image galleries on Android ([#173](https://github.com/markbang/cohub-mobile/issues/173)) ([cdb0387](https://github.com/markbang/cohub-mobile/commit/cdb0387ffa58c3e84352244e3f113df9b2c28bf8))
+* **chat:** read message images and file links by workspace-relative path ([#170](https://github.com/markbang/cohub-mobile/issues/170)) ([fb22dd9](https://github.com/markbang/cohub-mobile/commit/fb22dd905354397de37f9487a8a10d2d03ba385e))
+
 ## [2.3.7](https://github.com/markbang/cohub-mobile/compare/v2.3.6...v2.3.7) (2026-11-02)
 
 
