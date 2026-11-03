@@ -709,6 +709,14 @@ class ChatTimelineView(
       rect: Rect,
       immediate: Boolean,
     ): Boolean = false
+
+    // react-native-screens marks every descendant of a screen it pops as transitioning. Android keeps
+    // the parent of a transitioning child it removes, so a row recycled during the pop (a fling, or a
+    // layout that drops rows) is still attached and the recycler throws "Scrapped or attached views
+    // may not be recycled". The list owns its rows and React never removes them, so it opts out.
+    override fun startViewTransition(view: View) = Unit
+
+    override fun endViewTransition(view: View) = Unit
   }
 
   private inner class TimelineLayoutManager(
