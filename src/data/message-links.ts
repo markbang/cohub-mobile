@@ -9,38 +9,37 @@ const COHUB_SPACE_URI = new RegExp(`^cohub://spaces/(${UUID})(?:/sessions/(${UUI
 const COHUB_WEB_SPACE = new RegExp(`^${COHUB_WEB_ORIGIN_SOURCE}?/spaces/(${UUID})(?:/sessions/(${UUID}))?(?:[?#].*)?$`);
 const COHUB_APP_URI = /^cohub:\/\/apps\/([^/?#\s]+)\/([^/?#\s]+)\/([^/?#\s]+)([?#]\S*)?$/;
 const SCHEME = /^[a-z][a-z\d+.-]*:/i;
-const WORKSPACE_ROOT = "/workspace";
-// HOME in the Cohub sandbox image (`apps/sandbox/Dockerfile`).
-const SANDBOX_HOME = "/home/node";
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "heic", "heif"]);
 
-function joinSandboxPath(root: string, relative: string): string | null {
-  const parts = root.split("/").filter(Boolean);
-  const floor = parts.length;
-  for (const segment of relative.split("/")) {
-    if (!segment || segment === ".") continue;
-    if (segment === "..") {
-      if (parts.length <= floor) return null;
-      parts.pop();
-    } else parts.push(segment);
-  }
-  return parts.length > floor ? `/${parts.join("/")}` : null;
-}
-
-/**
- * The sandbox path a message image target points at: absolute paths with `.` and `..` resolved,
- * `~/…` under the sandbox HOME, and relative paths under the Space root. Null for URLs and anchors.
- */
-export function sandboxFilePath(url: string): string | null {
+/** A link target that names a file on the agent's machine rather than a URL or an anchor. */
+function localTarget(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//") || SCHEME.test(trimmed)) return null;
   if ([...trimmed].some((char) => char === "\\" || char.charCodeAt(0) <= 0x1f || char.charCodeAt(0) === 0x7f)) return null;
-  if (trimmed.startsWith("/")) return joinSandboxPath("/", trimmed);
-  if (trimmed.startsWith("~/")) return joinSandboxPath(SANDBOX_HOME, trimmed.slice(2));
   const first = trimmed.split("/", 1)[0]!;
   // md4c hands permissive autolinks over without a scheme (`www.example.com`, `name@example.com`).
-  if (first.startsWith("~") || /^www\./i.test(first) || first.includes("@")) return null;
-  return joinSandboxPath(WORKSPACE_ROOT, trimmed.startsWith("workspace/") ? trimmed.slice("workspace/".length) : trimmed);
+  if (/^www\./i.test(first) || first.includes("@")) return null;
+  return trimmed;
+}
+
+/**
+ * The Space file a link target names, as the files API takes it: relative to the workspace, with
+ * `.` and `..` resolved. `/workspace/…` and relative paths qualify; other absolute paths and `~/…`
+ * are outside the Space's files and do not.
+ */
+export function workspaceFilePath(url: string): string | null {
+  const target = localTarget(url);
+  if (!target || target.startsWith("~")) return null;
+  const prefix = /^\/?workspace\/+/.exec(target)?.[0];
+  if (!prefix && target.startsWith("/")) return null;
+  const relative = target.slice(prefix?.length ?? 0);
+  const parts: string[] = [];
+  for (const segment of relative.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment !== "..") parts.push(segment);
+    else if (!parts.pop()) return null;
+  }
+  return parts.length ? parts.join("/") : null;
 }
 
 function isImagePath(path: string) {
@@ -71,7 +70,7 @@ export function resolveMessageLink(url: string): ResolvedMessageLink | null {
   // Work mentions have no native slug route; open the published page instead.
   const app = COHUB_APP_URI.exec(trimmed);
   if (app) return { kind: "external", url: `https://cohub.live/${app[1]}/${app[2]}/w/${app[3]}${app[4] ?? ""}` };
-  if (trimmed.startsWith("/")) return { kind: "file", path: trimmed };
+  if (trimmed.startsWith("/")) return { kind: "file", path: workspaceFilePath(trimmed) ?? trimmed };
   if (/^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)) return { kind: "external", url: trimmed };
   return null;
 }
@@ -201,14 +200,17 @@ function rewriteParagraph(text: string, images: string[], asText = false) {
     const image = text[bang] === "!" && structural(bang);
     if (!image) linkTexts.push([open, close]);
     const raw = text.slice(target.start, target.end);
-    const path = sandboxFilePath((raw.startsWith("<") ? raw.slice(1, -1) : raw).replace(ESCAPED_PUNCTUATION, "$1"));
-    if (!path) continue;
-    if (isImagePath(path) && !images.includes(path)) images.push(path);
+    const local = localTarget((raw.startsWith("<") ? raw.slice(1, -1) : raw).replace(ESCAPED_PUNCTUATION, "$1"));
+    if (!local) continue;
+    const path = workspaceFilePath(local);
+    if (path && isImagePath(path) && !images.includes(path)) images.push(path);
     if (!image) continue;
-    // The device cannot load a sandbox path, and the native renderer draws such an image as an
+    // The device cannot load a local path, and the native renderer draws such an image as an
     // empty box. As a link it keeps its text and opens the file; a resolved image renders below.
     const label = rewriteParagraph(text.slice(open + 1, close), images, true);
-    const name = label.trim() || path.slice(path.lastIndexOf("/") + 1).replace(/[[\]\\`]/g, "\\$&");
+    const name = label.trim() || local.slice(local.lastIndexOf("/") + 1).replace(/[[\]\\`]/g, "\\$&");
+    // A relative target would not open as a link, so the link names the workspace file instead.
+    const destination = path && !local.startsWith("/") ? `</workspace/${path.replace(/[<>\\]/g, "\\$&")}>` : null;
     // Links cannot nest: an image inside another link's text becomes that text.
     if (asText || linkTexts.some(([start, end]) => bang > start && bang < end)) {
       out += `${text.slice(copied, bang)}${name}`;
@@ -216,6 +218,10 @@ function rewriteParagraph(text: string, images: string[], asText = false) {
     } else {
       out += `${text.slice(copied, bang)}[${name}]`;
       copied = close + 1;
+      if (destination) {
+        out += `(${destination}${text.slice(target.end, target.close + 1)}`;
+        copied = target.close + 1;
+      }
     }
     open = target.close;
   }
@@ -236,8 +242,9 @@ function indentWidth(line: string) {
 }
 
 /**
- * Sandbox images a message references through `![…](path)` or `[…](path)`, outside code, in
- * order. The returned Markdown has those sandbox images rewritten as links to the same path.
+ * Workspace images a message references through `![…](path)` or `[…](path)`, outside code, in
+ * order and relative to the workspace. The returned Markdown has every image with a local path
+ * rewritten as a link to that file.
  */
 export function messageMarkdownImages(markdown: string): MessageMarkdownImages {
   const images: string[] = [];
