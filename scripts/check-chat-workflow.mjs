@@ -13,6 +13,7 @@ import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
+import { delayedStatusDeadline, shownDelayedStatus, stepDelayedStatus } from "../src/data/delayed-status.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -1667,7 +1668,7 @@ try {
   screen.unmount();
 } finally { mock.timers.reset(); }
 const fadeAnimation = { duration: () => fadeAnimation };
-const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined });
+const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
 assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
 {
   const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
@@ -4516,7 +4517,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
     useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; pendingRender = true; }]; },
     useEffect: () => {},
   };
-  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800, messageRowKey });
+  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800, messageRowKey, useDelayedStatus: () => null });
   const isCatchUpArrival = loadChromeComponent("../src/components/use-chat-catch-up.ts", "isCatchUpArrival", { messageRowKey });
   const render = (catchingUp, messages) => { let result; do { pendingRender = false; cursor = 0; result = catchUpHook(catchingUp, messages); } while (pendingRender); return result; };
   const cached = [{ id: "a" }, { id: "b" }];
@@ -5032,6 +5033,29 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(gate.holding(), true);
   assert.deepEqual(gate.next(false), [false], "settling a held report while still away delivers the background");
   assert.deepEqual(gate.next(true), [true]);
+}
+
+{
+  let clock = 1_000;
+  const now = () => clock;
+  const step = (state, value, options = {}) => stepDelayedStatus(state, { key: "k", value, deadlinePassed: state !== null && delayedStatusDeadline(state) !== null && clock >= delayedStatusDeadline(state), ...options }, now);
+  let state = step(null, "syncing");
+  assert.equal(shownDelayedStatus(state, "k"), null, "a status waits before it shows");
+  clock += 200;
+  state = step(state, null);
+  assert.equal(state.phase, "idle", "work that finishes inside the delay never shows");
+  state = step(state, "syncing");
+  clock += 400;
+  state = step(state, "syncing");
+  assert.equal(shownDelayedStatus(state, "k"), "syncing");
+  clock += 100;
+  state = step(state, null);
+  assert.equal(shownDelayedStatus(state, "k"), "syncing", "a shown status holds for its minimum time");
+  clock += 300;
+  state = step(state, null);
+  assert.equal(state.phase, "idle");
+  assert.equal(shownDelayedStatus(step(null, true, { showDelayMs: 0 }), "k"), true, "a zero delay shows at once");
+  assert.equal(shownDelayedStatus(state, "other"), null, "another key never sees this status");
 }
 
 console.log("Chat workflow checks passed");

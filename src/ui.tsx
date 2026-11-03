@@ -29,6 +29,7 @@ import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
 import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
+import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -708,8 +709,10 @@ function useOutageAnnouncement(visible: boolean, label: string) {
 export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   const label = t("ui.banner.unavailable");
-  useOutageAnnouncement(visible, label);
-  if (!visible) return null;
+  // Realtime recovery already waits out short drops; a reconnect right after that must not flash the banner.
+  const shown = useDelayedStatus("connection", visible ? true : null, { showDelayMs: 0, minVisibleMs: 1_000 }) === true;
+  useOutageAnnouncement(shown, label);
+  if (!shown) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
     <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-2 rounded-full bg-surface-float px-3 py-1 shadow-float">
       <Mascot size={20} mood="worried" />
