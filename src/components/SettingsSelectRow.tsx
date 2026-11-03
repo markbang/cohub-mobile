@@ -41,7 +41,7 @@ function menuLayout(anchor: MorphRect, window: { width: number; height: number }
  * the finger, and sliding onto a choice and letting go picks it, with a selection tick per row.
  * This drawn version serves Android; iOS uses the system control (`SettingsSelectRow.ios.tsx`).
  */
-export function SettingsSelectRow<T extends string>({ icon, title, value, options, onChange, last = false, disabled = false, onOpenChange, testID }: {
+export type SettingsSelectRowProps<T extends string> = {
   icon: IconName;
   title: string;
   value: T;
@@ -49,10 +49,12 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   onChange: (value: T) => void;
   last?: boolean;
   disabled?: boolean;
-  /** Lets the owning scroll view stop scrolling while a press slides through the menu. */
+  /** Lets the owning scroll view stop scrolling while a press slides through the drawn menu; the system menu needs no scroll lock. */
   onOpenChange?: (open: boolean) => void;
   testID?: string;
-}) {
+};
+
+export function SettingsSelectRow<T extends string>({ icon, title, value, options, onChange, last = false, disabled = false, onOpenChange, testID }: SettingsSelectRowProps<T>) {
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   // Held in state rather than a ref: touch callbacks measure it, and they are built during render.

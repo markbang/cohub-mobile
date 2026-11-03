@@ -39,6 +39,17 @@ for (const file of files) {
   if (exempt) exemptOpen.push(file);
 }
 
+// A platform variant (`Foo.ios.tsx`) takes its props type from the base file, so the two cannot drift.
+const inlineVariantProps = /export function (\w+)(?:<[^>]*>)?\(\s*\{[^}]*\}\s*:\s*\{/g;
+for (const file of files.filter((file) => /\.ios\.tsx$/.test(file))) {
+  const base = file.replace(/\.ios\.tsx$/, ".tsx");
+  if (!files.includes(base)) continue;
+  const baseSource = readFileSync(base, "utf8");
+  for (const match of readFileSync(file, "utf8").matchAll(inlineVariantProps)) {
+    if (new RegExp(`export function ${match[1]}\\b`).test(baseSource)) violations.push(`${file}  inline props on ${match[1]} — import its props type from ${base}`);
+  }
+}
+
 if (exemptOpen.length) {
   console.error(`Unclosed design-system-begin in:\n${exemptOpen.join("\n")}`);
   process.exit(1);

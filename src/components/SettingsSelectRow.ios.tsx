@@ -2,28 +2,17 @@ import { Host, Picker, Text } from "@expo/ui/swift-ui";
 import { disabled as disabledModifier, labelsHidden, pickerStyle, tag, tint } from "@expo/ui/swift-ui/modifiers";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { traceAction } from "@/src/data/interaction-trace";
-import type { IconName } from "@/src/icons";
+import type { SettingsSelectRowProps } from "./SettingsSelectRow";
 import { useAppTheme } from "@/src/theme";
 
-export type SelectOption<T extends string> = { value: T; label: string };
+export type { SelectOption, SettingsSelectRowProps } from "./SettingsSelectRow";
 
 /**
  * iOS: the system pop-up button (SwiftUI `Picker` in menu style), so the menu, its Liquid Glass,
  * its spring, and press-and-slide selection are UIKit's own. Android renders the drawn version in
  * `SettingsSelectRow.tsx`; both take the same props.
  */
-export function SettingsSelectRow<T extends string>({ icon, title, value, options, onChange, last = false, disabled = false, testID }: {
-  icon: IconName;
-  title: string;
-  value: T;
-  options: readonly SelectOption<T>[];
-  onChange: (value: T) => void;
-  last?: boolean;
-  disabled?: boolean;
-  /** Only the drawn menu holds a press over the page; the system menu needs no scroll lock. */
-  onOpenChange?: (open: boolean) => void;
-  testID?: string;
-}) {
+export function SettingsSelectRow<T extends string>({ icon, title, value, options, onChange, last = false, disabled = false, testID }: SettingsSelectRowProps<T>) {
   const theme = useAppTheme();
   return <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
     <Host matchContents colorScheme={theme.mode} testID={testID}>

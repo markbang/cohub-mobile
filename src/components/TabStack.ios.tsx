@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
 import { useAppTheme } from "@/src/theme";
 import { liquidGlass } from "@/src/ui/Glass";
+import type { TabStackProps } from "./TabStack";
 
 // The title is set here so the bar is in place on the first frame.
-export function TabStack({ title }: { title: string }) {
+export function TabStack({ title }: TabStackProps) {
   const theme = useAppTheme();
   return <Stack screenOptions={{
     title,
