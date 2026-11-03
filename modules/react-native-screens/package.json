@@ -1,0 +1,122 @@
+{
+  "name": "react-native-screens",
+  "version": "4.30.0",
+  "private": true,
+  "description": "Vendored fork of react-native-screens; see UPSTREAM.md",
+  "license": "MIT",
+  "author": {
+    "email": "krzys.magiera@gmail.com",
+    "name": "Krzysztof Magiera"
+  },
+  "homepage": "https://github.com/software-mansion/react-native-screens#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/software-mansion/react-native-screens.git"
+  },
+  "main": "lib/commonjs/index",
+  "module": "lib/module/index",
+  "react-native": "src/index",
+  "source": "src/index",
+  "types": "lib/typescript/index.d.ts",
+  "dependencies": {
+    "react-freeze": "^1.0.0",
+    "warn-once": "^0.1.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "codegenConfig": {
+    "name": "rnscreens",
+    "type": "all",
+    "jsSrcsDir": "./src/fabric",
+    "android": {
+      "javaPackageName": "com.swmansion.rnscreens"
+    },
+    "ios": {
+      "components": {
+        "RNSFullWindowOverlay": {
+          "className": "RNSFullWindowOverlay"
+        },
+        "RNSModalScreen": {
+          "className": "RNSModalScreen"
+        },
+        "RNSScreenContainer": {
+          "className": "RNSScreenContainerView"
+        },
+        "RNSScreenContentWrapper": {
+          "className": "RNSScreenContentWrapper"
+        },
+        "RNSScreenFooter": {
+          "className": "RNSScreenFooter"
+        },
+        "RNSScrollToTopGuard": {
+          "className": "RNSScrollToTopGuard"
+        },
+        "RNSScreen": {
+          "className": "RNSScreenView"
+        },
+        "RNSScreenNavigationContainer": {
+          "className": "RNSScreenNavigationContainerView"
+        },
+        "RNSScreenStackHeaderConfig": {
+          "className": "RNSScreenStackHeaderConfig"
+        },
+        "RNSScreenStackHeaderSubview": {
+          "className": "RNSScreenStackHeaderSubview"
+        },
+        "RNSScreenStack": {
+          "className": "RNSScreenStackView"
+        },
+        "RNSSearchBar": {
+          "className": "RNSSearchBar"
+        },
+        "RNSStackScreen": {
+          "className": "RNSStackScreenComponentView"
+        },
+        "RNSStackHost": {
+          "className": "RNSStackHostComponentView"
+        },
+        "RNSStackHeaderConfigIOS": {
+          "className": "RNSStackHeaderConfigComponentView"
+        },
+        "RNSStackHeaderItemIOS": {
+          "className": "RNSStackHeaderItemComponentView"
+        },
+        "RNSStackHeaderItemSpacerIOS": {
+          "className": "RNSStackHeaderItemSpacerComponentView"
+        },
+        "RNSTabsScreenIOS": {
+          "className": "RNSTabsScreenComponentView"
+        },
+        "RNSTabsHostIOS": {
+          "className": "RNSTabsHostComponentView"
+        },
+        "RNSTabsBottomAccessory": {
+          "className": "RNSTabsBottomAccessoryComponentView"
+        },
+        "RNSTabsBottomAccessoryContent": {
+          "className": "RNSTabsBottomAccessoryContentComponentView"
+        },
+        "RNSSplitHost": {
+          "className": "RNSSplitHostComponentView"
+        },
+        "RNSSplitScreen": {
+          "className": "RNSSplitScreenComponentView"
+        },
+        "RNSSafeAreaView": {
+          "className": "RNSSafeAreaViewComponentView"
+        },
+        "RNSScrollViewMarker": {
+          "className": "RNSScrollViewMarkerComponentView"
+        },
+        "RNSFormSheetHost": {
+          "className": "RNSFormSheetHostComponentView"
+        },
+        "RNSFormSheetContentWrapper": {
+          "className": "RNSFormSheetContentWrapperComponentView"
+        }
+      }
+    }
+  }
+}
