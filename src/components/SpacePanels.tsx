@@ -37,6 +37,7 @@ import {
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, type PanelName } from "@/src/data/space-panel-pager";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
+import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
 import { AppIcon, Avatar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, SearchField, TopBar } from "@/src/ui";
 import { normalizeSpacePath, parentSpacePath, sortByRecent, spacePathName } from "@/src/utils";
 
@@ -252,6 +253,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
     },
   }, [acknowledgeSeed, centerOffset, pagerLayoutReady, pagerNativeX, pagerObserved, pagerSeed, pagerTarget, panelWidth, scrim, scrollOffset, showPanel, shownPanel]);
 
+  usePredictiveBackBlock(isFocused && Boolean(activePanel || visiblePanel));
   useEffect(() => {
     if (!isFocused) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {

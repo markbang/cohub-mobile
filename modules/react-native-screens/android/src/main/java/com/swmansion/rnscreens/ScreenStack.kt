@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.os.Build
 import android.view.View
+import android.view.animation.AnimationUtils
+import android.view.inputmethod.InputMethodManager
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.swmansion.rnscreens.Screen.StackAnimation
@@ -35,6 +37,110 @@ class ScreenStack(
     private var disappearingTransitioningChildren: MutableList<View> = ArrayList()
 
     var goingForward = false
+
+    // cohub: predictive back. See UPSTREAM.md.
+    interface PredictiveBackHost {
+        /** Whether popping [top] may show the screen under it while the back gesture runs. */
+        fun canPreviewBelow(top: Screen): Boolean
+
+        /** Called after every update, and when the stack attaches to or detaches from the window. */
+        fun onStackChanged(stack: ScreenStack)
+    }
+
+    private var predictivePopTop: ScreenStackFragmentWrapper? = null
+
+    // The screen kept attached, but invisible, right under the opaque screen it was pushed from.
+    private var retainedWrapper: ScreenStackFragment? = null
+    private var retainedAbove: ScreenFragmentWrapper? = null
+    private var previewing = false
+
+    /** The top screen's view and the retained view under it, when a back gesture can preview it. */
+    val predictiveBackViews: Pair<View, View>?
+        get() {
+            val top = topScreenWrapper as? ScreenStackFragment ?: return null
+            if (retainedAbove !== top) return null
+            val topView = top.view ?: return null
+            val belowView = retainedWrapper?.takeIf { it.isRetainedBelow }?.view ?: return null
+            return topView to belowView
+        }
+
+    /** Shows or hides [below] while a back gesture previews it, if it is still the retained screen. */
+    fun setPredictiveBackPreview(
+        below: View,
+        visible: Boolean,
+    ) {
+        val retained = retainedWrapper?.takeIf { it.isRetainedBelow && it.view === below } ?: return
+        previewing = visible
+        if (visible) {
+            below.clearAnimation()
+            below.visibility = View.VISIBLE
+        } else {
+            hideRetained(retained)
+        }
+    }
+
+    /**
+     * Marks the current top as already animated off screen, so the pop that follows runs without
+     * a transition. [clearPredictiveBackPop] drops the mark when the pop never comes.
+     */
+    fun markPredictiveBackPop() {
+        predictivePopTop = topScreenWrapper
+    }
+
+    fun clearPredictiveBackPop() {
+        predictivePopTop = null
+    }
+
+    private fun isPlainPush(screen: Screen) =
+        screen.stackPresentation === Screen.StackPresentation.PUSH && !screen.isTranslucent()
+
+    // Only the screen directly under an opaque push the host allows, and only while it is still
+    // attached from when it was on top: retaining never adds a fragment. A transparent modal on
+    // top (the image viewer) keeps it for when the modal closes.
+    private fun retainedBelow(above: ScreenFragmentWrapper?): ScreenStackFragment? {
+        val host = predictiveBackHost ?: return null
+        if (above == null) return null
+        if (!isPlainPush(above.screen) || above.screen.stackAnimation !== StackAnimation.DEFAULT) return null
+        if (!host.canPreviewBelow(above.screen)) return null
+        val below =
+            screenWrappers
+                .takeWhile { it !== above }
+                .lastOrNull { !dismissedWrappers.contains(it) && it.screen.activityState !== Screen.ActivityState.INACTIVE }
+                as? ScreenStackFragment ?: return null
+        return below.takeIf { isPlainPush(it.screen) && it.isAdded }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        predictiveBackHost?.onStackChanged(this)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        retainedWrapper = null
+        retainedAbove = null
+        previewing = false
+        predictiveBackHost?.onStackChanged(this)
+    }
+
+    /** Ends the push animation that covered a retained screen, unless a back gesture shows it again. */
+    internal fun onRetainedCovered(fragment: ScreenStackFragment) {
+        if (fragment !== retainedWrapper || previewing) return
+        hideRetained(fragment)
+    }
+
+    private fun hideRetained(fragment: ScreenStackFragment) {
+        if (!fragment.isRetainedBelow) return
+        val view = fragment.view ?: return
+        // Matches ScreenContainer.removeView: a covered screen must not keep the keyboard.
+        if (view === focusedChild) {
+            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(windowToken, InputMethodManager.HIDE_NOT_ALWAYS)
+            view.findFocus()?.clearFocus()
+        }
+        view.visibility = View.INVISIBLE
+        view.clearAnimation()
+    }
 
     /**
      * Marks given fragment as to-be-dismissed and performs updates on container
@@ -217,6 +323,20 @@ class ScreenStack(
 
         goingForward = shouldUseOpenAnimation
 
+        // cohub: keep the screen under the lowest visible one; a pop the back gesture already
+        // animated runs without a transition.
+        val previousTop = topScreenWrapper
+        val retainedAboveNext = visibleBottom ?: newTop
+        val retained = retainedBelow(retainedAboveNext)
+        val shownRetained =
+            screenWrappers
+                .dropWhile { it !== retainedAboveNext }
+                .filter { (it as? ScreenStackFragment)?.isRetainedBelow == true && !dismissedWrappers.contains(it) }
+        val revealsRetained = topScreenWillChange && shownRetained.contains(newTop)
+        val predictivePop = revealsRetained && predictivePopTop != null && predictivePopTop === previousTop
+        if (topScreenWillChange) predictivePopTop = null
+        if (predictivePop) stackAnimation = StackAnimation.NONE
+
         if (shouldUseOpenAnimation &&
             newTop != null &&
             needsDrawReordering(newTop, stackAnimation) &&
@@ -254,6 +374,15 @@ class ScreenStack(
             }
         }
 
+        // cohub: a retained screen that is neither kept nor shown is covered, so it leaves without
+        // an animation, even mid-way through the push that covered it. An animated removal would
+        // also turn on the reversed drawing order above.
+        stack.forEach { wrapper ->
+            if (wrapper !== retained && !shownRetained.contains(wrapper) && (wrapper as? ScreenStackFragment)?.isRetainedBelow == true) {
+                hideRetained(wrapper)
+            }
+        }
+
         createTransaction().let { transaction ->
             if (stackAnimation != null) {
                 transaction.setTweenAnimations(stackAnimation, shouldUseOpenAnimation)
@@ -275,6 +404,7 @@ class ScreenStack(
                 .asSequence()
                 .takeWhile { it !== visibleBottom }
                 .filter { (it !== newTop && !dismissedWrappers.contains(it)) || it.screen.activityState === Screen.ActivityState.INACTIVE }
+                .filter { it !== retained }
                 .forEach { wrapper -> transaction.remove(wrapper.fragment) }
 
             // attach screens that just became visible
@@ -318,6 +448,42 @@ class ScreenStack(
 
             transaction.commitNowAllowingStateLoss()
         }
+
+        // cohub: the retained screens get the transitions that adding or removing them would run.
+        // Only a pop to the retained screen animates it; under a transparent modal it just shows.
+        for (wrapper in shownRetained) {
+            val revealed = wrapper as ScreenStackFragment
+            // Cleared while still retained, so an interrupted push ends as a disappearance.
+            revealed.view?.clearAnimation()
+            revealed.isRetainedBelow = false
+            previewing = false
+            revealed.view?.let { view ->
+                view.translationX = 0f
+                view.scaleX = 1f
+                view.scaleY = 1f
+                view.visibility = View.VISIBLE
+                val animation =
+                    if (revealed === newTop && !predictivePop && stackAnimation === StackAnimation.DEFAULT) {
+                        R.anim.rns_default_exit_in
+                    } else {
+                        R.anim.rns_no_animation_20
+                    }
+                view.startAnimation(AnimationUtils.loadAnimation(context, animation))
+            }
+        }
+        retainedWrapper = retained
+        retainedAbove = retainedAboveNext.takeIf { retained != null }
+        if (retained != null && !retained.isRetainedBelow) {
+            retained.isRetainedBelow = true
+            val view = retained.view
+            if (view != null && retained === previousTop && shouldUseOpenAnimation && stackAnimation === StackAnimation.DEFAULT) {
+                // The exit animation the fragment would get from being removed; it hides itself after.
+                view.startAnimation(AnimationUtils.loadAnimation(context, R.anim.rns_default_enter_out))
+            } else {
+                hideRetained(retained)
+            }
+        }
+        predictiveBackHost?.onStackChanged(this)
     }
 
     // only top visible screen should be accessible
@@ -443,6 +609,10 @@ class ScreenStack(
 
     companion object {
         const val TAG = "ScreenStack"
+
+        // cohub: set once by the app; null keeps upstream behavior.
+        @JvmStatic
+        var predictiveBackHost: PredictiveBackHost? = null
 
         private fun needsDrawReordering(
             fragmentWrapper: ScreenFragmentWrapper,

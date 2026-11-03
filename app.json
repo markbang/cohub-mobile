@@ -31,7 +31,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": true,
+      "predictiveBackGestureEnabled": false,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -80,6 +80,7 @@
         }
       ],
       "./modules/cohub-device-runtime/app.plugin.js",
+      "./modules/cohub-predictive-back/app.plugin.js",
       [
         "expo-splash-screen",
         {

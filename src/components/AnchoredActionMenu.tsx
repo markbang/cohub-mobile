@@ -6,6 +6,7 @@ import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
 import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
+import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
 import { MorphMenuSurface, useMenuPresence, type MorphRect } from "@/src/ui/MorphMenuSurface";
 
 export type AnchoredMenuAction = {
@@ -53,6 +54,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
     return () => cancelAnimationFrame(frame);
   }, [height, measure, width]);
 
+  usePredictiveBackBlock(open && focused);
   useEffect(() => {
     if (!open) return;
     if (!focused) { onClose(); return; }

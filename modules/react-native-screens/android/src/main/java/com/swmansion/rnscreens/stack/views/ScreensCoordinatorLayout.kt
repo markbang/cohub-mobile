@@ -5,6 +5,7 @@ import android.view.WindowInsets
 import android.view.animation.Animation
 import android.view.animation.AnimationSet
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import com.facebook.react.uimanager.PointerEvents
 import com.facebook.react.uimanager.ReactPointerEventsView
 import com.swmansion.rnscreens.PointerEventsBoxNoneImpl
 import com.swmansion.rnscreens.ScreenStackFragment
@@ -22,6 +23,11 @@ internal class ScreensCoordinatorLayout(
         fragment,
         PointerEventsBoxNoneImpl(),
     )
+
+    // cohub: React Native hit-testing ignores visibility, so a screen kept attached under the top
+    // one must refuse touches itself.
+    override val pointerEvents: PointerEvents
+        get() = if (fragment.isRetainedBelow) PointerEvents.NONE else pointerEventsImpl.pointerEvents
 
     internal var blockFrameworkTransitionFinalization = false
     internal var needsTransitionFinalization = false

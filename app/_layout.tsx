@@ -23,6 +23,8 @@ import { LoadingState } from "@/src/ui/Loader";
 import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
+// Configures Android's back gesture before the first screen mounts.
+import "@/src/platform/predictive-back";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { record as recordDebugEvent, useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
 import { globalTouchHandlers, installInteractionInstrumentation, useRouteTracking } from "@/src/data/interaction-trace";

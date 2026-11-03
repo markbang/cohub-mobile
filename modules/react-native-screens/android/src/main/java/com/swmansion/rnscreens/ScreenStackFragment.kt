@@ -155,6 +155,11 @@ class ScreenStackFragment :
     override fun onViewAnimationEnd() {
         super.onViewAnimationEnd()
         notifyViewTransitionEnd()
+        // cohub: a retained screen stops drawing once the push that covers it ends. Posted because
+        // animations end inside draw.
+        if (isRetainedBelow) {
+            view?.post { (view?.parent as? ScreenStack)?.onRetainedCovered(this) }
+        }
     }
 
     private fun notifyViewTransitionEnd() {

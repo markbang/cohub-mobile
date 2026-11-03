@@ -62,6 +62,10 @@ open class ScreenFragment :
     // in nested fragments. See more explanation in dispatchViewAnimationEvent
     private var isTransitioning = false
 
+    // cohub: the stack keeps this screen attached, but invisible, under the screen above it.
+    // It stays resumed, so it must not take that as appearing.
+    internal var isRetainedBelow = false
+
     constructor() {
         throw IllegalStateException(
             "Screen fragments should never be restored. Follow instructions from https://github.com/software-mansion/react-native-screens/issues/17#issuecomment-424704067 to properly configure your main activity.",
@@ -299,7 +303,7 @@ open class ScreenFragment :
             // onViewAnimationStart/End is triggered from View#onAnimationStart/End method of the fragment's root
             // view. We override an appropriate method of the StackFragment's
             // root view in order to achieve this.
-            if (isResumed) {
+            if (isResumed && !isRetainedBelow) {
                 // Android dispatches the animation start event for the fragment that is being added first
                 // however we want the one being dismissed first to match iOS. It also makes more sense from
                 // a navigation point of view to have the disappear event first.
@@ -313,6 +317,12 @@ open class ScreenFragment :
                 if (animationEnd) dispatchOnDisappear() else dispatchOnWillDisappear()
             }
         }
+    }
+
+    override fun onDestroyView() {
+        // cohub: a removed fragment gets a new view when it is added again.
+        isRetainedBelow = false
+        super.onDestroyView()
     }
 
     override fun onDestroy() {
