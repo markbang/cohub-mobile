@@ -3770,7 +3770,9 @@ for (const OS of ["android", "ios"]) {
   const pressable = loadChromeComponent("../src/components/timeline/nodes.ts", "pressable", {});
   const gallery = loadChromeComponent("../src/components/timeline/nodes.ts", "gallery", { pressable, Platform: { OS }, PixelRatio: { get: () => 3 }, color: (value) => value, icon: (name) => ({ type: "vector", name }), imageThumbnailUrl: (uri) => uri.startsWith("https:") ? `${uri}?variant` : uri });
   const uris = ["https://cdn.example/a.png", "data:image/png;base64,AAAA"];
-  const thumbs = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300).children;
+  const strip = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300);
+  assert.equal(strip.style.height, undefined, "a multi-image strip takes its height from its content, so Android measures and lays it out");
+  const thumbs = strip.children;
   assert.deepEqual(thumbs.map((thumb) => [thumb.action, thumb.payload.index]), [["openImage", 0], ["openImage", 1]], "every thumbnail opens the viewer at its own image");
   const images = thumbs.map((thumb) => thumb.children.at(-1));
   assert.deepEqual(images.map((image) => [image.type, image.uri, image.fallbackUri]), [["image", "https://cdn.example/a.png?variant", uris[0]], ["image", uris[1], uris[1]]]);
