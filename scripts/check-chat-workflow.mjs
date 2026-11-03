@@ -15,6 +15,8 @@ import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-ti
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
 import { delayedStatusDeadline, shownDelayedStatus, stepDelayedStatus } from "../src/data/delayed-status.ts";
 import { createAttachmentUploads } from "../src/data/attachment-uploads.ts";
+import { launcherShortcuts, launcherShortcutsKey } from "../src/data/launcher-shortcuts.ts";
+import { incomingShareFromItems, isShareIntentPath } from "../src/data/incoming-share.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -5112,6 +5114,37 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(started.length, 5, "a new Chat's upload is its own; it is not shared with an existing Chat");
   uploads.dispose();
   assert.equal(started[4].signal.aborted, true, "signing out stops every pending upload");
+}
+
+{
+  const chats = [
+    { id: "old", title: "Old", lastActivityAt: "2026-11-01T00:00:00Z" },
+    { id: "a/b", title: "  Newest  ", lastActivityAt: "2026-11-03T00:00:00Z" },
+    { id: "blank", title: "  ", lastActivityAt: "2026-11-03T01:00:00Z" },
+    { id: "mid", title: "Mid", lastActivityAt: "2026-11-02T00:00:00Z" },
+    { id: "older", title: "Older", lastActivityAt: "2026-10-01T00:00:00Z" },
+  ];
+  const shortcuts = launcherShortcuts("New Chat", chats);
+  assert.deepEqual(shortcuts.map((shortcut) => shortcut.url), ["cohub://new-chat", "cohub://chat/a%2Fb", "cohub://chat/mid", "cohub://chat/old"], "New Chat leads, then the three latest titled Chats as links the bridge validates");
+  assert.equal(shortcuts[1].title, "Newest");
+  assert.equal(launcherShortcutsKey(launcherShortcuts("New Chat", [...chats].reverse())), launcherShortcutsKey(shortcuts), "an equal list in another order is not republished");
+  assert.deepEqual(launcherShortcuts("New Chat", []).map((shortcut) => shortcut.kind), ["new-chat"]);
+}
+{
+  const share = incomingShareFromItems([
+    { value: "Look at this", shareType: "text", contentUri: null, contentMimeType: null, originalName: null, contentSize: null },
+    { value: "https://example.com", shareType: "url", contentUri: "https://example.com", contentType: "website", contentMimeType: "text/html", originalName: null, contentSize: null },
+    { value: "content://media/1", shareType: "image", contentUri: "file:/data/user/0/app/cache/photo.jpg", contentType: "image", contentMimeType: "image/jpeg", originalName: "photo.jpg", contentSize: 120 },
+    { value: "content://docs/2", shareType: "file", contentUri: "file:///cache/report.pdf", contentType: "file", contentMimeType: null, mimeType: "application/pdf", originalName: " ", contentSize: null },
+  ]);
+  assert.equal(share.text, "Look at this\n\nhttps://example.com", "text and links prefill the composer");
+  assert.deepEqual(share.attachments, [
+    { uri: "file:///data/user/0/app/cache/photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 120 },
+    { uri: "file:///cache/report.pdf", name: "shared-4", mimeType: "application/pdf", size: 0 },
+  ], "files attach with readable file URIs and a fallback name");
+  assert.equal(incomingShareFromItems([{ value: " ", shareType: "text", contentUri: null, contentMimeType: null, originalName: null, contentSize: null }]), null);
+  for (const path of ["cohub://expo-sharing", "/expo-sharing", "expo-sharing?x=1"]) assert.equal(isShareIntentPath(path), true, path);
+  for (const path of ["cohub://chat/expo-sharing", "/expo-sharing-other", "cohub://callback"]) assert.equal(isShareIntentPath(path), false, path);
 }
 
 console.log("Chat workflow checks passed");

@@ -31,6 +31,7 @@ import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
+import { PasteImagesInput } from "@/src/platform/paste-input";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -48,7 +49,7 @@ import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
-import type { ActivityItem } from "@/src/data/types";
+import type { AttachmentDraft, ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { AppSwitch } from "@/src/ui/AppSwitch";
@@ -509,7 +510,7 @@ export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
-export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
+export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -582,61 +583,64 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
         <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-surface" />
         <View className="flex-row items-start">
-          <TextInput
-            ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
-            testID="chat-composer-input"
-            accessibilityLabel={t("ui.composer.placeholder")}
-            value={value}
-            onChangeText={(next) => {
-              setLastUserText(next);
-              const now = Date.now();
-              if (now - inputTrace.current.at >= 300) {
-                recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
-                inputTrace.current.at = now;
-              }
-              inputTrace.current.length = next.length;
-              onChangeText(next);
-            }}
-            onScroll={(event) => {
-              if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
-              // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
-              // only emits onContentSizeChange once the height prop itself has changed, which
-              // starves the growth logic. The scroll event still carries a fresh content size;
-              // only raising the measurement keeps Android's coarser scroll payload from
-              // shrinking the box. iOS includes it but the RN types omit it (Android leaves
-              // it unset), so it is read as an optional extra.
-              const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
-              if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
-                setContentHeight((current) => Math.max(current, appendedSize.height));
-              }
-            }}
-            onContentSizeChange={(event) => {
-              setContentHeight(event.nativeEvent.contentSize.height);
-              // Native inputs keep their scroll position on JS-driven text updates, so
-              // a voice-appended tail lands below the fold. This event only fires after
-              // the native layout reflects the new text, which is when the scroll lands.
-              if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
-            }}
-            editable={!disabled}
-            multiline
-            scrollEnabled={layout.scrollEnabled}
-            maxLength={12000}
-            placeholder={placeholder ?? t("ui.composer.placeholder")}
-            placeholderTextColor={theme.colors.textFaint}
-            className="min-w-0 flex-1 text-body text-fg"
-            style={[styles.composerText, { height: layout.height }]}
-            onSelectionChange={(event) => {
-              const now = Date.now();
-              if (now - inputTrace.current.selectionAt >= 300) {
-                inputTrace.current.selectionAt = now;
-                recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
-              }
-              onSelectionChange?.(event.nativeEvent.selection);
-            }}
-            onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
-            onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
-            submitBehavior="newline"
-          />
+          {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
+          <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
+            <TextInput
+              ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
+              testID="chat-composer-input"
+              accessibilityLabel={t("ui.composer.placeholder")}
+              value={value}
+              onChangeText={(next) => {
+                setLastUserText(next);
+                const now = Date.now();
+                if (now - inputTrace.current.at >= 300) {
+                  recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
+                  inputTrace.current.at = now;
+                }
+                inputTrace.current.length = next.length;
+                onChangeText(next);
+              }}
+              onScroll={(event) => {
+                if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
+                // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
+                // only emits onContentSizeChange once the height prop itself has changed, which
+                // starves the growth logic. The scroll event still carries a fresh content size;
+                // only raising the measurement keeps Android's coarser scroll payload from
+                // shrinking the box. iOS includes it but the RN types omit it (Android leaves
+                // it unset), so it is read as an optional extra.
+                const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
+                if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
+                  setContentHeight((current) => Math.max(current, appendedSize.height));
+                }
+              }}
+              onContentSizeChange={(event) => {
+                setContentHeight(event.nativeEvent.contentSize.height);
+                // Native inputs keep their scroll position on JS-driven text updates, so
+                // a voice-appended tail lands below the fold. This event only fires after
+                // the native layout reflects the new text, which is when the scroll lands.
+                if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
+              }}
+              editable={!disabled}
+              multiline
+              scrollEnabled={layout.scrollEnabled}
+              maxLength={12000}
+              placeholder={placeholder ?? t("ui.composer.placeholder")}
+              placeholderTextColor={theme.colors.textFaint}
+              className="min-w-0 text-body text-fg"
+              style={[styles.composerText, { height: layout.height }]}
+              onSelectionChange={(event) => {
+                const now = Date.now();
+                if (now - inputTrace.current.selectionAt >= 300) {
+                  inputTrace.current.selectionAt = now;
+                  recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
+                }
+                onSelectionChange?.(event.nativeEvent.selection);
+              }}
+              onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
+              onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
+              submitBehavior="newline"
+            />
+          </PasteImagesInput>
           <View className="w-11 h-11">
             {layout.showExpandButton ? <Pressable
               testID="chat-composer-expand"
@@ -773,4 +777,5 @@ const styles = StyleSheet.create({
   // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
   composerSurface: { padding: 8, borderRadius: 30, borderCurve: "continuous" },
   composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
+  composerPasteTarget: { flex: 1, minWidth: 0 },
 });

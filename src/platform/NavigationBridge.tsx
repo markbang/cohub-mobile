@@ -6,6 +6,7 @@ import {
   getInitialNotificationUrl,
   subscribeToNotificationResponses,
 } from "@/src/platform/notifications";
+import { initialLauncherShortcutUrl, subscribeLauncherShortcuts } from "@/src/platform/quick-actions";
 
 function routeFromUrl(rawUrl: string) {
   try {
@@ -34,6 +35,10 @@ export function NativeInteractionBridge() {
     const result = routeFromUrl(rawUrl);
     if (!result) return;
     const [resource, id] = result.parts;
+    if (resource === "new-chat") {
+      if (pathnameRef.current !== "/new-chat") router.push("/new-chat");
+      return;
+    }
     if (!id || resource === "callback") return;
     if (resource === "chat") {
       const turn = result.parsed.searchParams.get("turn");
@@ -72,6 +77,8 @@ export function NativeInteractionBridge() {
       });
 
     void notificationSubscription;
+    const stopShortcuts = subscribeLauncherShortcuts(openUrl);
+    openUrl(initialLauncherShortcutUrl());
     void ExpoLinking.getInitialURL().then(openUrl).catch((error) => {
       console.warn("[mobile-linking] initial URL unavailable", error);
     });
@@ -82,6 +89,7 @@ export function NativeInteractionBridge() {
       active = false;
       linkingSubscription.remove();
       notificationCleanup?.();
+      stopShortcuts();
     };
   }, [openUrl]);
 

@@ -11,12 +11,14 @@ import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingFlatRows, Sc
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { displaySpaceName } from "@/src/utils";
 
-type Params = { spaceId?: string | string[] };
+type Params = { spaceId?: string | string[]; shared?: string | string[] };
 
 export default function NewChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<Params>();
   const initialSpaceId = Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId;
+  // Opened by a share from another app: the chosen Space's draft takes the shared content.
+  const shared = (Array.isArray(params.shared) ? params.shared[0] : params.shared) === "1";
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { refreshHome } = useAppActions();
@@ -36,7 +38,7 @@ export default function NewChatScreen() {
 
   const openSpaceDraft = (spaceId: string) => {
     setSelectedSpaceId(spaceId);
-    router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } });
+    router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId, ...(shared ? { shared: "1" } : {}) } });
   };
 
   const empty = state.spaces.length === 0

@@ -92,6 +92,35 @@
             "backgroundColor": "#0c0a09"
           }
         }
+      ],
+      [
+        "expo-sharing",
+        {
+          "ios": {
+            "enabled": false
+          },
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": [
+              "*/*"
+            ],
+            "multipleShareMimeTypes": [
+              "*/*"
+            ]
+          }
+        }
+      ],
+      [
+        "expo-quick-actions",
+        {
+          "androidIcons": {
+            "shortcut_icon": {
+              "foregroundImage": "./assets/images/android-icon-foreground.png",
+              "backgroundImage": "./assets/images/android-icon-background.png",
+              "monochromeImage": "./assets/images/android-icon-monochrome.png"
+            }
+          }
+        }
       ]
     ],
     "extra": {

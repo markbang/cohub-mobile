@@ -127,6 +127,7 @@ export const en = {
   "ui.renderFailed.body": "You can still send messages. Try again, or copy the details to report it.",
   "ui.renderFailed.copy": "Copy details",
   "ui.renderFailed.copied": "Details copied",
+  "share.failed": "Couldn't add what was shared",
   "time.now": "now",
   "time.minutes": "{count}m",
   "time.hours": "{count}h",
