@@ -45,6 +45,7 @@ export const en = {
   "common.remove": "Remove",
   "common.retry": "Retry",
   "common.save": "Save",
+  "common.undo": "Undo",
   "common.share": "Share",
   "common.signOut": "Sign out",
 
@@ -944,6 +945,7 @@ export const en = {
   "session.forks.showFewer": "Show fewer forks",
   "session.forkedFromUnavailable": "Forked from a chat you can't access",
   "session.noMessages": "No messages yet",
+  "session.read": "Read",
   "session.unread": "Unread",
   "session.markRead": "Mark as read",
   "session.markUnread": "Mark as unread",
@@ -960,6 +962,7 @@ export const en = {
   "space.opening": "Opening Space…",
   "space.unavailable": "Space unavailable",
   "space.subtitle": "Space",
+  "space.unpinnedNamed": "Unpinned {name}",
   "space.unpin": "Unpin Space",
   "space.pin": "Pin Space",
   "space.pinned": "Pinned",

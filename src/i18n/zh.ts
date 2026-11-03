@@ -44,6 +44,7 @@ export const zh: Record<TranslationKey, string> = {
   "common.remove": "移除",
   "common.retry": "重试",
   "common.save": "保存",
+  "common.undo": "撤销",
   "common.share": "分享",
   "common.signOut": "退出登录",
 
@@ -917,6 +918,7 @@ export const zh: Record<TranslationKey, string> = {
   "session.forks.showFewer": "收起分叉",
   "session.forkedFromUnavailable": "分叉自无权访问的对话",
   "session.noMessages": "还没有消息",
+  "session.read": "已读",
   "session.unread": "未读",
   "session.markRead": "标为已读",
   "session.markUnread": "标为未读",
@@ -933,6 +935,7 @@ export const zh: Record<TranslationKey, string> = {
   "space.opening": "正在打开空间…",
   "space.unavailable": "空间不可用",
   "space.subtitle": "空间",
+  "space.unpinnedNamed": "已取消置顶 {name}",
   "space.unpin": "取消置顶空间",
   "space.pin": "置顶空间",
   "space.pinned": "已置顶",

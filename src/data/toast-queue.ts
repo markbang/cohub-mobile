@@ -1,11 +1,15 @@
 /** `success` confirms a finished action, `neutral` informs, `danger` reports a failure. */
 export type ToastTone = "neutral" | "success" | "danger";
 
+/** One follow-up for what the toast reports, such as Undo. */
+export type ToastAction = { label: string; onPress: () => void };
+
 export type ToastEntry = {
   key: string;
   title: string;
   message?: string;
   tone: ToastTone;
+  action?: ToastAction;
   /** Bumped when the same toast is raised again, restarting its time without adding a layer. */
   revision: number;
   /** Its time is up; the card fades out and then dismisses itself. */
@@ -20,8 +24,16 @@ export const MAX_VISIBLE_TOASTS = 3;
 
 /** A failure usually carries a detail line worth reading, so it stays longer. */
 export const TOAST_DURATION_MS: Record<ToastTone, number> = { neutral: 3200, success: 3200, danger: 5000 };
+/** A toast with an action stays long enough to reach for it. */
+export const TOAST_ACTION_DURATION_MS = 5000;
+
+export function toastDuration(entry: Pick<ToastEntry, "tone" | "action">) {
+  return entry.action ? Math.max(TOAST_DURATION_MS[entry.tone], TOAST_ACTION_DURATION_MS) : TOAST_DURATION_MS[entry.tone];
+}
 
 function isSameToast(a: ToastEntry, b: ToastEntry) {
+  // An action belongs to the operation that raised it, so its toast is never merged into another.
+  if (a.action || b.action) return false;
   return a.tone === b.tone && a.title === b.title && (a.message ?? "") === (b.message ?? "");
 }
 

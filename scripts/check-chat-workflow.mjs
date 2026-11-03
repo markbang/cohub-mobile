@@ -76,7 +76,7 @@ import { activityContributorName, activityRange, localDateKey, tokenDays } from 
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
 import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
-import { RELEASE_GRACE_MS, ToastClock } from "../src/data/toast-queue.ts";
+import { RELEASE_GRACE_MS, ToastClock, pushToast, toastDuration } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
@@ -682,6 +682,9 @@ const formScope = {
   assert.equal(avatar.props.name, "Renamed Space");
   assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
   assert.equal(row.props.unread, false);
+  const swipe = chromeNodes(renderSessionRow({ session: staleSession, onPress() {} })).find((node) => node.type === "SwipeActions");
+  assert.deepEqual(swipe.props.leading.map((action) => action.label), ["session.unread"], "a read Chat swipes to unread from the leading edge");
+  assert.equal(chromeNodes(renderSessionRow({ session: staleSession, onPress() {}, swipeToRead: false })).some((node) => node.type === "SwipeActions" && node.props.leading.length > 0), false, "inside the Space pager the leading swipe stays the pager's");
   sessionSeen = { baseline: Date.parse("2025-12-31T00:00:00Z"), entries: {} };
   const unreadRow = chromeNodes(renderSessionRow({ session: { ...staleSession, lastMessageId: "m1" }, onPress() {} })).find((node) => node.type === "ListRow");
   assert.equal(unreadRow.props.unread, true, "a message after the baseline marks a never-opened Chat unread");
@@ -5056,6 +5059,15 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(state.phase, "idle");
   assert.equal(shownDelayedStatus(step(null, true, { showDelayMs: 0 }), "k"), true, "a zero delay shows at once");
   assert.equal(shownDelayedStatus(state, "other"), null, "another key never sees this status");
+}
+
+{
+  const undo = { label: "Undo", onPress() {} };
+  const first = pushToast([], { key: "a", title: "Unpinned A", tone: "neutral", action: undo, revision: 0 });
+  const second = pushToast(first, { key: "b", title: "Unpinned A", tone: "neutral", action: undo, revision: 0 });
+  assert.deepEqual(second.map((entry) => entry.key), ["b", "a"], "a toast with an action is never merged into another; each undoes its own operation");
+  assert.equal(toastDuration({ tone: "neutral", action: undo }), 5000, "a toast with an action stays long enough to reach for it");
+  assert.equal(toastDuration({ tone: "neutral" }), 3200);
 }
 
 console.log("Chat workflow checks passed");

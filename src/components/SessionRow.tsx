@@ -30,6 +30,8 @@ type SessionRowProps = {
   showSpace?: boolean;
   fork?: SessionListFork | null;
   tree?: SessionTreePosition | null;
+  /** Off inside the Space pager, whose own leading swipe opens the Chats panel. */
+  swipeToRead?: boolean;
 };
 
 const AVATAR_SIZE = LIST_AVATAR_SIZE;
@@ -40,7 +42,7 @@ function railX(level: number, showSpace: boolean) {
   return (showSpace ? AVATAR_SIZE / 2 - 0.5 : 3.5) + (level - 1) * TREE_STEP;
 }
 
-export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null }: SessionRowProps) {
+export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null, swipeToRead = true }: SessionRowProps) {
   const { t } = useTranslation();
   // Only this Chat's status inputs; token batches keep the live stream's identity and phase.
   const { status, latestTurn, liveTurnId, liveStatus, spaceName: canonicalName, spaceAvatarUrl } = useAppSelector(({ state }) => {
@@ -119,6 +121,8 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     ? { icon: "check-check", title: t("session.markRead"), onPress: toggleRead } as const
     : { icon: "message-square", title: t("session.markUnread"), onPress: toggleRead } as const;
   const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }, readAction] as const;
+  // Mail toggles read from the leading edge; the label stays short to fit the action.
+  const readSwipe = swipeToRead ? [{ icon: readAction.icon, label: unread ? t("session.read") : t("session.unread"), tone: "accent", onPress: toggleRead } as const] : [];
   const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? age };
   const row = <ListRow
     leading={leading}
@@ -139,9 +143,9 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     onLongPress={!peek ? onLongPress : nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
   />;
   if (!peek) return onLongPress ? <SwipeActions trailing={[{ icon: "tag", label: t("labels.title"), tone: "neutral", onPress: onLongPress }]}>{row}</SwipeActions> : row;
-  if (nativeContextMenus) return <NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu>;
+  if (nativeContextMenus) return <SwipeActions leading={readSwipe}><NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu></SwipeActions>;
   return <>
-    {row}
+    <SwipeActions leading={readSwipe}>{row}</SwipeActions>
     {menuAt ? <ContextMenu visible x={menuAt.x} y={menuAt.y} onClose={() => setMenuAt(null)} preview={peekPreview} actions={[...actions]} /> : null}
   </>;
 }
