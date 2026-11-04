@@ -204,8 +204,8 @@ function MenuSection() {
     <Block label="Menu">
       <View className="flex-row">
         {nativeMenus
-          ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" actions={MENU_ACTIONS} />
-          : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={() => setOpen(true)} /></View>}
+          ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" actions={MENU_ACTIONS} testID="ui-catalog-menu-button" />
+          : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={() => setOpen(true)} testID="ui-catalog-menu-button" /></View>}
       </View>
       <MenuPresence open={open}><AnchoredActionMenu anchorRef={anchorRef} title="Actions" testID="ui-catalog-menu" actions={MENU_ACTIONS} onClose={() => setOpen(false)} /></MenuPresence>
     </Block>

@@ -22,13 +22,14 @@ const IOS_DEVICES = ["iPhone 16 Pro", "iPhone 17 Pro", "iPhone 16", "iPhone 17"]
 const PAIR_HEIGHT = 1400;
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
+const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 
 export const SCREENS = [
   { name: "catalog-type", link: "cohub://debug/ui?section=type" },
   { name: "catalog-rows", link: "cohub://debug/ui?section=rows" },
   { name: "catalog-controls", link: "cohub://debug/ui?section=controls" },
   { name: "catalog-states", link: "cohub://debug/ui?section=states" },
-  { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOn: "Open menu" }] },
+  { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
   { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet" },
   { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm" },
   { name: "chats", link: "cohub://settings", steps: [{ tapOn: "Chats" }] },
@@ -141,8 +142,16 @@ function buildFlow({ platform, screens }) {
     "      all: allow",
     // A debug binary fetches its first bundle from Metro, which can take minutes on a cold cache.
     "- extendedWaitUntil:",
-    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
+    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING}|${OPEN_IN_APP})`)}`,
     "    timeout: 600000",
+    "- runFlow:",
+    "    when:",
+    `      visible: ${yamlString(OPEN_IN_APP)}`,
+    "    commands:",
+    "      - tapOn: \"^Open$\"",
+    "      - extendedWaitUntil:",
+    `          visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
+    "          timeout: 300000",
     "- repeat:",
     "    while:",
     `      visible: ${yamlString(NOT_RESPONDING)}`,
@@ -170,9 +179,12 @@ function buildFlow({ platform, screens }) {
   ];
   for (const screen of screens) {
     lines.push(`- openLink: ${yamlString(screen.link)}`);
+    // iOS can ask before handing a custom-scheme link to the app.
+    lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
     for (const step of screen.steps ?? []) {
-      lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
+      if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`);
+      else lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
       lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
     }
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
@@ -207,7 +219,6 @@ function runMaestro({ device, flowPath, out, testOutput }) {
   // Maestro's on-device driver dies mid-run often enough that one retry is worth it (as in scripts/e2e/android.mjs).
   if (!result.error && result.status !== 0) {
     process.stdout.write(`Maestro failed on ${basename(flowPath)}; retrying once.\n`);
-    rmSync(testOutput, { recursive: true, force: true });
     result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
   }
   // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
