@@ -9,7 +9,7 @@ import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
-import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
+import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, chatTimelineSettledOffset, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
@@ -3730,6 +3730,9 @@ const displacedReset = { dragging: false, momentum: false, contentGrew: false, o
 assert.equal(chatTailDisplaced(displacedReset), true, "a list reset to the oldest row while following must re-pin the tail");
 assert.equal(chatTailDisplaced({ ...displacedReset, dragging: true }), false, "a user drag toward older messages is a scroll-away");
 assert.equal(chatTailDisplaced({ ...displacedReset, offsetDelta: 40 }), false, "a pin catching up toward the tail is not displaced");
+const grownShortChat = { offsetY: 0, distanceToLatest: 1114, following: true, dragging: false, momentum: false };
+assert.equal(chatTimelineSettledOffset(grownShortChat), 1114, "a short chat that grew past the viewport is on its pinned tail, not at the top the pull may claim");
+assert.equal(chatTimelineSettledOffset({ ...grownShortChat, distanceToLatest: 0 }), 0, "a chat that fits the viewport stays at the top for an explicit pull");
 assert.deepEqual(chatMaintainScrollAtEnd(true), { animated: true }, "sending must not disable the moving tail");
 assert.deepEqual(chatMaintainScrollAtEnd(true, false), { animated: false }, "first-row measurement and reduced motion must not animate the pin");
 assert.equal(chatMaintainScrollAtEnd(false), false);
