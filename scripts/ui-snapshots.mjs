@@ -209,10 +209,11 @@ function preamble(platform) {
   ];
 }
 
-function openScreen(lines, link) {
+function openScreen(lines, platform, link, first) {
   lines.push(`- openLink: ${yamlString(link)}`);
-  // iOS can ask before handing a custom-scheme link to the app.
-  lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
+  // iOS asks once per simulator before handing a custom-scheme link to the app. An absent match
+  // costs Maestro's ~7 s optional lookup, so only a flow's first link checks.
+  if (platform === "ios" && first) lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
 
@@ -235,9 +236,9 @@ function pushSteps(lines, platform, steps = []) {
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
 function buildFlow({ platform, screens }) {
   const lines = preamble(platform);
-  for (const screen of screens) {
+  for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
-    openScreen(lines, screen.link);
+    openScreen(lines, platform, screen.link, index === 0);
     pushSteps(lines, platform, screen.steps);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
     lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
@@ -248,8 +249,8 @@ function buildFlow({ platform, screens }) {
 /** Records each interaction from its settled start screen to its settled end. */
 function buildMotionFlow({ platform, motions }) {
   const lines = preamble(platform);
-  for (const motion of motions) {
-    openScreen(lines, motion.link);
+  for (const [index, motion] of motions.entries()) {
+    openScreen(lines, platform, motion.link, index === 0);
     pushSteps(lines, platform, motion.setup);
     lines.push(`- startRecording: ${yamlString(motion.name)}`);
     pushSteps(lines, platform, motion.steps);
