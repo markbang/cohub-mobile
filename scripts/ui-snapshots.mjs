@@ -204,12 +204,15 @@ function openScreen(lines, link) {
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
 
+// A tap waits for the screen to settle, which never happens beside a spinner; a second is enough here.
+const SETTLE = "    waitToSettleTimeoutMs: 1000";
+
 function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
-    if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`);
+    if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
-    else lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
+    else lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
   }
 }
@@ -460,7 +463,17 @@ function compare(options) {
   process.stdout.write(`Paired ${paired.length} screenshots and ${motionPairs} recordings (left iOS, right Android) in ${options.out}\n`);
 }
 
-/** Recordings side by side at one height and frame rate; the shorter one holds its last frame. */
+/**
+ * Seconds before the first change on screen. Each platform starts recording at its own moment, so
+ * pairs are trimmed to start just before their first interaction and play in step.
+ */
+function firstChange(path) {
+  const result = spawnSync("ffmpeg", ["-hide_banner", "-i", path, "-vf", "freezedetect=n=0.003:d=0.2", "-map", "0:v", "-f", "null", "-"], { encoding: "utf8" });
+  const match = /freeze_start: 0(?:\.0+)?\b[\s\S]*?freeze_end: ([\d.]+)/.exec(result.stderr ?? "");
+  return match ? Number(match[1]) : 0;
+}
+
+/** Recordings side by side at one height and frame rate, aligned on their first change; the shorter one holds its last frame. */
 function pairMotion(options, unmatched) {
   const iosDirectory = join(options.ios, "motion");
   const androidDirectory = join(options.android, "motion");
@@ -478,7 +491,9 @@ function pairMotion(options, unmatched) {
       continue;
     }
     const height = 1280;
-    run("ffmpeg", ["-y", "-loglevel", "error", "-i", left, "-i", right, "-filter_complex",
+    const lead = 0.3;
+    const trim = (path) => String(Math.max(0, firstChange(path) - lead));
+    run("ffmpeg", ["-y", "-loglevel", "error", "-ss", trim(left), "-i", left, "-ss", trim(right), "-i", right, "-filter_complex",
       `[0:v]fps=30,scale=-2:${height},setsar=1[a];[1:v]fps=30,scale=-2:${height},setsar=1[b];[a]pad=iw+24:ih:0:0:color=0x808080[ag];[ag][b]hstack=inputs=2`,
       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(directory, name)]);
     count += 1;
