@@ -24,20 +24,22 @@ const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
 const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 
+// Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
+// alert survives the route change and would cover the next screen.
 export const SCREENS = [
   { name: "catalog-type", link: "cohub://debug/ui?section=type" },
   { name: "catalog-rows", link: "cohub://debug/ui?section=rows" },
   { name: "catalog-controls", link: "cohub://debug/ui?section=controls" },
   { name: "catalog-states", link: "cohub://debug/ui?section=states" },
-  { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
-  { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet" },
-  { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm" },
   { name: "chats", link: "cohub://settings", steps: [{ tapOn: "Chats" }] },
   { name: "spaces", link: "cohub://spaces" },
   { name: "activity", link: "cohub://activity" },
   { name: "settings", link: "cohub://settings" },
   { name: "appearance", link: "cohub://appearance" },
   { name: "about", link: "cohub://about" },
+  { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
+  { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet", fresh: true },
+  { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
 function parseArgs(argv) {
@@ -178,6 +180,7 @@ function buildFlow({ platform, screens }) {
     `    file: ${yamlString(login)}`,
   ];
   for (const screen of screens) {
+    if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
     lines.push(`- openLink: ${yamlString(screen.link)}`);
     // iOS can ask before handing a custom-scheme link to the app.
     lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
