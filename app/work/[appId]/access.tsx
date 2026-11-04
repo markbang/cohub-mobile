@@ -10,6 +10,7 @@ import { useScreenQuery } from "@/src/data/query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { AppSwitch, DataError, LoadingSections, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { GroupSeparator } from "@/src/components/GroupRow";
 
 export default function WorkAccessScreen() {
   const { appId = "" } = useLocalSearchParams<{ appId: string }>();
@@ -54,7 +55,8 @@ export default function WorkAccessScreen() {
     {!scopes ? (error ? null : <LoadingSections sections={[{ kind: "caption" }, { kind: "group", rows: 8, trailing: "switch" }, { kind: "capsule" }]} />) : <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 32 }}>
       <Text className="mb-4 px-8 text-caption text-fg-muted">{t("app.access.hint")}</Text>
       <SettingsGroup>
-        {APP_SCOPES.map((scope, index) => <View key={scope} className={`min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3 ${index === APP_SCOPES.length - 1 ? "" : "border-b border-border"}`}>
+        {APP_SCOPES.map((scope, index) => <View key={scope} className="min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3">
+          {index === APP_SCOPES.length - 1 ? null : <GroupSeparator inset="text" />}
           <View className="min-w-0 flex-1 gap-0.5">
             <Text className="text-body text-fg">{t(`app.scope.${scope}`)}</Text>
             <Text className="text-caption text-fg-muted">{t(`app.scope.${scope}.hint`)}</Text>

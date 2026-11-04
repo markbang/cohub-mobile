@@ -640,7 +640,9 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
-  const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
+  const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
+  // The catalog names the recorded model; before it loads the trigger would show the raw id.
+  useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
   const liveStream = shouldShowLiveStream(view.stream, messages);
   // Mounting LegendList empty then filling it drops `initialScrollAtEnd`, so the first paint
   // would show the oldest rows and jump. Wait until there is a tail to pin to.
@@ -1493,7 +1495,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
@@ -1741,13 +1743,15 @@ function DraftChatContent({ spaceId, fromShare, onCreated }: { spaceId: string; 
       setSending(false);
     }
   };
+  // The catalog names the selected model; before it loads the trigger would show the raw id.
+  useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
   if (!space && !spaceLookupError) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
   if (!space && !spaceLookupError?.missing) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={spaceLookupError?.message ?? t("chat.draft.loadSpaceFailed")} onRetry={() => void spaceLookup.refetch()} /></View></Screen>;
   if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
   const spaceName = displaySpaceName(space);
   const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
   const modelLabel = activeModel?.name || activeModel?.id || (selectedHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
-  const modelTriggerLabel = activeModel?.thinkingLevel ? `${modelLabel} · ${formatThinkingLevel(activeModel.thinkingLevel)}` : modelLabel;
+  const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
   const selectedStatus = selectedHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   return <Screen edgeToEdge>
     <SpacePanels edgeToEdge key={space.id} spaceId={space.id} spaceName={spaceName} spaceAvatarUrl={space.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
@@ -1771,7 +1775,7 @@ function DraftChatContent({ spaceId, fromShare, onCreated }: { spaceId: string; 
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelTriggerLabel} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
+        ]} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
         </KeyboardAvoidingView>
         {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={selectedHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
         <MenuPresence open={modelSelectorOpen}>{selectedHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(selectedHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, selectedHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [selectedHarness]: model })); setModelSelectorOpen(false); }} />}</MenuPresence>

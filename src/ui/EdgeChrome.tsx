@@ -61,7 +61,11 @@ export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNod
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), [0, edgeChrome.topFade], [0, 1], "clamp") : 1 }));
   return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -edgeChrome.topFade }, scrimStyle]}>
-      <EdgeScrim edge="top" solid={insets.top} />
+      {/* Android has no backdrop blur behind the header's controls, so content stays solid-veiled
+          under the whole bar and only the strip below it fades; iOS keeps the soft edge behind glass. */}
+      {Platform.OS === "android"
+        ? <><View className="flex-1 bg-background" /><View style={TOP_FADE_STRIP}><EdgeScrim edge="top" /></View></>
+        : <EdgeScrim edge="top" solid={insets.top} />}
     </Animated.View>
     {children}
   </View>;
@@ -106,4 +110,5 @@ export function KeyboardLiftPadding({ style, children }: { style?: StyleProp<Vie
 }
 
 const FOOTER_STYLE: ViewStyle = { position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 1 };
+const TOP_FADE_STRIP: ViewStyle = { height: edgeChrome.topFade };
 const OVERLAY_STYLE: ViewStyle = { position: "absolute", left: 0, right: 0, zIndex: 2 };

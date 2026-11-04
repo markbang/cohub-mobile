@@ -144,6 +144,8 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 }
 
 const FILLED_ICON_SIZE = 18;
+/** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
+const MODEL_DETAIL_SHRINK = { flexShrink: 100 } as const;
 
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
   const insets = useSafeAreaInsets();
@@ -277,12 +279,13 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   );
 }
 
-/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label. */
-export function SettingsGroup({ label, children }: { label?: string; children: ReactNode }) {
+/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label, with an optional footnote. */
+export function SettingsGroup({ label, footer, children }: { label?: string; footer?: string; children: ReactNode }) {
   return (
     <View className="mb-6 px-4">
       {label ? <Text accessibilityRole="header" className="px-4 pb-2 text-caption font-semibold text-fg-muted">{label}</Text> : null}
       <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>{children}</View>
+      {footer ? <Text className="px-4 pt-2 text-caption text-fg-muted">{footer}</Text> : null}
     </View>
   );
 }
@@ -510,7 +513,7 @@ export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
-export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
+export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelDetail, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; /** Secondary, such as the thinking level; it gives way before the model name does. */ modelDetail?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -659,9 +662,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
-          {onModelPress ? <Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${modelMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
+          {onModelPress ? <Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${modelMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
+            {modelDetail ? <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="min-w-0 text-subhead text-fg-muted" style={MODEL_DETAIL_SHRINK}>{modelDetail}</Text> : null}
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}

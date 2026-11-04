@@ -95,23 +95,24 @@ export const lightPalette: Palette = {
   shadow: "#08090b",
 };
 
-// The icon's ink, warmed to one grey family. Dark mode only lightens as surfaces nest: a darker step inside a
-// lighter one reads as a hole. The accent takes the icon's own pairing, ink on orange.
+// Apple's dark system greys for surfaces, on a page just above black (pure black is its own preference).
+// Dark mode only lightens as surfaces nest: a darker step inside a lighter one reads as a hole. The accent
+// takes the icon's own pairing, ink on orange.
 export const darkPalette: Palette = {
-  background: "#0c0a09",
-  surface: "#1a1715",
-  surfaceRaised: "#25221e",
-  surfacePressed: "#302c27",
+  background: "#121214",
+  surface: "#1c1c1e",
+  surfaceRaised: "#2c2c2e",
+  surfacePressed: "#3a3a3c",
   // A shadow barely shows on a dark page, so floating chrome steps up a level instead of drawing a border.
-  surfaceFloat: "#25221e",
+  surfaceFloat: "#2c2c2e",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
-  border: "#2b2825",
-  borderStrong: "#443f39",
-  text: "#faf7f2",
-  textSecondary: "#d7d2ca",
-  textMuted: "#a9a39a",
-  // Faint 11–12px text must keep 4.5:1 on raised dark surfaces.
-  textFaint: "#938c82",
+  border: "#38383a",
+  borderStrong: "#48484a",
+  text: "#f2f2f7",
+  textSecondary: "#d1d1d6",
+  textMuted: "#bcbcc1",
+  // Faint 11–12px text must keep 4.5:1 on raised and pressed dark surfaces.
+  textFaint: "#a4a4a9",
   accent: "#ff8a3d",
   accentPressed: "#ec7428",
   accentSoft: "#38231a",
@@ -122,8 +123,8 @@ export const darkPalette: Palette = {
   userBubbleLink: "#ffe9db",
   userBubbleCodeBackground: "rgba(8, 9, 11, 0.24)",
   userBubbleMeta: "rgba(255, 247, 241, 0.92)",
-  assistantBubble: "#1a1715",
-  assistantBubbleText: "#faf7f2",
+  assistantBubble: "#1c1c1e",
+  assistantBubbleText: "#f2f2f7",
   success: "#62c994",
   successSoft: "#1b3127",
   warning: "#e6b85c",
@@ -139,14 +140,14 @@ export const darkPalette: Palette = {
 /** Applied over `darkPalette` when the pure black preference is on. */
 export const pureBlackOverrides: Partial<Palette> = {
   background: "#000000",
-  surface: "#131110",
-  surfaceRaised: "#1e1b19",
-  surfacePressed: "#2a2623",
-  surfaceFloat: "#1e1b19",
-  border: "#262320",
-  borderStrong: "#3e3934",
+  surface: "#161618",
+  surfaceRaised: "#252527",
+  surfacePressed: "#333335",
+  surfaceFloat: "#252527",
+  border: "#303032",
+  borderStrong: "#424244",
   userBubbleCodeBackground: "rgba(0, 0, 0, 0.24)",
-  assistantBubble: "#131110",
+  assistantBubble: "#161618",
 };
 
 export type TextToken = "display" | "title" | "headline" | "body" | "chat" | "subhead" | "caption" | "micro" | "code";
