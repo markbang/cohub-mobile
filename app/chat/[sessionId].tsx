@@ -51,6 +51,8 @@ import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQ
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
 import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
+import type { UploadTarget } from "@/src/data/attachment-uploads";
+import { useAttachmentUploadState } from "@/src/data/use-attachment-upload";
 import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
 import { harnessLabel, HttpError, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
@@ -67,7 +69,10 @@ import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistan
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
+import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
+import { previewLocalFile } from "@/src/platform/file-preview";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[] };
 type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
@@ -289,6 +294,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const sendFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (sendFeedbackTimerRef.current !== null) clearTimeout(sendFeedbackTimerRef.current); }, []);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, sessionId, attachments);
   useEffect(() => { if (attachments.length === 0) attachmentScrollYRef.current = 0; }, [attachments.length]);
   useEffect(() => {
     let active = true;
@@ -875,7 +881,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const pickAttachments = async () => {
     setAttachmentMenuOpen(false);
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true });
+      const result = await withForegroundHandoff(() => DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true }));
       if (result.canceled) return;
       appendAttachments(result.assets.map((asset) => ({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream", size: asset.size ?? 0 })));
     } catch (error) { showToast({ title: t("chat.attachmentUnavailable.title"), message: error instanceof Error ? error.message : t("chat.attachmentUnavailable.body"), tone: "danger" }); }
@@ -883,9 +889,9 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const pickPhotos = async () => {
     setAttachmentMenuOpen(false);
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync());
       if (!permission.granted) { showToast({ title: t("chat.photoOff.title"), message: t("chat.photoOff.body"), tone: "danger" }); return; }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 });
+      const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 }));
       if (result.canceled) return;
       appendAttachments(result.assets.map((asset, index) => ({ uri: asset.uri, name: asset.fileName || `image-${index + 1}.jpg`, mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 })));
     } catch (error) { showToast({ title: t("chat.photoPickerUnavailable.title"), message: error instanceof Error ? error.message : t("chat.photoPickerUnavailable.body"), tone: "danger" }); }
@@ -893,9 +899,9 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const takePhoto = async () => {
     setAttachmentMenuOpen(false);
     try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      const permission = await withForegroundHandoff(() => ImagePicker.requestCameraPermissionsAsync());
       if (!permission.granted) { showToast({ title: t("chat.cameraOff.title"), message: t("chat.cameraOff.body"), tone: "danger" }); return; }
-      const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.88 });
+      const result = await withForegroundHandoff(() => ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.88 }));
       if (result.canceled) return;
       const asset = result.assets[0];
       if (asset) appendAttachments([{ uri: asset.uri, name: asset.fileName || "camera-photo.jpg", mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }]);
@@ -941,7 +947,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     }
     const url = `${resolveWebBaseUrl({ env: config.environment })}/spaces/${encodeURIComponent(spaceId)}/sessions/${encodeURIComponent(sessionId)}`;
     try {
-      await Share.share({ message: `${title}\n${url}`, url, title });
+      await withForegroundHandoff(() => Share.share({ message: `${title}\n${url}`, url, title }));
     } catch (error) {
       showToast({ title: t("chat.shareFailed.title"), message: error instanceof Error ? error.message : t("chat.shareFailed.unavailable"), tone: "danger" });
     }
@@ -1377,6 +1383,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </EdgeHeader>
         <View ref={listContainerRef} collapsable={false} className="flex-1 min-h-0 bg-background">
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
+        <RenderErrorBoundary name="chat-timeline" resetKeys={[listGeneration]} fallback={(failure) => <View className="flex-1" style={{ paddingTop: headerHeight, paddingBottom: footerHeight }}><RenderFailureView {...failure} title={t("ui.renderFailed.chatTitle")} /></View>}>
         {timelineReady && nativeChatTimeline ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><NativeChatTimeline
           key={listGeneration}
           ref={timelineRef}
@@ -1462,6 +1469,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
           ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
+        </RenderErrorBoundary>
         {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
 
         </View>
@@ -1479,7 +1487,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
             })}
           </ScrollView>
         </Animated.View> : null}
-        {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
+        {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
         <ComposerInput menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
@@ -1632,6 +1640,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
     onSlashFocusChange(focused);
   }, [onMentionsFocusChange, onSlashFocusChange]);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, undefined, attachments);
   useEffect(() => {
     let active = true;
     inputEditedRef.current = false;
@@ -1680,9 +1689,9 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
     if (attachments.length + next.length > MAX_ATTACHMENTS) showToast({ title: t("chat.attachmentLimit", { count: MAX_ATTACHMENTS }), tone: "danger" });
     setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
   };
-  const pickAttachments = async () => { setAttachmentMenuOpen(false); try { const result = await DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true }); if (result.canceled) return; appendAttachments(result.assets.map((asset) => ({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream", size: asset.size ?? 0 }))); } catch (error) { showToast({ title: t("chat.attachmentUnavailable.title"), message: error instanceof Error ? error.message : t("chat.attachmentUnavailable.body"), tone: "danger" }); } };
-  const pickPhotos = async () => { setAttachmentMenuOpen(false); try { const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) { showToast({ title: t("chat.photoOff.title"), message: t("chat.photoOff.body"), tone: "danger" }); return; } const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 }); if (result.canceled) return; appendAttachments(result.assets.map((asset, index) => ({ uri: asset.uri, name: asset.fileName || `image-${index + 1}.jpg`, mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }))); } catch (error) { showToast({ title: t("chat.photoPickerUnavailable.title"), message: error instanceof Error ? error.message : t("chat.photoPickerUnavailable.body"), tone: "danger" }); } };
-  const takePhoto = async () => { setAttachmentMenuOpen(false); try { const permission = await ImagePicker.requestCameraPermissionsAsync(); if (!permission.granted) { showToast({ title: t("chat.cameraOff.title"), message: t("chat.cameraOff.body"), tone: "danger" }); return; } const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.88 }); if (result.canceled) return; const asset = result.assets[0]; if (asset) appendAttachments([{ uri: asset.uri, name: asset.fileName || "camera-photo.jpg", mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }]); } catch (error) { showToast({ title: t("chat.cameraUnavailable.title"), message: error instanceof Error ? error.message : t("chat.cameraUnavailable.body"), tone: "danger" }); } };
+  const pickAttachments = async () => { setAttachmentMenuOpen(false); try { const result = await withForegroundHandoff(() => DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true })); if (result.canceled) return; appendAttachments(result.assets.map((asset) => ({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream", size: asset.size ?? 0 }))); } catch (error) { showToast({ title: t("chat.attachmentUnavailable.title"), message: error instanceof Error ? error.message : t("chat.attachmentUnavailable.body"), tone: "danger" }); } };
+  const pickPhotos = async () => { setAttachmentMenuOpen(false); try { const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync()); if (!permission.granted) { showToast({ title: t("chat.photoOff.title"), message: t("chat.photoOff.body"), tone: "danger" }); return; } const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 })); if (result.canceled) return; appendAttachments(result.assets.map((asset, index) => ({ uri: asset.uri, name: asset.fileName || `image-${index + 1}.jpg`, mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }))); } catch (error) { showToast({ title: t("chat.photoPickerUnavailable.title"), message: error instanceof Error ? error.message : t("chat.photoPickerUnavailable.body"), tone: "danger" }); } };
+  const takePhoto = async () => { setAttachmentMenuOpen(false); try { const permission = await withForegroundHandoff(() => ImagePicker.requestCameraPermissionsAsync()); if (!permission.granted) { showToast({ title: t("chat.cameraOff.title"), message: t("chat.cameraOff.body"), tone: "danger" }); return; } const result = await withForegroundHandoff(() => ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.88 })); if (result.canceled) return; const asset = result.assets[0]; if (asset) appendAttachments([{ uri: asset.uri, name: asset.fileName || "camera-photo.jpg", mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }]); } catch (error) { showToast({ title: t("chat.cameraUnavailable.title"), message: error instanceof Error ? error.message : t("chat.cameraUnavailable.body"), tone: "danger" }); } };
   const submit = async () => {
     if (!space || sending || (!input.trim() && attachments.length === 0)) return;
     const text = input;
@@ -1745,7 +1754,7 @@ function DraftChatContent({ spaceId, onCreated }: { spaceId: string; onCreated: 
           </View>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
-          {attachments.length > 0 ? <View className="bg-background px-3 pt-1"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <AttachmentChip key={`${attachment.uri}-${index}`} name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} onRemove={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />)}</ScrollView></View></View> : null}
+          {attachments.length > 0 ? <View className="bg-background px-3 pt-1"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
           {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
           <ComposerInput menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: selectedHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={selectedHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
@@ -1821,3 +1830,36 @@ function LoadMoreCapsule({ icon, label, accessibilityLabel, loading, onPress }: 
 
 // design-system: modal scrims dim whatever theme sits underneath, so they stay black.
 const SCRIM = { backgroundColor: "rgba(0,0,0,0.6)" } as const;
+
+/**
+ * Uploads composer attachments as they are added, so sending does not wait on them. Removing a chip,
+ * or leaving with attachments still in the composer, stops their unsent uploads.
+ */
+function useComposerUploads(spaceId: string, sessionId: string | undefined, attachments: AttachmentDraft[]) {
+  const { prepareAttachments, releaseAttachments } = useAppActions();
+  const target = useMemo<UploadTarget | null>(() => spaceId ? { spaceId, ...(sessionId ? { sessionId } : {}) } : null, [sessionId, spaceId]);
+  useEffect(() => {
+    if (target && attachments.length > 0) prepareAttachments(target, attachments);
+  }, [attachments, prepareAttachments, target]);
+  const latest = useRef({ target, attachments });
+  useEffect(() => { latest.current = { target, attachments }; }, [attachments, target]);
+  useEffect(() => () => {
+    const { target: current, attachments: pending } = latest.current;
+    if (current) releaseAttachments(current, pending);
+  }, [releaseAttachments]);
+  const release = (attachment: AttachmentDraft) => { if (target) releaseAttachments(target, [attachment]); };
+  return { target, release };
+}
+
+function ComposerAttachmentChip({ target, attachment, onRemove }: { target: UploadTarget | null; attachment: AttachmentDraft; onRemove: () => void }) {
+  const { t } = useTranslation();
+  const showToast = useToast();
+  const upload = useAttachmentUploadState(target, attachment.uri);
+  const preview = () => {
+    void previewLocalFile(attachment.uri, { title: attachment.name, mimeType: attachment.mimeType }).then(
+      (shown) => { if (!shown) showToast({ title: t("ui.attachment.previewUnavailable"), tone: "neutral" }); },
+      (error: unknown) => showToast({ title: t("ui.attachment.previewUnavailable"), message: error instanceof Error ? error.message : undefined, tone: "danger" }),
+    );
+  };
+  return <AttachmentChip name={attachment.name} uri={attachment.uri} mimeType={attachment.mimeType} upload={upload} onPreview={preview} onRemove={onRemove} />;
+}

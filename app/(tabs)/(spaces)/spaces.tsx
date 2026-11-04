@@ -16,7 +16,7 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
-import { shallowEqual, useAppActions, useAppSelector, usePersonalSpaceActivity, useSpaceList } from "@/src/data/context";
+import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, usePersonalSpaceActivity, useSpaceList } from "@/src/data/context";
 import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useAppTheme } from "@/src/theme";
@@ -45,6 +45,7 @@ export default function SpacesScreen() {
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
+  const getAppState = useAppStateGetter();
   const spaceList = useSpaceList({ intervalMs: 60_000 });
   const personalActivity = usePersonalSpaceActivity(userUuid);
   const dataError = state.error ?? state.spacesError ?? spaceList.error;
@@ -136,12 +137,20 @@ export default function SpacesScreen() {
     [client, pinningSpaceId, spaceSessionCounts, t, theme],
   );
 
-  const togglePin = async (spaceId: string) => {
+  const togglePin = async (spaceId: string, name: string) => {
     if (pinningSpaceId) return;
     setPinningSpaceId(spaceId);
     setPinError(null);
     try {
-      await toggleSpacePin(spaceId);
+      const pinned = await toggleSpacePin(spaceId);
+      // Unpinning moves the row out of the pinned group, so a stray swipe needs a way back.
+      if (!pinned) toast({ title: t("space.unpinnedNamed", { name }), tone: "neutral", action: {
+        label: t("common.undo"),
+        onPress: () => {
+          if (getAppState().spaces.find((space) => space.id === spaceId)?.isPinned) return;
+          void togglePin(spaceId, name);
+        },
+      } });
     } catch (error) {
       setPinError(error instanceof Error ? error.message : t("spaces.pin.error"));
     } finally {
@@ -250,7 +259,7 @@ export default function SpacesScreen() {
       extraData={rowExtraData}
       estimatedItemSize={80}
       keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
-      renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
+      renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id, displaySpaceName(item.space)) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
       {...pullRefresh.listProps}
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}

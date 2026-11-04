@@ -29,6 +29,8 @@ import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
 import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
+import { useDelayedStatus } from "@/src/data/use-delayed-status";
+import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -677,11 +679,16 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   );
 }
 
-export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string; uri?: string; mimeType?: string; onRemove?: () => void }) {
+export function AttachmentChip({ name, uri, mimeType, upload = null, onPreview, onRemove }: { name: string; uri?: string; mimeType?: string; upload?: AttachmentUploadState | null; onPreview?: () => void; onRemove?: () => void }) {
   const { t } = useTranslation();
   return <View className="max-w-full flex-row items-center gap-2 rounded-sm bg-accent-soft px-2 py-1" style={{ minHeight: 44, borderCurve: "continuous" }}>
-    {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
-    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={t("ui.attachment.preview", { name })} disabled={!onPreview} onPress={onPreview} className="min-w-0 flex-1 flex-row items-center gap-2 self-stretch active:opacity-70">
+      {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    </Pressable>
+    {/* Ready is the quiet default; only work in progress or a failure the send will retry is shown. */}
+    {upload?.status === "uploading" ? <Loader accessibilityLabel={t("ui.attachment.uploading", { name })} /> : null}
+    {upload?.status === "failed" ? <View accessible accessibilityLabel={t("ui.attachment.uploadFailed", { name })}><AppIcon name="alert" size={16} tone="danger" /></View> : null}
     {/* A 32 × 44 box flush with the chip's end keeps the glyph where it was; the left slop completes the 44 pt target inside the chip. */}
     <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={REMOVE_SLOP} className="-my-1 -mr-2 h-11 w-8 items-center justify-center"><AppIcon name="x" size={16} tone="muted" /></Pressable>
   </View>;
@@ -712,8 +719,10 @@ function useOutageAnnouncement(visible: boolean, label: string) {
 export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   const label = t("ui.banner.unavailable");
-  useOutageAnnouncement(visible, label);
-  if (!visible) return null;
+  // Realtime recovery already waits out short drops; a reconnect right after that must not flash the banner.
+  const shown = useDelayedStatus("connection", visible ? true : null, { showDelayMs: 0, minVisibleMs: 1_000 }) === true;
+  useOutageAnnouncement(shown, label);
+  if (!shown) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
     <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-2 rounded-full bg-surface-float px-3 py-1 shadow-float">
       <Mascot size={20} mood="worried" />

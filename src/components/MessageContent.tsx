@@ -28,6 +28,7 @@ import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
 export function formatTokenCount(value: number) {
@@ -710,7 +711,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
 }
 
 export async function shareMessageText(value: string) {
-  await Share.share({ message: value });
+  await withForegroundHandoff(() => Share.share({ message: value }));
 }
 
 export async function copyMessageText(value: string) {

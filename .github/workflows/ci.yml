@@ -53,6 +53,9 @@ jobs:
       - name: Check design system usage
         run: node scripts/check-design-system.mjs
 
+      - name: Check module graph
+        run: node scripts/check-module-graph.mjs
+
       - name: Check open-source license list
         run: node scripts/open-source-licenses.mjs --check
 

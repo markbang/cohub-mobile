@@ -27,6 +27,7 @@ import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
 import { AppSwitch, AppIcon, Avatar, FIELD_INPUT_CLASS, IconButton, Loader, Screen, Segmented, SettingsGroup, TopBar, type IconName } from "@/src/ui";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
 const SPEC_OPTIONS = ["standard", "boost", "ultra"] as const satisfies readonly SandboxSpecId[];
 // Bounds and production default mirror the server's sandbox idle policy (sandbox-controller).
@@ -105,7 +106,7 @@ export default function SpaceSettingsScreen() {
     if (!client || !spaceId) return;
     try {
       const result = await client.space(spaceId).invitations.create({ role, ttlSeconds: 604800 });
-      await Share.share({ title: t("space.settings.inviteTitle"), message: `https://cohub.live/invite/${result.token}` });
+      await withForegroundHandoff(() => Share.share({ title: t("space.settings.inviteTitle"), message: `https://cohub.live/invite/${result.token}` }));
       setInvitations((current) => [...current, { token: result.token, role: result.role, status: "active" }]);
     } catch (error) {
       toast({ title: t("space.settings.inviteFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });

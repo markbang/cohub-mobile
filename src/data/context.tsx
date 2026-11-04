@@ -18,7 +18,6 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { AppState as NativeAppState } from "react-native";
 import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
 import { config } from "@/src/config";
@@ -37,6 +36,7 @@ import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-reten
 import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
 import { useSessionSeenOwner } from "@/src/data/use-session-seen";
 import { createStreamBatch } from "@/src/data/chat-rendering";
+import { createAttachmentUploads, type AttachmentUploadState, type AttachmentUploads, type UploadTarget, type UploadedAttachment } from "@/src/data/attachment-uploads";
 import {
   clearComposerDraft as clearLocalComposerDraft,
   clearUserCache,
@@ -75,6 +75,7 @@ import { shouldQueueFollowup } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
+import { isAppActive, subscribeAppActive } from "@/src/platform/app-lifecycle";
 import { useDeviceDisplayInterrupts, useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
@@ -119,68 +120,84 @@ function mentionTextBlock(blockText: string, draft: string): ContentBlock {
   return { type: "text", text: blockText, ...(mentions.length > 0 ? { _meta: { mentions } } : {}) };
 }
 
-async function buildPromptContent(
+async function uploadAttachmentFile(
   client: CohubClient,
-  spaceId: string,
-  sessionId: string | undefined,
+  target: UploadTarget,
+  attachment: AttachmentDraft,
+  { signal, onProgress }: { signal: AbortSignal; onProgress: (ratio: number) => void },
+): Promise<UploadedAttachment> {
+  const file = new ExpoFile(attachment.uri);
+  const mimeType = file.type || attachment.mimeType;
+
+  // Use expo-file-system's native upload to avoid React Native bridge recycling issues.
+  // SDK's fetch-based upload can fail with "dynamic value has been recycled" on Android.
+  const plan = await client.publicAssets.createUpload({
+    purpose: "chat_attachment",
+    uploadProtocol: "presigned_put_v1",
+    spaceId: target.spaceId,
+    sessionId: target.sessionId,
+    file: {
+      size: file.size,
+      mimeType,
+      filename: attachment.name,
+    },
+  }, { signal });
+
+  const uploadHeaders: Record<string, string> = {};
+  if (plan.asset.uploadHeaders) {
+    for (const [key, value] of Object.entries(plan.asset.uploadHeaders)) {
+      if (value != null) uploadHeaders[key] = String(value);
+    }
+  }
+
+  // `File.upload` defaults to POST; the presigned URL is signed for the method the plan
+  // reports (PUT), and a mismatched method makes R2 reject the signature with 403.
+  const uploadStarted = performance.now();
+  recordDebugEvent("net.upload", { kind: "attachment", bytes: file.size, mimeType, method: plan.asset.uploadMethod });
+  try {
+    const uploadResult = await file.upload(plan.asset.uploadUrl, {
+      httpMethod: plan.asset.uploadMethod,
+      uploadType: UploadType.BINARY_CONTENT,
+      headers: uploadHeaders,
+      signal,
+      onProgress: ({ bytesSent, totalBytes }) => onProgress(totalBytes > 0 ? bytesSent / totalBytes : 0),
+    });
+    recordDebugEvent("net.upload.response", { kind: "attachment", status: uploadResult.status, durationMs: Math.round(performance.now() - uploadStarted) });
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      throw new Error(`File upload failed: HTTP ${uploadResult.status}`);
+    }
+  } catch (error) {
+    recordDebugEvent("net.upload.error", { kind: "attachment", durationMs: Math.round(performance.now() - uploadStarted), message: error instanceof Error ? error.message : String(error) });
+    throw error;
+  }
+  return { publicUrl: plan.asset.publicUrl, mimeType };
+}
+
+/** The store exists whenever a client does, and every send already requires one. */
+function claimAttachmentUpload(uploads: AttachmentUploads | null, target: UploadTarget, attachment: AttachmentDraft) {
+  if (!uploads) throw new Error(translate("data.stillConnecting"));
+  return uploads.claim(target, attachment);
+}
+
+async function buildPromptContent(
   text: string,
   attachments: AttachmentDraft[],
+  resolveUpload: (attachment: AttachmentDraft) => Promise<UploadedAttachment>,
 ) {
   let promptText = text;
   const content: ContentBlock[] = [];
   const imageBlocks: ContentBlock[] = [];
-  for (const attachment of attachments) {
-    const file = new ExpoFile(attachment.uri);
-    const mimeType = file.type || attachment.mimeType;
-    
-    // Use expo-file-system's native upload to avoid React Native bridge recycling issues.
-    // SDK's fetch-based upload can fail with "dynamic value has been recycled" on Android.
-    const plan = await client.publicAssets.createUpload({
-      purpose: "chat_attachment",
-      uploadProtocol: "presigned_put_v1",
-      spaceId,
-      sessionId,
-      file: {
-        size: file.size,
-        mimeType,
-        filename: attachment.name,
-      },
-    });
-    
-    const uploadHeaders: Record<string, string> = {};
-    if (plan.asset.uploadHeaders) {
-      for (const [key, value] of Object.entries(plan.asset.uploadHeaders)) {
-        if (value != null) uploadHeaders[key] = String(value);
-      }
-    }
-    
-    // `File.upload` defaults to POST; the presigned URL is signed for the method the plan
-    // reports (PUT), and a mismatched method makes R2 reject the signature with 403.
-    const uploadStarted = performance.now();
-    recordDebugEvent("net.upload", { kind: "attachment", bytes: file.size, mimeType, method: plan.asset.uploadMethod });
-    try {
-      const uploadResult = await file.upload(plan.asset.uploadUrl, {
-        httpMethod: plan.asset.uploadMethod,
-        uploadType: UploadType.BINARY_CONTENT,
-        headers: uploadHeaders,
-      });
-      recordDebugEvent("net.upload.response", { kind: "attachment", status: uploadResult.status, durationMs: Math.round(performance.now() - uploadStarted) });
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        throw new Error(`File upload failed: HTTP ${uploadResult.status}`);
-      }
-    } catch (error) {
-      recordDebugEvent("net.upload.error", { kind: "attachment", durationMs: Math.round(performance.now() - uploadStarted), message: error instanceof Error ? error.message : String(error) });
-      throw error;
-    }
-    
-    const uploaded = plan.asset;
-    if (mimeType.startsWith("image/")) {
+  // Uploads usually started when each file was attached; any still running finish in parallel.
+  const uploads = await Promise.all(attachments.map(resolveUpload));
+  attachments.forEach((attachment, index) => {
+    const uploaded = uploads[index]!;
+    if (uploaded.mimeType.startsWith("image/")) {
       imageBlocks.push({
         type: "image",
         source: { type: "url", url: uploaded.publicUrl },
         _meta: {
           filename: attachment.name,
-          mediaType: mimeType,
+          mediaType: uploaded.mimeType,
           size: attachment.size,
         },
       });
@@ -190,7 +207,7 @@ async function buildPromptContent(
         `Attached file: ${attachment.name}\n${uploaded.publicUrl}`,
       ].filter(Boolean).join("\n\n");
     }
-  }
+  });
   if (promptText) content.push(mentionTextBlock(promptText, text));
   content.push(...imageBlocks);
   return content;
@@ -943,6 +960,11 @@ export type AppActions = {
   /** Device-local: records the Chat's latest message as seen for the Chats list unread marker. */
   markSessionSeen: (sessionId: string, messageId: string | null) => Promise<void>;
   markSessionUnread: (sessionId: string) => Promise<void>;
+  /** Starts uploading files as they are attached; `release` stops ones removed before sending. */
+  prepareAttachments: (target: UploadTarget, attachments: readonly AttachmentDraft[]) => void;
+  releaseAttachments: (target: UploadTarget, attachments: readonly AttachmentDraft[]) => void;
+  attachmentUploadState: (target: UploadTarget, attachment: Pick<AttachmentDraft, "uri">) => AttachmentUploadState | null;
+  subscribeAttachmentUploads: (listener: () => void) => () => void;
 };
 
 type AppStore = StoreApi<AppSnapshot>;
@@ -1070,6 +1092,12 @@ export function AppProvider({
 
   const { loadOverview: loadSpaceOverview, recordVisit: recordSpaceVisit, reset: resetSpaceList } = useSpaceListOwner(client, userKey, store, queryClient);
   const { markSeen: markSessionSeen, markUnread: markSessionUnread, reload: reloadSessionSeen } = useSessionSeenOwner(userKey, store);
+  // Scoped to the client and user like every other cache: a new account never sees another's uploads.
+  const attachmentUploads = useMemo(
+    () => client && userKey ? createAttachmentUploads((target, attachment, options) => uploadAttachmentFile(client, target, attachment, options)) : null,
+    [client, userKey],
+  );
+  useEffect(() => () => attachmentUploads?.dispose(), [attachmentUploads]);
 
   useEffect(() => {
     clientRef.current = client;
@@ -1118,7 +1146,7 @@ export function AppProvider({
         turnStatuses: stateRef.current.sessionTurnStatuses,
         cached: options.silent,
         activeOnly: options.activeOnly,
-        shouldContinue: () => generation === statusGenerationRef.current && (!options.silent || NativeAppState.currentState === "active"),
+        shouldContinue: () => generation === statusGenerationRef.current && (!options.silent || isAppActive()),
       });
     } catch (error) {
       statusError = errorMessage(error, "Unable to refresh Chat statuses. Check your connection and retry.");
@@ -1272,7 +1300,7 @@ export function AppProvider({
   const discoverRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
     const pending = runningDiscoveryRequests.current.get(source);
     if (pending) return pending;
-    if (!client || NativeAppState.currentState !== "active") return Promise.resolve();
+    if (!client || !isAppActive()) return Promise.resolve();
     const generation = statusGenerationRef.current;
     const revision = sessionEventRevision.current;
     const controller = new AbortController();
@@ -1435,13 +1463,13 @@ export function AppProvider({
       // The SDK exposes no reconnect; subscribing restarts a stopped socket.
       reconnect: () => client.onUserEvent(() => undefined)(),
       onUnavailableChange: setConnectionUnavailable,
-      isActive: () => NativeAppState.currentState === "active",
+      isActive: isAppActive,
       graceMs: REALTIME_UNAVAILABLE_GRACE_MS,
       retryBaseMs: REALTIME_RETRY_BASE_MS,
       retryMaxMs: REALTIME_RETRY_MAX_MS,
     });
-    const appState = NativeAppState.addEventListener("change", (next) => {
-      if (next === "active") recovery.foreground();
+    const stopAppActive = subscribeAppActive((active) => {
+      if (active) recovery.foreground();
     });
     const stopConnection = client.onConnection((snapshot) => {
       const previous = connectionStateRef.current;
@@ -1463,15 +1491,15 @@ export function AppProvider({
     });
     return () => {
       stopConnection();
-      appState.remove();
+      stopAppActive();
       recovery.dispose();
       setConnectionUnavailable(false);
     };
   }, [client, queryClient, setConnectionState, setConnectionUnavailable]);
 
   useEffect(() => {
-    const subscription = NativeAppState.addEventListener("change", (next) => {
-      if (next !== "active") {
+    return subscribeAppActive((active) => {
+      if (!active) {
         for (const controller of runningDiscoveryControllers.current.values()) controller.abort();
         runningDiscoveryControllers.current.clear();
         runningDiscoveryRequests.current.clear();
@@ -1481,7 +1509,6 @@ export function AppProvider({
       for (const sessionId of subscriptions.current.keys()) resyncCoordinatorRef.current.request(sessionId, "foreground");
       void queryClient.invalidateQueries();
     });
-    return () => subscription.remove();
   }, [queryClient]);
 
   // These queries schedule reducer-owned reads; their data is only a completion stamp.
@@ -1608,9 +1635,9 @@ export function AppProvider({
 
   useEffect(() => {
     if (!spaceRealtime) return;
-    spaceRealtime.setActive(NativeAppState.currentState === "active");
-    const subscription = NativeAppState.addEventListener("change", (next) => spaceRealtime.setActive(next === "active"));
-    return () => { subscription.remove(); spaceRealtime.setActive(false); };
+    spaceRealtime.setActive(isAppActive());
+    const stopAppActive = subscribeAppActive((active) => spaceRealtime.setActive(active));
+    return () => { stopAppActive(); spaceRealtime.setActive(false); };
   }, [spaceRealtime]);
 
   useEffect(() => {
@@ -2175,8 +2202,9 @@ export function AppProvider({
       dispatch({ type: "send-start", sessionId });
 
       let pending = optimistic;
+      const uploadTarget = { spaceId: session.spaceId, sessionId };
       try {
-        const content = await buildPromptContent(client, session.spaceId, sessionId, text, attachments);
+        const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, uploadTarget, attachment));
         const optimisticWithContent = { ...optimistic, content, text: text || optimistic.text };
         pending = optimisticWithContent;
         dispatch({ type: "message-optimistic", sessionId, message: optimisticWithContent });
@@ -2201,15 +2229,17 @@ export function AppProvider({
         dispatch({ type: "send-end", sessionId });
         // The accepted Turn owns this message now; a leftover local row would come back as a failed send.
         void deleteMessages(userKey, sessionId, [optimistic.id]).catch(() => undefined);
+        attachmentUploads?.forget(uploadTarget, attachments);
         void queryClient.invalidateQueries();
       } catch (error) {
         const message = error instanceof Error ? error.message : translate("data.messageSendFailed");
         dispatch({ type: "send-failed", sessionId, clientMessageId, message });
         void saveMessages(userKey, sessionId, [failedSendMessage(pending, message)]).catch(() => undefined);
+        attachmentUploads?.unclaim(uploadTarget, attachments);
         throw error;
       }
     },
-    [client, dispatch, loadLatestWindow, queryClient, userKey, userUuid, stateRef],
+    [attachmentUploads, client, dispatch, loadLatestWindow, queryClient, userKey, userUuid, stateRef],
   );
 
   const discardFailedSend = useCallback((sessionId: string, messageId: string) => {
@@ -2230,7 +2260,13 @@ export function AppProvider({
       if (!text && attachments.length === 0) throw new Error(translate("data.messageEmpty"));
 
       const clientMessageId = newId();
-      const content = await buildPromptContent(client, spaceId, undefined, text, attachments);
+      const uploadTarget = { spaceId };
+      // A failed send keeps its finished uploads for the retry from the composer.
+      const unclaim = (error: unknown): never => {
+        attachmentUploads?.unclaim(uploadTarget, attachments);
+        throw error;
+      };
+      const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, uploadTarget, attachment)).catch(unclaim);
       const result = await client.space(spaceId).prompt({
         mode: "agent",
         content,
@@ -2242,7 +2278,8 @@ export function AppProvider({
         ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
         ...(options.harness ? { harness: options.harness } : {}),
         ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
-      });
+      }).catch(unclaim);
+      attachmentUploads?.forget(uploadTarget, attachments);
       if (result.mode !== "immediate" || !result.session) {
         throw new Error(translate("data.newChatNotCreated"));
       }
@@ -2289,7 +2326,7 @@ export function AppProvider({
       void queryClient.invalidateQueries();
       return { session: result.session, turn, message };
     },
-    [client, dispatch, queryClient, userKey, stateRef],
+    [attachmentUploads, client, dispatch, queryClient, userKey, stateRef],
   );
 
   const loadComposerDraftForUser = useCallback(
@@ -2523,8 +2560,13 @@ export function AppProvider({
       saveSessionReadSequence: saveSessionReadSequenceForUser,
       markSessionSeen,
       markSessionUnread,
+      prepareAttachments: (target, attachments) => attachmentUploads?.prepare(target, attachments),
+      releaseAttachments: (target, attachments) => attachmentUploads?.release(target, attachments),
+      attachmentUploadState: (target, attachment) => attachmentUploads?.state(target, attachment) ?? null,
+      subscribeAttachmentUploads: (listener) => attachmentUploads?.subscribe(listener) ?? (() => undefined),
     }),
     [
+      attachmentUploads,
       markSessionSeen,
       markSessionUnread,
       spaceRealtime,

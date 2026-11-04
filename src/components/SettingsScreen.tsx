@@ -45,6 +45,7 @@ import { GroupRow, GroupSeparator, GroupSlot, GroupTile } from "@/src/components
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 import { openWebLink } from "@/src/platform/browser";
 import { formatUsd } from "@/src/data/space-wallet";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
 type ProfileState = {
 	profile: UserProfile | null;
@@ -161,7 +162,7 @@ function ProfileSection({
 		setActionError(null);
 		try {
 			const permission =
-				await ImagePicker.requestMediaLibraryPermissionsAsync();
+				await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync());
 			if (!permission.granted) {
 				onNotice({
 					title: t("settings.profile.photoOff.title"),
@@ -169,10 +170,10 @@ function ProfileSection({
 				});
 				return;
 			}
-			const result = await ImagePicker.launchImageLibraryAsync({
+			const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({
 				mediaTypes: ["images"],
 				quality: 0.9,
-			});
+			}));
 			if (result.canceled) return;
 			const asset = result.assets[0];
 			if (!asset) return;
@@ -716,7 +717,7 @@ function ReferralsSection({
 		if (!data) return;
 		const url = `https://cohub.live/referrals/${data.code}`;
 		try {
-			await Share.share({ title: t("settings.referrals.shareTitle"), message: url });
+			await withForegroundHandoff(() => Share.share({ title: t("settings.referrals.shareTitle"), message: url }));
 		} catch {
 			onNotice({
 				title: t("settings.referrals.shareUnavailable.title"),
