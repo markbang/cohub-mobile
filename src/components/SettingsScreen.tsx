@@ -11,7 +11,7 @@ import type {
 } from "@neta-art/cohub";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import {
 	Linking,
 	Platform,
@@ -38,8 +38,10 @@ import {
 	registerForPushNotifications,
 	type PushRegistrationResult,
 } from "@/src/platform/notifications";
-import { useAppTheme, typography } from "@/src/theme";
-import { AppIcon, Avatar, EmptyState, FIELD_INPUT_CLASS, IconButton, Loader, LoadingState, PrimaryButton, Screen, SectionHeader, StatusPill, TopBar } from "@/src/ui";
+import { useAppTheme } from "@/src/theme";
+import { AppIcon, Avatar, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingState, PrimaryButton, Screen, Segmented, SettingsGroup, StatusPill, TopBar, type IconName } from "@/src/ui";
+import { SettingsRow } from "@/src/components/SettingsRow";
+import { GroupRow, GroupSeparator, GroupSlot, GroupTile } from "@/src/components/GroupRow";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 import { openWebLink } from "@/src/platform/browser";
 import { formatUsd } from "@/src/data/space-wallet";
@@ -56,6 +58,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 	const { t } = useTranslation();
 	const insets = useSafeAreaInsets();
 	const { client, installationId, getAccessToken } = useAppActions();
+	const queryClient = useQueryClient();
 	const [notice, setNotice] = useState<{
 		title: string;
 		message: string;
@@ -66,7 +69,10 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 			<TopBar
 				title={t(settingsSections[section].labelKey)}
 				onBack={() => router.back()}
-				actions={section === "channels" ? <IconButton name="plus" label={t("settings.channels.add")} onPress={() => router.push("/settings/new-channel")} /> : undefined}
+				actions={section === "channels" ? <>
+					<IconButton name="refresh" label={t("common.refresh")} onPress={() => void queryClient.invalidateQueries({ queryKey: CHANNELS_KEY })} />
+					<IconButton name="plus" label={t("settings.channels.add")} onPress={() => router.push("/settings/new-channel")} />
+				</> : undefined}
 			/>
 			<ScrollView
 				className="flex-1"
@@ -102,91 +108,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 	);
 }
 
-function SettingsGroup({ children }: { children: ReactNode }) {
-	return (
-		<View
-			className="mt-3 border-t border-b border-border bg-surface"
-		>
-			{children}
-		</View>
-	);
-}
 
-function SettingsRow({
-	icon,
-	title,
-	detail,
-	trailing,
-	onPress,
-	danger = false,
-	disabled = false,
-}: {
-	icon: React.ComponentProps<typeof AppIcon>["name"];
-	title: string;
-	detail?: string;
-	trailing?: ReactNode;
-	onPress?: () => void;
-	danger?: boolean;
-	disabled?: boolean;
-}) {
-	const theme = useAppTheme();
-	const content = (
-		<View
-			className="min-h-16 px-3 py-2 flex-row items-center gap-3 border-b border-border"
-		>
-			<View
-				style={{
-					width: 34,
-					height: 34,
-					borderRadius: 10,
-					alignItems: "center",
-					justifyContent: "center",
-					backgroundColor: danger
-						? theme.colors.dangerSoft
-						: theme.colors.surfaceRaised,
-				}}
-			>
-				<AppIcon
-					name={icon}
-					size={18}
-					tone={danger ? "danger" : "muted"}
-				/>
-			</View>
-			<View className="flex-1 min-w-0">
-				<Text
-					style={[
-						typography.bodyMedium,
-						{ color: danger ? theme.colors.danger : theme.colors.text },
-					]}
-				>
-					{title}
-				</Text>
-				{detail ? (
-					<Text
-						numberOfLines={2}
-						className="text-caption text-fg-muted mt-0.5"
-					>
-						{detail}
-					</Text>
-				) : null}
-			</View>
-			{trailing}
-		</View>
-	);
-	return onPress ? (
-		<Pressable
-			accessibilityRole="button"
-			accessibilityLabel={title}
-			disabled={disabled}
-			onPress={onPress}
-			className="active:bg-surface-pressed disabled:opacity-55"
-		>
-			{content}
-		</Pressable>
-	) : (
-		content
-	);
-}
 
 const PROFILE_KEY = ["profile"];
 const EMPTY_PROFILE: ProfileState = { profile: null, email: null, uuid: "" };
@@ -307,16 +229,14 @@ function ProfileSection({
 	};
 
 	return (
-		<View>
+		<View className="pt-4">
 			{loading && !data.profile ? (
 				<LoadingBlock />
 			) : error && !data.profile ? (
 				<InlineError message={error} onRetry={() => void load()} />
 			) : (
 				<>
-					<View
-						className="items-center pt-4 pb-2"
-					>
+					<View className="items-center pb-6">
 						<Pressable
 							accessibilityRole="button"
 							accessibilityLabel={t("settings.profile.changeAvatar")}
@@ -331,87 +251,53 @@ function ProfileSection({
 							/>
 						</Pressable>
 						{uploadingAvatar ? (
-							<View
-								className="flex-row items-center gap-2 mt-2"
-							>
+							<View className="mt-2 flex-row items-center gap-2">
 								<Loader />
-								<Text
-									className="text-caption text-fg-muted"
-								>
-									{t("settings.profile.uploadingAvatar")}
-								</Text>
+								<Text className="text-caption text-fg-muted">{t("settings.profile.uploadingAvatar")}</Text>
 							</View>
 						) : null}
 						<Text className={`text-headline font-semibold text-fg ${uploadingAvatar ? "mt-2" : "mt-3"}`}>
 							{data.profile?.displayName || t("settings.profile.fallbackName")}
 						</Text>
-						{data.email ? (
-							<Text
-								className="text-caption text-fg-muted mt-1"
-							>
-								{data.email}
-							</Text>
-						) : null}
-						<Text
-							className="text-micro font-semibold text-fg-faint mt-2"
-						>
-							{t("settings.profile.tapAvatar")}
-						</Text>
+						{data.email ? <Text className="mt-1 text-caption text-fg-muted">{data.email}</Text> : null}
+						<Text className="mt-2 text-caption text-fg-faint">{t("settings.profile.tapAvatar")}</Text>
 					</View>
 					<SettingsGroup>
-						<View className="p-4">
-							<Text
-								className="text-caption text-fg-secondary mb-2"
-							>
-								{t("settings.profile.displayName")}
-							</Text>
-							<TextInput
-								value={displayName}
-								onChangeText={setDisplayName}
-								maxLength={120}
-								placeholder={t("settings.profile.displayNamePlaceholder")}
-								placeholderTextColor={theme.colors.textFaint}
-								className={FIELD_INPUT_CLASS}
-							/>
-							<Text
-								className="text-caption text-fg-secondary mt-4 mb-2"
-							>
-								{t("settings.profile.username")}
-							</Text>
-							<TextInput
-								value={username}
-								onChangeText={setUsername}
-								maxLength={39}
-								autoCapitalize="none"
-								placeholder={t("settings.profile.usernamePlaceholder")}
-								placeholderTextColor={theme.colors.textFaint}
-								className={FIELD_INPUT_CLASS}
-							/>
-							{error ? <Text accessibilityRole="alert" selectable className="text-caption text-danger mt-3">{error}</Text> : null}
+						<View className="gap-4 p-4">
+							<Field label={t("settings.profile.displayName")}>
+								<TextInput
+									value={displayName}
+									onChangeText={setDisplayName}
+									maxLength={120}
+									placeholder={t("settings.profile.displayNamePlaceholder")}
+									placeholderTextColor={theme.colors.textFaint}
+									className={FIELD_INPUT_CLASS}
+								/>
+							</Field>
+							<Field label={t("settings.profile.username")}>
+								<TextInput
+									value={username}
+									onChangeText={setUsername}
+									maxLength={39}
+									autoCapitalize="none"
+									placeholder={t("settings.profile.usernamePlaceholder")}
+									placeholderTextColor={theme.colors.textFaint}
+									className={FIELD_INPUT_CLASS}
+								/>
+							</Field>
+							{error ? <Text accessibilityRole="alert" selectable className="text-caption text-danger">{error}</Text> : null}
 							<PrimaryButton
 								label={saving ? t("settings.profile.saving") : t("settings.profile.save")}
 								icon="check"
 								loading={saving}
 								disabled={!displayName.trim()}
 								onPress={() => void save()}
-								className="mt-4"
 							/>
 						</View>
 					</SettingsGroup>
-					<SectionHeader title={t("settings.profile.section.identity")} />
-					<SettingsGroup>
-						<SettingsRow
-							icon="fingerprint"
-							title={t("settings.profile.userId")}
-							detail={data.uuid || t("settings.profile.unavailable")}
-							trailing={null}
-						/>
-						<SettingsRow
-							icon="user"
-							title={t("settings.profile.username")}
-							detail={username ? `@${username}` : t("settings.profile.notSet")}
-							trailing={null}
-						/>
+					<SettingsGroup label={t("settings.profile.section.identity")}>
+						<SettingsRow icon="fingerprint" title={t("settings.profile.userId")} value={data.uuid || t("settings.profile.unavailable")} />
+						<SettingsRow icon="user" title={t("settings.profile.username")} detail={username ? `@${username}` : t("settings.profile.notSet")} last />
 					</SettingsGroup>
 				</>
 			)}
@@ -433,25 +319,15 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 	const error = !client ? t("settings.activity.connect") : query.error ? query.error.message || t("settings.activity.error") : null;
 	const load = () => query.refetch();
 	const summary = data?.summary;
+	const topModels = (data?.rankings.llmModels ?? []).slice(0, 8);
 	return (
-		<View>
-			<View
-				className="flex-row gap-2 px-4 pt-2"
-			>
-				{[7, 30, 365].map((value) => (
-					<Pressable
-						key={value}
-						accessibilityRole="button"
-						accessibilityState={{ selected: days === value }}
-						onPress={() => setDays(value)}
-						className={`min-h-12 justify-center`}
-					>
-						{({ pressed }) => <View className={`min-h-8 justify-center overflow-hidden rounded-full px-3 py-1 ${pressed ? "bg-surface-pressed" : days === value ? "bg-accent-soft" : ""}`}>
-						<Text className={`text-subhead font-semibold ${days === value ? "text-accent" : "text-fg-muted"}`}>
-							{value === 365 ? t("settings.activity.range.oneYear") : t("settings.activity.range.days", { days: value })}
-						</Text></View>}
-					</Pressable>
-				))}
+		<View className="pt-4">
+			<View className="px-4 pb-4">
+				<Segmented
+					value={String(days)}
+					options={[7, 30, 365].map((value) => ({ value: String(value), label: value === 365 ? t("settings.activity.range.oneYear") : t("settings.activity.range.days", { days: value }) }))}
+					onChange={(value) => setDays(Number(value))}
+				/>
 			</View>
 			{loading ? (
 				<LoadingBlock />
@@ -459,65 +335,23 @@ function ActivitySection({ client }: { client: CohubClient | null }) {
 				<InlineError message={error} onRetry={() => void load()} />
 			) : (
 				<>
-					<View
-						className="flex-row gap-2 px-4 pt-4"
-					>
-						<Metric
-							label={t("settings.activity.metric.tokens")}
-							value={formatNumber(summary?.totalTokens)}
-							icon="layers"
-						/>
-						<Metric
-							label={t("settings.activity.metric.requests")}
-							value={formatNumber(summary?.requestCount)}
-							icon="zap"
-						/>
-						<Metric
-							label={t("settings.activity.metric.success")}
-							value={formatNumber(summary?.successCount)}
-							icon="check-circle"
-						/>
+					<View className="flex-row gap-2 px-4 pb-6">
+						<Metric label={t("settings.activity.metric.tokens")} value={formatNumber(summary?.totalTokens)} icon="layers" />
+						<Metric label={t("settings.activity.metric.requests")} value={formatNumber(summary?.requestCount)} icon="zap" />
+						<Metric label={t("settings.activity.metric.success")} value={formatNumber(summary?.successCount)} icon="check-circle" />
 					</View>
-					<SectionHeader title={t("settings.activity.topModels")} />
-					<SettingsGroup>
-						{(data?.rankings.llmModels ?? []).slice(0, 8).map((item, index) => (
-							<View
+					<SettingsGroup label={t("settings.activity.topModels")}>
+						{topModels.map((item, index) => (
+							<GroupRow
 								key={`${item.provider}/${item.model}`}
-								className="min-h-14 px-3 flex-row items-center gap-2 border-b border-border"
-							>
-								<Text
-									className="text-caption w-6 text-fg-faint"
-								>
-									{index + 1}
-								</Text>
-								<View className="flex-1 min-w-0">
-									<Text
-										numberOfLines={1}
-										className="text-body font-semibold text-fg"
-									>
-										{item.model}
-									</Text>
-									<Text
-										numberOfLines={1}
-										className="text-micro font-semibold text-fg-muted mt-0.5"
-									>
-										{item.provider}
-									</Text>
-								</View>
-								<Text
-									className="text-caption text-fg-secondary"
-								>
-									{formatNumber(item.totalTokens)}
-								</Text>
-							</View>
+								leading={<GroupSlot><Text className="text-subhead tabular-nums text-fg-faint">{index + 1}</Text></GroupSlot>}
+								title={item.model}
+								subtitle={item.provider}
+								trailing={<Text className="text-subhead tabular-nums text-fg-muted">{formatNumber(item.totalTokens)}</Text>}
+								last={index === topModels.length - 1}
+							/>
 						))}
-						{(data?.rankings.llmModels ?? []).length === 0 ? (
-							<Text
-								className="text-body text-fg-muted p-4"
-							>
-								{t("settings.activity.noUsage")}
-							</Text>
-						) : null}
+						{topModels.length === 0 ? <Text className="p-4 text-body text-fg-muted">{t("settings.activity.noUsage")}</Text> : null}
 					</SettingsGroup>
 				</>
 			)}
@@ -575,76 +409,38 @@ function NotificationsSection({
 			: result?.status === "unavailable"
 				? t("settings.notifications.status.needsSetup")
 				: t("settings.notifications.status.notConfigured");
+	const permissionDenied = result?.status === "unavailable" && result.reason === "permission-denied";
 	return (
-		<View>
-			<SettingsGroup>
-				<SettingsRow
-					icon="bell"
-					title={t("settings.notifications.row.title")}
-					detail={
-						result?.message ??
-						t("settings.notifications.row.detail")
-					}
-					trailing={
-						<StatusPill
-							label={status}
-							tone={
-								result?.status === "enabled"
-									? "success"
-									: result?.status === "unavailable"
-										? "warning"
-										: "neutral"
-							}
-						/>
-					}
-				/>
-				<View className="p-4">
-					<PrimaryButton
-						label={loading ? t("settings.notifications.checking") : t("settings.notifications.enable")}
-						icon="bell"
-						loading={loading}
-						onPress={() => void enable()}
-						className="min-h-12"
+		<View className="pt-4">
+			{/* The build note only explains an Android failure; it means nothing on iOS or once enabled. */}
+			<SettingsGroup footer={Platform.OS === "android" && result?.status === "unavailable" ? t("settings.notifications.androidNote") : undefined}>
+				<SettingsRow icon="bell" title={t("settings.notifications.row.title")} value={result?.message ?? t("settings.notifications.row.detail")}>
+					<StatusPill
+						label={status}
+						tone={result?.status === "enabled" ? "success" : result?.status === "unavailable" ? "warning" : "neutral"}
 					/>
-					{result?.status === "unavailable" &&
-					result.reason === "permission-denied" ? (
-						<Pressable
-							accessibilityRole="button"
-							accessibilityLabel={t("settings.notifications.openSystem")}
-							onPress={() => void Linking.openSettings()}
-							className="mt-3 active:opacity-60"
-						>
-							<Text
-								className="text-body font-semibold text-accent"
-							>
-								{t("settings.notifications.openSystem")}
-							</Text>
-						</Pressable>
-					) : null}
-					<Text
-						className="text-caption text-fg-muted mt-2"
-					>
-						{t("settings.notifications.androidNote")}
-					</Text>
-				</View>
+				</SettingsRow>
+				<GroupRow
+					leading={loading ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="bell" accent />}
+					title={loading ? t("settings.notifications.checking") : t("settings.notifications.enable")}
+					titleClassName="text-accent"
+					disabled={loading}
+					onPress={() => void enable()}
+					last={!permissionDenied}
+				/>
+				{permissionDenied ? <SettingsRow icon="settings" title={t("settings.notifications.openSystem")} external onPress={() => void Linking.openSettings()} last /> : null}
 			</SettingsGroup>
-			<SectionHeader title={t("settings.notifications.section.device")} />
-			<SettingsGroup>
+			<SettingsGroup label={t("settings.notifications.section.device")}>
 				<SettingsRow
 					icon="fingerprint"
 					title={t("settings.notifications.installation")}
-					detail={
-						installationId
-							? `${installationId.slice(0, 8)}…`
-							: t("settings.notifications.preparingIdentity")
-					}
+					detail={installationId ? `${installationId.slice(0, 8)}…` : t("settings.notifications.preparingIdentity")}
 				/>
 				<SettingsRow
 					icon="wifi"
 					title={t("settings.notifications.delivery")}
-					detail={
-						client ? t("settings.notifications.connected") : t("settings.notifications.waiting")
-					}
+					detail={client ? t("settings.notifications.connected") : t("settings.notifications.waiting")}
+					last
 				/>
 			</SettingsGroup>
 		</View>
@@ -656,44 +452,38 @@ function RulesSection() {
 	const router = useRouter();
 	const { data, loading, opening, error, openError, load, openHome } = useUserRules();
 	return (
-		<View>
+		<View className="pt-4">
 			{loading ? (
 				<LoadingBlock />
 			) : error ? (
 				<InlineError message={error} onRetry={() => void load()} />
 			) : (
-				<SettingsGroup>
-					<View className="p-4">
-						<View
-							className="flex-row items-center gap-2"
-						>
-							<AppIcon name="file-text" size={18} tone="accent" />
-							<Text
-								className="text-body font-semibold text-fg"
-							>
-								{data?.path || "AGENTS.md"}
-							</Text>
-						</View>
-						<Text
-							className="text-caption text-fg-muted mt-2"
-						>
-							{data?.updatedAt
-								? t("settings.rules.updated", { time: formatRelativeTime(data.updatedAt) })
-								: t("settings.rules.notPublished")}
-						</Text>
-						<ScrollView
-							horizontal={false}
-							style={{ maxHeight: 360, marginTop: 13 }}
-						>
-							<Text selectable className="text-code text-fg-secondary" style={{ fontFamily: "SpaceMono" }}>
+				<>
+					<SettingsGroup footer={t("settings.rules.homeHint", { file: "AGENTS.md" })}>
+						<SettingsRow
+							icon="file-text"
+							title={data?.path || "AGENTS.md"}
+							value={data?.updatedAt ? t("settings.rules.updated", { time: formatRelativeTime(data.updatedAt) }) : t("settings.rules.notPublished")}
+						/>
+						<ScrollView style={RULES_PREVIEW} contentContainerClassName="p-4">
+							{/* design-system: rule files read as source, in the bundled monospace face. */}
+							<Text selectable className="text-code text-fg-secondary" style={MONO}>
 								{data?.content?.trim() || t("settings.rules.none")}
 							</Text>
 						</ScrollView>
-						<Text className="text-caption text-fg-muted mt-4">{t("settings.rules.homeHint", { file: "AGENTS.md" })}</Text>
-						<PrimaryButton label={t("settings.rules.openHome")} icon="arrow-right" loading={opening} className="mt-3" onPress={() => void openHome().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })} />
-						{openError ? <Text accessibilityRole="alert" selectable className="text-caption text-danger mt-2">{openError}</Text> : null}
-					</View>
-				</SettingsGroup>
+					</SettingsGroup>
+					<SettingsGroup>
+						<GroupRow
+							leading={opening ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="arrow-right" accent />}
+							title={t("settings.rules.openHome")}
+							titleClassName="text-accent"
+							disabled={opening}
+							onPress={() => void openHome().then((space) => { if (space) router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } }); })}
+							last
+						/>
+					</SettingsGroup>
+					{openError ? <Text accessibilityRole="alert" selectable className="-mt-4 px-8 text-caption text-danger">{openError}</Text> : null}
+				</>
 			)}
 		</View>
 	);
@@ -709,7 +499,6 @@ function ChannelsSection({
 	client: CohubClient | null;
 	onNotice: (notice: { title: string; message: string }) => void;
 }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const router = useRouter();
 	const [bindingChannel, setBindingChannel] = useState<Channel | null>(null);
@@ -744,11 +533,8 @@ function ChannelsSection({
 		}
 	};
 	return (
-		<View>
+		<View className="pt-4">
 			{bindingChannel ? <ChannelBindingSheet key={bindingChannel.id} channel={bindingChannel} onClose={() => setBindingChannel(null)} onChanged={() => { setBindingChannel(null); void load(); }} /> : null}
-			<View className="px-4 items-end">
-				<IconButton name="refresh" label={t("common.refresh")} disabled={query.isFetching} onPress={() => void load()} />
-			</View>
 			{loading ? (
 				<LoadingBlock />
 			) : error ? (
@@ -762,39 +548,15 @@ function ChannelsSection({
 			) : (
 				<>
 					<SettingsGroup>
-						{channels.map((channel) => (
-							<View
-								key={channel.id}
-								className="min-h-20 px-3 py-3 flex-row items-center gap-2 border-b border-border"
-							>
-								<View
-									className="w-9 h-9 rounded-sm items-center justify-center bg-surface-raised"
-								>
-									<View
-										style={{
-											width: 8,
-											height: 8,
-											borderRadius: 4,
-											backgroundColor:
-												channelHealthState(channel) === "ready"
-													? theme.colors.success
-													: theme.colors.warning,
-										}}
-									/>
-								</View>
-								<View className="flex-1 min-w-0">
-									<Text
-										numberOfLines={1}
-										className="text-body font-semibold text-fg"
-									>
-										{channel.name}
-									</Text>
-									<Text
-										className="text-caption text-fg-muted mt-0.5"
-									>
+						{channels.map((channel, index) => (
+							<View key={channel.id} className="min-h-13 flex-row items-center gap-3 bg-surface py-2 pl-4 pr-1">
+								<GroupTile><View className={`size-2 rounded-full ${channelHealthState(channel) === "ready" ? "bg-success" : "bg-warning"}`} /></GroupTile>
+								<View className="min-w-0 flex-1 gap-0.5">
+									<Text numberOfLines={1} className="text-body text-fg">{channel.name}</Text>
+									<Text className="text-caption text-fg-muted">
 										{channel.provider} · {t(`settings.channels.health.${channelHealthState(channel)}`)}
 									</Text>
-									{channel.boundSpace ? <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: channel.boundSpace!.id } })} className="min-h-11 justify-center active:opacity-60">
+									{channel.boundSpace ? <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: channel.boundSpace!.id } })} className="min-h-11 justify-center active:opacity-60">
 										<Text className="text-caption text-accent">{t("settings.channels.boundTo", { name: channel.boundSpace.title || channel.boundSpace.id.slice(0, 8) })}</Text>
 									</Pressable> : null}
 									{channel.health?.message || channel.health?.detail ? <Text selectable className="text-caption text-fg-muted">{channel.health.message || channel.health.detail}</Text> : null}
@@ -805,10 +567,10 @@ function ChannelsSection({
 										name="trash"
 										label={t("settings.channels.remove", { name: channel.name })}
 										tone="danger"
-										size={38}
 										onPress={() => setRemoveCandidate(channel)}
 									/>
 								) : null}
+								{index < channels.length - 1 ? <GroupSeparator /> : null}
 							</View>
 						))}
 					</SettingsGroup>
@@ -838,7 +600,6 @@ function BillingSection({
 	client: CohubClient | null;
 	onNotice: (notice: { title: string; message: string }) => void;
 }) {
-	const theme = useAppTheme();
 	const { t } = useTranslation();
 	const query = useScreenQuery({
 		queryKey: ["billing", "overview"],
@@ -885,8 +646,11 @@ function BillingSection({
 			setPendingProductKey(null);
 		}
 	};
+	const plans = catalog?.plans ?? [];
+	const addons = catalog?.addons ?? [];
+	const price = (amountUsd: number) => <Text className="text-subhead tabular-nums text-fg-muted">{formatUsd(amountUsd)}</Text>;
 	return (
-		<View>
+		<View className="pt-4">
 			{loading ? (
 				<LoadingBlock />
 			) : error ? (
@@ -895,77 +659,42 @@ function BillingSection({
 				<>
 					<SettingsGroup>
 						<View className="p-4">
-							<Text
-								className="text-caption text-fg-muted"
-							>
-								{t("settings.billing.balance")}
-							</Text>
-							<Text
-								style={[
-									typography.display,
-									{
-										color:
-											credits && credits.netUsd < 0
-												? theme.colors.danger
-												: theme.colors.text,
-										marginTop: 4,
-									},
-								]}
-							>
+							<Text className="text-caption text-fg-muted">{t("settings.billing.balance")}</Text>
+							<Text className={`mt-1 text-display tabular-nums ${credits && credits.netUsd < 0 ? "text-danger" : "text-fg"}`}>
 								{formatUsd(credits?.netUsd ?? 0)}
 							</Text>
 						</View>
 					</SettingsGroup>
-					<SectionHeader title={t("settings.billing.plans")} />
-					<SettingsGroup>
-						{(catalog?.plans ?? []).map((plan) => (
+					<SettingsGroup label={t("settings.billing.plans")}>
+						{plans.map((plan, index) => (
 							<SettingsRow
 								key={plan.key}
 								icon="zap"
 								title={plan.name}
-								detail={plan.description || t("settings.billing.planFallback")}
+								value={plan.description || t("settings.billing.planFallback")}
 								disabled={pendingProductKey !== null}
 								onPress={() => void openProduct(plan)}
-								trailing={
-									<Text
-										className="text-caption text-fg-secondary"
-									>
-										{formatUsd(plan.pricing.amountUsd)}
-									</Text>
-								}
-							/>
+								external
+								last={index === plans.length - 1}
+							>{price(plan.pricing.amountUsd)}</SettingsRow>
 						))}
-						{(catalog?.plans ?? []).length === 0 ? (
-							<Text
-								className="text-body text-fg-muted p-4"
-							>
-								{t("settings.billing.noPlans")}
-							</Text>
-						) : null}
+						{plans.length === 0 ? <Text className="p-4 text-body text-fg-muted">{t("settings.billing.noPlans")}</Text> : null}
 					</SettingsGroup>
-					{(catalog?.addons ?? []).length > 0 ? (
-						<>
-							<SectionHeader title={t("settings.billing.creditPackages")} />
-							<SettingsGroup>
-								{(catalog?.addons ?? []).map((addon) => (
-									<SettingsRow
-										key={addon.key}
-										icon="zap"
-										title={addon.name}
-										detail={addon.description || t("settings.billing.addonFallback")}
-										disabled={pendingProductKey !== null}
-										onPress={() => void openProduct(addon)}
-										trailing={
-											<Text
-												className="text-caption text-fg-secondary"
-											>
-												{formatUsd(addon.pricing.amountUsd)}
-											</Text>
-										}
-									/>
-								))}
-							</SettingsGroup>
-						</>
+					{addons.length > 0 ? (
+						<SettingsGroup label={t("settings.billing.creditPackages")}>
+							{addons.map((addon, index) => (
+								<SettingsRow
+									key={addon.key}
+									icon="zap"
+									title={addon.name}
+									value={addon.description || t("settings.billing.addonFallback")}
+									disabled={pendingProductKey !== null}
+									onPress={() => void openProduct(addon)}
+									external
+									last={index === addons.length - 1}
+								>{price(addon.pricing.amountUsd)}</SettingsRow>
+							))}
+						</SettingsGroup>
 					) : null}
 				</>
 			)}
@@ -995,76 +724,47 @@ function ReferralsSection({
 			});
 		}
 	};
+	const link = data ? `https://cohub.live/referrals/${data.code}` : "";
+	const copy = () => void Clipboard.setStringAsync(link)
+		.then(() => onNotice({ title: t("settings.referrals.copy"), message: t("settings.referrals.copied") }))
+		.catch((caught: unknown) => onNotice({ title: t("settings.referrals.copy"), message: caught instanceof Error ? caught.message : t("settings.referrals.error") }));
 	return (
-		<View>
+		<View className="pt-4">
 			{loading ? (
 				<LoadingBlock />
 			) : !data ? (
-				<InlineError
-					message={error || t("settings.referrals.unavailable")}
-					onRetry={() => void load()}
-				/>
+				<InlineError message={error || t("settings.referrals.unavailable")} onRetry={() => void load()} />
 			) : (
 				<>
-					<SettingsGroup>
-						<View className="p-4">
-							<Text
-								className="text-caption text-fg-muted"
-							>
-								{t("settings.referrals.link")}
-							</Text>
-							<Text
-								selectable
-								className="text-body font-semibold text-fg mt-2"
-							>
-								https://cohub.live/referrals/{data.code}
-							</Text>
-							<View className="flex-row justify-end mt-3">
-								<IconButton name="copy" label={t("settings.referrals.copy")} disabled={rotating} onPress={() => void Clipboard.setStringAsync(`https://cohub.live/referrals/${data.code}`).then(() => onNotice({ title: t("settings.referrals.copy"), message: t("settings.referrals.copied") })).catch((caught: unknown) => onNotice({ title: t("settings.referrals.copy"), message: caught instanceof Error ? caught.message : t("settings.referrals.error") }))} />
-								<IconButton name="share" label={t("settings.referrals.share")} disabled={rotating} onPress={() => void share()} />
-								<IconButton name="refresh" label={t("settings.referrals.rotate")} disabled={rotating} onPress={() => setRotateOpen(true)} />
-							</View>
-							{error && !rotateOpen ? <Text accessibilityRole="alert" className="text-caption text-danger">{error}</Text> : null}
-							<ConfirmSheet visible={rotateOpen} title={t("settings.referrals.rotate")} message={t("settings.referrals.rotateConfirm")} confirmLabel={t("settings.referrals.rotate")} confirmIcon="refresh" busy={rotating} error={error} onConfirm={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} onClose={() => setRotateOpen(false)} />
+					<SettingsGroup label={t("settings.referrals.link")}>
+						<View className="px-4 py-3">
+							<Text selectable className="text-body text-fg">{link}</Text>
 						</View>
 					</SettingsGroup>
-					<View
-						className="flex-row gap-2 px-4 pt-4"
-					>
-						<Metric
-							label={t("settings.referrals.rewarded")}
-							value={String(data.summary.rewarded)}
-							icon="check-circle"
-						/>
-						<Metric
-							label={t("settings.referrals.earned")}
-							value={formatUsd(data.summary.earnedUsd)}
-							icon="gift"
-						/>
-					</View>
-					<SectionHeader title={t("settings.referrals.recent")} />
 					<SettingsGroup>
-						{data.items.map((item) => (
+						<GroupRow leading={<GroupTile icon="copy" accent />} title={t("settings.referrals.copy")} titleClassName="text-accent" disabled={rotating} onPress={copy} />
+						<GroupRow leading={<GroupTile icon="share" accent />} title={t("settings.referrals.share")} titleClassName="text-accent" disabled={rotating} onPress={() => void share()} />
+						<GroupRow leading={rotating ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="refresh" accent />} title={t("settings.referrals.rotate")} titleClassName="text-accent" disabled={rotating} onPress={() => setRotateOpen(true)} last />
+					</SettingsGroup>
+					{error && !rotateOpen ? <Text accessibilityRole="alert" className="-mt-4 mb-6 px-8 text-caption text-danger">{error}</Text> : null}
+					<ConfirmSheet visible={rotateOpen} title={t("settings.referrals.rotate")} message={t("settings.referrals.rotateConfirm")} confirmLabel={t("settings.referrals.rotate")} confirmIcon="refresh" busy={rotating} error={error} onConfirm={() => void rotate().then((ok) => { if (ok) setRotateOpen(false); })} onClose={() => setRotateOpen(false)} />
+					<View className="flex-row gap-2 px-4 pb-6">
+						<Metric label={t("settings.referrals.rewarded")} value={String(data.summary.rewarded)} icon="check-circle" />
+						<Metric label={t("settings.referrals.earned")} value={formatUsd(data.summary.earnedUsd)} icon="gift" />
+					</View>
+					<SettingsGroup label={t("settings.referrals.recent")}>
+						{data.items.map((item, index) => (
 							<SettingsRow
 								key={item.id}
 								icon="user"
 								title={item.profile?.displayName || t("settings.profile.fallbackName")}
-								detail={formatRelativeTime(item.claimedAt)}
-								trailing={
-									<StatusPill
-										label={item.status}
-										tone={item.status === "rewarded" ? "success" : "neutral"}
-									/>
-								}
-							/>
-						))}
-						{data.items.length === 0 ? (
-							<Text
-								className="text-body text-fg-muted p-4"
+								value={formatRelativeTime(item.claimedAt)}
+								last={index === data.items.length - 1}
 							>
-								{t("settings.referrals.none")}
-							</Text>
-						) : null}
+								<StatusPill label={item.status} tone={item.status === "rewarded" ? "success" : "neutral"} />
+							</SettingsRow>
+						))}
+						{data.items.length === 0 ? <Text className="p-4 text-body text-fg-muted">{t("settings.referrals.none")}</Text> : null}
 					</SettingsGroup>
 				</>
 			)}
@@ -1072,31 +772,12 @@ function ReferralsSection({
 	);
 }
 
-function Metric({
-	label,
-	value,
-	icon,
-}: {
-	label: string;
-	value: string;
-	icon: React.ComponentProps<typeof AppIcon>["name"];
-}) {
+function Metric({ label, value, icon }: { label: string; value: string; icon: IconName }) {
 	return (
-		<View
-			className="flex-1 min-h-20 p-3 border border-border rounded-md bg-surface"
-		>
+		<View className="min-h-20 flex-1 rounded-md bg-surface p-3" style={CONTINUOUS}>
 			<AppIcon name={icon} size={16} tone="accent" />
-			<Text
-				numberOfLines={1}
-				className="text-headline font-semibold text-fg mt-2"
-			>
-				{value}
-			</Text>
-			<Text
-				className="text-micro font-semibold text-fg-muted mt-0.5"
-			>
-				{label}
-			</Text>
+			<Text numberOfLines={1} className="mt-2 text-headline font-semibold tabular-nums text-fg">{value}</Text>
+			<Text numberOfLines={1} className="mt-0.5 text-caption text-fg-muted">{label}</Text>
 		</View>
 	);
 }
@@ -1106,34 +787,11 @@ function LoadingBlock() {
 	return <LoadingState fill={false} label={t("settings.loading")} />;
 }
 
-function InlineError({
-	message,
-	onRetry,
-}: {
-	message: string;
-	onRetry: () => void;
-}) {
-	const { t } = useTranslation();
-	return (
-		<View
-			className="mx-4 mt-3 p-4 border border-danger rounded-md bg-danger-soft"
-		>
-			<Text
-				selectable
-				className="text-caption text-danger"
-			>
-				{message}
-			</Text>
-			<Pressable
-				accessibilityRole="button"
-				accessibilityLabel={t("common.retry")}
-				onPress={onRetry}
-				className="mt-2 self-start active:opacity-60"
-			>
-				<Text className="text-body font-semibold text-danger">
-					{t("common.retry")}
-				</Text>
-			</Pressable>
-		</View>
-	);
+/** Shown in place of a section that failed to load; save errors stay beside their form instead. */
+function InlineError({ message, onRetry }: { message: string; onRetry: () => void }) {
+	return <DataError message={message} onRetry={onRetry} />;
 }
+
+const CONTINUOUS = { borderCurve: "continuous" } as const;
+const RULES_PREVIEW = { maxHeight: 360 } as const;
+const MONO = { fontFamily: "SpaceMono" } as const;

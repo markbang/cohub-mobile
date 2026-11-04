@@ -10,7 +10,7 @@ import { openWebLink } from "@/src/platform/browser";
 import { useBillingHistory, type SubscriptionCancellation } from "@/src/data/use-billing-history";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { EmptyState, IconButton, LoadingState, PrimaryButton, Screen, TopBar } from "@/src/ui";
+import { EmptyState, IconButton, LoadingState, PrimaryButton, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { billingStatusLabel } from "@/src/utils";
 
 export function BillingHistoryScreen({ kind }: { kind: "history" | "subscriptions" }) {
@@ -26,16 +26,16 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
   const busy = loading || saving || paying;
   return <Screen>
     <TopBar title={t(kind === "history" ? "settings.billing.history" : "settings.billing.subscriptions")} onBack={() => router.back()} actions={<IconButton name="refresh" label={t("common.refresh")} disabled={busy} onPress={() => void load()} />} />
-    <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }}>
+    <ScrollView contentContainerClassName="pt-4" contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing.xl }}>
       {loading ? <LoadingState fill={false} /> : null}
       {error || paymentError ? <View className="p-4 gap-3">
         <Text accessibilityRole="alert" className="text-body text-danger">{error || paymentError}</Text>
         <PrimaryButton label={t("common.retry")} icon="refresh" disabled={busy} onPress={() => { setPaymentError(null); void load(); }} />
       </View> : null}
       {!loading && data?.list.page === page ? <>
-        {data.kind === "history" ? data.list.items.map((item) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status && item.status !== "covered" ? billingStatusLabel(item.status) : null].filter(Boolean).join(" · ")}>
+        {data.kind === "history" ? data.list.items.length ? <SettingsGroup>{data.list.items.map((item, index) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status && item.status !== "covered" ? billingStatusLabel(item.status) : null].filter(Boolean).join(" · ")} last={index === data.list.items.length - 1}>
           <Text className={`text-subhead font-semibold tabular-nums ${item.amountUsd < 0 ? "text-fg" : "text-success"}`} style={{ maxWidth: "35%" }}>{item.amountUsd > 0 ? "+" : ""}{formatUsd(item.amountUsd)}</Text>
-        </SettingsRow>) : data.list.items.map((item) => <View key={item.id} className="p-4 gap-2 border-b border-border bg-surface">
+        </SettingsRow>)}</SettingsGroup> : null : data.list.items.map((item) => <SettingsGroup key={item.id}><View className="gap-2 p-4">
           <Text className="text-body font-semibold text-fg">{item.productName}</Text>
           <Text className="text-caption text-fg-secondary">{billingStatusLabel(item.status)} · {formatUsd(item.amountUsd)} · {item.billingPeriod}</Text>
           {item.currentPeriodStart || item.currentPeriodEnd ? <Text className="text-caption text-fg-muted">{[item.currentPeriodStart, item.currentPeriodEnd].filter(Boolean).map((date) => new Date(date!).toLocaleDateString()).join(" - ")}</Text> : null}
@@ -51,7 +51,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
             }} /> : null}
             {item.actions.canCancelCheckout || item.actions.canCancelAutoRenew ? <PrimaryButton label={t(item.actions.canCancelCheckout ? "settings.billing.cancelCheckout" : "settings.billing.cancelRenewal")} icon="x" variant="danger" disabled={busy} onPress={() => setCandidate({ subscription: item, kind: item.actions.canCancelCheckout ? "checkout" : "renewal" })} /> : null}
           </View>
-        </View>)}
+        </View></SettingsGroup>)}
         {!data.list.items.length ? <EmptyState icon="database" title={t("settings.billing.noHistory")} /> : null}
       </> : null}
     </ScrollView>

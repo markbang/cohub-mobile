@@ -276,12 +276,13 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   );
 }
 
-/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label. */
-export function SettingsGroup({ label, children }: { label?: string; children: ReactNode }) {
+/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label, with an optional footnote. */
+export function SettingsGroup({ label, footer, children }: { label?: string; footer?: string; children: ReactNode }) {
   return (
     <View className="mb-6 px-4">
       {label ? <Text accessibilityRole="header" className="px-4 pb-2 text-caption font-semibold text-fg-muted">{label}</Text> : null}
       <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>{children}</View>
+      {footer ? <Text className="px-4 pt-2 text-caption text-fg-muted">{footer}</Text> : null}
     </View>
   );
 }
