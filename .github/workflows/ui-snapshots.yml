@@ -15,6 +15,11 @@ on:
         required: false
         default: light,dark
         type: string
+      motion:
+        description: Also record the interactions in MOTIONS as side-by-side videos.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -30,6 +35,7 @@ env:
   E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
+  MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
   # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
 
@@ -143,7 +149,7 @@ jobs:
           profile: pixel_7
           emulator-boot-timeout: 900
           disable-animations: true
-          script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG
+          script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -238,7 +244,7 @@ jobs:
             metro-${{ runner.os }}-
 
       - name: Capture
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -282,8 +288,13 @@ jobs:
           pattern: ui-snapshots-*
           path: dist/ui-snapshots
 
-      - name: Install ImageMagick
-        run: command -v magick || command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+      - name: Install ImageMagick and ffmpeg
+        run: |
+          set -euo pipefail
+          missing=""
+          command -v magick >/dev/null || command -v convert >/dev/null || missing="$missing imagemagick"
+          command -v ffmpeg >/dev/null || missing="$missing ffmpeg"
+          if [ -n "$missing" ]; then sudo apt-get update && sudo apt-get install -y $missing; fi
 
       - name: Pair
         run: node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ui-snapshots-ios --android dist/ui-snapshots/ui-snapshots-android --out dist/ui-snapshots/pairs

@@ -5,14 +5,14 @@ Android draws the iOS design (see `AGENTS.md` › Native UI). iOS uses the syste
 ## Run in CI
 
 ```bash
-gh workflow run ui-snapshots.yml --ref <branch> [-f screens=catalog-rows,settings] [-f themes=light]
+gh workflow run ui-snapshots.yml --ref <branch> [-f screens=catalog-rows,settings] [-f themes=light] [-f motion=false]
 gh run download <run-id> -n ui-snapshots-pairs -D dist/ui-snapshots/pairs
 ```
 
 - `.github/workflows/ui-snapshots.yml` builds debug binaries and caches them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
 - The workflow needs the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), because every route sits behind sign-in.
 - Artifacts:
-  - `ui-snapshots-pairs`: `<screen>.<theme>.png`
+  - `ui-snapshots-pairs`: `<screen>.<theme>.png`, and `motion/<interaction>.mp4` side-by-side recordings
   - `ui-snapshots-ios` and `ui-snapshots-android`: the raw captures
 
 ## Run locally
@@ -33,6 +33,10 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 `app/debug/ui.tsx` is the UI catalog, a page that shows every shared primitive. `?section=` limits it to one section so each fits in a single screenshot. When you add or restyle a shared component, add it to the catalog.
 
+## Recordings
+
+After the screenshots, each platform records the interactions in `MOTIONS` (`scripts/ui-snapshots.mjs`) in the light theme: tab switches, a push and back, controls, a menu, a sheet, and a confirmation. Android turns its animation scales back on for this pass. `compare` stacks each pair into one 30 fps video with ffmpeg. To record a new interaction, add an entry to `MOTIONS`. Use `?open=0` on the catalog's `sheet` and `confirm` sections so a recording starts from the closed state.
+
 ## Limits
 
-These are still screenshots. They do not show motion, gesture feel, haptics, or blur fidelity, because the CI emulator has no GPU. Check those on a device.
+Recordings show timing and shape. They do not show gesture feel or haptics, and blur fidelity is unreliable because the CI emulator has no GPU. Check those on a device.

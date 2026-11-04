@@ -29,7 +29,8 @@ import {
 /**
  * Every shared primitive on one route, so `scripts/ui-snapshots.mjs` can capture iOS and Android
  * side by side. `?section=` renders one section to fit a single screenshot; `sheet` and `confirm`
- * open their overlay on mount because a screenshot cannot wait on a tap.
+ * open their overlay on mount because a screenshot cannot wait on a tap, unless `?open=0` asks for the
+ * closed state a screen recording starts from.
  */
 const SECTIONS = ["type", "rows", "controls", "states", "menu", "sheet", "confirm"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -43,8 +44,9 @@ const NOOP = () => undefined;
 export default function DebugUiCatalogScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; open?: string }>();
   const only = isSection(params.section) ? params.section : null;
+  const autoOpen = params.open !== "0";
   const show = (section: Section) => only === null || only === section;
 
   return (
@@ -56,8 +58,8 @@ export default function DebugUiCatalogScreen() {
         {show("controls") ? <ControlsSection /> : null}
         {show("states") ? <StatesSection /> : null}
         {show("menu") ? <MenuSection /> : null}
-        {show("sheet") ? <SheetSection initiallyOpen={only === "sheet"} /> : null}
-        {show("confirm") ? <ConfirmSection initiallyOpen={only === "confirm"} /> : null}
+        {show("sheet") ? <SheetSection initiallyOpen={autoOpen && only === "sheet"} /> : null}
+        {show("confirm") ? <ConfirmSection initiallyOpen={autoOpen && only === "confirm"} /> : null}
       </ScrollView>
     </Screen>
   );
@@ -156,7 +158,7 @@ function ControlsSection() {
       </Block>
       <Block label="Selection">
         <Segmented options={segments} value={segment} onChange={setSegment} />
-        <Segmented size="compact" options={segments} value={segment} onChange={setSegment} />
+        <Segmented options={segments.slice(0, 2)} value={segment === "shared" ? "all" : segment} onChange={setSegment} />
         <View className="flex-row flex-wrap gap-1">
           {["Recent", "Pinned", "Archived"].map((label, index) => (
             <FilterChip key={label} label={label} suffix={index === 0 ? "3" : undefined} selected={chip === index} onPress={() => setChip(index)} />

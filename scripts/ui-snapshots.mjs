@@ -6,19 +6,21 @@ import { basename, join, resolve } from "node:path";
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
  * UI can be compared with the iOS system UI without a local simulator.
  *
- *   capture --platform android|ios --app <apk|.app|.zip> [--out dir] [--screens a,b] [--themes light,dark] [--no-metro]
+ *   capture --platform android|ios --app <apk|.app|.zip> [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion]
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
+ * After the screenshots it records each of MOTIONS as a video (light theme, animations on); compare
+ * pairs those too, so motion can be tuned frame by frame.
  */
 
 const PACKAGE_ID = "io.github.markbang.cohubmobile";
 const METRO_PORT = 8081;
 const LOGIN_FLOWS = { android: "e2e/auth/login.yaml", ios: "e2e/auth/login.ios.yaml" };
-// iPhone 16 Pro width; the Android emulator's density is set so both lay out at the same width.
-const LOGICAL_WIDTH = 393;
-const IOS_DEVICES = ["iPhone 16 Pro", "iPhone 17 Pro", "iPhone 16", "iPhone 17"];
+// iPhone 17 Pro width; the Android emulator's density is set so both lay out at the same width.
+const LOGICAL_WIDTH = 402;
+const IOS_DEVICES = ["iPhone 17 Pro", "iPhone 16 Pro", "iPhone 17", "iPhone 16"];
 const PAIR_HEIGHT = 1400;
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
@@ -42,9 +44,22 @@ export const SCREENS = [
   { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
+/**
+ * Interactions recorded as video, the same on both platforms. `back` is the system back on Android
+ * and the edge swipe on iOS, which has no back key.
+ */
+export const MOTIONS = [
+  { name: "motion-tabs", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Me" }] },
+  { name: "motion-push", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
+  { name: "motion-controls", link: "cohub://debug/ui?section=controls", steps: [{ tapOn: "Switch on" }, { tapOn: "Mine" }, { tapOn: "Shared" }, { tapOn: "Pinned" }] },
+  { name: "motion-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
+  { name: "motion-sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },
+  { name: "motion-confirm", link: "cohub://debug/ui?section=confirm&open=0", steps: [{ tapOn: "Open confirm" }, { tapOn: "Cancel" }] },
+];
+
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -60,6 +75,7 @@ function parseArgs(argv) {
     else if (flag === "--ios") options.ios = resolve(value());
     else if (flag === "--android") options.android = resolve(value());
     else if (flag === "--no-metro") options.metro = false;
+    else if (flag === "--no-motion") options.motion = false;
     else if (flag === "--dir") options.dir = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
   }
@@ -132,10 +148,10 @@ function yamlString(value) {
   return JSON.stringify(value);
 }
 
-/** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
-function buildFlow({ platform, screens }) {
+/** Launches fresh, waits out a cold Metro and system dialogs, and signs in if needed. */
+function preamble(platform) {
   const login = resolve(LOGIN_FLOWS[platform]);
-  const lines = [
+  return [
     `appId: ${PACKAGE_ID}`,
     "---",
     "- launchApp:",
@@ -179,19 +195,46 @@ function buildFlow({ platform, screens }) {
     "      visible: \"Continue with Cohub\"",
     `    file: ${yamlString(login)}`,
   ];
+}
+
+function openScreen(lines, link) {
+  lines.push(`- openLink: ${yamlString(link)}`);
+  // iOS can ask before handing a custom-scheme link to the app.
+  lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
+  lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
+}
+
+function pushSteps(lines, platform, steps = []) {
+  for (const step of steps) {
+    if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`);
+    else if (step.back && platform === "android") lines.push("- back");
+    else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
+    else lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
+    lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
+  }
+}
+
+/** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
+function buildFlow({ platform, screens }) {
+  const lines = [`appId: ${PACKAGE_ID}`, "---", ...preamble(platform)];
   for (const screen of screens) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
-    lines.push(`- openLink: ${yamlString(screen.link)}`);
-    // iOS can ask before handing a custom-scheme link to the app.
-    lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
-    lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
-    for (const step of screen.steps ?? []) {
-      if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`);
-      else lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
-      lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
-    }
+    openScreen(lines, screen.link);
+    pushSteps(lines, platform, screen.steps);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
     lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/** Records each interaction from its settled start screen to its settled end. */
+function buildMotionFlow({ platform, motions }) {
+  const lines = [`appId: ${PACKAGE_ID}`, "---", ...preamble(platform)];
+  for (const motion of motions) {
+    openScreen(lines, motion.link);
+    lines.push(`- startRecording: ${yamlString(motion.name)}`);
+    pushSteps(lines, platform, motion.steps);
+    lines.push("- stopRecording");
   }
   return `${lines.join("\n")}\n`;
 }
@@ -264,7 +307,10 @@ const android = {
     const adb = (...args) => run("adb", ["-s", serial, ...args]);
     adb("install", "-r", "-d", app);
     adb("reverse", `tcp:${METRO_PORT}`, `tcp:${METRO_PORT}`);
-    for (const scale of ["window_animation_scale", "transition_animation_scale", "animator_duration_scale"]) adb("shell", "settings", "put", "global", scale, "0");
+    const setAnimations = (on) => {
+      for (const scale of ["window_animation_scale", "transition_animation_scale", "animator_duration_scale"]) adb("shell", "settings", "put", "global", scale, on ? "1" : "0");
+    };
+    setAnimations(false);
     const size = /(\d+)x(\d+)/.exec(adb("shell", "wm", "size"));
     if (!size) throw new Error("Could not read the emulator's screen size from `wm size`.");
     adb("shell", "wm", "density", String(Math.round((Number(size[1]) / LOGICAL_WIDTH) * 160)));
@@ -272,13 +318,20 @@ const android = {
     adb("shell", "settings", "put", "global", "hide_error_dialogs", "1");
     adb("shell", "settings", "put", "global", "sysui_demo_allowed", "1");
     const demo = (...extra) => adb("shell", "am", "broadcast", "-a", "com.android.systemui.demo", ...extra);
-    demo("-e", "command", "enter");
-    demo("-e", "command", "clock", "-e", "hhmm", "0941");
-    demo("-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false");
-    demo("-e", "command", "notifications", "-e", "visible", "false");
+    // System UI can drop demo mode when it restarts (a density or night-mode change), so it is re-entered per run.
+    const demoStatusBar = () => {
+      demo("-e", "command", "enter");
+      demo("-e", "command", "clock", "-e", "hhmm", "0941");
+      demo("-e", "command", "battery", "-e", "level", "100", "-e", "plugged", "false");
+      demo("-e", "command", "notifications", "-e", "visible", "false");
+    };
     return {
       device: serial,
-      setTheme: (theme) => adb("shell", "cmd", "uimode", "night", theme === "dark" ? "yes" : "no"),
+      setTheme: (theme) => {
+        adb("shell", "cmd", "uimode", "night", theme === "dark" ? "yes" : "no");
+        demoStatusBar();
+      },
+      setAnimations,
       restore() {
         run("adb", ["-s", serial, "shell", "wm", "density", "reset"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "settings", "put", "global", "hide_error_dialogs", "0"], { allowFailure: true });
@@ -311,6 +364,7 @@ const ios = {
     return {
       device: device.udid,
       setTheme: (theme) => run("xcrun", ["simctl", "ui", device.udid, "appearance", theme]),
+      setAnimations: () => undefined,
       restore: () => run("xcrun", ["simctl", "status_bar", device.udid, "clear"], { allowFailure: true }),
     };
   },
@@ -342,12 +396,31 @@ async function capture(options) {
         else missing.push(`${theme}/${file}`);
       }
     }
+    if (options.motion) {
+      const directory = join(options.out, "motion");
+      rmSync(directory, { recursive: true, force: true });
+      mkdirSync(directory, { recursive: true });
+      target.setTheme("light");
+      target.setAnimations(true);
+      const flowPath = join(options.out, "motion.yaml");
+      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, motions: MOTIONS }));
+      const testOutput = join(options.out, "maestro-output", "motion");
+      rmSync(testOutput, { recursive: true, force: true });
+      runMaestro({ device: target.device, flowPath, out: options.out, testOutput });
+      target.setAnimations(false);
+      for (const motion of MOTIONS) {
+        const file = `${motion.name}.mp4`;
+        const found = findFile(testOutput, file);
+        if (found) run("mv", [found, join(directory, file)]);
+        else missing.push(`motion/${file}`);
+      }
+    }
   } finally {
     stopMetro(metro);
     target.restore();
   }
-  if (missing.length) throw new Error(`Maestro finished but these screenshots are missing: ${missing.join(", ")}.`);
-  process.stdout.write(`Captured ${screens.length} screens × ${options.themes.length} themes in ${options.out}\n`);
+  if (missing.length) throw new Error(`Maestro finished but these captures are missing: ${missing.join(", ")}.`);
+  process.stdout.write(`Captured ${screens.length} screens × ${options.themes.length} themes${options.motion ? ` and ${MOTIONS.length} recordings` : ""} in ${options.out}\n`);
 }
 
 function compare(options) {
@@ -374,9 +447,36 @@ function compare(options) {
       paired.push(output);
     }
   }
-  if (paired.length === 0) throw new Error(`No screen exists on both platforms under ${options.ios} and ${options.android}.`);
+  const motionPairs = pairMotion(options, unmatched);
+  if (paired.length === 0 && motionPairs === 0) throw new Error(`No screen exists on both platforms under ${options.ios} and ${options.android}.`);
   if (unmatched.length) process.stdout.write(`Captured on one platform only: ${unmatched.join(", ")}\n`);
-  process.stdout.write(`Paired ${paired.length} screenshots (left iOS, right Android) in ${options.out}\n`);
+  process.stdout.write(`Paired ${paired.length} screenshots and ${motionPairs} recordings (left iOS, right Android) in ${options.out}\n`);
+}
+
+/** Recordings side by side at one height and frame rate; the shorter one holds its last frame. */
+function pairMotion(options, unmatched) {
+  const iosDirectory = join(options.ios, "motion");
+  const androidDirectory = join(options.android, "motion");
+  if (!existsSync(iosDirectory) || !existsSync(androidDirectory)) return 0;
+  requireCommand("ffmpeg", ["-version"], "Install ffmpeg (apt-get install ffmpeg / brew install ffmpeg) to pair recordings.");
+  const directory = join(options.out, "motion");
+  mkdirSync(directory, { recursive: true });
+  let count = 0;
+  const names = new Set([...readdirSync(iosDirectory), ...readdirSync(androidDirectory)].filter((name) => name.endsWith(".mp4")));
+  for (const name of [...names].sort()) {
+    const left = join(iosDirectory, name);
+    const right = join(androidDirectory, name);
+    if (!existsSync(left) || !existsSync(right)) {
+      unmatched.push(`motion/${name}`);
+      continue;
+    }
+    const height = 1280;
+    run("ffmpeg", ["-y", "-loglevel", "error", "-i", left, "-i", right, "-filter_complex",
+      `[0:v]fps=30,scale=-2:${height},setsar=1[a];[1:v]fps=30,scale=-2:${height},setsar=1[b];[a]pad=iw+24:ih:0:0:color=0x808080[ag];[ag][b]hstack=inputs=2`,
+      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(directory, name)]);
+    count += 1;
+  }
+  return count;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
