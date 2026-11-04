@@ -39,14 +39,19 @@ export const SCREENS = [
   { name: "settings", link: "cohub://settings" },
   { name: "appearance", link: "cohub://appearance" },
   { name: "about", link: "cohub://about" },
+  // The tab roots scrolled: the Large Title collapsed into the bar.
+  { name: "chats-scrolled", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
+  { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
+  { name: "activity-scrolled", link: "cohub://activity", steps: [{ swipe: "up" }] },
+  { name: "settings-scrolled", link: "cohub://settings", steps: [{ swipe: "up" }] },
   { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
   { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
 /**
- * Interactions recorded as video, the same on both platforms. `back` is the system back on Android
- * and the edge swipe on iOS, which has no back key.
+ * Interactions recorded as video, the same on both platforms. `setup` runs before the recording
+ * starts. `back` is the system back on Android and the edge swipe on iOS, which has no back key.
  */
 export const MOTIONS = [
   { name: "motion-tabs", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Me" }] },
@@ -55,6 +60,12 @@ export const MOTIONS = [
   { name: "motion-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
   { name: "motion-sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },
   { name: "motion-confirm", link: "cohub://debug/ui?section=confirm&open=0", steps: [{ tapOn: "Open confirm" }, { tapOn: "Cancel" }] },
+  { name: "motion-scroll-chats", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-scroll-spaces", link: "cohub://spaces", steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-scroll-activity", link: "cohub://activity", steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-scroll-settings", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-chat", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { tapOn: "Who are you\\?" }], steps: [{ swipe: "down" }, { swipe: "up" }] },
+  { name: "motion-space", link: "cohub://spaces", setup: [{ tapOn: "Home" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
 ];
 
 function parseArgs(argv) {
@@ -213,6 +224,9 @@ function pushSteps(lines, platform, steps = []) {
     if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
+    // A deliberate drag, slow enough that the content follows the finger and then coasts.
+    else if (step.swipe === "up") lines.push("- swipe:", "    start: 50%, 72%", "    end: 50%, 32%", "    duration: 700");
+    else if (step.swipe === "down") lines.push("- swipe:", "    start: 50%, 32%", "    end: 50%, 72%", "    duration: 700");
     else lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
   }
@@ -236,6 +250,7 @@ function buildMotionFlow({ platform, motions }) {
   const lines = preamble(platform);
   for (const motion of motions) {
     openScreen(lines, motion.link);
+    pushSteps(lines, platform, motion.setup);
     lines.push(`- startRecording: ${yamlString(motion.name)}`);
     pushSteps(lines, platform, motion.steps);
     lines.push("- stopRecording");
