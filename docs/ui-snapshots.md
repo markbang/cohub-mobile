@@ -41,6 +41,8 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 `app/debug/ui.tsx` is the UI catalog, a page that shows every shared primitive. `?section=` limits it to one section so each fits in a single screenshot. When you add or restyle a shared component, add it to the catalog.
 
+`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states`), so the Chat layout can be compared without an account's data.
+
 ## Recordings
 
 After the screenshots, each platform records the interactions in `MOTIONS` (`scripts/ui-snapshots.mjs`) in the light theme: tab switches, a push and back, controls, a menu, a sheet, and a confirmation. Android turns its animation scales back on for this pass. `compare` stacks each pair into one 30 fps video with ffmpeg. To record a new interaction, add an entry to `MOTIONS`. Use `?open=0` on the catalog's `sheet` and `confirm` sections so a recording starts from the closed state.

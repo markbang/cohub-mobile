@@ -299,6 +299,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="debug/markdown" options={{ title: t("route.markdown") }} />
             <Stack.Screen name="debug/list" options={{ title: t("route.longList") }} />
             <Stack.Screen name="debug/ui" options={{ title: "UI Catalog" }} />
+            <Stack.Screen name="debug/chat" options={{ title: "Chat Fixtures" }} />
           </Stack>
           <AppUpdateBanner />
         </View>
