@@ -126,6 +126,7 @@ export const zh: Record<TranslationKey, string> = {
   "ui.renderFailed.body": "仍可发送消息。可以重试，或复制详情用于反馈。",
   "ui.renderFailed.copy": "复制详情",
   "ui.renderFailed.copied": "已复制详情",
+  "share.failed": "无法添加分享的内容",
   "time.now": "刚刚",
   "time.minutes": "{count} 分钟前",
   "time.hours": "{count} 小时前",
