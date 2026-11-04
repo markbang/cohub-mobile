@@ -232,9 +232,14 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
     }
   }, [centerOffset, clearIdleTimer, commitClosed, onActivePanelChange, pagerSeed, pagerTarget, pagerRef, scrim, seedPager, settle, swipeOffset]);
 
+  const tracePagerScroll = useCallback((offset: number, target: number, seeding: boolean) => {
+    chatScrollTrace.record("pager.scroll", "space-panel", { offset, target, seeding });
+  }, []);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const offset = event.contentOffset.x;
+      if (swipePhase.value !== "dragging" && swipePhase.value !== "released") scheduleOnRN(tracePagerScroll, offset, pagerTarget.value, pagerSeed.value !== 0);
       pagerNativeX.value = offset;
       pagerObserved.value = true;
       scrollOffset.value = offset;
@@ -251,7 +256,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
       shownPanel.value = panel;
       scheduleOnRN(showPanel, panel);
     },
-  }, [acknowledgeSeed, centerOffset, pagerLayoutReady, pagerNativeX, pagerObserved, pagerSeed, pagerTarget, panelWidth, scrim, scrollOffset, showPanel, shownPanel]);
+  }, [acknowledgeSeed, centerOffset, pagerLayoutReady, pagerNativeX, pagerObserved, pagerSeed, pagerTarget, panelWidth, scrim, scrollOffset, showPanel, shownPanel, swipePhase, tracePagerScroll]);
 
   usePredictiveBackBlock(isFocused && Boolean(activePanel || visiblePanel));
   useEffect(() => {
@@ -364,6 +369,8 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
         overScrollMode="never"
         scrollEventThrottle={16}
         scrollEnabled={false}
+        // Android otherwise scrolls the pager to reveal a focused descendant, flashing a closed panel.
+        scrollsChildToFocus={false}
         onScroll={scrollHandler}
         onMomentumScrollBegin={clearIdleTimer}
         onMomentumScrollEnd={settle}
