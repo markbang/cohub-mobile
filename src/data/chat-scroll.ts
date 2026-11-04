@@ -90,3 +90,14 @@ export function chatTailStalled(distanceToLatest: number, offsetUnchanged: boole
 export function chatTailDisplaced(input: { dragging: boolean; momentum: boolean; contentGrew: boolean; offsetDelta: number; distanceToLatest: number }) {
   return !input.dragging && !input.momentum && !input.contentGrew && input.offsetDelta < 0 && input.distanceToLatest > CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD;
 }
+
+/**
+ * Where a native timeline scroll event leaves the viewport, for the pull's "at the top" check. A
+ * following, untouched list pins its tail right after the layout that reported this offset, and the
+ * throttle drops the event for that pin: a short chat whose rows grew reports offset 0 while it
+ * already shows its tail. A null distance means the tail row is not even attached, so far from the top.
+ */
+export function chatTimelineSettledOffset(event: { offsetY: number; distanceToLatest: number | null; following: boolean; dragging: boolean; momentum: boolean }) {
+  if (!event.following || event.dragging || event.momentum) return event.offsetY;
+  return event.distanceToLatest === null ? Number.POSITIVE_INFINITY : event.offsetY + event.distanceToLatest;
+}

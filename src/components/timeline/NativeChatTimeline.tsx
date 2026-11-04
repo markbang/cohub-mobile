@@ -10,7 +10,7 @@ import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD } from "@/src/data/chat-scroll";
+import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
 import { compactionFromMessage } from "@/src/data/compaction";
@@ -436,7 +436,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   const { onVisibleMessages, onFollowingChange, onNearEdge, onLoad, onDragBegin, onFlightEnd, onScrollOffset, onWidth } = props;
   const scrollLogRef = useRef({ at: 0, y: 0 });
   const handleScroll = useCallback(({ nativeEvent }: { nativeEvent: TimelineScrollEvent }) => {
-    onScrollOffset(nativeEvent.offsetY);
+    onScrollOffset(chatTimelineSettledOffset(nativeEvent));
     const now = Date.now();
     if (now - scrollLogRef.current.at < SCROLL_LOG_MS) return;
     // The fields of the JS list's event, so logs from before and after the native timeline compare.
