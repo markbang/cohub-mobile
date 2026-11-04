@@ -232,9 +232,23 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
     }
   }, [centerOffset, clearIdleTimer, commitClosed, onActivePanelChange, pagerSeed, pagerTarget, pagerRef, scrim, seedPager, settle, swipeOffset]);
 
+  // Diagnostics for the open-time panel flash; remove once the cause is fixed.
+  const tracePager = useCallback((event: string, fields: Record<string, number | boolean | string>) => {
+    chatScrollTrace.record(event, "space-panel", fields);
+  }, []);
   const tracePagerScroll = useCallback((offset: number, target: number, seeding: boolean) => {
     chatScrollTrace.record("pager.scroll", "space-panel", { offset, target, seeding });
   }, []);
+  useEffect(() => {
+    tracePager("pager.mount", { spaceKey: spaceId ? "space" : "none" });
+    return () => tracePager("pager.unmount", {});
+  }, [spaceId, tracePager]);
+  useAnimatedReaction(() => ({ seed: pagerSeed.value, nativeX: pagerNativeX.value, target: pagerTarget.value }), (now, previous) => {
+    const translate = now.seed === 0 ? 0 : now.nativeX - now.target;
+    const previousTranslate = previous ? (previous.seed === 0 ? 0 : previous.nativeX - previous.target) : null;
+    if (previous && now.seed === previous.seed && translate === previousTranslate) return;
+    scheduleOnRN(tracePager, "pager.paint", { seeding: now.seed !== 0, translate, nativeX: now.nativeX, target: now.target });
+  }, [pagerNativeX, pagerSeed, pagerTarget, tracePager]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -375,11 +389,13 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
         onMomentumScrollBegin={clearIdleTimer}
         onMomentumScrollEnd={settle}
         onLayout={({ nativeEvent: { layout } }) => {
+          tracePager("pager.layout", { width: layout.width, height: layout.height });
           layoutRef.current.width = layout.width;
           layoutRef.current.height = layout.height;
           seedPager();
         }}
         onContentSizeChange={(contentWidth) => {
+          tracePager("pager.contentSize", { contentWidth });
           layoutRef.current.contentWidth = contentWidth;
           seedPager();
         }}
