@@ -30,6 +30,8 @@ env:
   E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
+  # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
 
 jobs:
   android:
@@ -137,6 +139,8 @@ jobs:
           name: ui-snapshots-android
           path: dist/ui-snapshots/android
           if-no-files-found: ignore
+          # Maestro nests its debug output under a `.maestro` directory.
+          include-hidden-files: true
           retention-days: 7
 
   ios:
@@ -201,6 +205,7 @@ jobs:
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   pairs:
