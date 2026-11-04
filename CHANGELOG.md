@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.3.9](https://github.com/markbang/cohub-mobile/compare/v2.3.8...v2.3.9) (2026-11-04)
+
+
+### Features
+
+* **android:** preview the previous screen during the back gesture ([#179](https://github.com/markbang/cohub-mobile/issues/179)) ([5af4b39](https://github.com/markbang/cohub-mobile/commit/5af4b39ce9697e0772f54950e99782981618f0a6))
+* apply t3code mobile lessons to lists, chat, and composer ([#177](https://github.com/markbang/cohub-mobile/issues/177)) ([40ba38f](https://github.com/markbang/cohub-mobile/commit/40ba38fbe72b69903297990297ad5d919eee6bf2))
+* **chats:** mark unread Chats on this device ([696c3c4](https://github.com/markbang/cohub-mobile/commit/696c3c42ae9774246fcaa7d9b0f99d62a7f76529))
+* **composer:** announce queueing a follow-up while a turn runs ([60a0145](https://github.com/markbang/cohub-mobile/commit/60a014563134a4fb58491fcbb97c7d930c0f3ba6))
+* **composer:** show the thinking level beside the model name ([dfd60ec](https://github.com/markbang/cohub-mobile/commit/dfd60ec2d79a31aa58f1924666cb193975807934))
+* **native:** add quick actions, image paste, and Android share into Cohub ([#178](https://github.com/markbang/cohub-mobile/issues/178)) ([485c44c](https://github.com/markbang/cohub-mobile/commit/485c44c96069a065c415cd9eaa4fe55a71a48281))
+* **space:** regroup Space settings into native rows and menus ([9218944](https://github.com/markbang/cohub-mobile/commit/92189442b9374dd26693b3a3db0d8eeb1fc63c8a))
+
+
+### Fixes
+
+* **android:** route system back through JS navigation again ([#176](https://github.com/markbang/cohub-mobile/issues/176)) ([e91bbe2](https://github.com/markbang/cohub-mobile/commit/e91bbe28eb16b08a375b3d362e708a211894411d))
+* **chat:** keep multi-image strips inside the bubble on Android ([#174](https://github.com/markbang/cohub-mobile/issues/174)) ([0a1ee51](https://github.com/markbang/cohub-mobile/commit/0a1ee5123861bd350c537033f4bf54b05fb04d74))
+* **chats:** show Markdown row previews as plain words ([6aae36b](https://github.com/markbang/cohub-mobile/commit/6aae36b54a90e4e3275bd2dfabdfc2a32fdf662e))
+* **links:** retarget the open Chat instead of stacking a copy ([4cd2746](https://github.com/markbang/cohub-mobile/commit/4cd2746bd0f10989306f0af3dfb3a8b818bde99e))
+* **tabs:** show the Android tab bar again when the keyboard hides without a will-hide ([#180](https://github.com/markbang/cohub-mobile/issues/180)) ([51540eb](https://github.com/markbang/cohub-mobile/commit/51540eb45c2fded6518ba66da3902853bbf8e80d))
+* **ui:** veil content behind the Android header bar ([abc668d](https://github.com/markbang/cohub-mobile/commit/abc668d080d7d1810bf4f19ebe6db54330bb3274))
+
+
+### Refactoring
+
+* **settings:** share grouped rows across settings screens ([ab6cdf4](https://github.com/markbang/cohub-mobile/commit/ab6cdf47f2790b96d5c723064b395be0e12cb23c))
+* **ui:** share platform variant props with the base component ([8f314ac](https://github.com/markbang/cohub-mobile/commit/8f314ac1c5c9cac3fd365b58995b908b49d94889))
+
 ## [2.3.8](https://github.com/markbang/cohub-mobile/compare/v2.3.7...v2.3.8) (2026-11-03)
 
 
