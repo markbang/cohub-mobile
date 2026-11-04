@@ -173,9 +173,11 @@ function runMaestro({ device, flowPath, out }) {
     if (!value) throw new Error(`${key} is required: every screen renders AuthScreen until a session exists (dev tenant account).`);
     return `${key}=${value}`;
   });
-  const result = spawnSync("maestro", ["test", "--device", device, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
+  // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
+  const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
+  const result = spawnSync("maestro", ["test", "--device", device, "--debug-output", debugOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its debug output is under ~/.maestro/tests.`);
+  if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
 
 function androidDevice() {

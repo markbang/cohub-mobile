@@ -55,9 +55,10 @@ jobs:
         id: fingerprint
         run: echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform android | jq -r .hash)" >> "$GITHUB_OUTPUT"
 
+      # Restore and save are split so a built binary is cached even when the capture fails.
       - name: Restore debug APK
         id: apk
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: build/ui-snapshots/cohub.apk
           key: ui-snapshots-android-${{ steps.fingerprint.outputs.hash }}
@@ -96,6 +97,13 @@ jobs:
           npm run native:android:build
           mkdir -p build/ui-snapshots
           cp android/app/build/outputs/apk/debug/app-x86_64-debug.apk build/ui-snapshots/cohub.apk
+
+      - name: Save debug APK
+        if: steps.apk.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ui-snapshots/cohub.apk
+          key: ${{ steps.apk.outputs.cache-primary-key }}
 
       - name: Install Maestro
         run: |
@@ -154,7 +162,7 @@ jobs:
 
       - name: Restore simulator app
         id: app
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: build/ui-snapshots/Cohub-ios-simulator.zip
           key: ui-snapshots-ios-${{ steps.fingerprint.outputs.hash }}
@@ -167,6 +175,13 @@ jobs:
           npm run native:ios:build
           mkdir -p build/ui-snapshots
           cp build/artifacts/Cohub-ios-simulator.zip build/ui-snapshots/
+
+      - name: Save simulator app
+        if: steps.app.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: build/ui-snapshots/Cohub-ios-simulator.zip
+          key: ${{ steps.app.outputs.cache-primary-key }}
 
       - name: Install Maestro
         run: |

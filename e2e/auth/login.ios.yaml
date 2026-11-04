@@ -7,6 +7,10 @@ name: Sign in on the dev tenant (iOS)
     clearState: false
 - tapOn: "Development"
 - tapOn: "Continue with Cohub"
+# The consent alert, when shown, arrives after the tap; a `when` checked immediately would miss it.
+- extendedWaitUntil:
+    visible: "(Continue|Email)"
+    timeout: 60000
 - runFlow:
     when:
       visible: "Continue"
