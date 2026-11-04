@@ -112,18 +112,18 @@
       --color-shadow: #08090b;
     }
     @variant dark {
-      --color-background: #0c0a09;
-      --color-surface: #1a1715;
-      --color-surface-raised: #25221e;
-      --color-surface-pressed: #302c27;
-      --color-surface-float: #25221e;
+      --color-background: #121214;
+      --color-surface: #1c1c1e;
+      --color-surface-raised: #2c2c2e;
+      --color-surface-pressed: #3a3a3c;
+      --color-surface-float: #2c2c2e;
       --color-press-overlay: rgba(255, 255, 255, 0.12);
-      --color-border: #2b2825;
-      --color-border-strong: #443f39;
-      --color-fg: #faf7f2;
-      --color-fg-secondary: #d7d2ca;
-      --color-fg-muted: #a9a39a;
-      --color-fg-faint: #938c82;
+      --color-border: #38383a;
+      --color-border-strong: #48484a;
+      --color-fg: #f2f2f7;
+      --color-fg-secondary: #d1d1d6;
+      --color-fg-muted: #bcbcc1;
+      --color-fg-faint: #a4a4a9;
       --color-accent: #ff8a3d;
       --color-accent-pressed: #ec7428;
       --color-accent-soft: #38231a;
@@ -134,8 +134,8 @@
       --color-user-bubble-link: #ffe9db;
       --color-user-bubble-code: rgba(8, 9, 11, 0.24);
       --color-user-bubble-meta: rgba(255, 247, 241, 0.92);
-      --color-assistant-bubble: #1a1715;
-      --color-on-assistant-bubble: #faf7f2;
+      --color-assistant-bubble: #1c1c1e;
+      --color-on-assistant-bubble: #f2f2f7;
       --color-success: #62c994;
       --color-success-soft: #1b3127;
       --color-warning: #e6b85c;

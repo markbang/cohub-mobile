@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { MessageRecord } from "@neta-art/cohub";
 import { messageRowKey } from "@/src/data/session-history";
+import { useDelayedStatus } from "@/src/data/use-delayed-status";
 
 /** Most catch-ups finish before this; showing the loader for them only adds a flicker at the tail. */
 export const CATCH_UP_LOADER_DELAY_MS = 300;
 /** Covers the arrival fade; after it the baseline is dropped so rows render plainly again. */
 const ARRIVAL_WINDOW_MS = 800;
 
-type CatchUp = { active: boolean; baseline: ReadonlySet<string> | null; loaderDue: boolean };
+type CatchUp = { active: boolean; baseline: ReadonlySet<string> | null };
 
 /**
  * Tracks one catch-up: earlier history is on screen while the request for what arrived since is in
@@ -17,25 +18,22 @@ type CatchUp = { active: boolean; baseline: ReadonlySet<string> | null; loaderDu
  * commit; an effect would run only after the new rows had painted.
  */
 export function useChatCatchUp(catchingUp: boolean, messages: readonly MessageRecord[]) {
-  const [state, setState] = useState<CatchUp>({ active: false, baseline: null, loaderDue: false });
+  const [state, setState] = useState<CatchUp>({ active: false, baseline: null });
   if (catchingUp !== state.active) {
-    setState({ active: catchingUp, baseline: catchingUp ? new Set(messages.map(messageRowKey)) : state.baseline, loaderDue: false });
+    setState({ active: catchingUp, baseline: catchingUp ? new Set(messages.map(messageRowKey)) : state.baseline });
   }
+  // A catch-up that ends just after the loader appears would otherwise flash it for a frame.
+  const showLoader = useDelayedStatus("catch-up", state.active ? true : null, { showDelayMs: CATCH_UP_LOADER_DELAY_MS }) === true;
 
   useEffect(() => {
-    if (state.active) {
-      if (state.loaderDue) return;
-      const timer = setTimeout(() => setState((current) => (current.active ? { ...current, loaderDue: true } : current)), CATCH_UP_LOADER_DELAY_MS);
-      return () => clearTimeout(timer);
-    }
-    if (!state.baseline) return;
-    const timer = setTimeout(() => setState((current) => (current.active ? current : { active: false, baseline: null, loaderDue: false })), ARRIVAL_WINDOW_MS);
+    if (state.active || !state.baseline) return;
+    const timer = setTimeout(() => setState((current) => (current.active ? current : { active: false, baseline: null })), ARRIVAL_WINDOW_MS);
     return () => clearTimeout(timer);
   }, [state]);
 
   // Nothing was on screen (a cold open without cache), so there is nothing to arrive after.
   const arrivalBaseline = state.baseline && state.baseline.size > 0 ? state.baseline : null;
-  return { showLoader: state.active && state.loaderDue, arrivalBaseline };
+  return { showLoader, arrivalBaseline };
 }
 
 /** A row the catch-up response added. Local sends own their own entrance (the send bubble). */

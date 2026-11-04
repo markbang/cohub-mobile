@@ -1,19 +1,19 @@
 import { createContext, Fragment, useCallback, useContext, useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import { AccessibilityInfo, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import { useKeyboardContext } from "react-native-keyboard-controller";
 import Reanimated, { ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay } from "react-native-screens";
 import { scheduleOnRN } from "react-native-worklets";
-import { dismissToast, expireToast, pushToast, TOAST_DURATION_MS, ToastClock, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
+import { dismissToast, expireToast, pushToast, toastDuration, ToastClock, type ToastAction, type ToastEntry, type ToastTone } from "@/src/data/toast-queue";
 import { haptics } from "@/src/platform/haptics";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { useTranslation } from "@/src/i18n";
 import { motion } from "@/src/motion";
 import { AppIcon, Mascot } from "@/src/ui";
 
-type ShowToast = (toast: { title: string; message?: string; tone?: ToastTone }) => void;
+type ShowToast = (toast: { title: string; message?: string; tone?: ToastTone; action?: ToastAction }) => void;
 
 type ToastLayerState = {
   toasts: ToastEntry[];
@@ -85,16 +85,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [viewports, setViewports] = useState<string[]>([]);
   const [store] = useState(() => new ToastStore(setToasts));
 
-  const show = useCallback<ShowToast>(({ title, message, tone = "neutral" }) => {
+  const show = useCallback<ShowToast>(({ title, message, tone = "neutral", action }) => {
     // Titles are UI copy, not user content; the detail line may quote an error and is not logged.
     recordDebugEvent("ui.toast", { tone, label: title.slice(0, 80), hasMessage: Boolean(message) });
-    const next = pushToast(store.entries, { key: store.nextKey(), title, message, tone, revision: 0 });
+    const next = pushToast(store.entries, { key: store.nextKey(), title, message, tone, action, revision: 0 });
     store.commit(next);
-    store.clock.start(next[0].key, TOAST_DURATION_MS[tone]);
+    store.clock.start(next[0].key, toastDuration(next[0]));
     // A success or neutral toast confirms what the user just did and the control already answered; a failure is news.
     if (tone === "danger") haptics.failure();
     // The one announcement per toast; the card itself is not a live region, so moving it between viewports stays silent.
-    AccessibilityInfo.announceForAccessibilityWithOptions(message ? `${title}. ${message}` : title, { queue: true });
+    AccessibilityInfo.announceForAccessibilityWithOptions([title, message, action?.label].filter(Boolean).join(". "), { queue: true });
   }, [store]);
 
   const dismiss = useCallback((key: string) => store.commit(dismissToast(store.entries, key)), [store]);
@@ -290,17 +290,26 @@ function ToastCard({ toast, depth, entered, onDismiss, holds }: ToastCardProps) 
 
   const danger = toast.tone === "danger";
   const label = toast.message ? `${toast.title}. ${toast.message}` : toast.title;
+  const action = toast.action;
+  const runAction = () => {
+    if (!action) return;
+    onDismiss(toast.key);
+    action.onPress();
+  };
   // The front card is in flow and sizes the layer, so the gesture root only covers what can be touched.
   const placement = isFront ? "" : "absolute bottom-0 left-0 right-0";
 
   return (
     <GestureDetector gesture={pan}>
-      <Reanimated.View accessible accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} pointerEvents={isFront ? "auto" : "none"} className={`${placement} flex-row items-center gap-3 rounded-md bg-surface-float px-4 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
+      <Reanimated.View accessible accessibilityLabel={label} accessibilityHint={isFront ? t("toast.swipeHint") : undefined} accessibilityActions={action && isFront ? [{ name: "activate", label: action.label }] : undefined} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "activate") runAction(); }} pointerEvents={isFront ? "auto" : "none"} className={`${placement} flex-row items-center gap-3 rounded-md bg-surface-float px-4 py-3 shadow-float ${danger ? "border border-danger" : ""}`} style={[{ zIndex: 10 - depth, borderCurve: "continuous" }, animatedStyle]}>
         {danger ? <Mascot size={20} mood="worried" /> : <AppIcon name={toast.tone === "success" ? "check" : "info"} size={16} tone={toast.tone === "success" ? "success" : "secondary"} />}
         <View className="min-w-0 flex-1 gap-px">
           <Text numberOfLines={1} className="text-body font-semibold text-fg">{toast.title}</Text>
           {toast.message ? <Text numberOfLines={2} className="text-caption text-fg-secondary">{toast.message}</Text> : null}
         </View>
+        {action ? <Pressable accessible={false} hitSlop={8} onPress={runAction} className="-my-1 -mr-2 min-h-11 justify-center rounded-sm px-2 active:bg-surface-pressed">
+          <Text numberOfLines={1} className="text-body font-semibold text-accent">{action.label}</Text>
+        </Pressable> : null}
       </Reanimated.View>
     </GestureDetector>
   );

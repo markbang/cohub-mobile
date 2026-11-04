@@ -29,6 +29,9 @@ import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
 import { haptics } from "@/src/platform/haptics";
 import { getComposerActionState } from "@/src/data/composer-state";
+import { useDelayedStatus } from "@/src/data/use-delayed-status";
+import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
+import { PasteImagesInput } from "@/src/platform/paste-input";
 import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -46,7 +49,7 @@ import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
-import type { ActivityItem } from "@/src/data/types";
+import type { AttachmentDraft, ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
 export { AppSwitch } from "@/src/ui/AppSwitch";
@@ -141,6 +144,8 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 }
 
 const FILLED_ICON_SIZE = 18;
+/** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
+const MODEL_DETAIL_SHRINK = { flexShrink: 100 } as const;
 
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
   const insets = useSafeAreaInsets();
@@ -274,12 +279,13 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   );
 }
 
-/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label. */
-export function SettingsGroup({ label, children }: { label?: string; children: ReactNode }) {
+/** Inset grouped list in the iOS Settings style: a floating card of rows under a section label, with an optional footnote. */
+export function SettingsGroup({ label, footer, children }: { label?: string; footer?: string; children: ReactNode }) {
   return (
     <View className="mb-6 px-4">
       {label ? <Text accessibilityRole="header" className="px-4 pb-2 text-caption font-semibold text-fg-muted">{label}</Text> : null}
       <View className="overflow-hidden rounded-md bg-surface" style={CONTINUOUS}>{children}</View>
+      {footer ? <Text className="px-4 pt-2 text-caption text-fg-muted">{footer}</Text> : null}
     </View>
   );
 }
@@ -507,7 +513,7 @@ export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
-export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
+export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelDetail, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; /** Secondary, such as the thinking level; it gives way before the model name does. */ modelDetail?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -580,61 +586,64 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
         <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-surface" />
         <View className="flex-row items-start">
-          <TextInput
-            ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
-            testID="chat-composer-input"
-            accessibilityLabel={t("ui.composer.placeholder")}
-            value={value}
-            onChangeText={(next) => {
-              setLastUserText(next);
-              const now = Date.now();
-              if (now - inputTrace.current.at >= 300) {
-                recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
-                inputTrace.current.at = now;
-              }
-              inputTrace.current.length = next.length;
-              onChangeText(next);
-            }}
-            onScroll={(event) => {
-              if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
-              // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
-              // only emits onContentSizeChange once the height prop itself has changed, which
-              // starves the growth logic. The scroll event still carries a fresh content size;
-              // only raising the measurement keeps Android's coarser scroll payload from
-              // shrinking the box. iOS includes it but the RN types omit it (Android leaves
-              // it unset), so it is read as an optional extra.
-              const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
-              if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
-                setContentHeight((current) => Math.max(current, appendedSize.height));
-              }
-            }}
-            onContentSizeChange={(event) => {
-              setContentHeight(event.nativeEvent.contentSize.height);
-              // Native inputs keep their scroll position on JS-driven text updates, so
-              // a voice-appended tail lands below the fold. This event only fires after
-              // the native layout reflects the new text, which is when the scroll lands.
-              if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
-            }}
-            editable={!disabled}
-            multiline
-            scrollEnabled={layout.scrollEnabled}
-            maxLength={12000}
-            placeholder={placeholder ?? t("ui.composer.placeholder")}
-            placeholderTextColor={theme.colors.textFaint}
-            className="min-w-0 flex-1 text-body text-fg"
-            style={[styles.composerText, { height: layout.height }]}
-            onSelectionChange={(event) => {
-              const now = Date.now();
-              if (now - inputTrace.current.selectionAt >= 300) {
-                inputTrace.current.selectionAt = now;
-                recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
-              }
-              onSelectionChange?.(event.nativeEvent.selection);
-            }}
-            onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
-            onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
-            submitBehavior="newline"
-          />
+          {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
+          <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
+            <TextInput
+              ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
+              testID="chat-composer-input"
+              accessibilityLabel={t("ui.composer.placeholder")}
+              value={value}
+              onChangeText={(next) => {
+                setLastUserText(next);
+                const now = Date.now();
+                if (now - inputTrace.current.at >= 300) {
+                  recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
+                  inputTrace.current.at = now;
+                }
+                inputTrace.current.length = next.length;
+                onChangeText(next);
+              }}
+              onScroll={(event) => {
+                if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
+                // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
+                // only emits onContentSizeChange once the height prop itself has changed, which
+                // starves the growth logic. The scroll event still carries a fresh content size;
+                // only raising the measurement keeps Android's coarser scroll payload from
+                // shrinking the box. iOS includes it but the RN types omit it (Android leaves
+                // it unset), so it is read as an optional extra.
+                const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
+                if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
+                  setContentHeight((current) => Math.max(current, appendedSize.height));
+                }
+              }}
+              onContentSizeChange={(event) => {
+                setContentHeight(event.nativeEvent.contentSize.height);
+                // Native inputs keep their scroll position on JS-driven text updates, so
+                // a voice-appended tail lands below the fold. This event only fires after
+                // the native layout reflects the new text, which is when the scroll lands.
+                if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
+              }}
+              editable={!disabled}
+              multiline
+              scrollEnabled={layout.scrollEnabled}
+              maxLength={12000}
+              placeholder={placeholder ?? t("ui.composer.placeholder")}
+              placeholderTextColor={theme.colors.textFaint}
+              className="min-w-0 text-body text-fg"
+              style={[styles.composerText, { height: layout.height }]}
+              onSelectionChange={(event) => {
+                const now = Date.now();
+                if (now - inputTrace.current.selectionAt >= 300) {
+                  inputTrace.current.selectionAt = now;
+                  recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
+                }
+                onSelectionChange?.(event.nativeEvent.selection);
+              }}
+              onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
+              onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
+              submitBehavior="newline"
+            />
+          </PasteImagesInput>
           <View className="w-11 h-11">
             {layout.showExpandButton ? <Pressable
               testID="chat-composer-expand"
@@ -653,9 +662,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
-          {onModelPress ? <Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${modelMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
+          {onModelPress ? <Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${modelMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
+            {modelDetail ? <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="min-w-0 text-subhead text-fg-muted" style={MODEL_DETAIL_SHRINK}>{modelDetail}</Text> : null}
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable> : null}
@@ -673,11 +683,16 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   );
 }
 
-export function AttachmentChip({ name, uri, mimeType, onRemove }: { name: string; uri?: string; mimeType?: string; onRemove?: () => void }) {
+export function AttachmentChip({ name, uri, mimeType, upload = null, onPreview, onRemove }: { name: string; uri?: string; mimeType?: string; upload?: AttachmentUploadState | null; onPreview?: () => void; onRemove?: () => void }) {
   const { t } = useTranslation();
   return <View className="max-w-full flex-row items-center gap-2 rounded-sm bg-accent-soft px-2 py-1" style={{ minHeight: 44, borderCurve: "continuous" }}>
-    {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
-    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={t("ui.attachment.preview", { name })} disabled={!onPreview} onPress={onPreview} className="min-w-0 flex-1 flex-row items-center gap-2 self-stretch active:opacity-70">
+      {uri && mimeType?.startsWith("image/") ? <Image source={{ uri }} resizeMode="cover" className="w-8 h-8 rounded-xs" /> : <AppIcon name="file-text" size={20} tone="accent" />}
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg flex-1 min-w-0">{name}</Text>
+    </Pressable>
+    {/* Ready is the quiet default; only work in progress or a failure the send will retry is shown. */}
+    {upload?.status === "uploading" ? <Loader accessibilityLabel={t("ui.attachment.uploading", { name })} /> : null}
+    {upload?.status === "failed" ? <View accessible accessibilityLabel={t("ui.attachment.uploadFailed", { name })}><AppIcon name="alert" size={16} tone="danger" /></View> : null}
     {/* A 32 × 44 box flush with the chip's end keeps the glyph where it was; the left slop completes the 44 pt target inside the chip. */}
     <Pressable accessibilityRole="button" accessibilityLabel={`${t("common.remove")}: ${name}`} disabled={!onRemove} onPress={onRemove} hitSlop={REMOVE_SLOP} className="-my-1 -mr-2 h-11 w-8 items-center justify-center"><AppIcon name="x" size={16} tone="muted" /></Pressable>
   </View>;
@@ -708,8 +723,10 @@ function useOutageAnnouncement(visible: boolean, label: string) {
 export function ConnectionBanner({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
   const label = t("ui.banner.unavailable");
-  useOutageAnnouncement(visible, label);
-  if (!visible) return null;
+  // Realtime recovery already waits out short drops; a reconnect right after that must not flash the banner.
+  const shown = useDelayedStatus("connection", visible ? true : null, { showDelayMs: 0, minVisibleMs: 1_000 }) === true;
+  useOutageAnnouncement(shown, label);
+  if (!shown) return null;
   return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fade.duration)} pointerEvents="none" className="absolute left-4 right-4 top-full mt-2 items-center">
     <View accessible accessibilityLabel={label} className="max-w-full flex-row items-center gap-2 rounded-full bg-surface-float px-3 py-1 shadow-float">
       <Mascot size={20} mood="worried" />
@@ -764,4 +781,5 @@ const styles = StyleSheet.create({
   // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
   composerSurface: { padding: 8, borderRadius: 30, borderCurve: "continuous" },
   composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
+  composerPasteTarget: { flex: 1, minWidth: 0 },
 });

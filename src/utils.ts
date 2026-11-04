@@ -2,6 +2,8 @@ import type { ContentBlock, MessageRecord, SessionListFork, SessionRecord, Space
 import * as Crypto from "expo-crypto";
 import { translate, getActiveLocale, type TranslationKey } from "@/src/i18n/core";
 import { mentionDisplayText } from "@/src/data/space-mentions";
+import { relativeTime } from "@/src/data/relative-time";
+import { markdownPlainText } from "@/src/data/markdown-plain";
 
 export function newId() {
   return Crypto.randomUUID();
@@ -31,16 +33,18 @@ export function initials(value: string) {
   return `${words[0]![0]}${words[words.length - 1]![0]}`.toUpperCase();
 }
 
-export function formatRelativeTime(value: string | null | undefined) {
+export function formatRelativeTime(value: string | null | undefined, now = Date.now()) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const delta = Date.now() - date.getTime();
-  if (delta < 60_000) return "now";
-  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m`;
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)}h`;
-  if (delta < 7 * 86_400_000) return `${Math.floor(delta / 86_400_000)}d`;
-  return date.toLocaleDateString(getActiveLocale(), { month: "short", day: "numeric" });
+  const at = Date.parse(value);
+  if (!Number.isFinite(at)) return "";
+  const time = relativeTime(at, now);
+  switch (time.unit) {
+    case "now": return translate("time.now");
+    case "minutes": return translate("time.minutes", { count: time.count });
+    case "hours": return translate("time.hours", { count: time.count });
+    case "days": return translate("time.days", { count: time.count });
+    case "date": return new Date(at).toLocaleDateString(getActiveLocale(), { month: "short", day: "numeric" });
+  }
 }
 
 export function formatNumber(value: number | null | undefined) {
@@ -122,7 +126,7 @@ export function messageText(message: Pick<MessageRecord, "text" | "content">) {
 
 /** Preview text without a fallback, for rows that carry their own empty state. */
 export function previewText(value: string | null | undefined, limit = 110) {
-  const normalized = mentionDisplayText(value ?? "").replace(/\s+/g, " ").trim();
+  const normalized = markdownPlainText(mentionDisplayText(value ?? "")).replace(/\s+/g, " ").trim();
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
 }
 

@@ -9,6 +9,7 @@ import { useAppActions, useAppSelector } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { Avatar, PrimaryButton, Screen, TopBar, FIELD_INPUT_CLASS, Loader } from "@/src/ui";
+import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 
 const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
 
@@ -43,18 +44,18 @@ export default function EditSpaceScreen() {
 
     setPhotoStage("picking");
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync());
       if (!permission.granted) {
         Alert.alert(t("space.edit.photoOffTitle"), t("space.edit.photoOffBody"));
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({
+      const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,
         base64: true,
-      });
+      }));
       if (result.canceled) return;
       const asset = result.assets[0];
       if (!asset?.base64) {

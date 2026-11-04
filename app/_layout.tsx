@@ -22,6 +22,8 @@ import { useAppTheme } from "@/src/theme";
 import { LoadingState } from "@/src/ui/Loader";
 import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
+import { clearLauncherShortcuts } from "@/src/platform/quick-actions";
+import { LauncherShortcuts } from "@/src/components/LauncherShortcuts";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 // Configures Android's back gesture before the first screen mounts.
 import "@/src/platform/predictive-back";
@@ -227,9 +229,11 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
     if (isInitialized) void SplashScreen.hideAsync();
   }, [isInitialized]);
 
-  // Signing out must not leave this device serving the previous account's folders.
+  // Signing out must not leave this device serving the previous account's folders or showing its Chat titles.
   useEffect(() => {
-    if (isInitialized && !isAuthenticated) signOutDeviceRuntime();
+    if (!isInitialized || isAuthenticated) return;
+    signOutDeviceRuntime();
+    clearLauncherShortcuts();
   }, [isAuthenticated, isInitialized]);
 
   if (!isInitialized) return <LoadingScreen />;
@@ -251,6 +255,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
       <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
       <StatusBar style={theme.mode === "dark" ? "light" : "dark"} />
       <NativeInteractionBridge />
+      <LauncherShortcuts />
       <ToastProvider>
         <View className="flex-1">
           {/* Deeper screens use the platform transition: the iOS push (with its interactive back

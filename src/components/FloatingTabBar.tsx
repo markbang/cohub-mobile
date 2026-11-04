@@ -166,9 +166,13 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     const events = Platform.OS === "ios" ? Keyboard : KeyboardEvents;
     const show = events.addListener("keyboardWillShow", () => setKeyboardVisible(true));
     const hide = events.addListener("keyboardWillHide", () => setKeyboardVisible(false));
+    // keyboard-controller skips will-hide when it resyncs a dismissal it did not animate, as when a
+    // Modal opens over the keyboard or the app returns from background; did-hide arrives in every case.
+    const hidden = events.addListener("keyboardDidHide", () => setKeyboardVisible(false));
     return () => {
       show.remove();
       hide.remove();
+      hidden.remove();
     };
   }, []);
 

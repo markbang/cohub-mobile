@@ -5,6 +5,7 @@ import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
 import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
+import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
@@ -12,6 +13,12 @@ import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
+import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
+import { createForegroundGate } from "../src/data/foreground-handoff.ts";
+import { delayedStatusDeadline, shownDelayedStatus, stepDelayedStatus } from "../src/data/delayed-status.ts";
+import { createAttachmentUploads } from "../src/data/attachment-uploads.ts";
+import { launcherShortcuts, launcherShortcutsKey } from "../src/data/launcher-shortcuts.ts";
+import { incomingShareFromItems, isShareIntentPath } from "../src/data/incoming-share.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
@@ -74,7 +81,7 @@ import { activityContributorName, activityRange, localDateKey, tokenDays } from 
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
 import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
-import { RELEASE_GRACE_MS, ToastClock } from "../src/data/toast-queue.ts";
+import { RELEASE_GRACE_MS, ToastClock, pushToast, toastDuration } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
@@ -507,8 +514,8 @@ const formScope = {
     DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
     specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
     deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
-    Section: "Section", Row: "Row", AddRow: "AddRow", Tile: "Tile", MemberMenu: "MemberMenu", ImageOptionList: "ImageOptionList", EnvironmentRow: "EnvironmentRow", ScheduleRow: "ScheduleRow",
-    SettingsSelectRow: "SettingsSelectRow", ConfirmSheet: "ConfirmSheet", TILE: 30, TILE_STYLE: {},
+    SettingsGroup: "SettingsGroup", GroupRow: "GroupRow", GroupAddRow: "GroupAddRow", GroupTile: "GroupTile", GroupSlot: "GroupSlot", GROUP_TILE: 30, MemberMenu: "MemberMenu", ImageOptionList: "ImageOptionList", EnvironmentRow: "EnvironmentRow", ScheduleRow: "ScheduleRow",
+    SettingsSelectRow: "SettingsSelectRow", ConfirmSheet: "ConfirmSheet",
   });
   const render = () => { cursor = 0; return chromeNodes(renderSettings()); };
   const add = render().find((node) => node.props?.label === "space.settings.addMod" || String(node.props?.onPress).includes("Alert.prompt"));
@@ -543,7 +550,7 @@ const formScope = {
   requests[1].resolve({ item: installed, sandboxRestarting: true });
   await flushSync();
   assert.equal(sheet().props.visible, false, "successful installation closes the input sheet");
-  assert.ok(render().some((node) => node.type === "Row" && node.props.title === installed.name), "the accepted Mod appears without another list request");
+  assert.ok(render().some((node) => node.type === "GroupRow" && node.props.title === installed.name), "the accepted Mod appears without another list request");
   assert.equal(alerts.at(-1).message, "space.settings.modRestarting");
   add.props.onPress();
   assert.equal(input().props.value, "");
@@ -586,6 +593,7 @@ const formScope = {
     useAppTheme: () => ({ colors: {} }),
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", Screen: "Screen", TopBar: "TopBar", FIELD_INPUT_CLASS: "", Loader: "Loader",
     ScrollView: "ScrollView", View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable",
+    withForegroundHandoff: (task) => task(),
     ImagePicker: { requestMediaLibraryPermissionsAsync: async () => ({ granted: permissionGranted }), launchImageLibraryAsync: async () => pickerResult },
     ExpoFile: MockAvatarFile, Paths: { cache: "/cache" },
     toUint8Array: () => ({ byteLength }),
@@ -668,7 +676,7 @@ const formScope = {
     ContextMenu: "ContextMenu", NativeContextMenu: "NativeContextMenu", SwipeActions: "SwipeActions",
     haptics: { longPress() {} }, debugAlias: (_kind, id) => id,
     sessionListStatus, sessionActivity,
-    displayForkSessionTitle: () => "Chat", formatRelativeTime: () => "now", previewText: () => "",
+    displayForkSessionTitle: () => "Chat", useRelativeTime: () => "now", previewText: () => "",
   });
   const staleSession = {
     id: "chat", spaceId: "space", title: "Chat", updatedAt: "2026-01-01T00:00:00Z", lastMessageAt: "2026-01-01T00:00:00Z",
@@ -679,6 +687,9 @@ const formScope = {
   assert.equal(avatar.props.name, "Renamed Space");
   assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
   assert.equal(row.props.unread, false);
+  const swipe = chromeNodes(renderSessionRow({ session: staleSession, onPress() {} })).find((node) => node.type === "SwipeActions");
+  assert.deepEqual(swipe.props.leading.map((action) => action.label), ["session.unread"], "a read Chat swipes to unread from the leading edge");
+  assert.equal(chromeNodes(renderSessionRow({ session: staleSession, onPress() {}, swipeToRead: false })).some((node) => node.type === "SwipeActions" && node.props.leading.length > 0), false, "inside the Space pager the leading swipe stays the pager's");
   sessionSeen = { baseline: Date.parse("2025-12-31T00:00:00Z"), entries: {} };
   const unreadRow = chromeNodes(renderSessionRow({ session: { ...staleSession, lastMessageId: "m1" }, onPress() {} })).find((node) => node.type === "ListRow");
   assert.equal(unreadRow.props.unread, true, "a message after the baseline marks a never-opened Chat unread");
@@ -1669,7 +1680,7 @@ try {
   screen.unmount();
 } finally { mock.timers.reset(); }
 const fadeAnimation = { duration: () => fadeAnimation };
-const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined });
+const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
 assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
 {
   const nodes = chromeNodes(renderConnectionBanner({ visible: true }));
@@ -2513,7 +2524,7 @@ function inspectSyncEffects(node) {
 inspectSyncEffects(contextSource);
 mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10000 });
 try {
-  const scope = { NativeAppState: { currentState: "active", addEventListener: () => ({ remove: () => {} }) } };
+  const scope = { isAppActive: () => true, subscribeAppActive: () => () => {} };
 
   let events = 0;
   let listener;
@@ -2522,7 +2533,7 @@ try {
     subscribe: (_id, callback) => { listener = callback; subscribed++; return () => { subscribed--; }; },
     event: () => { events++; }, error: () => {},
   });
-  const restartEffect = new Function("spaceRealtime", "NativeAppState", `return (${spaceRealtimeEffect});`)(spaceRealtime, scope.NativeAppState);
+  const restartEffect = new Function("spaceRealtime", "isAppActive", "subscribeAppActive", `return (${spaceRealtimeEffect});`)(spaceRealtime, scope.isAppActive, scope.subscribeAppActive);
   restartEffect()();
   const stopEffect = restartEffect();
   const stopRoom = spaceRealtime.watch(["visible-space"]);
@@ -3956,6 +3967,17 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   assert.equal(latestMessageId({ lastMessageId: "m1", lastMessageAt: "2026-11-03T09:00:00Z" }, { lastMessageId: "m2", lastMessageAt: "2026-11-03T09:05:00Z" }), "m2");
   assert.equal(latestMessageId(null, { lastMessageId: null, lastMessageAt: null }), null);
 }
+// Row previews read as words: Markdown markers, including ones left open by truncation, never show.
+{
+  const plain = (text) => markdownPlainText(text).replace(/\s+/g, " ").trim();
+  assert.equal(plain("I released **v2.90.2** today"), "I released v2.90.2 today");
+  assert.equal(plain("加 `meta.runStatus` 字段"), "加 meta.runStatus 字段");
+  assert.equal(plain("主要是：\n- lint\n1. typecheck"), "主要是： lint typecheck");
+  assert.equal(plain("PR 已开：[#423](https://github.com/x/y/pull/423)"), "PR 已开：#423");
+  assert.equal(plain("## Summary\n> quoted\n```ts\nconst x = 1\n```"), "Summary quoted const x = 1");
+  assert.equal(plain("cut off **v2.9"), "cut off v2.9");
+  assert.equal(plain("snake_case_name and 2 * 3 * 4"), "snake_case_name and 2 * 3 * 4");
+}
 
 // Accent presets replace the base accent tokens in every mode and keep the default's contrast.
 {
@@ -4238,7 +4260,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: () => uploads.promise, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: () => uploads.promise, attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4279,7 +4301,7 @@ for (const busy of [false, true]) {
       translate: (key) => key, newId: () => "client", nextTurnSequence,
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action), saveMessages: async () => {}, deleteMessages: async () => {}, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4311,7 +4333,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: (action) => actions.push(action),
       saveMessages: async (_user, _session, rows) => { saved.push(rows); }, deleteMessages: async (_user, _session, ids) => { deleted.push(...ids); }, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4343,7 +4365,7 @@ assert.deepEqual(
       optimisticMessageSequenceRef: { current: new Map() }, userUuid: "user", userKey: "user",
       shouldQueueFollowup, recordDebugEvent: () => {}, dispatch: () => {},
       saveMessages: write, deleteMessages: remove, failedSendMessage,
-      buildPromptContent: async (_client, _space, _session, text) => [{ type: "text", text }], withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
+      buildPromptContent: async (text) => [{ type: "text", text }], attachmentUploads: null, claimAttachmentUpload: () => {}, withFallbackUserContent: (turn) => turn, queryClient: { invalidateQueries: async () => {} },
       mentionTextBlock: (blockText) => ({ type: "text", text: blockText }),
     };
     const send = new Function(...Object.keys(sendScope), ts.transpileModule(`return (${sessionCallbacks.sendMessage});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(sendScope));
@@ -4498,7 +4520,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   const sendNewScope = {
     client: { space: () => ({ prompt: async () => ({ mode: "immediate", session: { id: "new-chat", spaceId: "space" }, turn: userTurn }) }) },
     stateRef: providerStateRef, dispatch: (action) => handoffStore.setState(({ state }) => ({ state: reduceStream(state, action) })), translate: (key) => key, newId: () => "client-message",
-    buildPromptContent: async () => [{ type: "text", text: "hi" }], displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
+    buildPromptContent: async () => [{ type: "text", text: "hi" }], attachmentUploads: null, claimAttachmentUpload: () => {}, displaySpaceName: (item) => item.name, withFallbackUserContent: (turn) => turn,
     messagesFromTurns: (turns) => turns.map((turn) => ({ id: `${turn.id}:user`, role: "user", sequence: turn.sequence, meta: { turnId: turn.id, turnSequence: turn.sequence } })),
     saveSessions: async () => {}, saveMessages: async () => {}, queryClient: { invalidateQueries: async () => {} }, userKey: "test-user",
   };
@@ -4531,7 +4553,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
     useState: (initial) => { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], (value) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; pendingRender = true; }]; },
     useEffect: () => {},
   };
-  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800, messageRowKey });
+  const catchUpHook = loadChromeComponent("../src/components/use-chat-catch-up.ts", "useChatCatchUp", { ...hooks, CATCH_UP_LOADER_DELAY_MS: 300, ARRIVAL_WINDOW_MS: 800, messageRowKey, useDelayedStatus: () => null });
   const isCatchUpArrival = loadChromeComponent("../src/components/use-chat-catch-up.ts", "isCatchUpArrival", { messageRowKey });
   const render = (catchingUp, messages) => { let result; do { pendingRender = false; cursor = 0; result = catchUpHook(catchingUp, messages); } while (pendingRender); return result; };
   const cached = [{ id: "a" }, { id: "b" }];
@@ -5010,5 +5032,149 @@ assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, t
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, turnId: "t9" }), { kind: "setParams", params: { turn: undefined, turnId: "t9" } }, "a turn link to the Chat on screen retargets it in place");
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: "4", turnId: null }), { kind: "setParams", params: { turn: "4", turnId: undefined } }, "the previous turn target is cleared");
 assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" });
+
+{
+  const now = Date.parse("2026-11-03T12:00:00Z");
+  const ago = (ms) => now - ms;
+  assert.deepEqual(relativeTime(ago(59_000), now), { unit: "now" });
+  assert.deepEqual(relativeTime(now + 5_000, now), { unit: "now" }, "a clock running ahead of the server reads as now");
+  assert.deepEqual(relativeTime(ago(61 * 60_000), now), { unit: "hours", count: 1 });
+  assert.deepEqual(relativeTime(ago(8 * 86_400_000), now), { unit: "date" });
+  assert.equal(msUntilRelativeTimeChange(ago(20_000), now), 40_000, "now becomes 1m at the minute");
+  assert.equal(msUntilRelativeTimeChange(ago(59 * 60_000 + 30_000), now), 30_000, "59m becomes 1h at the hour");
+  assert.equal(msUntilRelativeTimeChange(ago(3 * 3_600_000), now), 3_600_000);
+  assert.equal(msUntilRelativeTimeChange(ago(8 * 86_400_000), now), null, "a date label never changes, so nothing waits on it");
+}
+
+{
+  let clock = 0;
+  const gate = createForegroundGate(() => clock, 60_000);
+  assert.deepEqual(gate.next(false), [false], "leaving without a handoff tears live work down");
+  assert.deepEqual(gate.next(true), [true]);
+  const end = gate.begin();
+  assert.deepEqual(gate.next(false), [], "a picker the app opened is not a background trip");
+  assert.equal(gate.active(), true);
+  end();
+  end();
+  clock = 5_000;
+  assert.deepEqual(gate.next(true), [], "returning from the picker refetches nothing, even when its result resolved first");
+  const endLong = gate.begin();
+  gate.next(false);
+  endLong();
+  clock = 70_001;
+  assert.deepEqual(gate.next(true), [false, true], "a long trip may have suspended the process, so it refreshes like a real background");
+  const endHome = gate.begin();
+  gate.next(false);
+  endHome();
+  assert.equal(gate.holding(), true);
+  assert.deepEqual(gate.next(false), [false], "settling a held report while still away delivers the background");
+  assert.deepEqual(gate.next(true), [true]);
+}
+
+{
+  let clock = 1_000;
+  const now = () => clock;
+  const step = (state, value, options = {}) => stepDelayedStatus(state, { key: "k", value, deadlinePassed: state !== null && delayedStatusDeadline(state) !== null && clock >= delayedStatusDeadline(state), ...options }, now);
+  let state = step(null, "syncing");
+  assert.equal(shownDelayedStatus(state, "k"), null, "a status waits before it shows");
+  clock += 200;
+  state = step(state, null);
+  assert.equal(state.phase, "idle", "work that finishes inside the delay never shows");
+  state = step(state, "syncing");
+  clock += 400;
+  state = step(state, "syncing");
+  assert.equal(shownDelayedStatus(state, "k"), "syncing");
+  clock += 100;
+  state = step(state, null);
+  assert.equal(shownDelayedStatus(state, "k"), "syncing", "a shown status holds for its minimum time");
+  clock += 300;
+  state = step(state, null);
+  assert.equal(state.phase, "idle");
+  assert.equal(shownDelayedStatus(step(null, true, { showDelayMs: 0 }), "k"), true, "a zero delay shows at once");
+  assert.equal(shownDelayedStatus(state, "other"), null, "another key never sees this status");
+}
+
+{
+  const undo = { label: "Undo", onPress() {} };
+  const first = pushToast([], { key: "a", title: "Unpinned A", tone: "neutral", action: undo, revision: 0 });
+  const second = pushToast(first, { key: "b", title: "Unpinned A", tone: "neutral", action: undo, revision: 0 });
+  assert.deepEqual(second.map((entry) => entry.key), ["b", "a"], "a toast with an action is never merged into another; each undoes its own operation");
+  assert.equal(toastDuration({ tone: "neutral", action: undo }), 5000, "a toast with an action stays long enough to reach for it");
+  assert.equal(toastDuration({ tone: "neutral" }), 3200);
+}
+
+{
+  const started = [];
+  const uploads = createAttachmentUploads((target, attachment, { signal, onProgress }) => {
+    const run = { attachment, signal, onProgress };
+    run.promise = new Promise((resolve, reject) => { run.resolve = resolve; run.reject = reject; });
+    started.push(run);
+    return run.promise;
+  });
+  const chat = { spaceId: "space", sessionId: "chat" };
+  const photo = { uri: "file:///photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 10 };
+  const doc = { uri: "file:///doc.pdf", name: "doc.pdf", mimeType: "application/pdf", size: 20 };
+  uploads.prepare(chat, [photo, doc]);
+  uploads.prepare(chat, [photo, doc]);
+  assert.equal(started.length, 2, "attaching starts each upload once, however often the composer re-renders");
+  started[0].onProgress(0.5);
+  assert.deepEqual(uploads.state(chat, photo), { status: "uploading", progress: 0.5 });
+  started[0].onProgress(0.52);
+  assert.deepEqual(uploads.state(chat, photo), { status: "uploading", progress: 0.5 }, "small progress steps do not redraw the chip");
+  started[0].resolve({ publicUrl: "https://cdn/photo", mimeType: "image/jpeg" });
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(uploads.state(chat, photo), { status: "ready" });
+  assert.deepEqual(await uploads.claim(chat, photo), { publicUrl: "https://cdn/photo", mimeType: "image/jpeg" }, "a send uses the finished upload instead of uploading again");
+  assert.equal(started.length, 2);
+  uploads.release(chat, [photo, doc]);
+  assert.equal(started[1].signal.aborted, true, "removing an unsent chip stops its upload");
+  assert.equal(uploads.state(chat, doc), null);
+  assert.notEqual(uploads.state(chat, photo), null, "an upload a send has claimed is not released with the composer");
+  uploads.prepare(chat, [doc]);
+  started[2].reject(new Error("offline"));
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(uploads.state(chat, doc).status, "failed", "a failed pre-upload shows on the chip before sending");
+  const retried = uploads.claim(chat, doc);
+  assert.equal(started.length, 4, "sending retries a failed pre-upload once");
+  started[3].resolve({ publicUrl: "https://cdn/doc", mimeType: "application/pdf" });
+  assert.equal((await retried).publicUrl, "https://cdn/doc");
+  uploads.forget(chat, [photo, doc]);
+  assert.equal(uploads.state(chat, photo), null, "a sent upload is dropped, so attaching the file again uploads it again");
+  uploads.prepare({ spaceId: "space" }, [photo]);
+  assert.equal(started.length, 5, "a new Chat's upload is its own; it is not shared with an existing Chat");
+  uploads.dispose();
+  assert.equal(started[4].signal.aborted, true, "signing out stops every pending upload");
+}
+
+{
+  const chats = [
+    { id: "old", title: "Old", lastActivityAt: "2026-11-01T00:00:00Z" },
+    { id: "a/b", title: "  Newest  ", lastActivityAt: "2026-11-03T00:00:00Z" },
+    { id: "blank", title: "  ", lastActivityAt: "2026-11-03T01:00:00Z" },
+    { id: "mid", title: "Mid", lastActivityAt: "2026-11-02T00:00:00Z" },
+    { id: "older", title: "Older", lastActivityAt: "2026-10-01T00:00:00Z" },
+  ];
+  const shortcuts = launcherShortcuts("New Chat", chats);
+  assert.deepEqual(shortcuts.map((shortcut) => shortcut.url), ["cohub://new-chat", "cohub://chat/a%2Fb", "cohub://chat/mid", "cohub://chat/old"], "New Chat leads, then the three latest titled Chats as links the bridge validates");
+  assert.equal(shortcuts[1].title, "Newest");
+  assert.equal(launcherShortcutsKey(launcherShortcuts("New Chat", [...chats].reverse())), launcherShortcutsKey(shortcuts), "an equal list in another order is not republished");
+  assert.deepEqual(launcherShortcuts("New Chat", []).map((shortcut) => shortcut.kind), ["new-chat"]);
+}
+{
+  const share = incomingShareFromItems([
+    { value: "Look at this", shareType: "text", contentUri: null, contentMimeType: null, originalName: null, contentSize: null },
+    { value: "https://example.com", shareType: "url", contentUri: "https://example.com", contentType: "website", contentMimeType: "text/html", originalName: null, contentSize: null },
+    { value: "content://media/1", shareType: "image", contentUri: "file:/data/user/0/app/cache/photo.jpg", contentType: "image", contentMimeType: "image/jpeg", originalName: "photo.jpg", contentSize: 120 },
+    { value: "content://docs/2", shareType: "file", contentUri: "file:///cache/report.pdf", contentType: "file", contentMimeType: null, mimeType: "application/pdf", originalName: " ", contentSize: null },
+  ]);
+  assert.equal(share.text, "Look at this\n\nhttps://example.com", "text and links prefill the composer");
+  assert.deepEqual(share.attachments, [
+    { uri: "file:///data/user/0/app/cache/photo.jpg", name: "photo.jpg", mimeType: "image/jpeg", size: 120 },
+    { uri: "file:///cache/report.pdf", name: "shared-4", mimeType: "application/pdf", size: 0 },
+  ], "files attach with readable file URIs and a fallback name");
+  assert.equal(incomingShareFromItems([{ value: " ", shareType: "text", contentUri: null, contentMimeType: null, originalName: null, contentSize: null }]), null);
+  for (const path of ["cohub://expo-sharing", "/expo-sharing", "expo-sharing?x=1"]) assert.equal(isShareIntentPath(path), true, path);
+  for (const path of ["cohub://chat/expo-sharing", "/expo-sharing-other", "cohub://callback"]) assert.equal(isShareIntentPath(path), false, path);
+}
 
 console.log("Chat workflow checks passed");
