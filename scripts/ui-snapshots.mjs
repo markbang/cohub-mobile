@@ -216,7 +216,7 @@ function pushSteps(lines, platform, steps = []) {
 
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
 function buildFlow({ platform, screens }) {
-  const lines = [`appId: ${PACKAGE_ID}`, "---", ...preamble(platform)];
+  const lines = preamble(platform);
   for (const screen of screens) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
     openScreen(lines, screen.link);
@@ -229,7 +229,7 @@ function buildFlow({ platform, screens }) {
 
 /** Records each interaction from its settled start screen to its settled end. */
 function buildMotionFlow({ platform, motions }) {
-  const lines = [`appId: ${PACKAGE_ID}`, "---", ...preamble(platform)];
+  const lines = preamble(platform);
   for (const motion of motions) {
     openScreen(lines, motion.link);
     lines.push(`- startRecording: ${yamlString(motion.name)}`);
