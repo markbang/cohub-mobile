@@ -8,6 +8,7 @@ import { basename, join, resolve } from "node:path";
  *
  *   capture --platform android|ios --app <apk|.app|.zip> [--out dir] [--screens a,b] [--themes light,dark] [--no-metro]
  *   compare --ios <dir> --android <dir> [--out dir]
+ *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
  */
@@ -55,6 +56,7 @@ function parseArgs(argv) {
     else if (flag === "--ios") options.ios = resolve(value());
     else if (flag === "--android") options.android = resolve(value());
     else if (flag === "--no-metro") options.metro = false;
+    else if (flag === "--dir") options.dir = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
   }
   if (command === "capture") {
@@ -67,8 +69,10 @@ function parseArgs(argv) {
   } else if (command === "compare") {
     if (!options.ios || !options.android) throw new Error("compare needs --ios <dir> and --android <dir>.");
     options.out ??= resolve("dist/ui-snapshots/pairs");
+  } else if (command === "redact") {
+    if (!options.dir) throw new Error("redact needs --dir <dir>.");
   } else {
-    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|compare [options]. See the header of this file.");
+    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|compare|redact [options]. See the header of this file.");
   }
   return options;
 }
@@ -212,7 +216,9 @@ function redact(root, secrets) {
       redact(path, secrets);
     } else if (/\.(json|log|txt|yaml|xml)$/.test(entry)) {
       const source = readFileSync(path, "utf8");
-      const clean = secrets.reduce((text, secret) => text.split(secret).join("***"), source);
+      // XCTest types the first character on its own and logs the remaining text.
+      const variants = secrets.flatMap((secret) => [secret, secret.slice(1)]).filter((value) => value.length >= 4).sort((a, b) => b.length - a.length);
+      const clean = variants.reduce((text, secret) => text.split(secret).join("***"), source);
       if (clean !== source) writeFileSync(path, clean);
     }
   }
@@ -350,6 +356,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.command === "capture") await capture(options);
+    else if (options.command === "redact") redact(options.dir, ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => process.env[key]?.trim()).filter(Boolean));
     else compare(options);
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

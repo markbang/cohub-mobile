@@ -145,16 +145,22 @@ jobs:
           disable-animations: true
           script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG
 
+      # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
+      # log typed text; this repository is public.
+      - name: Redact credentials
+        if: always()
+        run: node scripts/ui-snapshots.mjs redact --dir dist/ui-snapshots/android
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ui-snapshots-android
-          # Maestro's command log and logs carry the `-e` credentials verbatim; this repository is public.
+          # Maestro's command log and the device logs carry typed credentials; this repository is public.
           path: |
             dist/ui-snapshots/android
             !**/commands.json
-            !**/maestro.log
+            !**/*.log
           if-no-files-found: ignore
           # Maestro nests its debug output under a `.maestro` directory.
           include-hidden-files: true
@@ -234,6 +240,12 @@ jobs:
       - name: Capture
         run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG
 
+      # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
+      # log typed text; this repository is public.
+      - name: Redact credentials
+        if: always()
+        run: node scripts/ui-snapshots.mjs redact --dir dist/ui-snapshots/ios
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -243,7 +255,7 @@ jobs:
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
             !**/commands.json
-            !**/maestro.log
+            !**/*.log
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
