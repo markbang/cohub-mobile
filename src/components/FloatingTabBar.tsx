@@ -3,7 +3,7 @@ import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { Keyboard, Platform, View } from "react-native";
+import { Keyboard, Platform, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardEvents } from "react-native-keyboard-controller";
 import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
@@ -19,7 +19,10 @@ import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 const BAR_HEIGHT = 62;
 const BAR_PADDING = 4;
 // Four tabs plus the glass outset must fit a 360dp-wide screen.
-const ITEM_WIDTH = 76;
+// The iOS 26 tab bar, measured on a 402 pt iPhone: 21 pt from each screen edge, a 98 pt selection
+// capsule, and items centred at even steps between the capsule's two end positions.
+const BAR_SIDE_MARGIN = 21;
+const LENS_WIDTH = 98;
 const LENS_HEIGHT = BAR_HEIGHT - BAR_PADDING * 2;
 /** How far a lifted lens grows past its resting size on each side. */
 const LENS_GROWTH = 8;
@@ -82,10 +85,19 @@ export function TabScreenLayout({ routeKey, children }: { routeKey: string; chil
 
 const IOS_HOME_INDICATOR_OVERLAP = 14;
 
+// The iOS 26 tab bar ends 22 pt above the screen edge, clear of the home indicator.
+const SYSTEM_BAR_BOTTOM = 22;
+
 function barBottomOffset(bottomInset: number) {
   // iOS's home-indicator inset is sized for edge-to-edge content; like the system tab bar, a floating bar can sit partly inside it.
   if (Platform.OS === "ios") return Math.max(bottomInset - IOS_HOME_INDICATOR_OVERLAP, BAR_BOTTOM_MARGIN * 2);
-  return Math.max(bottomInset, BAR_BOTTOM_MARGIN) + BAR_BOTTOM_MARGIN;
+  // Gesture navigation's handle sits where the home indicator does; three-button navigation needs its own inset.
+  return bottomInset <= 34 ? SYSTEM_BAR_BOTTOM : bottomInset + BAR_BOTTOM_MARGIN;
+}
+
+/** Distance between neighbouring items' centres, given the bar's width. */
+function itemPitch(barWidth: number, count: number) {
+  return count > 1 ? (barWidth - BAR_PADDING * 2 - LENS_WIDTH) / (count - 1) : 0;
 }
 
 /** Space the tab bar occupies at the bottom of a tab screen. */
@@ -117,7 +129,10 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const blurTarget = useContext(TabBlurTargets)?.targets[routes[state.index]?.key ?? ""] ?? null;
   const material = useGlassMaterial({ blurTarget });
   const lastIndex = routes.length - 1;
-  const barWidth = ITEM_WIDTH * routes.length + BAR_PADDING * 2;
+  const { width: windowWidth } = useWindowDimensions();
+  const barWidth = windowWidth - BAR_SIDE_MARGIN * 2;
+  const pitch = itemPitch(barWidth, routes.length);
+  const itemWidth = pitch > 0 ? pitch : LENS_WIDTH;
 
   const hidden = useSharedValue(0);
   const selected = useSharedValue(state.index);
@@ -216,7 +231,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       const touch = event.allTouches[0];
       if (!touch || touching.get()) return;
       manager.activate();
-      const index = indexAt(positionAt(touch.x, lastIndex), lastIndex);
+      const index = indexAt(positionAt(touch.x, lastIndex, pitch), lastIndex);
       touching.set(true);
       dragging.set(false);
       dropping.set(false);
@@ -245,7 +260,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       }
       const overshoot = touch.x - Math.min(Math.max(touch.x, 0), barWidth);
       pull.set(withSpring(rubberBand(overshoot, PULL_LIMIT), springs.dockTrack));
-      const position = positionAt(touch.x, lastIndex);
+      const position = positionAt(touch.x, lastIndex, pitch);
       lensTarget.set(position);
       lens.set(withSpring(position, springs.dockFollow));
       const index = indexAt(position, lastIndex);
@@ -259,7 +274,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       const wasDragging = dragging.get();
       let index = pressed.get();
       if (wasDragging) {
-        const lead = velocityX.get() / ITEM_WIDTH * FLING_PROJECTION_S;
+        const lead = velocityX.get() / pitch * FLING_PROJECTION_S;
         const flung = Math.min(Math.max(Math.round(lensTarget.get() + lead), index - 1, 0), index + 1, lastIndex);
         if (flung !== index) {
           index = flung;
@@ -293,7 +308,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   // never re-lays-out the bar; its capsule ends flatten slightly while it stretches.
   const lensStyle = useAnimatedStyle(() => {
     const { width, height } = lensSize(lift.get(), jelly.get());
-    return { transform: [{ translateX: lens.get() * ITEM_WIDTH }, { scaleX: width / ITEM_WIDTH }, { scaleY: height / LENS_HEIGHT }] };
+    return { transform: [{ translateX: lens.get() * pitch }, { scaleX: width / LENS_WIDTH }, { scaleY: height / LENS_HEIGHT }] };
   });
   // Liquid Glass keeps a real frame: the glass group merges and refracts by its views' geometry, which
   // a transform would leave behind. It is one childless, absolutely placed view, so nothing else re-lays-out.
@@ -304,7 +319,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       borderRadius: height / 2,
       width,
       height,
-      left: GLASS_OUTSET + BAR_PADDING + (lens.get() + 0.5) * ITEM_WIDTH - width / 2,
+      left: GLASS_OUTSET + BAR_PADDING + LENS_WIDTH / 2 + lens.get() * pitch - width / 2,
       top: GLASS_OUTSET + (BAR_HEIGHT - height) / 2,
     };
   });
@@ -332,11 +347,12 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
           <Animated.View pointerEvents="none" className="absolute" style={[LENS_FRAME, lensStyle]}>
-            <Animated.View className="absolute inset-0 rounded-full bg-accent-soft" style={restingLensStyle} />
+            {/* iOS selects with a neutral capsule; the accent stays on the glyph and label. */}
+            <Animated.View className="absolute inset-0 rounded-full bg-control-track" style={restingLensStyle} />
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
           </Animated.View>
-          <View className="flex-1 flex-row" style={{ paddingHorizontal: BAR_PADDING }}>
+          <View className="flex-1 flex-row" style={{ paddingHorizontal: BAR_PADDING + (LENS_WIDTH - itemWidth) / 2 }}>
             {routes.map((route, index) => {
               const { options } = descriptors[route.key];
               const label = typeof options.title === "string" ? options.title : route.name;
@@ -351,12 +367,13 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
                   lens={lens}
                   lift={lift}
                   // design-system-begin: the icon renderer and the label color interpolation take JS colors.
-                  restIcon={options.tabBarIcon?.({ focused: false, color: theme.colors.textMuted, size: ICON_SIZE })}
+                  restIcon={options.tabBarIcon?.({ focused: false, color: theme.colors.text, size: ICON_SIZE })}
                   activeIcon={options.tabBarIcon?.({ focused: state.index === index, color: theme.colors.accent, size: ICON_SIZE })}
                   // design-system-end
-                  restColor={theme.colors.textMuted}
+                  restColor={theme.colors.text}
                   activeColor={theme.colors.accent}
                   onSelect={select}
+                  width={itemWidth}
                 />
               );
             })}
@@ -367,19 +384,21 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   );
 }
 
-const ICON_SIZE = 24;
-const LENS_FRAME = { left: BAR_PADDING, top: (BAR_HEIGHT - LENS_HEIGHT) / 2, width: ITEM_WIDTH, height: LENS_HEIGHT } as const;
+// SF tab symbols draw about 26 pt; Lucide draws inside its box with padding.
+const ICON_SIZE = 28;
+const LENS_FRAME = { left: BAR_PADDING, top: (BAR_HEIGHT - LENS_HEIGHT) / 2, width: LENS_WIDTH, height: LENS_HEIGHT } as const;
 
 /** The lens grows as it lifts, and stretches along its motion while thinning across it. */
 function lensSize(lifted: number, stretch: number) {
   "worklet";
   const growth = LENS_GROWTH * 2 * lifted;
-  return { width: (ITEM_WIDTH + growth) * (1 + stretch), height: (LENS_HEIGHT + growth) * (1 - stretch * JELLY_ASPECT) };
+  return { width: (LENS_WIDTH + growth) * (1 + stretch), height: (LENS_HEIGHT + growth) * (1 - stretch * JELLY_ASPECT) };
 }
 
-function positionAt(x: number, lastIndex: number) {
+function positionAt(x: number, lastIndex: number, pitch: number) {
   "worklet";
-  const position = (x - BAR_PADDING) / ITEM_WIDTH - 0.5;
+  if (pitch <= 0) return 0;
+  const position = (x - BAR_PADDING - LENS_WIDTH / 2) / pitch;
   if (position < 0) return rubberBand(position, OVERDRAG);
   if (position > lastIndex) return lastIndex + rubberBand(position - lastIndex, OVERDRAG);
   return position;
@@ -403,13 +422,14 @@ type TabItemProps = {
   restColor: string;
   activeColor: string;
   onSelect: (index: number) => void;
+  width: number;
 };
 
 /**
  * One destination. Its accent shows wherever the lens is over it, not only once navigation
  * settles, so a drag lights each tab it crosses. Touch is the bar's; screen readers activate here.
  */
-function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift, restIcon, activeIcon, restColor, activeColor, onSelect }: TabItemProps) {
+function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift, restIcon, activeIcon, restColor, activeColor, onSelect, width }: TabItemProps) {
   const contentStyle = useAnimatedStyle(() => {
     const over = Math.max(0, 1 - Math.abs(lens.get() - index));
     return { transform: [{ scale: 1 + LENS_MAGNIFY * lift.get() * over }] };
@@ -428,7 +448,7 @@ function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift
       onAccessibilityAction={() => onSelect(index)}
       testID={testID}
       className="h-full items-center justify-center"
-      style={{ width: ITEM_WIDTH }}
+      style={{ width }}
     >
       <Animated.View className="items-center justify-center gap-0.5" style={contentStyle}>
         <View style={{ width: ICON_SIZE, height: ICON_SIZE }}>

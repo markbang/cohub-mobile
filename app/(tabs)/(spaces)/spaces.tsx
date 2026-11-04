@@ -26,7 +26,7 @@ import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
@@ -129,6 +129,7 @@ export default function SpacesScreen() {
       ...spaces.filter((space) => !remoteIds.has(space.id)).map((space) => ({ kind: "local" as const, space })),
     ];
   }, [deviceInstances, filter, remoteSearch.query, remoteSearch.spaces, spaces, state.spaces, trimmedQuery]);
+  const emptyFill = useEmptyListFill(listItems.length === 0);
 
   // LegendList memoizes each row on [item, extraData]; async counts and pin state are
   // read by renderItem but never change `listItems`, so they must flow through extraData.
@@ -233,9 +234,10 @@ export default function SpacesScreen() {
   useNativeHeader({
     title: t("tabs.spaces"),
     search: { query, onQueryChange: setQuery, placeholder: t("spaces.search.placeholder") },
+    // Leading to trailing: the prominent action takes the trailing edge, as on Android.
     items: [
-      { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
       { kind: "menu", label: t("spaces.filter.label"), icon: "filter", title: filterLabel, active: filter !== "recent", actions: filterActions },
+      { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
     ],
   });
   return <Screen edgeToEdge>
@@ -265,7 +267,8 @@ export default function SpacesScreen() {
       onViewableItemsChanged={onViewableItemsChanged}
       keyboardShouldPersistTaps="handled"
       {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
-      contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: listItems.length === 0 ? 1 : undefined }}
+      contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
+        onLayout={emptyFill.onLayout}
       ListHeaderComponent={<View>
         {pullRefresh.header}
         {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}

@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
   AccessibilityInfo,
@@ -109,14 +110,14 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
  * `filled` draws the glyph on a solid circle, for bar buttons over content. `accent` fills with the accent and is
  * kept for a screen's one primary action; `active` marks a control in a non-default state with an accent glyph only.
  */
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, glyph, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; /** Overrides the glyph's size and stroke, as for the back chevron. */ glyph?: { size: number; strokeWidth: number }; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
   const bar = useContext(BarButtonContext);
   const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
   const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
-  const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
+  const icon = <AppIcon name={name} size={glyph?.size ?? (filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5))} tone={iconTone} strokeWidth={glyph?.strokeWidth ?? (filled ? 2 : undefined)} />;
   return (
     <Pressable
       accessibilityRole="button"
@@ -133,9 +134,10 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       style={{ width: target, height: target }}
     >
       {filled
-        ? ({ pressed }) => <View className="size-9 items-center justify-center" style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
+        // A 44 pt glass circle, as iOS 26 draws bar buttons.
+        ? ({ pressed }) => <View className="size-11 items-center justify-center" style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
           {/* Glass where the platform draws it; an accent button is glass tinted with the accent. */}
-          <GlassBackground radius={18} tint={tone === "accent" ? theme.colors.accent : undefined} />
+          <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} />
           {icon}
         </View>
         : icon}
@@ -143,12 +145,15 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
   );
 }
 
-const FILLED_ICON_SIZE = 18;
+// Lucide draws inside a 24 box with padding, so 22 matches the visual size of a 17 pt SF Symbol in a bar.
+const FILLED_ICON_SIZE = 22;
 /** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
 const MODEL_DETAIL_SHRINK = { flexShrink: 100 } as const;
 
 export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
   const insets = useSafeAreaInsets();
+  // The native bar's height, status bar included; 0 when this screen's navigator shows no header.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const scrollTrace = useRef({ at: 0, y: 0, height: 0, viewport: 0 });
   const traceScroll = (phase: string, event?: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number }; velocity?: { y?: number } | null } }) => {
     const native = event?.nativeEvent;
@@ -185,12 +190,16 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
   );
   // The keyboard is followed frame by frame on the UI thread, with its own curve, on both platforms.
   const wrapped = !keyboard ? body : <KeyboardAvoidingView behavior="padding" style={FILL}>{body}</KeyboardAvoidingView>;
-  // Under an iOS navigation bar the root insets would double the top gap; measure natively instead.
+  // The iOS navigation bar overlays the screen, and the native safe area measures only the status bar
+  // above it, so content starts below the bar's measured height.
+  if (Platform.OS === "ios" && !edgeToEdge && headerHeight > 0) return <View className="flex-1 bg-background" style={{ paddingTop: headerHeight }}>{wrapped}</View>;
   if (Platform.OS === "ios" && !edgeToEdge) return <View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView></View>;
   return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
 }
 
 const TOP_EDGE = ["top"] as const;
+/** SF's chevron.backward in a bar is about 12 × 20 pt with a 2.3 pt stroke; Lucide's is 1 : 2, so it is drawn larger and thinner. */
+const BACK_GLYPH = { size: 36, strokeWidth: 1.5 } as const;
 /** Two lines (headline + caption) and the 2 pt inset make 44, so one radius keeps it a capsule with or without a subtitle. */
 const TITLE_CAPSULE = { minHeight: 44, borderRadius: 22, borderCurve: "continuous" } as const;
 const FILL = { flex: 1 } as const;
@@ -240,19 +249,19 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   const titleContent = children ?? (capsule
     ? <View className="max-w-full self-center justify-center px-4 py-0.5" style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} />{titleText}</View>
     : titleText);
-  // Each bar slot is a 44 pt target; the gap between slots is 4.
-  const leadingWidth = onBack || leading ? 48 : 0;
-  const trailing = actions ? (trailingWidth ?? 0) + 4 : 0;
+  // Each bar slot is a 44 pt glass circle; slots sit 12 apart, as in an iOS 26 bar.
+  const leadingWidth = onBack || leading ? 44 + 12 : 0;
+  const trailing = actions ? (trailingWidth ?? 0) + 12 : 0;
   const side = Math.max(leadingWidth, trailing);
   // The capsule drops only the leading balance, so a long title takes the slack beside the back button;
   // with wider actions a short one sits slightly left of the screen's center.
   const balance = children ? undefined : { marginLeft: capsule ? 0 : side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
-      <View className="flex-row items-center gap-1 px-2 py-1" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="chevron-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+      <View className="flex-row items-center gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
+        {onBack ? <IconButton filled name="chevron-left" glyph={BACK_GLYPH} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
-        {actions ? <View className="shrink-0 flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+        {actions ? <View className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
       {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
         <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-semibold text-fg">{title}</Text>
@@ -261,10 +270,11 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     </View>
   );
   return (
-    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-1 px-2 py-1 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
+    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-3 px-4 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
       {onBack ? <IconButton
         filled
         name="chevron-left"
+        glyph={BACK_GLYPH}
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
@@ -274,7 +284,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
       <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1" style={balance}>
         {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className={capsule ? "max-w-full self-center active:opacity-70" : "min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed"} style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-1"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
     </View>
   );
 }
@@ -361,8 +371,9 @@ export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick
   const theme = useAppTheme();
   const { t } = useTranslation();
   return (
-    <View className="min-h-11 flex-row items-center gap-3 rounded-sm bg-surface-raised px-4" style={CONTINUOUS}>
-      <AppIcon name="search" size={18} tone="muted" />
+    // The iOS 26 search field: a 44 pt capsule on the system fill, a black glyph, the text 58 pt in.
+    <View className="min-h-11 flex-row items-center gap-2 rounded-full bg-control-track px-4">
+      <AppIcon name="search" size={18} tone="fg" />
       <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
       {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={CLEAR_SLOP} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
     </View>
@@ -374,84 +385,22 @@ const CLEAR_SLOP = touchSlop(18);
 
 export type SegmentOption<T extends string> = { value: T; label: string; icon?: IconName; locked?: boolean };
 
-// A capsule track holding capsule segments: concentric at any height, since both corners are full.
-const SEGMENT_INSET = 4;
+// The iOS 26 segmented control, measured: a 32 pt capsule track with a capsule thumb inset by 2.
+const SEGMENT_INSET = 2;
 const SEGMENT_CORNER = { borderRadius: 999 } as const;
 const SEGMENT_THUMB_STYLE = { ...SEGMENT_CORNER, top: SEGMENT_INSET, bottom: SEGMENT_INSET, left: SEGMENT_INSET } as const;
+// The 28 pt segments reach 44 pt targets through the track's inset and this slop.
+const SEGMENT_HIT_SLOP = { top: 8, bottom: 8 } as const;
 
 type SegmentedProps<T extends string> = { options: readonly SegmentOption<T>[]; value: T; onChange: (value: T) => void; disabled?: boolean; onLocked?: () => void; className?: string };
 
-/** Mutually exclusive choices: the system segmented control on iOS, the drawn one elsewhere. */
-export function Segmented<T extends string>({ size = "regular", ...props }: SegmentedProps<T> & { size?: "regular" | "compact" }) {
+/** Mutually exclusive choices: the system segmented control on iOS, the same control drawn elsewhere. */
+export function Segmented<T extends string>(props: SegmentedProps<T>) {
   if (nativeSegmented) return <NativeSegmented {...props} />;
-  return size === "compact" ? <CompactDrawnSegmented {...props} /> : <DrawnSegmented {...props} />;
+  return <DrawnSegmented {...props} />;
 }
 
-// Segments reach 44 pt (compact, 32 + 2 × 6) and 48 pt (regular) tall targets through the track's inset.
-const COMPACT_SEGMENT_HIT_SLOP = { top: 6, bottom: 6 } as const;
-const SEGMENT_HIT_SLOP = { top: SEGMENT_INSET, bottom: SEGMENT_INSET } as const;
-
-/** Bar-sized: segments fit their labels and the thumb is a tint, so it sits beside bar buttons without outshouting them. */
-function CompactDrawnSegmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: SegmentedProps<T>) {
-  const [layouts, setLayouts] = useState<Partial<Record<T, { x: number; width: number }>>>({});
-  const selectedX = layouts[value]?.x;
-  const selectedWidth = layouts[value]?.width;
-  const thumbX = useSharedValue(0);
-  const thumbWidth = useSharedValue(0);
-  const placedValue = useRef<T | null>(null);
-  useEffect(() => {
-    if (selectedX === undefined || selectedWidth === undefined) return;
-    // A first placement or a label resize re-seats the thumb; only a change of choice slides.
-    if (placedValue.current !== value) {
-      const slide = placedValue.current !== null;
-      placedValue.current = value;
-      if (slide) {
-        thumbX.set(withSpring(selectedX, springs.indicator));
-        thumbWidth.set(withSpring(selectedWidth, springs.indicator));
-        return;
-      }
-    }
-    thumbX.set(selectedX);
-    thumbWidth.set(selectedWidth);
-  }, [selectedWidth, selectedX, thumbWidth, thumbX, value]);
-  const thumbStyle = useAnimatedStyle(() => ({ width: thumbWidth.get(), transform: [{ translateX: thumbX.get() }] }));
-  return (
-    <View className={className}>
-    <View accessibilityRole="radiogroup" className="flex-row self-start rounded-full bg-surface-raised" style={{ padding: SEGMENT_INSET }}>
-      {selectedWidth !== undefined ? <Animated.View pointerEvents="none" className="absolute bg-accent-soft" style={[SEGMENT_CORNER, { top: SEGMENT_INSET, bottom: SEGMENT_INSET, left: 0 }, thumbStyle]} /> : null}
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityLabel={option.label}
-            accessibilityState={{ selected, checked: selected, disabled: disabled || Boolean(option.locked) }}
-            aria-checked={selected}
-            disabled={disabled}
-            hitSlop={COMPACT_SEGMENT_HIT_SLOP}
-            onLayout={(event) => {
-              const { x, width } = event.nativeEvent.layout;
-              setLayouts((current) => current[option.value]?.x === x && current[option.value]?.width === width ? current : { ...current, [option.value]: { x, width } });
-            }}
-            onPress={() => {
-              traceAction("segment", { label: option.label, value: option.value, selected, locked: Boolean(option.locked) });
-              if (option.locked) { onLocked?.(); return; }
-              if (!selected) { haptics.selection(); onChange(option.value); }
-            }}
-            className={`min-h-8 shrink flex-row items-center justify-center px-3 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
-            style={SEGMENT_CORNER}
-          >
-            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`shrink text-caption ${selected ? "font-semibold text-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-    </View>
-  );
-}
-
-/** A capsule track with the selected choice on an accent thumb that slides between them. */
+/** UIKit's look: equal segments, plain labels (the system control shows no icons), a neutral thumb that slides. */
 function DrawnSegmented<T extends string>({ options, value, onChange, disabled = false, onLocked, className = "" }: SegmentedProps<T>) {
   const [trackWidth, setTrackWidth] = useState(0);
   const selectedIndex = options.findIndex((option) => option.value === value);
@@ -467,8 +416,8 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
   }, [segmentWidth, selectedIndex, thumbX]);
   const thumbStyle = useAnimatedStyle(() => ({ transform: [{ translateX: thumbX.get() }] }));
   return (
-    <View accessibilityRole="radiogroup" onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} className={`min-h-12 flex-row rounded-full bg-surface-raised ${className}`} style={{ padding: SEGMENT_INSET }}>
-      {segmentWidth > 0 && selectedIndex >= 0 ? <Animated.View pointerEvents="none" className="absolute bg-accent" style={[SEGMENT_THUMB_STYLE, { width: segmentWidth }, thumbStyle]} /> : null}
+    <View accessibilityRole="radiogroup" onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)} className={`min-h-8 flex-row rounded-full bg-control-track ${disabled ? "opacity-50" : ""} ${className}`} style={{ padding: SEGMENT_INSET }}>
+      {segmentWidth > 0 && selectedIndex >= 0 ? <Animated.View pointerEvents="none" className="absolute bg-control-thumb" style={[SEGMENT_THUMB_STYLE, { width: segmentWidth }, thumbStyle]} /> : null}
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -485,11 +434,10 @@ function DrawnSegmented<T extends string>({ options, value, onChange, disabled =
               if (option.locked) { onLocked?.(); return; }
               if (!selected) { haptics.selection(); onChange(option.value); }
             }}
-            className={`min-h-10 flex-1 flex-row items-center justify-center gap-2 px-2 ${selected ? "" : "active:bg-surface-pressed"} ${option.locked ? "opacity-45" : ""}`}
+            className={`min-h-7 flex-1 items-center justify-center px-2 ${option.locked ? "opacity-45" : ""}`}
             style={SEGMENT_CORNER}
           >
-            {option.icon ? <AppIcon name={option.icon} size={16} tone={selected ? "onAccent" : "muted"} /> : null}
-            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`shrink text-subhead ${selected ? "font-semibold text-on-accent" : "font-medium text-fg-secondary"}`}>{option.label}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="shrink text-caption font-normal text-fg">{option.label}</Text>
           </Pressable>
         );
       })}

@@ -1,19 +1,36 @@
 import { useNavigation } from "expo-router";
 import type { NativeStackHeaderItem, NativeStackNavigationOptions } from "expo-router/native-stack";
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { HeaderHeightContext } from "expo-router/react-navigation";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text, View } from "react-native";
 import type { SearchBarCommands } from "react-native-screens";
 import { traceAction } from "@/src/data/interaction-trace";
 import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { useAppTheme, type AppTheme } from "@/src/theme";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
-import type { NativeHeader, NativeHeaderItem } from "./NativeHeader";
+import type { EmptyListFill, NativeHeader, NativeHeaderItem } from "./NativeHeader";
 
-export type { NativeHeader, NativeHeaderItem } from "./NativeHeader";
+export type { EmptyListFill, NativeHeader, NativeHeaderItem } from "./NativeHeader";
 
 export const nativeHeaders = true;
 
 export const NAVIGATION_BAR_INSETS = { contentInsetAdjustmentBehavior: "automatic" } as const;
+
+/**
+ * Automatic insets put the content below the bar, so a container grown to the list's full height
+ * would push a centred empty state down by the bar. It fills only the space between the bar and the
+ * bottom safe area instead.
+ */
+export function useEmptyListFill(empty: boolean): EmptyListFill {
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const insets = useSafeAreaInsets();
+  const [height, setHeight] = useState(0);
+  return {
+    onLayout: (event) => setHeight(event.nativeEvent.layout.height),
+    style: empty && height > 0 ? { minHeight: Math.max(0, height - headerHeight - insets.bottom) } : undefined,
+  };
+}
 
 export function useNativeHeader(header: NativeHeader | null) {
   const navigation = useNavigation();

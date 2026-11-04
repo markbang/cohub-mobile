@@ -21,6 +21,10 @@ const iconNames: Record<AnimatedTabIconName, IconName> = {
   user: "user",
 };
 
+// iOS selects a tab with the filled symbol. These two read clearly when filled; the overlapping
+// message squares would merge into one shape, and the activity trace is a line on iOS too.
+const FILLED_WHEN_FOCUSED = new Set<AnimatedTabIconName>(["layers", "user"]);
+
 /** Tabs switch a hundred times a day, so selection only settles the icon's weight; it never pops. */
 export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconProps) {
   const progress = useSharedValue(focused ? 1 : 0);
@@ -37,7 +41,7 @@ export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconP
 
   return (
     <Animated.View style={style}>
-      <Icon size={size} color={color} strokeWidth={focused ? 2 : 1.8} absoluteStrokeWidth />
+      <Icon size={size} color={color} fill={focused && FILLED_WHEN_FOCUSED.has(name) ? String(color) : "none"} strokeWidth={focused ? 2 : 1.8} absoluteStrokeWidth />
     </Animated.View>
   );
 }

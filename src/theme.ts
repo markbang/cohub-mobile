@@ -5,7 +5,8 @@ import { ACCENTS, DEFAULT_ACCENT, isAccentId, type AccentId } from "@/src/design
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides, type Palette } from "@/src/design/tokens";
 export { colorWithOpacity } from "@/src/design/color";
 
-export const edgeChrome = { headerMinHeight: 56, fade: 40, topFade: 24 } as const;
+// headerMinHeight is the iOS navigation bar: 44 pt, the height of its glass buttons.
+export const edgeChrome = { headerMinHeight: 44, fade: 40, topFade: 24 } as const;
 
 export type AppTheme = {
   mode: "light" | "dark";

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -70,6 +70,7 @@ export function AdaptiveSheet({
   contentStyle,
   fullHeight = false,
   confirm,
+  detent = "large",
   testID,
 }: AdaptiveSheetProps) {
   const theme = useAppTheme();
@@ -77,6 +78,10 @@ export function AdaptiveSheet({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const compact = Math.min(width, height) < COMPACT_BREAKPOINT;
+  // A large sheet is UIKit's page sheet: the full height under the status bar, no grabber, dragged by its header.
+  const page = compact && detent === "large";
+  // design-system: iOS dims the screen under a sheet by a fifth, and by half in dark mode.
+  const scrimOpacity = theme.mode === "dark" ? 0.5 : 0.2;
   const hiddenOffset = Math.min(height * 0.56, 520);
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -175,7 +180,7 @@ export function AdaptiveSheet({
   }, [dragContext, dragY, progress, visible]);
 
   const backdropStyle = useAnimatedStyle(() => ({
-    opacity: progress.get() * 0.56,
+    opacity: progress.get() * scrimOpacity,
   }));
   const compactPanelStyle = useAnimatedStyle(() => ({
     // A sheet slides rather than fades; the brief fade only hides the first frame below the screen edge.
@@ -191,10 +196,10 @@ export function AdaptiveSheet({
   const backdropExiting = useMemo<EntryExitAnimationFunction>(() => () => {
     "worklet";
     return {
-      initialValues: { opacity: progress.get() * 0.56 },
+      initialValues: { opacity: progress.get() * scrimOpacity },
       animations: { opacity: withTiming(0, CLOSE_TIMING) },
     };
-  }, [progress]);
+  }, [progress, scrimOpacity]);
   const panelExiting = useMemo<EntryExitAnimationFunction>(() => () => {
     "worklet";
     const shown = progress.get();
@@ -215,7 +220,7 @@ export function AdaptiveSheet({
   }, [compact, dragY, progress, revealDistance]);
   const availableHeight = Math.max(0, height - keyboardHeight);
   const maxHeight = compact
-    ? Math.max(0, availableHeight - insets.top - 12)
+    ? Math.max(0, availableHeight - insets.top - (page ? 0 : 12))
     : Math.max(0, Math.min(availableHeight - 48, 760));
   const bottomPadding = Math.max(insets.bottom, theme.spacing.lg);
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
@@ -251,38 +256,41 @@ export function AdaptiveSheet({
             exiting={visible ? panelExiting : undefined}
             accessibilityViewIsModal
             role="dialog"
-            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
+            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? page ? "" : "rounded-t-lg" : "max-w-125 rounded-lg"}`}
             style={[
               { borderCurve: "continuous" },
-              { maxHeight, height: compact && fullHeight ? maxHeight : undefined },
+              page ? PAGE_CORNERS : null,
+              { maxHeight, height: compact && (fullHeight || page) ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
             {/* Owners often clear the data behind a sheet as they close it; keep showing what was open while it leaves. */}
             <Freeze frozen={!visible}>
-            {compact ? (
-              <GestureDetector gesture={pan}>
-                <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
-                  {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
+            <SheetDrag gesture={compact ? pan : null}>
+              <View>
+                {compact && !page ? (
+                  <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
+                    {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
+                  </View>
+                ) : null}
+                {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
+                <View testID={page && dismissible && testID ? `${testID}-drag-handle` : undefined} className={`min-h-14 flex-row items-center px-2 ${page ? "pt-2" : "pb-2"}`}>
+                  <IconButton
+                    filled
+                    name="x"
+                    label={t("ui.sheet.close", { title })}
+                    disabled={!dismissible}
+                    onPress={requestClose}
+                  />
+                  <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
+                  <SheetConfirmButton confirm={confirm} />
                 </View>
-              </GestureDetector>
-            ) : null}
-            {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
-            <View className="min-h-14 flex-row items-center px-2 pb-2">
-              <IconButton
-                filled
-                name="x"
-                label={t("ui.sheet.close", { title })}
-                disabled={!dismissible}
-                onPress={requestClose}
-              />
-              <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 px-2 text-center text-headline font-semibold text-fg">{title}</Text>
-              <SheetConfirmButton confirm={confirm} />
-            </View>
+              </View>
+            </SheetDrag>
             {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (
               <ScrollView
-                style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
+                style={fullHeight || page ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
                 contentContainerStyle={resolvedContentStyle}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -309,10 +317,17 @@ export function AdaptiveSheet({
   );
 }
 
+/** Compact sheets drag from their top: the grabber and header, or the header alone on a page sheet. */
+function SheetDrag({ gesture, children }: { gesture: ReturnType<typeof Gesture.Pan> | null; children: ReactElement }) {
+  return gesture ? <GestureDetector gesture={gesture}>{children}</GestureDetector> : children;
+}
+
 const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: ReactNode }) {
   return children;
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
+// UIKit's page sheet corner on a 402 pt iPhone, measured from its top edge.
+const PAGE_CORNERS = { borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
 const SCRIM = { backgroundColor: "#000000" } as const;

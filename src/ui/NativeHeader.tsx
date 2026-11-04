@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import type { IconName } from "@/src/icons";
 
@@ -20,3 +21,12 @@ export const nativeHeaders = false;
 export const NAVIGATION_BAR_INSETS = { contentInsetAdjustmentBehavior: "automatic" } as const;
 
 export function useNativeHeader(_header: NativeHeader | null) {}
+
+export type EmptyListFill = { onLayout?: (event: LayoutChangeEvent) => void; style: ViewStyle | undefined };
+
+/** Lets an empty tab-root list centre its empty state in the visible area. Android lists start below a drawn header, so they just grow. */
+export function useEmptyListFill(empty: boolean): EmptyListFill {
+  return { style: empty ? EMPTY_FILL : undefined };
+}
+
+const EMPTY_FILL = { flexGrow: 1 } as const;

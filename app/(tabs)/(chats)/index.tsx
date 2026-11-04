@@ -26,7 +26,7 @@ import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
@@ -132,6 +132,7 @@ export default function ChatsScreen() {
   const holdLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingRef = useRef(false);
   const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
+  const emptyFill = useEmptyListFill(shownItems.length === 0);
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
   const clearOrderTimers = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
@@ -194,9 +195,10 @@ export default function ChatsScreen() {
   useNativeHeader({
     title: t("tabs.chats"),
     search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
+    // Leading to trailing: the prominent action takes the trailing edge, as on Android.
     items: [
-      { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
       { kind: "menu", label: t("chats.source.filter"), icon: "filter", title: sourceLabel, active: sourceFilter !== "all", actions: sourceActions },
+      { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
     ],
   });
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
@@ -242,7 +244,8 @@ export default function ChatsScreen() {
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
-        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, flexGrow: shownItems.length === 0 ? 1 : undefined }}
+        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
+        onLayout={emptyFill.onLayout}
         ListHeaderComponent={<View>
           {pullRefresh.header}
           {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}

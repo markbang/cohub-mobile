@@ -8,6 +8,7 @@
 export type ColorKey =
   | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "pressOverlay"
   | "border" | "borderStrong"
+  | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton"
   | "text" | "textSecondary" | "textMuted" | "textFaint"
   | "accent" | "accentPressed" | "accentSoft" | "accentBorder" | "accentText"
   | "userBubble" | "userBubbleText" | "userBubbleLink" | "userBubbleCodeBackground" | "userBubbleMeta"
@@ -28,6 +29,11 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   pressOverlay: "press-overlay",
   border: "border",
   borderStrong: "border-strong",
+  controlTrack: "control-track",
+  controlThumb: "control-thumb",
+  switchOff: "switch-off",
+  dialogSurface: "dialog-surface",
+  dialogButton: "dialog-button",
   text: "fg",
   textSecondary: "fg-secondary",
   textMuted: "fg-muted",
@@ -67,6 +73,13 @@ export const lightPalette: Palette = {
   pressOverlay: "rgba(8, 9, 11, 0.08)",
   border: "#e8e3da",
   borderStrong: "#cdc6ba",
+  // iOS system control fills as measured over `background` (segmented track, search field, thumb, switch off).
+  controlTrack: "#e6e3e0",
+  controlThumb: "#ffffff",
+  switchOff: "#bfbcbb",
+  // The iOS 26 alert card and its capsule buttons, as measured over the dimmed screen.
+  dialogSurface: "#efece9",
+  dialogButton: "#d2d0cd",
   text: "#16130f",
   textSecondary: "#4a453e",
   textMuted: "#5c564e",
@@ -108,6 +121,11 @@ export const darkPalette: Palette = {
   pressOverlay: "rgba(255, 255, 255, 0.12)",
   border: "#38383a",
   borderStrong: "#48484a",
+  controlTrack: "#2a2a2e",
+  controlThumb: "#64646a",
+  switchOff: "#535357",
+  dialogSurface: "#131314",
+  dialogButton: "#2d2d2e",
   text: "#f2f2f7",
   textSecondary: "#d1d1d6",
   textMuted: "#bcbcc1",

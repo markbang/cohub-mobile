@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import Reanimated, { Easing, SlideInDown, withTiming } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useState, type ReactNode } from "react";
+import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import Reanimated, { Easing, withTiming } from "react-native-reanimated";
 import { useTranslation } from "@/src/i18n";
 import type { IconName } from "@/src/icons";
 import { curves, dialog } from "@/src/motion";
+import { useAppTheme } from "@/src/theme";
 import { Loader } from "@/src/ui";
 import { ToastViewport } from "@/src/components/Toast";
 
@@ -27,7 +27,6 @@ export type ConfirmSheetProps = {
   testID?: string;
 };
 
-const SHEET_SPRING = SlideInDown.springify().duration(dialog.sheet.duration).dampingRatio(dialog.sheet.dampingRatio);
 const ALERT_TIMING = { duration: dialog.enter.duration, easing: Easing.bezier(...curves.easeOut) };
 
 /** The alert settles in from just under full size; the modal's own fade carries both its entrance and its exit. */
@@ -40,36 +39,17 @@ function alertEntering() {
 }
 
 /**
- * A yes-or-no confirmation. iOS presents the system action sheet (`SystemDialogs.ios.tsx`); Android
- * draws the same shape: the question and its action in one card, Cancel in its own below.
+ * A yes-or-no confirmation. iOS presents the system action sheet (`SystemDialogs.ios.tsx`), which
+ * iOS 26 shows as a centred card; Android draws that card: the question, then Cancel and the action
+ * side by side as capsules.
  */
 export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, destructive = true, busy = false, error = null, onConfirm, onClose, testID }: ConfirmSheetProps) {
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const close = () => { if (!busy) onClose(); };
-  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
-    <View className="flex-1 justify-end px-2" style={{ paddingBottom: Math.max(insets.bottom, 8) }} testID={testID}>
-      {/* design-system: the scrim dims whatever theme sits underneath, so it stays black. */}
-      <Pressable accessible={false} style={[StyleSheet.absoluteFill, SCRIM]} onPress={close} />
-      <Reanimated.View entering={SHEET_SPRING} accessibilityViewIsModal className="gap-2">
-        <View className="overflow-hidden rounded-md bg-surface-float" style={CONTINUOUS}>
-          <View className="items-center gap-1 px-4 py-4">
-            <Text accessibilityRole="header" className="text-center text-caption font-semibold text-fg-muted">{title}</Text>
-            {[subtitle, message].filter(Boolean).map((line) => <Text key={line} className="text-center text-caption text-fg-muted">{line}</Text>)}
-            {error ? <Text accessibilityRole="alert" className="mt-1 text-center text-caption text-danger">{error}</Text> : null}
-          </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={confirmLabel} accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={onConfirm} className="min-h-14 flex-row items-center justify-center gap-2 border-border active:bg-surface-pressed" style={HAIRLINE_TOP}>
-            {busy ? <Loader /> : null}
-            <Text className={`text-title ${destructive ? "text-danger" : "text-accent"}`}>{confirmLabel}</Text>
-          </Pressable>
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("common.cancel")} disabled={busy} onPress={close} className="min-h-14 items-center justify-center rounded-md bg-surface-float active:bg-surface-pressed disabled:opacity-55" style={CONTINUOUS}>
-          <Text className="text-title font-semibold text-accent">{t("common.cancel")}</Text>
-        </Pressable>
-      </Reanimated.View>
-      <ToastViewport />
-    </View>
-  </Modal>;
+  return <AlertCard visible={visible} onClose={close} testID={testID} title={title} lines={[subtitle, message]} error={error}>
+    <AlertButton label={t("common.cancel")} disabled={busy} onPress={close} />
+    <AlertButton label={confirmLabel} tone={destructive ? "danger" : "accent"} busy={busy} onPress={onConfirm} />
+  </AlertCard>;
 }
 
 export type NoticeSheetProps = {
@@ -85,23 +65,51 @@ export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSh
   // The last notice stays drawn while the modal fades out, so its text does not blank mid-exit.
   const [shown, setShown] = useState(notice);
   if (notice && notice !== shown) setShown(notice);
-  return <Modal visible={notice !== null} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-    <View className="flex-1 items-center justify-center px-8" style={SCRIM} testID={testID}>
-      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="w-full max-w-70 overflow-hidden rounded-md bg-surface-float" style={CONTINUOUS}>
-        <View className="items-center gap-1 px-4 pb-4 pt-5">
-          <Text accessibilityRole="header" className="text-center text-headline font-semibold text-fg">{shown?.title || fallbackTitle}</Text>
-          <Text className="text-center text-subhead text-fg-secondary">{shown?.message ?? ""}</Text>
+  return <AlertCard visible={notice !== null} onClose={onClose} testID={testID} title={shown?.title || fallbackTitle} lines={[shown?.message]}>
+    <AlertButton label={t("common.done")} tone="accent" onPress={onClose} />
+  </AlertCard>;
+}
+
+/**
+ * The iOS 26 alert, measured on a 402 pt iPhone: a 318 pt card 42 pt in from each edge with 34 pt
+ * corners; the title's cap height 14 pt below the top and its text 29 pt in; 48 pt capsule buttons
+ * 8 apart and 15 pt from the card's edges.
+ */
+function AlertCard({ visible, onClose, testID, title, lines, error = null, children }: { visible: boolean; onClose: () => void; testID?: string; title: string; lines: readonly (string | undefined)[]; error?: string | null; children: ReactNode }) {
+  const theme = useAppTheme();
+  const { width } = useWindowDimensions();
+  const cardStyle = { width: Math.min(CARD_WIDTH, width - CARD_MARGIN * 2), borderRadius: CARD_RADIUS, borderCurve: "continuous" } as const;
+  return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <View className="flex-1 items-center justify-center" testID={testID}>
+      {/* design-system: the scrim dims whatever sits underneath, so it stays black; iOS dims more in dark mode. */}
+      <Pressable accessible={false} style={[StyleSheet.absoluteFill, theme.mode === "dark" ? SCRIM_DARK : SCRIM_LIGHT]} onPress={onClose} />
+      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="overflow-hidden bg-dialog-surface" style={cardStyle}>
+        <View style={CONTENT_INSET}>
+          <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
+          {lines.filter(Boolean).map((line) => <Text key={line} className="mt-1.5 text-subhead text-fg-muted">{line}</Text>)}
+          {error ? <Text accessibilityRole="alert" className="mt-1.5 text-caption text-danger">{error}</Text> : null}
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={t("common.done")} onPress={onClose} className="min-h-12 items-center justify-center border-border active:bg-surface-pressed" style={HAIRLINE_TOP}>
-          <Text className="text-body font-semibold text-accent">{t("common.done")}</Text>
-        </Pressable>
+        <View className="mt-5 flex-row gap-2" style={BUTTON_INSET}>{children}</View>
       </Reanimated.View>
       <ToastViewport />
     </View>
   </Modal>;
 }
 
-const CONTINUOUS = { borderCurve: "continuous" } as const;
-const HAIRLINE_TOP = { borderTopWidth: StyleSheet.hairlineWidth } as const;
+function AlertButton({ label, tone = "default", busy = false, disabled = false, onPress }: { label: string; tone?: "default" | "accent" | "danger"; busy?: boolean; disabled?: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ busy, disabled: disabled || busy }} disabled={disabled || busy} onPress={onPress} className="min-h-12 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-dialog-button px-3 active:opacity-70 disabled:opacity-55">
+    {busy ? <Loader /> : null}
+    <Text numberOfLines={1} className={`shrink text-body ${tone === "danger" ? "text-danger" : tone === "accent" ? "font-semibold text-accent" : "text-fg"}`}>{label}</Text>
+  </Pressable>;
+}
+
+const CARD_WIDTH = 318;
+const CARD_MARGIN = 42;
+const CARD_RADIUS = 34;
+// Roboto's cap height sits 4.7 pt into a 22 pt line, so 10 puts it 14 pt below the card's top as SF's does.
+const CONTENT_INSET = { paddingTop: 10, paddingHorizontal: 29 } as const;
+const BUTTON_INSET = { paddingHorizontal: 15, paddingBottom: 15 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black at a fixed alpha.
-const SCRIM = { backgroundColor: "rgba(0, 0, 0, 0.4)" } as const;
+const SCRIM_LIGHT = { backgroundColor: "rgba(0, 0, 0, 0.2)" } as const;
+// design-system: as above; iOS dims the dark appearance by half.
+const SCRIM_DARK = { backgroundColor: "rgba(0, 0, 0, 0.5)" } as const;

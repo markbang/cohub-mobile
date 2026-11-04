@@ -4,12 +4,17 @@ import { edgeChrome } from "@/src/theme";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
 
 /**
- * Android tab roots: the Large Title and the bar's buttons share one row, as on the App Store's Today and in a
- * Material top app bar. A separate title row only pays off where UIKit collapses it into the bar on scroll.
+ * Android tab roots, drawn as UIKit lays out a Large Title: the bar's buttons in a 44 pt row, the title
+ * on its own row below. The title row's padding puts its cap height 22 pt under the bar and a search
+ * field below it 63 pt under the bar, as measured on iOS 26.
  */
 export function LargeTitleBar({ title, actions }: { title: string; actions?: ReactNode }) {
-  return <View className="flex-row items-center gap-2 pl-4 pr-2" style={{ minHeight: edgeChrome.headerMinHeight }}>
-    <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="min-w-0 flex-1 text-display font-semibold text-fg">{title}</Text>
-    {actions ? <View className="flex-row items-center"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+  return <View>
+    <View className="flex-row items-center justify-end gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
+      {actions ? <BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider> : null}
+    </View>
+    <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="px-4 pb-2 text-display font-bold text-fg" style={TITLE_INSET}>{title}</Text>
   </View>;
 }
+
+const TITLE_INSET = { paddingTop: 14 } as const;
