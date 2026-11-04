@@ -188,7 +188,14 @@ function runMaestro({ device, flowPath, out, testOutput }) {
   });
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
-  const result = spawnSync("maestro", ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
+  const args = ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
+  let result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
+  // Maestro's on-device driver dies mid-run often enough that one retry is worth it (as in scripts/e2e/android.mjs).
+  if (!result.error && result.status !== 0) {
+    process.stdout.write(`Maestro failed on ${basename(flowPath)}; retrying once.\n`);
+    rmSync(testOutput, { recursive: true, force: true });
+    result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
+  }
   // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
   const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
   redact(debugOutput, secrets);
