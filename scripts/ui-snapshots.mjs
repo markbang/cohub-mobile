@@ -125,7 +125,7 @@ function yamlString(value) {
 }
 
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
-function buildFlow({ platform, screens, directory }) {
+function buildFlow({ platform, screens }) {
   const login = resolve(LOGIN_FLOWS[platform]);
   const lines = [
     `appId: ${PACKAGE_ID}`,
@@ -159,7 +159,8 @@ function buildFlow({ platform, screens, directory }) {
       lines.push(`- tapOn: ${yamlString(step.tapOn)}`);
       lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
     }
-    lines.push("- takeScreenshot:", `    path: ${yamlString(join(directory, screen.name))}`);
+    // Maestro only writes screenshots inside its test output directory, so the path stays relative.
+    lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -177,7 +178,7 @@ function findFile(root, name) {
   return null;
 }
 
-function runMaestro({ device, flowPath, out }) {
+function runMaestro({ device, flowPath, out, testOutput }) {
   const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
     const value = process.env[key]?.trim();
     if (!value) throw new Error(`${key} is required: every screen renders AuthScreen until a session exists (dev tenant account).`);
@@ -185,9 +186,11 @@ function runMaestro({ device, flowPath, out }) {
   });
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
-  const result = spawnSync("maestro", ["test", "--device", device, "--debug-output", debugOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
+  const result = spawnSync("maestro", ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
   // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
-  redact(debugOutput, credentials.map((pair) => pair.slice(pair.indexOf("=") + 1)));
+  const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
+  redact(debugOutput, secrets);
+  redact(testOutput, secrets);
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
@@ -285,13 +288,14 @@ async function capture(options) {
       mkdirSync(directory, { recursive: true });
       target.setTheme(theme);
       const flowPath = join(options.out, `${theme}.yaml`);
-      writeFileSync(flowPath, buildFlow({ platform: options.platform, screens, directory }));
-      runMaestro({ device: target.device, flowPath, out: options.out });
+      writeFileSync(flowPath, buildFlow({ platform: options.platform, screens }));
+      const testOutput = join(options.out, "maestro-output", theme);
+      rmSync(testOutput, { recursive: true, force: true });
+      runMaestro({ device: target.device, flowPath, out: options.out, testOutput });
       for (const screen of screens) {
         const file = `${screen.name}.png`;
-        if (existsSync(join(directory, file))) continue;
-        // Some Maestro versions nest screenshots under their output directory.
-        const found = findFile(options.out, file);
+        // Maestro may nest screenshots in a per-run folder under its test output directory.
+        const found = findFile(testOutput, file);
         if (found) run("mv", [found, join(directory, file)]);
         else missing.push(`${theme}/${file}`);
       }
