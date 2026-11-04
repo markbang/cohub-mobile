@@ -21,6 +21,7 @@ const LOGICAL_WIDTH = 393;
 const IOS_DEVICES = ["iPhone 16 Pro", "iPhone 17 Pro", "iPhone 16", "iPhone 17"];
 const PAIR_HEIGHT = 1400;
 const DEV_SERVER_ERROR = "Could not connect to development server";
+const NOT_RESPONDING = ".* isn't responding";
 
 export const SCREENS = [
   { name: "catalog-type", link: "cohub://debug/ui?section=type" },
@@ -140,8 +141,17 @@ function buildFlow({ platform, screens }) {
     "      all: allow",
     // A debug binary fetches its first bundle from Metro, which can take minutes on a cold cache.
     "- extendedWaitUntil:",
-    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*)`)}`,
+    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
     "    timeout: 600000",
+    "- repeat:",
+    "    while:",
+    `      visible: ${yamlString(NOT_RESPONDING)}`,
+    "    times: 3",
+    "    commands:",
+    "      - tapOn: \"Wait\"",
+    "      - extendedWaitUntil:",
+    `          visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
+    "          timeout: 300000",
     // A cold Metro can build the first bundle slower than the app waits for it. Metro keeps building,
     // so a later reload gets the finished bundle.
     "- repeat:",
@@ -244,6 +254,8 @@ const android = {
     const size = /(\d+)x(\d+)/.exec(adb("shell", "wm", "size"));
     if (!size) throw new Error("Could not read the emulator's screen size from `wm size`.");
     adb("shell", "wm", "density", String(Math.round((Number(size[1]) / LOGICAL_WIDTH) * 160)));
+    // The software-rendered emulator often raises "isn't responding" dialogs over the app under test.
+    adb("shell", "settings", "put", "global", "hide_error_dialogs", "1");
     adb("shell", "settings", "put", "global", "sysui_demo_allowed", "1");
     const demo = (...extra) => adb("shell", "am", "broadcast", "-a", "com.android.systemui.demo", ...extra);
     demo("-e", "command", "enter");
@@ -255,6 +267,7 @@ const android = {
       setTheme: (theme) => adb("shell", "cmd", "uimode", "night", theme === "dark" ? "yes" : "no"),
       restore() {
         run("adb", ["-s", serial, "shell", "wm", "density", "reset"], { allowFailure: true });
+        run("adb", ["-s", serial, "shell", "settings", "put", "global", "hide_error_dialogs", "0"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "exit"], { allowFailure: true });
       },
     };
