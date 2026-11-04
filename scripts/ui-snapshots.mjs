@@ -113,6 +113,7 @@ function requireCommand(command, args, hint) {
 }
 
 const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds));
+const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
 async function startMetro() {
   const metro = spawn("npx", ["expo", "start", "--port", String(METRO_PORT)], {
@@ -265,9 +266,11 @@ function runMaestro({ device, flowPath, out, testOutput }) {
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
   const args = ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
   let result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
-  // Maestro's on-device driver dies mid-run often enough that one retry is worth it (as in scripts/e2e/android.mjs).
-  if (!result.error && result.status !== 0) {
-    process.stdout.write(`Maestro failed on ${basename(flowPath)}; retrying once.\n`);
+  // Maestro's on-device driver dies mid-run often enough on CI emulators that two retries are worth it,
+  // after a pause for the device to settle (as in scripts/e2e/android.mjs).
+  for (let attempt = 2; attempt <= 3 && !result.error && result.status !== 0; attempt += 1) {
+    process.stdout.write(`Maestro failed on ${basename(flowPath)}; retrying (attempt ${attempt} of 3).\n`);
+    sleepSync(15_000);
     result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
   }
   // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
@@ -340,6 +343,8 @@ const android = {
       setTheme: (theme) => {
         adb("shell", "cmd", "uimode", "night", theme === "dark" ? "yes" : "no");
         demoStatusBar();
+        // A night-mode switch restarts System UI and recreates activities; Maestro's first dump can time out meanwhile.
+        sleepSync(5_000);
       },
       setAnimations,
       restore() {
