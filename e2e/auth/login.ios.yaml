@@ -21,10 +21,17 @@ name: Sign in on the dev tenant (iOS)
     timeout: 60000
 - tapOn: "Email"
 - inputText: ${E2E_ACCOUNT_EMAIL}
-# Tap the checkbox beside the sentence: the sentence's center can land on its Terms of Use link.
-- tapOn:
-    leftOf: "I have read and agree to the Terms of Use and Privacy Policy"
 - tapOn: "^(Sign in|Continue)$"
+# The tenant requires the terms consent. Its checkbox shares one element with the Terms of Use link,
+# so a tap can open the link; submitting without it raises a modal with an Agree button instead.
+- extendedWaitUntil:
+    visible: "(Agree|Password)"
+    timeout: 45000
+- runFlow:
+    when:
+      visible: "^Agree$"
+    commands:
+      - tapOn: "^Agree$"
 - extendedWaitUntil:
     visible: "Password"
     timeout: 45000
