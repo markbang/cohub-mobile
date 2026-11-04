@@ -189,6 +189,17 @@ export const TEXT_RAMP: Record<TextToken, { size: number; lineHeight: number; we
 };
 
 /**
+ * Android's text faces: Inter in the weights the ramp and `font-*` classes use. iOS draws SF Pro, which
+ * Apple licenses for its platforms only. Each weight is loaded as its own family (`src/ui/platform-fonts`).
+ */
+export const ANDROID_FONT_FAMILIES = { 400: "Inter-Regular", 500: "Inter-Medium", 600: "Inter-SemiBold", 700: "Inter-Bold" } as const;
+
+/** Inter's dynamic metrics: tighter tracking as text grows, in px for a size in px. */
+export function interTracking(size: number) {
+  return Math.round((-0.0223 + 0.185 * Math.exp(-0.1745 * size)) * size * 100) / 100;
+}
+
+/**
  * Picked by a shape's shortest side: tags and wells 8, controls 14, cards, menus, and bubbles 20,
  * sheets 28, capsules full. Nested shapes derive theirs (outer = inner + inset) instead of adding a token.
  */

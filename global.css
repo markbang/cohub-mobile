@@ -77,6 +77,21 @@
   --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
 }
 
+@media android {
+  .text-display { font-family: Inter-Regular; letter-spacing: -0.74px; }
+  .text-title { font-family: Inter-Regular; letter-spacing: -0.4px; }
+  .text-headline { font-family: Inter-Regular; letter-spacing: -0.22px; }
+  .text-body { font-family: Inter-Regular; letter-spacing: -0.22px; }
+  .text-chat { font-family: Inter-Regular; letter-spacing: -0.22px; }
+  .text-subhead { font-family: Inter-Regular; letter-spacing: -0.13px; }
+  .text-caption { font-family: Inter-Medium; letter-spacing: -0.04px; }
+  .text-micro { font-family: Inter-SemiBold; letter-spacing: 0.05px; }
+  .font-normal { font-family: Inter-Regular !important; }
+  .font-medium { font-family: Inter-Medium !important; }
+  .font-semibold { font-family: Inter-SemiBold !important; }
+  .font-bold { font-family: Inter-Bold !important; }
+}
+
 /* Runtime overrides (pure black, Config theme, font scale) go through Uniwind.updateCSSVariables. */
 @layer theme {
   :root {

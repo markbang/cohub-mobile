@@ -29,6 +29,7 @@ import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
+import { textFace } from "@/src/ui/platform-fonts";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
 export function formatTokenCount(value: number) {
@@ -68,7 +69,10 @@ export function useOpenMessageLink(spaceId: string | null) {
 
 // design-system-begin: react-native-enriched-markdown is a native renderer that takes JS style objects, so it reads tokens through the theme.
 export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor = theme.colors.accent, onUserBubble = false, onSurface = false): MarkdownStyle {
-  const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color };
+  // Android names Inter's faces per weight (`textFace`); iOS keeps the system font.
+  const face = textFace(400);
+  const strongFace = textFace(600);
+  const body = { fontSize: typography.chatBody.fontSize, lineHeight: typography.chatBody.lineHeight, color, ...(face ? { fontFamily: face } : null) };
   // Wells step up from their backdrop: the page under replies, a surface in bubbles and cards.
   const well = onUserBubble || onSurface ? theme.colors.surfaceRaised : theme.colors.surface;
   // Blocks in a bubble sit closer than in a document: one gap for paragraphs, lists, quotes, and code.
@@ -76,7 +80,7 @@ export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor 
   // One weight for every level; size and color carry the hierarchy, as in the app chrome.
   const heading = (size: number): MarkdownStyle["h1"] => {
     const fontSize = scaleFontSize(size);
-    return { ...body, fontSize, lineHeight: Math.round(fontSize * 1.3), fontWeight: "600", marginTop: Math.round(gap / 2), marginBottom: Math.round(gap / 2) };
+    return { ...body, ...(strongFace ? { fontFamily: strongFace } : null), fontSize, lineHeight: Math.round(fontSize * 1.3), fontWeight: "600", marginTop: Math.round(gap / 2), marginBottom: Math.round(gap / 2) };
   };
   const dark = theme.mode === "dark";
   // Inline code sits in prose: a narrow platform monospace (Space Mono is too wide beside CJK) on a
@@ -95,7 +99,8 @@ export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor 
     h4: heading(17),
     h5: heading(15),
     h6: heading(15),
-    strong: { color },
+    // A semibold face rather than a synthetic bold over the regular one.
+    strong: strongFace ? { color, fontFamily: strongFace, fontWeight: "normal" } : { color },
     em: { color },
     strikethrough: { color: onUserBubble ? color : theme.colors.textMuted },
     blockquote: {

@@ -49,6 +49,12 @@ const packages = installed.map(({ root: repositoryRoot, licenseText, ...item }) 
   licenseText: (licenseText ?? textByRepository.get(repositoryRoot) ?? null)?.replace(/\r\n/g, "\n").trim() ?? null,
 }));
 
+// Assets shipped in the bundle rather than through npm.
+const BUNDLED_ASSETS = [
+  { name: "Inter (font, Android)", version: "4.1", license: "OFL-1.1", url: "https://github.com/rsms/inter", licenseText: readFileSync(new URL("assets/fonts/Inter-LICENSE.txt", root), "utf8").replace(/\r\n/g, "\n").trim() },
+];
+packages.push(...BUNDLED_ASSETS);
+
 const transitive = new Set();
 for (const [path, entry] of Object.entries(readJson("package-lock.json").packages)) {
   if (!path.startsWith("node_modules/") || entry.dev || entry.devOptional || entry.link) continue;

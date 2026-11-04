@@ -4,6 +4,7 @@ import { normalizeMarkdownStyle } from "react-native-enriched-markdown/src/norma
 import type { TimelineAnimation, TimelineNode, TimelineTextStyle } from "@/modules/cohub-chat-timeline";
 import { DETAIL_SEPARATOR, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon } from "@/src/components/MessageContent";
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
+import { textFace } from "@/src/ui/platform-fonts";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { formatMessageClock } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
@@ -44,7 +45,8 @@ type TextToken = "chatBody" | "caption" | "micro" | "code" | "body";
 
 function textStyle(token: TextToken, colorValue: string, overrides?: Partial<TimelineTextStyle>): TimelineTextStyle {
   const base = typography[token];
-  return { fontSize: base.fontSize, lineHeight: base.lineHeight, fontWeight: base.fontWeight, color: color(colorValue), ...overrides };
+  const fontFamily = textFace(overrides?.fontWeight ?? base.fontWeight);
+  return { fontSize: base.fontSize, lineHeight: base.lineHeight, fontWeight: base.fontWeight, color: color(colorValue), ...(fontFamily ? { fontFamily } : null), ...overrides };
 }
 
 function text(value: string, style: TimelineTextStyle, options?: { numberOfLines?: number; selectable?: boolean; style?: TimelineNode["style"]; id?: string }): TimelineNode {
