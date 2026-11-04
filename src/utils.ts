@@ -2,6 +2,7 @@ import type { ContentBlock, MessageRecord, SessionListFork, SessionRecord, Space
 import * as Crypto from "expo-crypto";
 import { translate, getActiveLocale, type TranslationKey } from "@/src/i18n/core";
 import { mentionDisplayText } from "@/src/data/space-mentions";
+import { markdownPlainText } from "@/src/data/markdown-plain";
 
 export function newId() {
   return Crypto.randomUUID();
@@ -122,7 +123,7 @@ export function messageText(message: Pick<MessageRecord, "text" | "content">) {
 
 /** Preview text without a fallback, for rows that carry their own empty state. */
 export function previewText(value: string | null | undefined, limit = 110) {
-  const normalized = mentionDisplayText(value ?? "").replace(/\s+/g, " ").trim();
+  const normalized = markdownPlainText(mentionDisplayText(value ?? "")).replace(/\s+/g, " ").trim();
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
 }
 
