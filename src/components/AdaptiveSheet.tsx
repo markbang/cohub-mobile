@@ -80,9 +80,11 @@ export function AdaptiveSheet({
   const compact = Math.min(width, height) < COMPACT_BREAKPOINT;
   // A large sheet is UIKit's page sheet: the full height under the status bar, no grabber, dragged by its header.
   const page = compact && detent === "large";
+  // A page sheet rises from fully below the screen, as UIKit's does; a short one only from partway.
+  const hiddenOffset = page ? height : Math.min(height * 0.56, 520);
   // design-system: iOS dims the screen under a sheet by a fifth, and by half in dark mode.
   const scrimOpacity = theme.mode === "dark" ? 0.5 : 0.2;
-  const hiddenOffset = Math.min(height * 0.56, 520);
+
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
   const dragContext = useSharedValue(0);

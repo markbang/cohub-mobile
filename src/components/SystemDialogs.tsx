@@ -29,7 +29,7 @@ export type ConfirmSheetProps = {
 
 const ALERT_TIMING = { duration: dialog.enter.duration, easing: Easing.bezier(...curves.easeOut) };
 
-/** The alert settles in from just under full size; the modal's own fade carries both its entrance and its exit. */
+/** The alert settles in from above full size, as UIKit's does; the modal's own fade carries both its entrance and its exit. */
 function alertEntering() {
   "worklet";
   return {

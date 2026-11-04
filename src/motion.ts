@@ -74,11 +74,10 @@ export const menuMorph = {
   close: { duration: 280, dampingRatio: 1 },
 } as const;
 
-/** Drawn Android alerts and action sheets. */
+/** Drawn Android alerts: UIAlertController's entrance, shrinking from 1.2 × while it fades in. */
 export const dialog = {
   enter: { duration: 220 },
-  fromScale: 0.95,
-  sheet: { duration: 300, dampingRatio: 1 },
+  fromScale: 1.2,
 } as const;
 
 /** Ambient loops that signal ongoing work; each one stops under Reduce Motion unless noted. */
