@@ -110,14 +110,14 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
  * `filled` draws the glyph on a solid circle, for bar buttons over content. `accent` fills with the accent and is
  * kept for a screen's one primary action; `active` marks a control in a non-default state with an accent glyph only.
  */
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, glyphSize, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; /** Overrides the glyph's size, as for Android's back chevron. */ glyphSize?: number; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
   const bar = useContext(BarButtonContext);
   const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
   const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
-  const icon = <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
+  const icon = <AppIcon name={name} size={glyphSize ?? (filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5))} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
       accessibilityRole="button"
@@ -197,6 +197,8 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
 }
 
 const TOP_EDGE = ["top"] as const;
+// iOS's own back chevron stands about 20 pt tall; Android draws that size. iOS drawn bars keep their symbol size.
+const BACK_GLYPH_SIZE = Platform.OS === "android" ? 32 : undefined;
 /** Two lines (headline + caption) and the 2 pt inset make 44, so one radius keeps it a capsule with or without a subtitle. */
 const TITLE_CAPSULE = { minHeight: 44, borderRadius: 22, borderCurve: "continuous" } as const;
 const FILL = { flex: 1 } as const;
@@ -256,7 +258,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="chevron-left" label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {onBack ? <IconButton filled name="chevron-left" glyphSize={BACK_GLYPH_SIZE} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
         {actions ? <View className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
@@ -271,6 +273,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
       {onBack ? <IconButton
         filled
         name="chevron-left"
+        glyphSize={BACK_GLYPH_SIZE}
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}

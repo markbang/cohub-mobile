@@ -4,22 +4,22 @@ import { icons, type IconName } from "@/src/icons";
 export type GlyphProps = { name: IconName; size: number; color: ColorValue; strokeWidth: number; fill?: string; style?: object };
 
 /**
- * iOS draws an SF Symbol scaled to fill its box, while a Lucide glyph sits inside a 24 unit canvas with
- * padding: most icons span about 20 units, chevrons 12, the up-down pair 16. Drawing Lucide larger by that
- * ratio, centred in the same box, gives the same visual size for the same `size` on both platforms.
+ * SF Symbols render at a point size, so most glyphs match Lucide's at the same `size`. Lucide's chevrons
+ * are the exception: they fill half of its 24 unit canvas, so they draw smaller than SF's. These ratios,
+ * measured against iOS 26 screenshots, draw them at the iOS size, centred in the same box.
  */
 const FILL_SCALE: Partial<Record<IconName, number>> = {
-  "chevron-left": 2,
-  "chevron-right": 2,
-  "chevron-down": 2,
-  "chevrons-up-down": 1.5,
+  "chevron-left": 1.25,
+  "chevron-right": 1.25,
+  "chevron-down": 1.25,
+  "chevrons-up-down": 1.12,
 };
-const DEFAULT_FILL_SCALE = 1.2;
 
 export function Glyph({ name, size, color, strokeWidth, fill, style }: GlyphProps) {
   const Icon = icons[name];
-  const drawn = Math.round(size * (FILL_SCALE[name] ?? DEFAULT_FILL_SCALE));
+  const scale = FILL_SCALE[name];
+  if (!scale) return <Icon size={size} color={color} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
   return <View pointerEvents="none" style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]}>
-    <Icon size={drawn} color={color} strokeWidth={strokeWidth} absoluteStrokeWidth {...(fill ? { fill } : {})} />
+    <Icon size={Math.round(size * scale)} color={color} strokeWidth={strokeWidth} absoluteStrokeWidth {...(fill ? { fill } : {})} />
   </View>;
 }
