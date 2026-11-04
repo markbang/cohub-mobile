@@ -24,7 +24,7 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
@@ -242,7 +242,7 @@ export default function SpacesScreen() {
   });
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-    <LargeTitleBar title={t("tabs.spaces")} actions={<>
+    <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
       <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
       </View>
@@ -271,6 +271,7 @@ export default function SpacesScreen() {
         onLayout={emptyFill.onLayout}
       ListHeaderComponent={<View>
         {pullRefresh.header}
+        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} />}
         {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
         <View className="px-3">
         {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}

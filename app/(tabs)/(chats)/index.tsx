@@ -24,7 +24,7 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
@@ -208,7 +208,7 @@ export default function ChatsScreen() {
   return (
     <Screen edgeToEdge>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-      <LargeTitleBar title={t("tabs.chats")} actions={<>
+      <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
         <View ref={sourceButtonRef} collapsable={false} className={sourceMenuOpen ? "opacity-0" : undefined}>
           <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </View>
@@ -248,6 +248,7 @@ export default function ChatsScreen() {
         onLayout={emptyFill.onLayout}
         ListHeaderComponent={<View>
           {pullRefresh.header}
+          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} />}
           {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
           <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}

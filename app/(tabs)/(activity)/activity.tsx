@@ -14,7 +14,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
-import { LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 import { billingStatusLabel } from "@/src/utils";
@@ -44,12 +44,13 @@ export default function ActivityScreen() {
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-      <LargeTitleBar title={t("tabs.activity")} />
+      <LargeTitleBar title={t("tabs.activity")} scrollY={scrollY} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
       {pullRefresh.header}
+      {nativeHeaders ? null : <LargeTitle title={t("tabs.activity")} scrollY={scrollY} />}
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
