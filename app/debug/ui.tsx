@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -47,6 +47,9 @@ export default function DebugUiCatalogScreen() {
   const params = useLocalSearchParams<{ section?: string; open?: string }>();
   const only = isSection(params.section) ? params.section : null;
   const autoOpen = params.open !== "0";
+  // The menu overlays the whole screen, as on real screens, so it lives outside the scroll view.
+  const menuAnchorRef = useRef<View>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const show = (section: Section) => only === null || only === section;
 
   return (
@@ -57,10 +60,11 @@ export default function DebugUiCatalogScreen() {
         {show("rows") ? <RowsSection /> : null}
         {show("controls") ? <ControlsSection /> : null}
         {show("states") ? <StatesSection /> : null}
-        {show("menu") ? <MenuSection /> : null}
+        {show("menu") ? <MenuSection anchorRef={menuAnchorRef} open={menuOpen} onOpen={() => setMenuOpen(true)} /> : null}
         {show("sheet") ? <SheetSection initiallyOpen={autoOpen && only === "sheet"} /> : null}
         {show("confirm") ? <ConfirmSection initiallyOpen={autoOpen && only === "confirm"} /> : null}
       </ScrollView>
+      <MenuPresence open={menuOpen}><AnchoredActionMenu anchorRef={menuAnchorRef} title="Actions" testID="ui-catalog-menu" actions={MENU_ACTIONS} onClose={() => setMenuOpen(false)} /></MenuPresence>
     </Screen>
   );
 }
@@ -199,17 +203,14 @@ const MENU_ACTIONS: NativeMenuAction[] = [
   { icon: "archive", title: "Archive", onPress: NOOP },
 ];
 
-function MenuSection() {
-  const anchorRef = useRef<View>(null);
-  const [open, setOpen] = useState(false);
+function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | null>; open: boolean; onOpen: () => void }) {
   return (
     <Block label="Menu">
       <View className="flex-row">
         {nativeMenus
           ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" actions={MENU_ACTIONS} testID="ui-catalog-menu-button" />
-          : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={() => setOpen(true)} testID="ui-catalog-menu-button" /></View>}
+          : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={onOpen} testID="ui-catalog-menu-button" /></View>}
       </View>
-      <MenuPresence open={open}><AnchoredActionMenu anchorRef={anchorRef} title="Actions" testID="ui-catalog-menu" actions={MENU_ACTIONS} onClose={() => setOpen(false)} /></MenuPresence>
     </Block>
   );
 }
