@@ -10,7 +10,9 @@ await run("xcodebuild", [
   "-configuration", "Debug",
   "-sdk", "iphonesimulator",
   "-derivedDataPath", join(root, "build", "ios"),
-  "CODE_SIGNING_ALLOWED=NO",
+  // Signed to run locally: an unsigned app has no entitlements, so the keychain (expo-secure-store,
+  // and with it sign-in) fails with "A required entitlement isn't present". No team is needed.
+  "CODE_SIGN_IDENTITY=-",
   // Index data only feeds an IDE and this derived data directory is discarded after the run.
   "COMPILER_INDEX_STORE_ENABLE=NO",
   "build",

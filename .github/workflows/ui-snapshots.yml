@@ -193,7 +193,8 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/ui-snapshots/Cohub-ios-simulator.zip
-          key: ui-snapshots-ios-${{ steps.fingerprint.outputs.hash }}
+          # Bump the version when the simulator build settings change; they are not in the fingerprint.
+          key: ui-snapshots-ios-v2-${{ steps.fingerprint.outputs.hash }}
 
       - name: Build simulator app
         if: steps.app.outputs.cache-hit != 'true'
