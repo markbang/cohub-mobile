@@ -6,6 +6,10 @@ name: Sign in on the dev tenant
 # tenant enables password sign-in, and the login screen can switch environments.
 - launchApp:
     clearState: false
+# A debug build renders after Metro serves the bundle, which the tap would not wait for.
+- extendedWaitUntil:
+    visible: "Continue with Cohub"
+    timeout: 120000
 - tapOn: "Development"
 - tapOn: "Continue with Cohub"
 # Logto's hosted page opens in a Custom Tab, outside the app under test. A fresh emulator

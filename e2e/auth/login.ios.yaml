@@ -5,6 +5,10 @@ name: Sign in on the dev tenant (iOS)
 # the "wants to use … to sign in" consent alert; the conditional tap covers a non-ephemeral session.
 - launchApp:
     clearState: false
+# A debug build renders after Metro serves the bundle, which the tap would not wait for.
+- extendedWaitUntil:
+    visible: "Continue with Cohub"
+    timeout: 120000
 - tapOn: "Development"
 - tapOn: "Continue with Cohub"
 # The consent alert, when shown, arrives after the tap; a `when` checked immediately would miss it.
