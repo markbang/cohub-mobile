@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppIcon, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { GroupSeparator } from "@/src/components/GroupRow";
 import { formatNumber, formatRelativeTime } from "@/src/utils";
 
 const UTM_FIELDS = [
@@ -144,7 +145,8 @@ function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appI
         <AppIcon name="copy" size={16} tone="muted" />
       </Pressable>
       {failed ? <Text className="text-subhead text-fg-muted">{t("app.promo.statsUnavailable")}</Text> : !stats ? <View className="py-4"><Loader /></View> : <View className="overflow-hidden rounded-md bg-surface-raised" style={{ borderCurve: "continuous" }}>
-        {FUNNEL.map(([key, label], index) => <View key={key} className={`min-h-12 flex-row items-center px-4 ${index ? "border-t border-border" : ""}`}>
+        {FUNNEL.map(([key, label], index) => <View key={key} className="min-h-12 flex-row items-center px-4">
+          {index ? <GroupSeparator inset="text" edge="top" /> : null}
           <Text className="min-w-0 flex-1 text-body text-fg">{t(label)}</Text>
           <Text className="text-body font-semibold tabular-nums text-fg">{formatNumber(stats.summary[key])}</Text>
         </View>)}

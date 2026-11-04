@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { AppSwitch, DataError, Field, FIELD_INPUT_CLASS, LoadingSections, PrimaryButton, Screen, Segmented, SettingsGroup, TopBar } from "@/src/ui";
+import { GroupSeparator } from "@/src/components/GroupRow";
 import { Meta } from "@/src/ui/ListRow";
 import { formatNumber } from "@/src/utils";
 
@@ -157,7 +158,8 @@ export default function ManageWorkScreen() {
 }
 
 function ToggleRow({ title, detail, value, onChange, disabled = false, last = false }: { title: string; detail: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean; last?: boolean }) {
-  return <View className={`min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3 ${last ? "" : "border-b border-border"}`}>
+  return <View className="min-h-16 flex-row items-center gap-3 bg-surface px-4 py-3">
+    {last ? null : <GroupSeparator inset="text" />}
     <View className={`min-w-0 flex-1 gap-0.5 ${disabled ? "opacity-55" : ""}`}>
       <Text className="text-body text-fg">{title}</Text>
       <Text className="text-caption text-fg-muted">{detail}</Text>

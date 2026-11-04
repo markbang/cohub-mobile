@@ -4,6 +4,7 @@ import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
 import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
+import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
@@ -510,8 +511,8 @@ const formScope = {
     DEFAULT_IDLE_TTL_SECONDS: 43200, MIN_IDLE_TTL_SECONDS: 60, MAX_IDLE_TTL_SECONDS: 2592000, CUSTOM_TTL_UNITS: { minutes: 60, hours: 3600, days: 86400 },
     specNeedsRestart: () => false, idleTtlChoices: () => [], formatIdleTtl: String,
     deviceRuntimeSupported: false, DeviceRuntimeSection: "DeviceRuntimeSection",
-    Section: "Section", Row: "Row", AddRow: "AddRow", Tile: "Tile", MemberMenu: "MemberMenu", ImageOptionList: "ImageOptionList", EnvironmentRow: "EnvironmentRow", ScheduleRow: "ScheduleRow",
-    SettingsSelectRow: "SettingsSelectRow", ConfirmSheet: "ConfirmSheet", TILE: 30, TILE_STYLE: {},
+    SettingsGroup: "SettingsGroup", GroupRow: "GroupRow", GroupAddRow: "GroupAddRow", GroupTile: "GroupTile", GroupSlot: "GroupSlot", GROUP_TILE: 30, MemberMenu: "MemberMenu", ImageOptionList: "ImageOptionList", EnvironmentRow: "EnvironmentRow", ScheduleRow: "ScheduleRow",
+    SettingsSelectRow: "SettingsSelectRow", ConfirmSheet: "ConfirmSheet",
   });
   const render = () => { cursor = 0; return chromeNodes(renderSettings()); };
   const add = render().find((node) => node.props?.label === "space.settings.addMod" || String(node.props?.onPress).includes("Alert.prompt"));
@@ -546,7 +547,7 @@ const formScope = {
   requests[1].resolve({ item: installed, sandboxRestarting: true });
   await flushSync();
   assert.equal(sheet().props.visible, false, "successful installation closes the input sheet");
-  assert.ok(render().some((node) => node.type === "Row" && node.props.title === installed.name), "the accepted Mod appears without another list request");
+  assert.ok(render().some((node) => node.type === "GroupRow" && node.props.title === installed.name), "the accepted Mod appears without another list request");
   assert.equal(alerts.at(-1).message, "space.settings.modRestarting");
   add.props.onPress();
   assert.equal(input().props.value, "");
@@ -3945,6 +3946,17 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   assert.equal(isSessionUnread(chat("m1", "2026-11-03T07:00:00Z"), seen({ s1: { messageId: null, seenAt: 0 } })), true);
   assert.equal(latestMessageId({ lastMessageId: "m1", lastMessageAt: "2026-11-03T09:00:00Z" }, { lastMessageId: "m2", lastMessageAt: "2026-11-03T09:05:00Z" }), "m2");
   assert.equal(latestMessageId(null, { lastMessageId: null, lastMessageAt: null }), null);
+}
+// Row previews read as words: Markdown markers, including ones left open by truncation, never show.
+{
+  const plain = (text) => markdownPlainText(text).replace(/\s+/g, " ").trim();
+  assert.equal(plain("I released **v2.90.2** today"), "I released v2.90.2 today");
+  assert.equal(plain("加 `meta.runStatus` 字段"), "加 meta.runStatus 字段");
+  assert.equal(plain("主要是：\n- lint\n1. typecheck"), "主要是： lint typecheck");
+  assert.equal(plain("PR 已开：[#423](https://github.com/x/y/pull/423)"), "PR 已开：#423");
+  assert.equal(plain("## Summary\n> quoted\n```ts\nconst x = 1\n```"), "Summary quoted const x = 1");
+  assert.equal(plain("cut off **v2.9"), "cut off v2.9");
+  assert.equal(plain("snake_case_name and 2 * 3 * 4"), "snake_case_name and 2 * 3 * 4");
 }
 
 // Accent presets replace the base accent tokens in every mode and keep the default's contrast.
