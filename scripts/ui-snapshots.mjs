@@ -275,6 +275,8 @@ function runMaestro({ device, flowPath, out, testOutput }) {
   if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
 
+const MAX_REDACTED_BYTES = 32 * 1024 * 1024;
+
 function redact(root, secrets) {
   if (!existsSync(root)) return;
   for (const entry of readdirSync(root)) {
@@ -282,6 +284,11 @@ function redact(root, secrets) {
     if (statSync(path).isDirectory()) {
       redact(path, secrets);
     } else if (/\.(json|log|txt|yaml|xml)$/.test(entry)) {
+      // The simulator's own log can pass the largest string Node can hold; nobody reads it, so it goes.
+      if (statSync(path).size > MAX_REDACTED_BYTES) {
+        rmSync(path);
+        continue;
+      }
       const source = readFileSync(path, "utf8");
       // XCTest types the first character on its own and logs the remaining text.
       const variants = secrets.flatMap((secret) => [secret, secret.slice(1)]).filter((value) => value.length >= 4).sort((a, b) => b.length - a.length);
