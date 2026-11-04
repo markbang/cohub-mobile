@@ -137,7 +137,7 @@ function buildFlow({ platform, screens, directory }) {
     // A debug binary fetches its first bundle from Metro, which can take minutes on a cold cache.
     "- extendedWaitUntil:",
     `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*)`)}`,
-    "    timeout: 300000",
+    "    timeout: 600000",
     // A cold Metro can build the first bundle slower than the app waits for it; a reload then gets the built bundle.
     "- runFlow:",
     "    when:",

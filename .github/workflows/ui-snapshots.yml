@@ -121,6 +121,19 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # Metro's transform cache makes the app's first bundle fast; a cold one can outlast the app's wait.
+      - name: Locate Metro cache
+        id: metro
+        run: echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Metro cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            metro-${{ runner.os }}-
+
       - name: Capture
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -146,6 +159,13 @@ jobs:
           # Maestro nests its debug output under a `.maestro` directory.
           include-hidden-files: true
           retention-days: 7
+
+      - name: Save Metro cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ github.run_id }}
 
   ios:
     name: iOS simulator
@@ -197,6 +217,19 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
+      # Metro's transform cache makes the app's first bundle fast; a cold one can outlast the app's wait.
+      - name: Locate Metro cache
+        id: metro
+        run: echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Metro cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            metro-${{ runner.os }}-
+
       - name: Capture
         run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG
 
@@ -213,6 +246,13 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
+
+      - name: Save Metro cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ github.run_id }}
 
   pairs:
     name: Pair screenshots
