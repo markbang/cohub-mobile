@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
 /**
@@ -19,6 +19,7 @@ const LOGIN_FLOWS = { android: "e2e/auth/login.yaml", ios: "e2e/auth/login.ios.y
 const LOGICAL_WIDTH = 393;
 const IOS_DEVICES = ["iPhone 16 Pro", "iPhone 17 Pro", "iPhone 16", "iPhone 17"];
 const PAIR_HEIGHT = 1400;
+const DEV_SERVER_ERROR = "Could not connect to development server";
 
 export const SCREENS = [
   { name: "catalog-type", link: "cohub://debug/ui?section=type" },
@@ -135,8 +136,17 @@ function buildFlow({ platform, screens, directory }) {
     "      all: allow",
     // A debug binary fetches its first bundle from Metro, which can take minutes on a cold cache.
     "- extendedWaitUntil:",
-    "    visible: \"(Continue with Cohub|Chats)\"",
+    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*)`)}`,
     "    timeout: 300000",
+    // A cold Metro can build the first bundle slower than the app waits for it; a reload then gets the built bundle.
+    "- runFlow:",
+    "    when:",
+    `      visible: ${yamlString(`${DEV_SERVER_ERROR}.*`)}`,
+    "    commands:",
+    "      - tapOn: \"(Reload|RELOAD).*\"",
+    "      - extendedWaitUntil:",
+    "          visible: \"(Continue with Cohub|Chats)\"",
+    "          timeout: 300000",
     "- runFlow:",
     "    when:",
     "      visible: \"Continue with Cohub\"",
@@ -176,8 +186,24 @@ function runMaestro({ device, flowPath, out }) {
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
   const result = spawnSync("maestro", ["test", "--device", device, "--debug-output", debugOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath], { cwd: out, stdio: "inherit" });
+  // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
+  redact(debugOutput, credentials.map((pair) => pair.slice(pair.indexOf("=") + 1)));
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its screenshots and view hierarchy are in ${debugOutput}.`);
+}
+
+function redact(root, secrets) {
+  if (!existsSync(root)) return;
+  for (const entry of readdirSync(root)) {
+    const path = join(root, entry);
+    if (statSync(path).isDirectory()) {
+      redact(path, secrets);
+    } else if (/\.(json|log|txt|yaml|xml)$/.test(entry)) {
+      const source = readFileSync(path, "utf8");
+      const clean = secrets.reduce((text, secret) => text.split(secret).join("***"), source);
+      if (clean !== source) writeFileSync(path, clean);
+    }
+  }
 }
 
 function androidDevice() {

@@ -137,7 +137,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ui-snapshots-android
-          path: dist/ui-snapshots/android
+          # Maestro's command log and logs carry the `-e` credentials verbatim; this repository is public.
+          path: |
+            dist/ui-snapshots/android
+            !**/commands.json
+            !**/maestro.log
           if-no-files-found: ignore
           # Maestro nests its debug output under a `.maestro` directory.
           include-hidden-files: true
@@ -204,6 +208,8 @@ jobs:
           path: |
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
+            !**/commands.json
+            !**/maestro.log
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7

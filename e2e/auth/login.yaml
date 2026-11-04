@@ -34,7 +34,9 @@ name: Sign in on the dev tenant
 - tapOn: "Email"
 - inputText: ${E2E_ACCOUNT_EMAIL}
 # The tenant requires the terms consent before it accepts the identifier.
-- tapOn: "I have read and agree to the Terms of Use and Privacy Policy"
+# Tap the checkbox beside the sentence: the sentence's center can land on its Terms of Use link.
+- tapOn:
+    leftOf: "I have read and agree to the Terms of Use and Privacy Policy"
 # "Sign in" is also the page title, so anchor to the button alone.
 - tapOn: "^(Sign in|Continue)$"
 # The password step only appears after the identifier is submitted.
