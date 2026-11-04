@@ -38,6 +38,7 @@ export default function DebugMenuScreen() {
         <DebugRow icon="terminal" title="工具展开验收" detail="长输出、报错、编辑 diff 的展开高度" onPress={() => router.push("/debug/tools")} />
         <DebugRow icon="code" title="Markdown 渲染验收" detail="标题、表格、代码块、列表、引用" onPress={() => router.push("/debug/markdown")} />
         <DebugRow icon="list-tree" title="长列表性能" detail="500 / 2000 / 10000 条消息" onPress={() => router.push("/debug/list")} />
+        <DebugRow icon="palette" title="UI Catalog" detail="共享组件一览，供 iOS / Android 截图对比" onPress={() => router.push("/debug/ui")} />
       </View>
 
       <SectionHeader title="运行时 / 数据" />

@@ -1,0 +1,31 @@
+appId: io.github.markbang.cohubmobile
+name: Sign in on the dev tenant (iOS)
+---
+# iOS counterpart of login.yaml. Logto opens an ephemeral ASWebAuthenticationSession, which skips
+# the "wants to use … to sign in" consent alert; the conditional tap covers a non-ephemeral session.
+- launchApp:
+    clearState: false
+- tapOn: "Development"
+- tapOn: "Continue with Cohub"
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Email"
+    timeout: 60000
+- tapOn: "Email"
+- inputText: ${E2E_ACCOUNT_EMAIL}
+- tapOn: "I have read and agree to the Terms of Use and Privacy Policy"
+- tapOn: "^(Sign in|Continue)$"
+- extendedWaitUntil:
+    visible: "Password"
+    timeout: 45000
+- tapOn: "Password"
+- inputText: ${E2E_ACCOUNT_PASSWORD}
+# The keyboard covers the submit button inside the auth sheet; Return submits the form instead.
+- pressKey: Enter
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 90000

@@ -7,7 +7,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { LogBox, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import "react-native-reanimated";
@@ -35,6 +35,9 @@ export { ErrorBoundary } from "expo-router";
 
 // Install network, error and console capture before the first render starts any request.
 installInteractionInstrumentation();
+
+// `scripts/ui-snapshots.mjs` serves a dev bundle; warning toasts would cover the screenshots.
+if (__DEV__ && process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1") LogBox.ignoreAllLogs();
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -294,6 +297,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <Stack.Screen name="debug/tools" options={{ title: t("route.tools") }} />
             <Stack.Screen name="debug/markdown" options={{ title: t("route.markdown") }} />
             <Stack.Screen name="debug/list" options={{ title: t("route.longList") }} />
+            <Stack.Screen name="debug/ui" options={{ title: "UI Catalog" }} />
           </Stack>
           <AppUpdateBanner />
         </View>

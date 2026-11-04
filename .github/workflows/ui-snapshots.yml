@@ -1,0 +1,218 @@
+name: UI Snapshots
+
+# Captures the same screens on an iOS simulator and an Android emulator and pairs them side by
+# side (left iOS, right Android). Debug binaries are cached by native fingerprint and load the
+# branch's JS from Metro, so a JS-only change skips the native builds.
+on:
+  workflow_dispatch:
+    inputs:
+      screens:
+        description: Screens to capture, comma-separated (see SCREENS in scripts/ui-snapshots.mjs). Defaults to all.
+        required: false
+        type: string
+      themes:
+        description: Themes to capture.
+        required: false
+        default: light,dark
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-snapshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  EXPO_NO_TELEMETRY: "1"
+  EXPO_PUBLIC_COHUB_ENV: dev
+  E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
+  E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
+  SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
+
+jobs:
+  android:
+    name: Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Native fingerprint
+        id: fingerprint
+        run: echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform android | jq -r .hash)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore debug APK
+        id: apk
+        uses: actions/cache@v6
+        with:
+          path: build/ui-snapshots/cohub.apk
+          key: ui-snapshots-android-${{ steps.fingerprint.outputs.hash }}
+
+      - name: Set up Go
+        if: steps.apk.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: reference/cohub/apps/sandbox/go.mod
+          cache-dependency-path: reference/cohub/apps/sandbox/go.sum
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Restore Gradle caches
+        if: steps.apk.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build debug APK
+        if: steps.apk.outputs.cache-hit != 'true'
+        env:
+          COHUB_ANDROID_ARCHITECTURES: x86_64
+        run: |
+          set -euo pipefail
+          npm run native:android:prepare
+          npm run native:android:build
+          mkdir -p build/ui-snapshots
+          cp android/app/build/outputs/apk/debug/app-x86_64-debug.apk build/ui-snapshots/cohub.apk
+
+      - name: Install Maestro
+        run: |
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # Without /dev/kvm access the emulator falls back to software emulation and never boots.
+      - name: Enable KVM
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Capture
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_7
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-android
+          path: dist/ui-snapshots/android
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ios:
+    name: iOS simulator
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Native fingerprint
+        id: fingerprint
+        run: echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform ios | jq -r .hash)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore simulator app
+        id: app
+        uses: actions/cache@v6
+        with:
+          path: build/ui-snapshots/Cohub-ios-simulator.zip
+          key: ui-snapshots-ios-${{ steps.fingerprint.outputs.hash }}
+
+      - name: Build simulator app
+        if: steps.app.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          npm run native:ios:prepare
+          npm run native:ios:build
+          mkdir -p build/ui-snapshots
+          cp build/artifacts/Cohub-ios-simulator.zip build/ui-snapshots/
+
+      - name: Install Maestro
+        run: |
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Capture
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-ios
+          path: |
+            dist/ui-snapshots/ios
+            !dist/ui-snapshots/ios/app
+          if-no-files-found: ignore
+          retention-days: 7
+
+  pairs:
+    name: Pair screenshots
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download screenshots
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ui-snapshots-*
+          path: dist/ui-snapshots
+
+      - name: Install ImageMagick
+        run: command -v magick || command -v convert || (sudo apt-get update && sudo apt-get install -y imagemagick)
+
+      - name: Pair
+        run: node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ui-snapshots-ios --android dist/ui-snapshots/ui-snapshots-android --out dist/ui-snapshots/pairs
+
+      - name: Upload pairs
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-pairs
+          path: dist/ui-snapshots/pairs
+          if-no-files-found: error
+          retention-days: 14
