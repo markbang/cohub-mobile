@@ -44,8 +44,15 @@ export const SCREENS = [
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
   { name: "activity-scrolled", link: "cohub://activity", steps: [{ swipe: "up" }] },
   { name: "settings-scrolled", link: "cohub://settings", steps: [{ swipe: "up" }] },
+  // The Chat screen's chrome and native timeline over fixed conversations, then a real Chat.
+  { name: "chat-conversation", link: "cohub://debug/chat?fixture=conversation" },
+  { name: "chat-tools", link: "cohub://debug/chat?fixture=tools" },
+  { name: "chat-long", link: "cohub://debug/chat?fixture=long" },
+  { name: "chat-states", link: "cohub://debug/chat?fixture=states" },
+  { name: "chat-real", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Who are you\\?" }] },
   { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
   { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet", fresh: true },
+  { name: "catalog-page", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
@@ -64,7 +71,7 @@ export const MOTIONS = [
   { name: "motion-scroll-spaces", link: "cohub://spaces", steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-scroll-activity", link: "cohub://activity", steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-scroll-settings", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
-  { name: "motion-chat", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { tapOn: "Who are you\\?" }], steps: [{ swipe: "down" }, { swipe: "up" }] },
+  { name: "motion-chat", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }, { swipe: "up" }] },
   { name: "motion-space", link: "cohub://spaces", setup: [{ tapOn: "Home" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
 ];
 
