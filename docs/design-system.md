@@ -82,8 +82,8 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   Nothing else gets a new hue. The icon's orange fails 4.5:1 as text on paper, so the light accent is
   `#bf3f00`, just past the dark end of the gradient; dark mode uses `#ff8a3d` with ink on it, the icon's
   own pairing.
-- **One grey family, warm.** Every neutral leans toward the orange: paper and pure white in light mode,
-  warmed ink in dark mode.
+- **Neutrals follow the mode.** Light mode is warm paper and pure white, leaning toward the orange. Dark mode
+  uses Apple's neutral system greys, so cards and raised surfaces match native iOS grouped cards.
 - **Selection is filled.** A selected filter or segment is the accent itself with
   `text-on-accent`, not a tinted wash; unselected ones sit on the surface one level up. The tab
   bar is the exception, as on iOS: its lens is a tint and the selected tab is marked by accent color.
