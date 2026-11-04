@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
@@ -1408,6 +1409,7 @@ const menuExited = () => undefined;
 let menuBackHandler;
 let menuBackRemoved = false;
 let menuFocused = true;
+let menuPredictiveBackBlocked = null;
 const menuCleanups = [];
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
@@ -1423,6 +1425,7 @@ const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu
   useWindowDimensions: () => ({ width: 390, height: 844 }),
   useIsFocused: () => menuFocused,
   BackHandler: { addEventListener: (name, callback) => { assert.equal(name, "hardwareBackPress"); menuBackHandler = callback; return { remove: () => { menuBackRemoved = true; } }; } },
+  usePredictiveBackBlock: (active) => { menuPredictiveBackBlocked = active; },
   getAnchoredMenuLayout,
 });
 const chatMenuProps = {
@@ -1448,6 +1451,7 @@ menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onAcces
 assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
 assert.equal(menuBackHandler(), true);
 assert.deepEqual(chatMenuEvents.splice(0), ["close"], "Android back dismisses the menu without navigating away");
+assert.equal(menuPredictiveBackBlocked, true, "an open menu keeps the back gesture from previewing the screen underneath");
 assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, menuExited, "the menu unmounts once it has shrunk back into its trigger");
 assert.equal(menuNodes.find((node) => node.type === "ScrollView").props.keyboardShouldPersistTaps, "always");
 assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native share sheet must not compete with another Modal");
@@ -1456,6 +1460,7 @@ assert.equal(menuBackRemoved, true);
 menuFocused = false;
 renderChatMenu(chatMenuProps);
 assert.deepEqual(chatMenuEvents.splice(0), ["close"], "leaving the chat must dismiss its menu");
+assert.equal(menuPredictiveBackBlocked, false);
 
 // A composer menu stays mounted after its owner closes it, until it has shrunk back into its button.
 let presenceMounted;
@@ -3185,6 +3190,7 @@ assert.equal(pagerAttributes.some((attribute) => attribute.name.getText(panelsSo
 assert.equal(panelPager.attributes.properties.filter(ts.isJsxSpreadAttribute).some((spread) => spread.getText(panelsSource).includes("contentOffset")), false, "Spreading contentOffset and then dropping it resets the pager onto the Chats page");
 // Render the real pager with native commands delayed until both layouts are ready.
 // This checks geometry and callback ordering, not Android rendering or Reanimated scheduling.
+let panelsPredictiveBackBlocked = null;
 function panelPagerHarness(initialPanel = null) {
   const slots = [];
   let cursor = 0;
@@ -3245,6 +3251,7 @@ function panelPagerHarness(initialPanel = null) {
     scheduleOnRN: (callback, ...args) => callback(...args),
     interpolate: (value, input, output) => Math.min(output[1], Math.max(output[0], value / input[1])), Extrapolation: { CLAMP: "clamp" },
     Reanimated: { ScrollView: "Pager", View: "AnimatedView" }, BackHandler: { addEventListener: () => ({ remove() {} }) },
+    usePredictiveBackBlock: (active) => { panelsPredictiveBackBlocked = active; },
     PANEL_WIDTH_RATIO: 0.86, MAX_PANEL_WIDTH: 360, PANEL_CLOSE_SETTLE_MS: 380,
     PANEL_SEED_RETRY_MS: 240, PANEL_SEED_FORCE_MS: 480, PANEL_SWIPE_SPRING: {},
     PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, recordDebugEvent: (name, fields) => diagnostics.push({ name, fields }), chatScrollTrace: { record() {} }, ChatPanel: "ChatPanel", FilesPanel: "FilesPanel",
@@ -3334,6 +3341,17 @@ delayedPager.content();
 delayedPager.layout();
 delayedPager.render();
 assert.equal(delayedPager.commands.length, commandsAfterSeed, "stream/list re-layouts never reposition a ready pager");
+assert.equal(panelsPredictiveBackBlocked, false, "a closed pager lets the back gesture preview the screen underneath");
+delayedPager.setPanel("chat");
+assert.equal(panelsPredictiveBackBlocked, true, "an open panel closes on back, so the gesture must not preview a pop");
+delayedPager.setPanel(null);
+// cohub-predictive-back matches routes by the name before the last ":" of the native screenId
+// (the route key). Fail here if an Expo Router upgrade changes how it mints route keys.
+const { createRouteKeyMinter } = createRequire(import.meta.url)("expo-router/build/react-navigation/routers/stateKeys.js");
+for (const stateKey of ["navigator:root", "navigator:2-0"]) {
+  const routeKey = createRouteKeyMinter({ key: stateKey, routeKeySeq: 7 }).mint("chat/[sessionId]");
+  assert.equal(routeKey.slice(0, routeKey.lastIndexOf(":")), "chat/[sessionId]", `route keys keep their route name before the last ":" (${routeKey})`);
+}
 for (let cycle = 0; cycle < 2; cycle++) {
   delayedPager.drag(-120, -1200);
   assert.deepEqual(delayedPager.dragged.at(-1), { x: 344 + 120 - PANEL_SWIPE_ACTIVATION_PX, animated: false }, "the swipe follows the finger without jumping by the activation travel");

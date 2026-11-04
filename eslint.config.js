@@ -13,6 +13,7 @@ module.exports = defineConfig([
     "coverage/**",
     "landing/vendor/**",
     "modules/react-native-enriched-markdown/**",
+    "modules/react-native-screens/**",
   ]),
   {
     rules: {

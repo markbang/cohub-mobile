@@ -19,6 +19,7 @@
     "expo-env.d.ts"
   ],
   "exclude": [
-    "reference"
+    "reference",
+    "modules/react-native-screens"
   ]
 }

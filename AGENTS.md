@@ -41,6 +41,8 @@ This repository is the native iOS/Android client. There is no web target.
 - `modules/cohub-device-runtime/`: local Expo module (Android Kotlin) for the device Runtime, a port of upstream `apps/android` runtime code. JS reaches it only through `src/platform/device-runtime.ts`.
 - `modules/cohub-chat-timeline/`: local Expo module that draws the Chat timeline natively (Android: Kotlin RecyclerView; iOS: Objective-C++ scroll view with Swift module glue). Row content and policy stay in JS (`src/components/timeline/` builds node trees); the app reaches the view only through `src/platform/chat-timeline.ts`. The JS list remains for binaries without the module.
 - `modules/react-native-enriched-markdown/`: vendored fork of the native Markdown renderer. Read its `UPSTREAM.md` before editing or updating it.
+- `modules/react-native-screens/`: vendored fork of the native stack, patched to keep the screen under a push for Android's back gesture. Read its `UPSTREAM.md` before editing or updating it.
+- `modules/cohub-predictive-back/`: local Expo module (Android Kotlin) that owns system back and the gesture preview; `app.plugin.js` hooks it into `MainActivity`. JS reaches it only through `src/platform/predictive-back.ts`.
 - `scripts/`: repository checks and native build tooling. Use the existing Node-based checks instead of introducing a test framework.
 
 ## Cohub Reference Source

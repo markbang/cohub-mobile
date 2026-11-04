@@ -80,6 +80,7 @@
         }
       ],
       "./modules/cohub-device-runtime/app.plugin.js",
+      "./modules/cohub-predictive-back/app.plugin.js",
       [
         "expo-splash-screen",
         {

@@ -25,6 +25,8 @@ import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { clearLauncherShortcuts } from "@/src/platform/quick-actions";
 import { LauncherShortcuts } from "@/src/components/LauncherShortcuts";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
+// Configures Android's back gesture before the first screen mounts.
+import "@/src/platform/predictive-back";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { record as recordDebugEvent, useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
 import { globalTouchHandlers, installInteractionInstrumentation, useRouteTracking } from "@/src/data/interaction-trace";

@@ -1,0 +1,23 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'io.github.markbang.cohubmobile'
+version = '1.0.0'
+
+android {
+  namespace "io.github.markbang.cohubmobile.predictiveback"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+  }
+}
+
+dependencies {
+  // The vendored stack exposes the screens a back gesture previews (modules/react-native-screens/UPSTREAM.md).
+  implementation project(':react-native-screens')
+  // BackEventCompat; the app already resolves a newer version through appcompat and fragment.
+  implementation "androidx.activity:activity:1.8.0"
+  implementation "androidx.lifecycle:lifecycle-common:2.6.1"
+}
