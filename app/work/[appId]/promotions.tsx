@@ -137,7 +137,8 @@ function PromotionStatsSheet({ appId, promotion, link, onCopy, onClose }: { appI
   });
   const stats = statsQuery.data ?? null;
   const failed = statsQuery.isError;
-  return <AdaptiveSheet visible title={promotion.name} subtitle={promotion.provider} onClose={onClose}>
+  // A link and a fixed funnel: short and bounded, so it sizes to its rows.
+  return <AdaptiveSheet visible detent="fit" title={promotion.name} subtitle={promotion.provider} onClose={onClose}>
     <View className="gap-4">
       <Pressable accessibilityRole="button" accessibilityLabel={t("app.promo.copyLink")} onPress={onCopy} className="flex-row items-center gap-2 rounded-sm bg-surface-raised px-3 py-3 active:bg-surface-pressed" style={{ borderCurve: "continuous" }}>
         <AppIcon name="link" size={16} tone="accent" />

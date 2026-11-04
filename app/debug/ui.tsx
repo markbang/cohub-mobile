@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState, type ReactNode, type RefObject } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
@@ -15,6 +15,8 @@ import {
   AppSwitch,
   DataError,
   EmptyState,
+  Field,
+  FIELD_INPUT_CLASS,
   IconButton,
   LoadingRows,
   PrimaryButton,
@@ -32,7 +34,7 @@ import {
  * open their overlay on mount because a screenshot cannot wait on a tap, unless `?open=0` asks for the
  * closed state a screen recording starts from.
  */
-const SECTIONS = ["type", "rows", "controls", "states", "menu", "sheet", "confirm"] as const;
+const SECTIONS = ["type", "rows", "controls", "states", "menu", "sheet", "page", "confirm"] as const;
 type Section = (typeof SECTIONS)[number];
 
 function isSection(value: unknown): value is Section {
@@ -62,6 +64,7 @@ export default function DebugUiCatalogScreen() {
         {show("states") ? <StatesSection /> : null}
         {show("menu") ? <MenuSection anchorRef={menuAnchorRef} open={menuOpen} onOpen={() => setMenuOpen(true)} /> : null}
         {show("sheet") ? <SheetSection initiallyOpen={autoOpen && only === "sheet"} /> : null}
+        {show("page") ? <PageSheetSection initiallyOpen={autoOpen && only === "page"} /> : null}
         {show("confirm") ? <ConfirmSection initiallyOpen={autoOpen && only === "confirm"} /> : null}
       </ScrollView>
       <MenuPresence open={menuOpen}><AnchoredActionMenu anchorRef={menuAnchorRef} title="Actions" testID="ui-catalog-menu" actions={MENU_ACTIONS} onClose={() => setMenuOpen(false)} /></MenuPresence>
@@ -220,11 +223,34 @@ function SheetSection({ initiallyOpen }: { initiallyOpen: boolean }) {
   return (
     <Block label="Sheet">
       <PrimaryButton label="Open sheet" variant="secondary" onPress={() => setOpen(true)} />
-      <AdaptiveSheet visible={open} title="Sheet title" subtitle="Subtitle" onClose={() => setOpen(false)} confirm={{ label: "Done", onPress: () => setOpen(false) }}>
+      {/* Two rows: a short sheet sized to its content. */}
+      <AdaptiveSheet visible={open} detent="fit" title="Sheet title" subtitle="Subtitle" onClose={() => setOpen(false)} confirm={{ label: "Done", onPress: () => setOpen(false) }}>
         <SettingsGroup>
           <SettingsRow icon="user" title="Profile" value="Mark" onPress={NOOP} />
           <SettingsRow icon="bell" title="Notifications" value="On" last onPress={NOOP} />
         </SettingsGroup>
+      </AdaptiveSheet>
+    </Block>
+  );
+}
+
+/** A form, as the app's create and edit sheets are: the full-height page sheet. */
+function PageSheetSection({ initiallyOpen }: { initiallyOpen: boolean }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const [name, setName] = useState("");
+  return (
+    <Block label="Page sheet">
+      <PrimaryButton label="Open page sheet" variant="secondary" onPress={() => setOpen(true)} />
+      <AdaptiveSheet visible={open} title="New Space" onClose={() => setOpen(false)} confirm={{ label: "Create", disabled: !name.trim(), onPress: () => setOpen(false) }}>
+        <View className="gap-4">
+          <Field label="Name">
+            <TextInput value={name} onChangeText={setName} placeholder="Design review" className={FIELD_INPUT_CLASS} />
+          </Field>
+          <SettingsGroup label="Placement">
+            <SettingsRow icon="cloud" title="Cloud" value="Default" onPress={NOOP} />
+            <SettingsRow icon="monitor" title="This device" last onPress={NOOP} />
+          </SettingsGroup>
+        </View>
       </AdaptiveSheet>
     </Block>
   );

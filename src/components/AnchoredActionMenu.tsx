@@ -85,7 +85,8 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
           onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-          className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
+          // The iOS 26 menu row, measured: 42 pt tall, the glyph 28 pt in and the title 64 pt in.
+          className="flex-row items-center gap-3.5 py-2.5 pl-7 pr-4 active:bg-surface-pressed disabled:opacity-45"
         >
           <AppIcon name={action.icon} size={22} tone="secondary" />
           <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
