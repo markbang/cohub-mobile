@@ -28,8 +28,9 @@ const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 
 // Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
 // alert survives the route change and would cover the next screen.
-// The first list row under a tab root's search field, on both platforms at 402 pt wide.
-const FIRST_ROW = "50%, 26%";
+// The first list row under a tab root's search field at 402 pt wide; iOS's native Large Title and
+// search field sit lower than Android's drawn ones.
+const FIRST_ROW = { ios: "50%, 40%", android: "50%, 26%" };
 
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
@@ -243,9 +244,9 @@ function pushSteps(lines, platform, steps = []) {
     // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
     if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${step.waitFor}.*`)}`, "    timeout: 20000");
     // For a loading state: the screen counts as ready once it has gone.
-    else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 30000");
+    else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
-    else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint)}`, SETTLE);
+    else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint[platform])}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
