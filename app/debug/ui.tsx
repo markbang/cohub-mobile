@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { getLoadedFonts, isLoaded } from "expo-font";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -92,8 +93,20 @@ const TYPE_RAMP = [
   ["Code", "text-code"],
 ] as const;
 
+const FONT_SAMPLE = { fontSize: 17 } as const;
+// design-system-begin: font probes set the family and weight directly to see which face Android picks.
+const FONT_SAMPLES = [
+  ["System 400", { fontWeight: "400" }],
+  ["System 700", { fontWeight: "700" }],
+  ["Inter", { fontFamily: "Inter" }],
+  ["Inter 500", { fontFamily: "Inter", fontWeight: "500" }],
+  ["Inter 600", { fontFamily: "Inter", fontWeight: "600" }],
+  ["Inter 700", { fontFamily: "Inter", fontWeight: "700" }],
+] as const;
+// design-system-end
+
 function TypeSection() {
-  return (
+  return (<>
     <SettingsGroup label="Type">
       <View className="gap-2 px-4 py-3">
         {TYPE_RAMP.map(([label, className]) => (
@@ -104,7 +117,13 @@ function TypeSection() {
         <Text className="text-body text-accent">Accent body</Text>
       </View>
     </SettingsGroup>
-  );
+    {/* Which faces actually loaded, and how each way of naming them renders, beside the system font. */}
+    <SettingsGroup label={`Fonts · loaded: ${getLoadedFonts().join(", ") || "none"} · Inter ${isLoaded("Inter") ? "yes" : "no"}`}>
+      <View className="gap-1 px-4 py-3">
+        {FONT_SAMPLES.map(([label, style]) => <Text key={label} numberOfLines={1} className="text-fg" style={[FONT_SAMPLE, style]}>{label} · Rag 0123</Text>)}
+      </View>
+    </SettingsGroup>
+  </>);
 }
 
 const SELECT_OPTIONS = [
