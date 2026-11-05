@@ -45,7 +45,7 @@ export default function ChatsScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks, sessionLatestTurns: state.sessionLatestTurns, sessionTurnStatuses: state.sessionTurnStatuses }), shallowEqual);
@@ -220,7 +220,8 @@ export default function ChatsScreen() {
       <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
       <LegendList
         ref={listRef}
-        onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
+        refScrollView={scrollRef}
+        onScroll={(event) => { pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
         onScrollBeginDrag={(event) => { draggingRef.current = true; holdRowOrder(); pullRefresh.onScrollBeginDrag(event); }}
         onScrollEndDrag={() => { draggingRef.current = false; releaseRowOrder(); }}
         onMomentumScrollEnd={() => { draggingRef.current = false; releaseRowOrder(); }}

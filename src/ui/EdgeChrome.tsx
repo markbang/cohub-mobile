@@ -1,22 +1,28 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
-import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle } from "react-native";
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { interpolate, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
 import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
 
-export function useEdgeChrome(options?: { reserveComposer?: boolean }) {
+/**
+ * With `trackScroll`, the scroll view given `scrollRef` drives `scrollY` on the UI thread, so the header's
+ * veil and collapsing title follow the finger frame by frame, as UIKit's bar does, even while JS is busy.
+ */
+export function useEdgeChrome(options?: { reserveComposer?: boolean; trackScroll?: boolean }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(insets.top + edgeChrome.headerMinHeight);
   const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom) : 0);
   const scrollY = useSharedValue(0);
+  const scrollRef = useAnimatedRef<ScrollView>();
+  useScrollOffset(options?.trackScroll ? scrollRef : null, scrollY);
   return {
     headerHeight,
     footerHeight,
     scrollY,
-    onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => scrollY.set(event.nativeEvent.contentOffset.y),
+    scrollRef,
     onHeaderLayout: (event: LayoutChangeEvent) => setHeaderHeight(event.nativeEvent.layout.height),
     onFooterLayout: (event: LayoutChangeEvent) => setFooterHeight(event.nativeEvent.layout.height),
   };

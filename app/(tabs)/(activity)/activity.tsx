@@ -1,6 +1,6 @@
 import { useRouter, useScrollToTop } from "expo-router";
 import type { BillingSubscriptionHistoryStatus } from "@neta-art/cohub";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { ActivityHeatmap, ActivityHeatmapSkeleton } from "@/src/components/ActivityHeatmap";
@@ -23,14 +23,13 @@ export default function ActivityScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const subscriptions = useBillingHistory("subscriptions");
   const subscriptionItems = subscriptions.data?.kind === "subscriptions" ? subscriptions.data.list.items as BillingSubscriptionHistoryStatus[] : [];
   const currentSubscription = subscriptionItems.find((item) => item.status === "active") ?? subscriptionItems[0] ?? null;
-  const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
   const retry = () => void refresh();
   const refreshOnPull = async () => {
@@ -48,7 +47,7 @@ export default function ActivityScreen() {
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => pullRefresh.onScroll(event)} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
       {pullRefresh.header}
       {nativeHeaders ? null : <LargeTitle title={t("tabs.activity")} scrollY={scrollY} />}
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}

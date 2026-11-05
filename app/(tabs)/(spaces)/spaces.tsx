@@ -41,7 +41,7 @@ export default function SpacesScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -254,7 +254,8 @@ export default function SpacesScreen() {
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <LegendList
       ref={listRef}
-      onScroll={(event) => { onScroll(event); pullRefresh.onScroll(event); }}
+      refScrollView={scrollRef}
+      onScroll={(event) => pullRefresh.onScroll(event)}
       onScrollBeginDrag={pullRefresh.onScrollBeginDrag}
       scrollEventThrottle={16}
       data={listItems}

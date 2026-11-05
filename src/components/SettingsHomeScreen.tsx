@@ -1,6 +1,6 @@
 import { useRouter, useScrollToTop } from "expo-router";
 import { haptics } from "@/src/platform/haptics";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useCurrentUser } from "@/src/auth/current-user";
 import { useProfileSession } from "@/src/auth/profile-session";
@@ -24,8 +24,7 @@ import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 
 export function SettingsHomeScreen() {
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, onScroll } = useEdgeChrome();
-  const scrollRef = useRef<ScrollView>(null);
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   useScrollToTop(scrollRef);
   const { t, preference: language, setPreference: setLanguage } = useTranslation();
   const showToast = useToast();
@@ -75,7 +74,7 @@ export function SettingsHomeScreen() {
 
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}><LargeTitleBar title={t("tabs.me")} scrollY={scrollY} /></EdgeHeader>}
-    <ScrollView ref={scrollRef} scrollEnabled={!selecting} onScroll={onScroll} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} scrollEnabled={!selecting} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
       {nativeHeaders ? null : <LargeTitle title={t("tabs.me")} scrollY={scrollY} />}
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
       <View className="mb-6 mt-4 px-4">
