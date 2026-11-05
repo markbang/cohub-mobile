@@ -153,6 +153,8 @@ export const en = {
   "chats.source.all": "All",
   "chats.source.web": "Web app",
   "chats.source.other": "Other",
+  "chats.source.web.detail": "Started in the browser",
+  "chats.source.other.detail": "Channels, scheduled tasks, the API, and the CLI",
   "chats.source.title": "Chat source",
   "chats.source.filter": "Filter Chats by source",
   "chats.source.saveFailed": "Could not save the Chat source filter. Try again.",

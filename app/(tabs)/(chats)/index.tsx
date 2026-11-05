@@ -4,7 +4,7 @@ import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/
 import { Text, TextInput, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
-import { nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
@@ -184,12 +184,12 @@ export default function ChatsScreen() {
 
   const sourceOptions = [
     { value: "all", label: t("chats.source.all"), icon: "messages" },
-    { value: "web", label: t("chats.source.web"), icon: "globe" },
-    { value: "other", label: t("chats.source.other"), icon: "link" },
-  ] as const satisfies readonly { value: SessionSourceFilter; label: string; icon: NativeMenuAction["icon"] }[];
+    { value: "web", label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" },
+    { value: "other", label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" },
+  ] as const satisfies readonly { value: SessionSourceFilter; label: string; detail?: string; icon: NativeMenuAction["icon"] }[];
   const sourceLabel = sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
-  // Android menus have no check mark of their own, so the chosen source trades its glyph for one.
-  const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: !nativeMenus && option.value === sourceFilter ? "check" : option.icon, title: option.label, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
+  // Counting a source needs its own paged query, so each choice says what it covers instead.
+  const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: "detail" in option ? option.detail : undefined, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
   const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({

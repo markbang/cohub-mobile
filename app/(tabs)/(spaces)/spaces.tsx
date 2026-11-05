@@ -5,7 +5,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
-import { nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
@@ -97,6 +97,10 @@ export default function SpacesScreen() {
     const candidates = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now });
     return candidates.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   }, [filter, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits, trimmedQuery]);
+  const filterCounts = useMemo<Record<SpacesTabFilter, number | null>>(() => {
+    const count = (listFilter: SpaceFilter) => selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now }).length;
+    return { recent: count("recent"), all: count("all"), pinned: count("pinned"), device: deviceInstances ? deviceInstances.length : null };
+  }, [deviceInstances, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   const visibleSpaceKeyRef = useRef("");
   const onViewableItemsChanged = useCallback((info: { viewableItems: ViewToken<SpaceListItem>[] }) => {
@@ -227,8 +231,11 @@ export default function SpacesScreen() {
     ...(deviceRuntimeSupported ? [{ value: "device", label: t("deviceRuntime.thisDevice"), icon: "smartphone" }] as const : []),
   ] as const satisfies readonly { value: SpacesTabFilter; label: string; icon: NativeMenuAction["icon"] }[];
   const filterLabel = filterOptions.find((option) => option.value === filter)?.label ?? t("spaces.filter.recent");
-  // Android menus have no check mark of their own, so the chosen scope trades its glyph for one.
-  const filterActions: NativeMenuAction[] = filterOptions.map((option) => ({ icon: !nativeMenus && option.value === filter ? "check" : option.icon, title: option.label, checked: option.value === filter, onPress: () => setFilter(option.value) }));
+  // Each scope shows how many Spaces it holds, as a count after its name.
+  const filterActions: NativeMenuAction[] = filterOptions.map((option) => {
+    const count = filterCounts[option.value];
+    return { icon: option.icon, title: count === null ? option.label : `${option.label} · ${count}`, checked: option.value === filter, onPress: () => setFilter(option.value) };
+  });
   const openCreate = () => { setCreateError(null); setCreateOpen(true); };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({

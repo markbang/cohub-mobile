@@ -150,6 +150,8 @@ export const zh: Record<TranslationKey, string> = {
   "chats.source.all": "全部",
   "chats.source.web": "网页应用",
   "chats.source.other": "其他",
+  "chats.source.web.detail": "在浏览器中发起",
+  "chats.source.other.detail": "频道、定时任务、API 和命令行",
   "chats.source.title": "对话来源",
   "chats.source.filter": "按来源筛选对话",
   "chats.source.saveFailed": "无法保存对话来源筛选，请重试。",

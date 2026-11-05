@@ -1581,7 +1581,7 @@ for (const [path, labels, chips] of [
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
   chromeNodes(render().find((node) => node.type === "LargeTitleBar").props.actions).find((node) => node.props?.name === "filter").props.onPress();
-  const deviceAction = () => render().find((node) => node.type === "AnchoredActionMenu").props.actions.find((action) => action.title === "deviceRuntime.thisDevice");
+  const deviceAction = () => render().find((node) => node.type === "AnchoredActionMenu").props.actions.find((action) => action.title.startsWith("deviceRuntime.thisDevice"));
   deviceAction().onPress();
   assert.equal(deviceAction().checked, true);
   assert.deepEqual(list().props.data.map((item) => [item.kind, item.instance.spaceId, item.space?.name ?? null]), [["device", "space-a", "Field notes"], ["device", "space-gone", null]], "only served Spaces are listed; an unloaded one stays manageable");
