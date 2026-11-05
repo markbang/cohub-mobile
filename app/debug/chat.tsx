@@ -1,7 +1,8 @@
 import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { FlatList, Text, View, useWindowDimensions } from "react-native";
+import { MessageBubble } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
@@ -28,11 +29,13 @@ export default function DebugChatScreen() {
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
   const [draft, setDraft] = useState("");
+  const { width } = useWindowDimensions();
   // Printed under the bar so a snapshot shows whether rows were laid out (frame) even when none is painted.
   const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const [probe, setProbe] = useState("probing…");
   useEffect(() => {
     const timer = setTimeout(() => {
+      if (!nativeChatTimeline) { setProbe("JS list"); return; }
       void timelineRef.current?.inspect().then((result) => {
         const frame = result.firstFrame ? `${Math.round(result.firstFrame.x)},${Math.round(result.firstFrame.y)} ${Math.round(result.firstFrame.width)}×${Math.round(result.firstFrame.height)}` : "none";
         setProbe(`rows ${result.rows} · visible ${result.state?.visibleKeys.length ?? "?"} · first ${frame}`);
@@ -94,7 +97,14 @@ export default function DebugChatScreen() {
         onWidth={NOOP}
         refreshing={false}
         onRefresh={NOOP}
-      /> : <View className="flex-1 items-center justify-center"><Text className="text-body text-fg-muted">This binary has no native timeline.</Text></View>}
+      /> : <FlatList
+        // The Chat screen's JS list path: what iOS and binaries without the native timeline draw.
+        key={fixture}
+        data={messages}
+        keyExtractor={(message) => message.id}
+        renderItem={({ item }) => <MessageBubble message={item} availableWidth={width} />}
+        contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
+      />}
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
       <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" />
