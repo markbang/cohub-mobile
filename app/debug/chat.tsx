@@ -45,6 +45,7 @@ export default function DebugChatScreen() {
           `rows ${result.rows} · visible ${state?.visibleKeys.length ?? "?"} · first ${frame}`,
           `following ${state?.following} · toLatest ${state?.distanceToLatest === null || state?.distanceToLatest === undefined ? "?" : Math.round(state.distanceToLatest)} · toOldest ${state?.distanceToOldest === null || state?.distanceToOldest === undefined ? "?" : Math.round(state.distanceToOldest)}`,
           `setRows failures ${result.rowsFailures}${result.rowsError ? ` · ${result.rowsError}` : ""}`,
+          ...(state?.viewportWidth === undefined ? [] : [`native viewport ${Math.round(state.viewportWidth)}×${Math.round(state.viewportHeight ?? 0)} · rows ${state.rowCount} · content ${Math.round(state.contentHeight ?? 0)}`]),
         ].join("\n"));
       }).catch((error: unknown) => setProbe(`probe failed: ${String(error)}`));
     }, 2000);
