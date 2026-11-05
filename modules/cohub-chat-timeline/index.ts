@@ -75,7 +75,7 @@ export type TimelineScrollEvent = { offsetY: number; contentHeight: number; view
 export type TimelineState = {
   following: boolean; dragging: boolean; momentum: boolean; distanceToLatest: number | null; distanceToOldest: number | null; visibleKeys: string[]; keyboardLift: number;
   /** iOS binaries after v2.3.9: the viewport and content the timeline lays out in, for diagnosing a blank timeline. */
-  viewportWidth?: number; viewportHeight?: number; rowCount?: number; contentHeight?: number;
+  viewportWidth?: number; viewportHeight?: number; rowCount?: number; contentHeight?: number; diagnostics?: Record<string, unknown>;
 };
 
 type Event<T> = { nativeEvent: T };

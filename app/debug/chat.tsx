@@ -36,7 +36,8 @@ export default function DebugChatScreen() {
   const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const [probe, setProbe] = useState("probing…");
   useEffect(() => {
-    const timer = setTimeout(() => {
+    // Probed every two seconds: a row that appears late shows up in a later snapshot of the line.
+    const timer = setInterval(() => {
       if (!useNative) { setProbe("JS list"); return; }
       void timelineRef.current?.inspect().then((result) => {
         const frame = result.firstFrame ? `${Math.round(result.firstFrame.x)},${Math.round(result.firstFrame.y)} ${Math.round(result.firstFrame.width)}×${Math.round(result.firstFrame.height)}` : "none";
@@ -46,10 +47,11 @@ export default function DebugChatScreen() {
           `following ${state?.following} · toLatest ${state?.distanceToLatest === null || state?.distanceToLatest === undefined ? "?" : Math.round(state.distanceToLatest)} · toOldest ${state?.distanceToOldest === null || state?.distanceToOldest === undefined ? "?" : Math.round(state.distanceToOldest)}`,
           `setRows failures ${result.rowsFailures}${result.rowsError ? ` · ${result.rowsError}` : ""}`,
           ...(state?.viewportWidth === undefined ? [] : [`native viewport ${Math.round(state.viewportWidth)}×${Math.round(state.viewportHeight ?? 0)} · rows ${state.rowCount} · content ${Math.round(state.contentHeight ?? 0)}`]),
+          ...(state?.diagnostics ? [JSON.stringify(state.diagnostics)] : []),
         ].join("\n"));
       }).catch((error: unknown) => setProbe(`probe failed: ${String(error)}`));
     }, 2000);
-    return () => clearTimeout(timer);
+    return () => clearInterval(timer);
   }, [fixture, useNative]);
 
   return <Screen edgeToEdge>
