@@ -24,4 +24,19 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
-module.exports = withUniwindConfig(config, { cssEntryFile: "./global.css", dtsFile: "./uniwind-types.d.ts" });
+const uniwindConfig = withUniwindConfig(config, { cssEntryFile: "./global.css", dtsFile: "./uniwind-types.d.ts" });
+
+// Uniwind swaps `react-native` for its own module, which re-exports a fixed list that lacks React Native
+// 0.88's `AssetRegistry`. expo-asset imports it from there, so every `require()`d asset loaded through it
+// (fonts in `useFonts`) failed with "Cannot read property 'getAssetByID' of undefined". expo-asset styles
+// no components, so it gets React Native itself.
+const uniwindResolveRequest = uniwindConfig.resolver.resolveRequest;
+const UNSWAPPED_ORIGINS = [`${path.sep}node_modules${path.sep}expo-asset${path.sep}`];
+uniwindConfig.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === "react-native" && UNSWAPPED_ORIGINS.some((origin) => context.originModulePath.includes(origin))) {
+    return context.resolveRequest(context, moduleName, platform);
+  }
+  return uniwindResolveRequest(context, moduleName, platform);
+};
+
+module.exports = uniwindConfig;
