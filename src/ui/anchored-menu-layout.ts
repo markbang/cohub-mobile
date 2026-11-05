@@ -7,8 +7,7 @@ export function getAnchoredMenuLayout({ anchor, viewport, bottomInset, contentWi
   contentWidth?: number;
 }): { left: number; top: number; width: number; maxHeight: number } {
   const margin = 8;
-  // UIKit's menus are never narrower than 250 pt, so short items leave room on the trailing side.
-  const minWidth = 250;
+  const minWidth = 180;
   const maxWidth = 280;
   const availableWidth = Math.max(0, viewport.width - margin * 2);
   const width = Math.min(availableWidth, Math.max(minWidth, Math.min(maxWidth, contentWidth)));
