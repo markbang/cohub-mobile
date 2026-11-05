@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState, type ReactNode, type RefObject } from "react";
-import { getLoadedFonts, isLoaded } from "expo-font";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { getLoadedFonts, isLoaded, loadAsync } from "expo-font";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
@@ -12,6 +12,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { PLATFORM_FONT_FAMILIES } from "@/src/ui/platform-fonts";
 import {
   AppSwitch,
   DataError,
@@ -106,6 +107,11 @@ const FONT_SAMPLES = [
 // design-system-end
 
 function TypeSection() {
+  // Loads the platform fonts again to surface the error the root layout's `useFonts` swallows.
+  const [fontLoad, setFontLoad] = useState("loading…");
+  useEffect(() => {
+    loadAsync(PLATFORM_FONT_FAMILIES).then(() => setFontLoad(`ok · Inter ${isLoaded("Inter") ? "yes" : "no"}`), (error: unknown) => setFontLoad(`error: ${error instanceof Error ? error.message : String(error)}`));
+  }, []);
   return (<>
     <SettingsGroup label="Type">
       <View className="gap-2 px-4 py-3">
@@ -118,7 +124,7 @@ function TypeSection() {
       </View>
     </SettingsGroup>
     {/* Which faces actually loaded, and how each way of naming them renders, beside the system font. */}
-    <SettingsGroup label={`Fonts · loaded: ${getLoadedFonts().join(", ") || "none"} · Inter ${isLoaded("Inter") ? "yes" : "no"}`}>
+    <SettingsGroup label={`Fonts · ${fontLoad} · runtime: ${getLoadedFonts().filter((name) => !name.startsWith("KaTeX")).join(", ") || "none"}`}>
       <View className="gap-1 px-4 py-3">
         {FONT_SAMPLES.map(([label, style]) => <Text key={label} numberOfLines={1} className="text-fg" style={[FONT_SAMPLE, style]}>{label} · Rag 0123</Text>)}
       </View>
