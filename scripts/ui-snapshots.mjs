@@ -28,6 +28,9 @@ const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 
 // Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
 // alert survives the route change and would cover the next screen.
+// The first list row under a tab root's search field, on both platforms at 402 pt wide.
+const FIRST_ROW = "50%, 26%";
+
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
   { name: "catalog-rows", ready: "Settings rows", link: "cohub://debug/ui?section=rows" },
@@ -49,8 +52,8 @@ export const SCREENS = [
   { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
   { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
   { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
-  // iOS reads the row as one element labelled "Open <title>, …", so the title is matched inside it.
-  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: ".*Who are you\\?.*" }, { waitGone: "Opening Chat" }] },
+  // The first row, by position: the test account's newest Chat changes from run to run.
+  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }] },
   { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
   { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
@@ -73,7 +76,7 @@ export const MOTIONS = [
   { name: "motion-scroll-activity", ready: "Usage details", link: "cohub://activity", setup: [{ waitGone: "Loading" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-scroll-settings", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-chat", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }, { swipe: "up" }] },
-  { name: "motion-space", link: "cohub://spaces", setup: [{ tapOn: ".*Home.*" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-space", link: "cohub://spaces", setup: [{ tapPoint: FIRST_ROW }], steps: [{ swipe: "up" }, { swipe: "down" }] },
 ];
 
 function parseArgs(argv) {
@@ -242,6 +245,7 @@ function pushSteps(lines, platform, steps = []) {
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 30000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
+    else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
