@@ -297,6 +297,8 @@ function findFile(root, name) {
   return null;
 }
 
+const MAESTRO_ATTEMPT_MS = 30 * 60 * 1000;
+
 function runMaestro({ device, flowPath, out, testOutput }) {
   const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
     const value = process.env[key]?.trim();
@@ -306,13 +308,16 @@ function runMaestro({ device, flowPath, out, testOutput }) {
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
   const args = ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
-  let result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
+  // A failed iOS `viewHierarchy` request can leave Maestro hung instead of exiting, so each attempt is capped.
+  const run = () => spawnSync("maestro", args, { cwd: out, stdio: "inherit", timeout: MAESTRO_ATTEMPT_MS, killSignal: "SIGKILL" });
+  const timedOut = (value) => value.error?.code === "ETIMEDOUT";
+  let result = run();
   // Maestro's on-device driver dies mid-run often enough on CI emulators that two retries are worth it,
   // after a pause for the device to settle (as in scripts/e2e/android.mjs).
-  for (let attempt = 2; attempt <= 3 && !result.error && result.status !== 0; attempt += 1) {
-    process.stdout.write(`Maestro failed on ${basename(flowPath)}; retrying (attempt ${attempt} of 3).\n`);
+  for (let attempt = 2; attempt <= 3 && (timedOut(result) || (!result.error && result.status !== 0)); attempt += 1) {
+    process.stdout.write(`Maestro ${timedOut(result) ? "timed out" : "failed"} on ${basename(flowPath)}; retrying (attempt ${attempt} of 3).\n`);
     sleepSync(15_000);
-    result = spawnSync("maestro", args, { cwd: out, stdio: "inherit" });
+    result = run();
   }
   // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
   const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
