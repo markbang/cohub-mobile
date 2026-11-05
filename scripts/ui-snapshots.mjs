@@ -256,8 +256,8 @@ function pushSteps(lines, platform, steps = []) {
     else if (step.swipe === "up") lines.push("- swipe:", "    start: 50%, 72%", "    end: 50%, 32%", "    duration: 700");
     else if (step.swipe === "down") lines.push("- swipe:", "    start: 50%, 32%", "    end: 50%, 72%", "    duration: 700");
     else {
-      // Scrolling back up brings a minimized tab bar back.
-      if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - swipe:", "          start: 50%, 32%", "          end: 50%, 72%", "          duration: 400", "      - waitForAnimationToEnd:", "          timeout: 5000");
+      // Tapping the minimized bar (the current tab's bubble, bottom leading) expands it again.
+      if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - tapOn:", "          point: 13%, 94%", "      - waitForAnimationToEnd:", "          timeout: 5000");
       lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
     }
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
