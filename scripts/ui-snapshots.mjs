@@ -331,6 +331,11 @@ function redact(root, secrets) {
     if (statSync(path).isDirectory()) {
       redact(path, secrets);
     } else if (/\.(json|log|txt|yaml|xml)$/.test(entry)) {
+      // Native diagnostics (`cohub-diag:` lines) go up beside the log, which is not uploaded.
+      if (entry.endsWith(".log") && !entry.includes("cohub-diag")) {
+        const found = spawnSync("grep", ["-h", "cohub-diag", path], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+        if (found.stdout) writeFileSync(`${path}.cohub-diag.txt`, found.stdout);
+      }
       // The simulator's own log can pass the largest string Node can hold; nobody reads it, so it goes.
       if (statSync(path).size > MAX_REDACTED_BYTES) {
         rmSync(path);
