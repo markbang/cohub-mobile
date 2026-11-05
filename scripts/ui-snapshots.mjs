@@ -50,8 +50,8 @@ export const SCREENS = [
   { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
   { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
   // iOS reads the row as one element labelled "Open <title>, …", so the title is matched inside it.
-  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: ".*Who are you\\?.*" }] },
-  { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
+  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: ".*Who are you\\?.*" }, { waitFor: "Message the Agent" }] },
+  { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
   { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
@@ -237,7 +237,9 @@ const SETTLE = "    waitToSettleTimeoutMs: 1000";
 
 function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
-    if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
+    // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
+    if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${step.waitFor}.*`)}`, "    timeout: 20000");
+    else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
