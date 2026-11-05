@@ -1454,6 +1454,8 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
 
 @implementation RNSScreen {
   __weak id _previousFirstResponder;
+  // cohub: the scroll view last handed to UIKit, so repeated passes do not re-register it.
+  __weak UIScrollView *_registeredContentScrollView;
   CGRect _lastViewFrame;
   UIView *_fakeView;
   CADisplayLink *_animationTimer;
@@ -1549,6 +1551,8 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
 - (void)viewDidAppear:(BOOL)animated
 {
   [super viewDidAppear:animated];
+  // cohub: see registerContentScrollViewIfNeeded; 8 tries over two seconds cover a list mounting late.
+  [self registerContentScrollViewRetrying:8];
   if (!_isSwiping || _shouldNotify) {
     // we are going forward or dismissing without swipe
     // or successfully swiped back
@@ -1608,6 +1612,44 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
   if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
     [self.screenView updateBounds];
   }
+  [self registerContentScrollViewIfNeeded];
+}
+
+// cohub: the legacy stack never told UIKit which scroll view a screen shows (only the gamma stack calls
+// `setContentScrollView:forEdge:`), so neither the navigation bar's Large Title nor a minimizing tab bar
+// tracked the content. The screen registers its first-descendant scroll view on itself, its navigation
+// controller, and the tab that hosts it. A list mounts deep in the tree after the screen first lays out,
+// so an appearing screen retries until it finds one.
+- (BOOL)registerContentScrollViewIfNeeded
+{
+  if (@available(iOS 15.0, *)) {
+    UIScrollView *scrollView = [RNSScrollViewFinder findScrollViewInFirstDescendantChainFrom:self.screenView];
+    if (scrollView == nil) {
+      return NO;
+    }
+    if (scrollView != _registeredContentScrollView) {
+      _registeredContentScrollView = scrollView;
+      [self setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeAll];
+    }
+    UINavigationController *navigationController = self.navigationController;
+    if (navigationController.topViewController == self) {
+      [navigationController setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeAll];
+      [navigationController.parentViewController setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeAll];
+    }
+    return YES;
+  }
+  return NO;
+}
+
+- (void)registerContentScrollViewRetrying:(NSInteger)attemptsLeft
+{
+  if ([self registerContentScrollViewIfNeeded] || attemptsLeft <= 0) {
+    return;
+  }
+  __weak RNSScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [weakSelf registerContentScrollViewRetrying:attemptsLeft - 1];
+  });
 }
 
 - (BOOL)isModalWithHeader
