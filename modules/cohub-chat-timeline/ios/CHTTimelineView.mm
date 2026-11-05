@@ -109,6 +109,17 @@ static NSNumber *CHTNum(id value)
   NSMutableSet<NSString *> *_pendingAppear;
   NSMutableDictionary<NSString *, UIViewPropertyAnimator *> *_runningFlights;
   NSMutableDictionary<NSString *, UIView *> *_flightViews;
+
+  // Diagnostics: how often each step ran, and what the last bound row held.
+  NSUInteger _passes;
+  NSUInteger _passesSkippedSize;
+  NSUInteger _passesQueued;
+  NSUInteger _rowsCreated;
+  NSUInteger _rowsRecycled;
+  NSUInteger _setRowsCalls;
+  NSString *_lastNodeType;
+  NSUInteger _lastNodeChildren;
+  CGFloat _lastMeasured;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -245,6 +256,7 @@ static NSNumber *CHTNum(id value)
 
 - (void)setRowKeys:(NSArray<NSString *> *)keys rows:(NSDictionary *)rows
 {
+  _setRowsCalls++;
   // Rows added or removed above the reader must not move what they are reading. While
   // following, the tail pin decides instead.
   CHTAnchor *anchor = _loaded && !_following && ![keys isEqualToArray:_keys] ? [self captureAnchor] : nil;
@@ -375,6 +387,56 @@ static NSNumber *CHTNum(id value)
     @"distanceToOldest" : @(MAX(0, _scroll.contentOffset.y - [self minOffset])),
     @"visibleKeys" : _visibleKeys ?: @[],
     @"keyboardLift" : @(_lift),
+    @"viewportWidth" : @(_scroll.bounds.size.width),
+    @"viewportHeight" : @(_scroll.bounds.size.height),
+    @"rowCount" : @(_keys.count),
+    @"contentHeight" : @(_scroll.contentSize.height),
+    @"diagnostics" : [self diagnostics],
+  };
+}
+
+/// Internal layout state for diagnosing a timeline that lays out rows but shows none.
+- (NSDictionary *)diagnostics
+{
+  CHTRowView *first = nil;
+  for (NSString *key in _visible) {
+    if (!first || _index[key].unsignedIntegerValue < _index[first.key].unsignedIntegerValue)
+      first = _visible[key];
+  }
+  CGRect firstFrame = first ? first.frame : CGRectZero;
+  CGRect firstRoot = first.subviews.firstObject ? first.subviews.firstObject.frame : CGRectZero;
+  return @{
+    @"visible" : @(_visible.count),
+    @"inPass" : @(_inPass),
+    @"passes" : @(_passes),
+    @"passesSkippedSize" : @(_passesSkippedSize),
+    @"passesQueued" : @(_passesQueued),
+    @"rowsCreated" : @(_rowsCreated),
+    @"rowsRecycled" : @(_rowsRecycled),
+    @"setRowsCalls" : @(_setRowsCalls),
+    @"lastNodeType" : _lastNodeType ?: @"",
+    @"lastNodeChildren" : @(_lastNodeChildren),
+    @"lastMeasured" : @(_lastMeasured),
+    @"selfAddress" : [NSString stringWithFormat:@"%p", self],
+    @"inRange" : @(_inRange.count),
+    @"heights" : @(_heights.count),
+    @"loaded" : @(_loaded),
+    @"lead" : @(_lead),
+    @"offset" : @(_scroll.contentOffset.y),
+    @"insetTop" : @(_insetTop),
+    @"viewTop" : @(_viewTop),
+    @"viewBottom" : @(_viewBottom),
+    @"selfFrame" : NSStringFromCGRect(self.frame),
+    @"scrollFrame" : NSStringFromCGRect(_scroll.frame),
+    @"inWindow" : @(self.window != nil),
+    @"scrollSubviews" : @(_scroll.subviews.count),
+    @"firstKey" : first.key ?: @"",
+    @"firstFrame" : NSStringFromCGRect(firstFrame),
+    @"firstRoot" : NSStringFromCGRect(firstRoot),
+    @"firstAlpha" : @(first ? first.alpha : -1),
+    @"firstHidden" : @(first ? first.hidden : NO),
+    @"firstInScroll" : @(first ? first.superview == _scroll : NO),
+    @"firstSubviews" : @(first ? first.subviews.count : 0),
   };
 }
 
@@ -517,13 +579,17 @@ static NSNumber *CHTNum(id value)
 - (void)pass:(CHTAnchor *)explicitAnchor
 {
   if (_inPass) {
+    _passesQueued++;
     _passQueued = YES;
     return;
   }
   CGFloat width = _scroll.bounds.size.width;
   CGFloat height = _scroll.bounds.size.height;
-  if (width <= 0 || height <= 0)
+  if (width <= 0 || height <= 0) {
+    _passesSkippedSize++;
     return;
+  }
+  _passes++;
   _inPass = YES;
   _adjusting = YES;
   if (width != _width) {
@@ -617,6 +683,10 @@ static NSNumber *CHTNum(id value)
     CHTRowView *row = [self rowForKey:key];
     [_inRange addObject:key];
     CGFloat height = [row layoutForWidth:_width];
+    id node = _specs[key][@"node"];
+    _lastNodeType = [node isKindOfClass:[NSDictionary class]] ? ([node[@"type"] description] ?: @"(no type)") : NSStringFromClass([node class]) ?: @"(nil)";
+    _lastNodeChildren = [node isKindOfClass:[NSDictionary class]] && [node[@"children"] isKindOfClass:[NSArray class]] ? [node[@"children"] count] : 0;
+    _lastMeasured = height;
     NSNumber *old = _heights[key];
     if (!old || fabs(old.doubleValue - height) > 0.5)
       changed = YES;
@@ -632,10 +702,12 @@ static NSNumber *CHTNum(id value)
   if (!row) {
     NSString *type = spec[@"type"] ?: @"row";
     NSMutableArray<CHTRowView *> *pool = _pool[type];
-    // A pooled row still bound to this key keeps its content.
-    NSUInteger found = [pool indexOfObjectPassingTest:^BOOL(CHTRowView *candidate, NSUInteger index, BOOL *stop) {
+    // A pooled row still bound to this key keeps its content. Before a type's first recycle its pool
+    // is nil, and a message to nil returns 0, not NSNotFound: that read as "found at 0", bound a nil
+    // row, and left every Chat blank. An absent pool finds nothing.
+    NSUInteger found = pool ? [pool indexOfObjectPassingTest:^BOOL(CHTRowView *candidate, NSUInteger index, BOOL *stop) {
       return [candidate.key isEqualToString:key];
-    }];
+    }] : NSNotFound;
     if (found != NSNotFound) {
       row = pool[found];
       [pool removeObjectAtIndex:found];
@@ -645,6 +717,7 @@ static NSNumber *CHTNum(id value)
     } else {
       row = [CHTRowView new];
       row.delegate = self;
+      _rowsCreated++;
     }
     if (row.superview != _scroll)
       [_scroll addSubview:row];
@@ -684,6 +757,7 @@ static NSNumber *CHTNum(id value)
 
 - (void)recycle:(CHTRowView *)row
 {
+  _rowsRecycled++;
   [self cancelFlight:row.key];
   [row removeFromSuperview];
   NSString *type = row.type ?: @"row";

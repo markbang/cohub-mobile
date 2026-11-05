@@ -102,6 +102,15 @@ public final class ChatTimelineView: ExpoView {
     }
   }
 
+  // Fabric sizes this view after init. Autoresizing from the zero frame left the timeline at 0 × 0,
+  // so it laid out no rows and every Chat opened blank; it takes this view's bounds on each layout.
+  public override func layoutSubviews() {
+    super.layoutSubviews()
+    if timeline.frame != bounds {
+      timeline.frame = bounds
+    }
+  }
+
   private func dispatch(_ name: String, _ payload: [String: Any]) {
     switch name {
     case "onTimelineScroll": onTimelineScroll(payload)
