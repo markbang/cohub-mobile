@@ -98,7 +98,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
             onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
             className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
           >
-            <AppIcon name={action.checked ? "check" : action.icon} size={22} tone={action.checked ? "accent" : "secondary"} />
+            <AppIcon name={action.checked ? "check" : action.icon} size={22} tone="secondary" />
             <View className="min-w-0 flex-1">
               <Text className="text-body text-fg">{action.title}</Text>
               {action.detail ? <Text numberOfLines={2} className="text-caption text-fg-muted">{action.detail}</Text> : null}
