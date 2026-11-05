@@ -4,7 +4,7 @@ import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/
 import { Text, TextInput, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
-import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
 import { SessionForkToggle, SessionRow } from "@/src/components/SessionRow";
@@ -26,7 +26,7 @@ import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { useEmptyListFill } from "@/src/ui/NativeHeader";
+import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
@@ -45,7 +45,7 @@ export default function ChatsScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef, contentTop, scrollInsets } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks, sessionLatestTurns: state.sessionLatestTurns, sessionTurnStatuses: state.sessionTurnStatuses }), shallowEqual);
@@ -192,23 +192,31 @@ export default function ChatsScreen() {
   const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: "detail" in option ? option.detail : undefined, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
   const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
+  useNativeHeader({
+    title: t("tabs.chats"),
+    search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
+    // Leading to trailing: the prominent action takes the trailing edge, as on Android.
+    items: [
+      { kind: "menu", label: t("chats.source.filter"), icon: "filter", title: sourceLabel, active: sourceFilter !== "all", actions: sourceActions },
+      { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
+    ],
+  });
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <LoadingState label={t("chats.searching")} />
     : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
     <Screen edgeToEdge>
-      {/* Both platforms draw the Large Title, so it collapses into the bar on scroll; iOS keeps its system menu. */}
-      <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
-        {nativeMenus ? <NativeMenuButton appearance="bar" icon="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} title={sourceLabel} active={sourceFilter !== "all"} actions={sourceActions} testID="chats-source-menu-button" /> : <View ref={sourceButtonRef} collapsable={false} className={sourceMenuOpen ? "opacity-0" : undefined}>
+        <View ref={sourceButtonRef} collapsable={false} className={sourceMenuOpen ? "opacity-0" : undefined}>
           <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
-        </View>}
+        </View>
         <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
       </>} />
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
-      </EdgeHeader>
+      </EdgeHeader>}
       <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
       <LegendList
         ref={listRef}
@@ -236,14 +244,15 @@ export default function ChatsScreen() {
         {...pullRefresh.listProps}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
-        {...scrollInsets(tabBarInset)}
-        contentContainerStyle={{ paddingTop: contentTop, paddingBottom: tabBarInset, ...emptyFill.style }}
+        {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
+        contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
         onLayout={emptyFill.onLayout}
         ListHeaderComponent={<View>
           {pullRefresh.header}
-          <LargeTitle title={t("tabs.chats")} scrollY={scrollY} />
-          <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>
+          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} />}
+          {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
           <View className="px-3">
+          {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
           </View>
