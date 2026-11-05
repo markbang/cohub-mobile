@@ -29,31 +29,32 @@ const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 // Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
 // alert survives the route change and would cover the next screen.
 export const SCREENS = [
-  { name: "catalog-type", link: "cohub://debug/ui?section=type" },
-  { name: "catalog-rows", link: "cohub://debug/ui?section=rows" },
-  { name: "catalog-controls", link: "cohub://debug/ui?section=controls" },
-  { name: "catalog-states", link: "cohub://debug/ui?section=states" },
-  { name: "chats", link: "cohub://settings", steps: [{ tapOn: "Chats" }] },
+  { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
+  { name: "catalog-rows", ready: "Settings rows", link: "cohub://debug/ui?section=rows" },
+  { name: "catalog-controls", ready: "Buttons", link: "cohub://debug/ui?section=controls" },
+  { name: "catalog-states", ready: "No files yet", link: "cohub://debug/ui?section=states" },
+  { name: "chats", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }] },
   { name: "spaces", link: "cohub://spaces" },
-  { name: "activity", link: "cohub://activity" },
-  { name: "settings", link: "cohub://settings" },
-  { name: "appearance", link: "cohub://appearance" },
-  { name: "about", link: "cohub://about" },
+  { name: "activity", ready: "Current balance", link: "cohub://activity" },
+  { name: "settings", ready: "Appearance", link: "cohub://settings" },
+  { name: "appearance", ready: "Accent color", link: "cohub://appearance" },
+  { name: "about", ready: "Cohub Mobile", link: "cohub://about" },
   // The tab roots scrolled: the Large Title collapsed into the bar.
-  { name: "chats-scrolled", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
+  { name: "chats-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
-  { name: "activity-scrolled", link: "cohub://activity", steps: [{ swipe: "up" }] },
-  { name: "settings-scrolled", link: "cohub://settings", steps: [{ swipe: "up" }] },
+  { name: "activity-scrolled", ready: "Current balance", link: "cohub://activity", steps: [{ swipe: "up" }] },
+  { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }] },
   // The Chat screen's chrome and native timeline over fixed conversations, then a real Chat.
-  { name: "chat-conversation", link: "cohub://debug/chat?fixture=conversation" },
-  { name: "chat-tools", link: "cohub://debug/chat?fixture=tools" },
-  { name: "chat-long", link: "cohub://debug/chat?fixture=long" },
-  { name: "chat-states", link: "cohub://debug/chat?fixture=states" },
-  { name: "chat-real", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Who are you\\?" }] },
-  { name: "catalog-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
-  { name: "catalog-sheet", link: "cohub://debug/ui?section=sheet", fresh: true },
-  { name: "catalog-page", link: "cohub://debug/ui?section=page", fresh: true },
-  { name: "catalog-confirm", link: "cohub://debug/ui?section=confirm", fresh: true },
+  { name: "chat-conversation", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
+  { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
+  { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
+  { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
+  // iOS reads the row as one element labelled "Open <title>, …", so the title is matched inside it.
+  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: ".*Who are you\\?.*" }] },
+  { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }] },
+  { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
+  { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
+  { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
 /**
@@ -61,18 +62,18 @@ export const SCREENS = [
  * starts. `back` is the system back on Android and the edge swipe on iOS, which has no back key.
  */
 export const MOTIONS = [
-  { name: "motion-tabs", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Me" }] },
-  { name: "motion-push", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
-  { name: "motion-controls", link: "cohub://debug/ui?section=controls", steps: [{ tapOn: "Switch on" }, { tapOn: "Mine" }, { tapOn: "Shared" }, { tapOn: "Pinned" }] },
-  { name: "motion-menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
-  { name: "motion-sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },
-  { name: "motion-confirm", link: "cohub://debug/ui?section=confirm&open=0", steps: [{ tapOn: "Open confirm" }, { tapOn: "Cancel" }] },
-  { name: "motion-scroll-chats", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-tabs", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Me" }] },
+  { name: "motion-push", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
+  { name: "motion-controls", ready: "Buttons", link: "cohub://debug/ui?section=controls", steps: [{ tapOn: "Switch on" }, { tapOn: "Mine" }, { tapOn: "Shared" }, { tapOn: "Pinned" }] },
+  { name: "motion-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
+  { name: "motion-sheet", ready: "Open sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },
+  { name: "motion-confirm", ready: "Open confirm", link: "cohub://debug/ui?section=confirm&open=0", steps: [{ tapOn: "Open confirm" }, { tapOn: "Cancel" }] },
+  { name: "motion-scroll-chats", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-scroll-spaces", link: "cohub://spaces", steps: [{ swipe: "up" }, { swipe: "down" }] },
-  { name: "motion-scroll-activity", link: "cohub://activity", steps: [{ swipe: "up" }, { swipe: "down" }] },
-  { name: "motion-scroll-settings", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
-  { name: "motion-chat", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }, { swipe: "up" }] },
-  { name: "motion-space", link: "cohub://spaces", setup: [{ tapOn: "Home" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-scroll-activity", ready: "Current balance", link: "cohub://activity", steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-scroll-settings", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
+  { name: "motion-chat", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }, { swipe: "up" }] },
+  { name: "motion-space", link: "cohub://spaces", setup: [{ tapOn: ".*Home.*" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
 ];
 
 function parseArgs(argv) {
@@ -216,11 +217,17 @@ function preamble(platform) {
   ];
 }
 
-function openScreen(lines, platform, link, first) {
+/**
+ * A deep link navigates after `openLink` returns, so an animation wait can return before the screen
+ * changes. A screen names text that shows it is ready; without one it gets a short settle.
+ */
+function openScreen(lines, platform, link, first, ready) {
   lines.push(`- openLink: ${yamlString(link)}`);
   // iOS asks once per simulator before handing a custom-scheme link to the app. An absent match
   // costs Maestro's ~7 s optional lookup, so only a flow's first link checks.
   if (platform === "ios" && first) lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
+  if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(ready)}`, "    timeout: 20000");
+  else lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 1500", "    optional: true");
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
 
@@ -245,7 +252,7 @@ function buildFlow({ platform, screens }) {
   const lines = preamble(platform);
   for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
-    openScreen(lines, platform, screen.link, index === 0);
+    openScreen(lines, platform, screen.link, index === 0, screen.ready);
     pushSteps(lines, platform, screen.steps);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
     lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
@@ -257,7 +264,7 @@ function buildFlow({ platform, screens }) {
 function buildMotionFlow({ platform, motions }) {
   const lines = preamble(platform);
   for (const [index, motion] of motions.entries()) {
-    openScreen(lines, platform, motion.link, index === 0);
+    openScreen(lines, platform, motion.link, index === 0, motion.ready);
     pushSteps(lines, platform, motion.setup);
     lines.push(`- startRecording: ${yamlString(motion.name)}`);
     pushSteps(lines, platform, motion.steps);
