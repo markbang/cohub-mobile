@@ -53,10 +53,14 @@ function text(value: string, style: TimelineTextStyle, options?: { numberOfLines
   return { type: "text", value, text: style, ...options };
 }
 
+const LUCIDE_INSET = 24 * (1 / 0.9 - 1) / 2;
+
 /** Lucide on Android, SF Symbols on iOS, as `Glyph` draws them. */
 export function icon(name: TimelineIconName, size: number, stroke: string, strokeWidth = 1.9): TimelineNode {
   const symbol = Platform.OS === "ios" ? { symbol: SF_SYMBOLS[name], weight: strokeWidth >= 2.05 ? "semibold" as const : "regular" as const } : null;
-  return { type: "vector", viewBox: [0, 0, 24, 24], paths: symbol ? [] : iconPaths(name).map((d) => ({ d })), stroke: color(stroke), strokeWidth, absoluteStrokeWidth: true, style: { width: size, height: size }, ...symbol };
+  // Android draws Lucide to SF Symbols' measure, as `Glyph` does: 0.9 of the extent (a wider viewBox) and 0.7 of the stroke.
+  const viewBox: readonly [number, number, number, number] = symbol ? [0, 0, 24, 24] : [-LUCIDE_INSET, -LUCIDE_INSET, 24 + LUCIDE_INSET * 2, 24 + LUCIDE_INSET * 2];
+  return { type: "vector", viewBox, paths: symbol ? [] : iconPaths(name).map((d) => ({ d })), stroke: color(stroke), strokeWidth: symbol ? strokeWidth : strokeWidth * 0.7, absoluteStrokeWidth: true, style: { width: size, height: size }, ...symbol };
 }
 
 const spin: TimelineAnimation = { property: "rotate", keyframes: [{ at: 0, value: 0 }, { at: 1, value: 360 }], duration: 900, iterations: 0 };

@@ -4,10 +4,13 @@ import { icons, type IconName } from "@/src/icons";
 export type GlyphProps = { name: IconName; size: number; color: ColorValue; strokeWidth: number; fill?: string; style?: object };
 
 /**
- * SF Symbols render at a point size, so most glyphs match Lucide's at the same `size`. Lucide's chevrons
- * are the exception: they fill half of its 24 unit canvas, so they draw smaller than SF's. These ratios,
- * measured against iOS 26 screenshots, draw them at the iOS size, centred in the same box.
+ * Lucide drawn to SF Symbols' measure. At the same `size`, SF glyphs span about 0.9 of what Lucide's do
+ * and their regular weight strokes about 0.7 as thick (measured on iOS 26 screenshots), so Android draws
+ * each glyph scaled and thinned, centred in the same box. Chevrons fill only half of Lucide's canvas and
+ * are drawn larger instead.
  */
+export const GLYPH_STROKE_SCALE = 0.7;
+export const GLYPH_DRAW_SCALE = 0.9;
 const FILL_SCALE: Partial<Record<IconName, number>> = {
   "chevron-left": 1.25,
   "chevron-right": 1.25,
@@ -17,9 +20,8 @@ const FILL_SCALE: Partial<Record<IconName, number>> = {
 
 export function Glyph({ name, size, color, strokeWidth, fill, style }: GlyphProps) {
   const Icon = icons[name];
-  const scale = FILL_SCALE[name];
-  if (!scale) return <Icon size={size} color={color} strokeWidth={strokeWidth} absoluteStrokeWidth style={style} {...(fill ? { fill } : {})} />;
+  const drawn = Math.round(size * (FILL_SCALE[name] ?? GLYPH_DRAW_SCALE));
   return <View pointerEvents="none" style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]}>
-    <Icon size={Math.round(size * scale)} color={color} strokeWidth={strokeWidth} absoluteStrokeWidth {...(fill ? { fill } : {})} />
+    <Icon size={drawn} color={color} strokeWidth={strokeWidth * GLYPH_STROKE_SCALE} absoluteStrokeWidth {...(fill ? { fill } : {})} />
   </View>;
 }
