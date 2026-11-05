@@ -3,7 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Platform, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
-import type { ChatTimelineViewRef, TimelineFlight, TimelineNode, TimelineRowSpec, TimelineScrollEvent } from "@/modules/cohub-chat-timeline";
+import type { ChatTimelineViewRef, TimelineFlight, TimelineNode, TimelineRowSpec, TimelineScrollEvent, TimelineState } from "@/modules/cohub-chat-timeline";
 import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
@@ -38,6 +38,8 @@ export type NativeChatTimelineHandle = {
   scrollToEnd(animated: boolean): void;
   /** Resolves false when the message has no row yet. */
   scrollToMessage(messageKey: string, animated: boolean): Promise<boolean>;
+  /** Debug: the native state and the first row's measured frame, to tell a layout fault from a paint fault. */
+  inspect(): Promise<{ rows: number; firstKey: string | null; state: TimelineState | null; firstFrame: { x: number; y: number; width: number; height: number } | null }>;
 };
 
 export type VisibleMessage = { message: MessageRecord; index: number; key: string };
@@ -430,6 +432,16 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       const key = timelineTargetKey(rowsRef.current, messageKey);
       if (!key || !nativeRef.current) return false;
       return nativeRef.current.scrollToKey(key, { animated, ...TARGET_POSITION });
+    },
+    inspect: async () => {
+      const firstKey = rowsRef.current[0]?.key ?? null;
+      const native = nativeRef.current;
+      return {
+        rows: rowsRef.current.length,
+        firstKey,
+        state: native ? await native.getState() : null,
+        firstFrame: native && firstKey ? await native.measureNode(firstKey, null) : null,
+      };
     },
   }), []);
 

@@ -1,9 +1,9 @@
 import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { NativeChatTimeline } from "@/src/components/timeline/NativeChatTimeline";
+import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -28,6 +28,18 @@ export default function DebugChatScreen() {
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
   const [draft, setDraft] = useState("");
+  // Printed under the bar so a snapshot shows whether rows were laid out (frame) even when none is painted.
+  const timelineRef = useRef<NativeChatTimelineHandle>(null);
+  const [probe, setProbe] = useState("probing…");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void timelineRef.current?.inspect().then((result) => {
+        const frame = result.firstFrame ? `${Math.round(result.firstFrame.x)},${Math.round(result.firstFrame.y)} ${Math.round(result.firstFrame.width)}×${Math.round(result.firstFrame.height)}` : "none";
+        setProbe(`rows ${result.rows} · visible ${result.state?.visibleKeys.length ?? "?"} · first ${frame}`);
+      }).catch((error: unknown) => setProbe(`probe failed: ${String(error)}`));
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [fixture]);
 
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
@@ -35,10 +47,12 @@ export default function DebugChatScreen() {
         <IconButton name="list-tree" label="Turns" size={38} onPress={NOOP} />
         <IconButton name="more" label="More" size={38} onPress={NOOP} />
       </>} />
+      <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
     </EdgeHeader>
     <View className="flex-1 min-h-0 bg-background">
       {nativeChatTimeline ? <NativeChatTimeline
         key={fixture}
+        ref={timelineRef}
         sessionId={`debug-${fixture}`}
         spaceId=""
         client={null}
