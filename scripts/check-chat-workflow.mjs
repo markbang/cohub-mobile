@@ -3734,7 +3734,7 @@ for (const OS of ["android", "ios"]) {
   let resends = 0;
   const view = { setRows: (keys, rows) => { calls.push([keys, Object.keys(rows)]); return failures-- > 0 ? Promise.reject(new Error("tag")) : Promise.resolve(); } };
   const specs = { keys: ["a", "b"], rows: { a: { type: "user" }, b: { type: "assistant" } } };
-  const scope = { nativeRef: { current: view }, sentRef: { current: new Map() }, sentKeysRef: { current: [] }, rowsFailuresRef: { current: 0 }, rowsRetryRef: { current: null }, setResend: () => { resends += 1; }, withoutUndefined: (value) => value, recordDebugEvent: () => {}, ROWS_RETRY_MAX_MS: 1000, specs };
+  const scope = { nativeRef: { current: view }, sentRef: { current: new Map() }, sentKeysRef: { current: [] }, rowsFailuresRef: { current: 0 }, rowsErrorRef: { current: null }, rowsRetryRef: { current: null }, setResend: () => { resends += 1; }, withoutUndefined: (value) => value, recordDebugEvent: () => {}, ROWS_RETRY_MAX_MS: 1000, specs };
   const deliver = new Function(...Object.keys(scope), ts.transpileModule(`return (${deliverySource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
   mock.timers.enable({ apis: ["setTimeout"] });
   try {
