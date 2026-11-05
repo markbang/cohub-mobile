@@ -1452,8 +1452,12 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
 
 #pragma mark - RNSScreen
 
+static UIScrollView *RNSMainVerticalScrollView(UIView *view, NSUInteger depth);
+
 @implementation RNSScreen {
   __weak id _previousFirstResponder;
+  // cohub: the scroll view last handed to UIKit as this screen's content, so repeat calls are free.
+  __weak UIScrollView *_registeredContentScrollView;
   CGRect _lastViewFrame;
   UIView *_fakeView;
   CADisplayLink *_animationTimer;
@@ -1549,6 +1553,14 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
 - (void)viewDidAppear:(BOOL)animated
 {
   [super viewDidAppear:animated];
+  // cohub: React mounts a tab root's list around the first appearance; look again once it has settled.
+  [self registerContentScrollViewIfNeeded];
+  __weak RNSScreen *weakSelf = self;
+  for (NSNumber *delay in @[ @0.3, @1.0 ]) {
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      [weakSelf registerContentScrollViewIfNeeded];
+    });
+  }
   if (!_isSwiping || _shouldNotify) {
     // we are going forward or dismissing without swipe
     // or successfully swiped back
@@ -1608,6 +1620,47 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
   if (isDisplayedWithinUINavController || isTabScreen || self.screenView.isPresentedAsNativeModal) {
     [self.screenView updateBounds];
   }
+  [self registerContentScrollViewIfNeeded];
+}
+
+// cohub: the legacy stack never tells UIKit which scroll view a screen shows (only the gamma stack calls
+// `setContentScrollView:forEdge:`), and UIKit's own lookup does not reach a list nested in Fabric views,
+// so the iOS 26 tab bar never minimized on scroll (`minimizeBehavior="onScrollDown"`) and bars never tracked the list. The screen hands UIKit
+// its main vertical scroll view: the largest one in the tree that scrolls vertically.
+- (void)registerContentScrollViewIfNeeded
+{
+  if (@available(iOS 15.0, *)) {
+    UIScrollView *scrollView = RNSMainVerticalScrollView(self.screenView, 0);
+    if (scrollView == _registeredContentScrollView) {
+      return;
+    }
+    _registeredContentScrollView = scrollView;
+    [self setContentScrollView:scrollView forEdge:NSDirectionalRectEdgeAll];
+    NSLog(@"cohub-diag: content scroll view %@ %@ for %@", NSStringFromClass(scrollView.class), NSStringFromCGRect(scrollView.frame), (id)self.title ?: (id)@(self.screenView.tag));
+  }
+}
+
+/// The largest scroll view under `view` that is not purely horizontal, searched to a bounded depth.
+static UIScrollView *RNSMainVerticalScrollView(UIView *view, NSUInteger depth)
+{
+  if (!view || depth > 40 || view.hidden) {
+    return nil;
+  }
+  if ([view isKindOfClass:UIScrollView.class]) {
+    UIScrollView *scroll = (UIScrollView *)view;
+    BOOL horizontalOnly = scroll.contentSize.width > scroll.bounds.size.width + 1 && scroll.contentSize.height <= scroll.bounds.size.height + 1 && !scroll.alwaysBounceVertical;
+    if (!horizontalOnly && scroll.bounds.size.height > 0) {
+      return scroll;
+    }
+  }
+  UIScrollView *best = nil;
+  for (UIView *subview in view.subviews) {
+    UIScrollView *candidate = RNSMainVerticalScrollView(subview, depth + 1);
+    if (candidate && (!best || candidate.bounds.size.width * candidate.bounds.size.height > best.bounds.size.width * best.bounds.size.height)) {
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 - (BOOL)isModalWithHeader
