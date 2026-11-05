@@ -1,27 +1,28 @@
+import Svg, { Path } from "react-native-svg";
 import { View, type ColorValue } from "react-native";
 import { icons, type IconName } from "@/src/icons";
+import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
 
 export type GlyphProps = { name: IconName; size: number; color: ColorValue; strokeWidth: number; fill?: string; style?: object };
 
 /**
- * Lucide drawn to SF Symbols' measure. At the same `size`, SF glyphs span about 0.9 of what Lucide's do
- * and their regular weight strokes about 0.7 as thick (measured on iOS 26 screenshots), so Android draws
- * each glyph scaled and thinned, centred in the same box. Chevrons fill only half of Lucide's canvas and
- * are drawn larger instead.
+ * Android draws Framework7 Icons, an open set drawn after SF Symbols, sized as SF draws them (see
+ * scripts/generate-glyphs.mjs), so glyphs match iOS. `fill` picks the filled shape where the set has one.
+ * Names it lacks keep Lucide, thinned and scaled to SF's measure.
  */
-export const GLYPH_STROKE_SCALE = 0.7;
-export const GLYPH_DRAW_SCALE = 0.9;
-const FILL_SCALE: Partial<Record<IconName, number>> = {
-  "chevron-left": 1.25,
-  "chevron-right": 1.25,
-  "chevron-down": 1.25,
-  "chevrons-up-down": 1.12,
-};
+const LUCIDE_STROKE_SCALE = 0.7;
+const LUCIDE_DRAW_SCALE = 0.9;
 
 export function Glyph({ name, size, color, strokeWidth, fill, style }: GlyphProps) {
+  const glyph = GLYPH_PATHS[name];
+  if (glyph) {
+    const shape = fill && glyph.fill ? glyph.fill : glyph.outline;
+    return <Svg pointerEvents="none" width={size} height={size} viewBox={shape.viewBox.join(" ")} style={style}>
+      {shape.paths.map((path, index) => <Path key={index} d={path.d} fill={color} fillRule={path.evenOdd ? "evenodd" : "nonzero"} />)}
+    </Svg>;
+  }
   const Icon = icons[name];
-  const drawn = Math.round(size * (FILL_SCALE[name] ?? GLYPH_DRAW_SCALE));
   return <View pointerEvents="none" style={[{ width: size, height: size, alignItems: "center", justifyContent: "center" }, style]}>
-    <Icon size={drawn} color={color} strokeWidth={strokeWidth * GLYPH_STROKE_SCALE} absoluteStrokeWidth {...(fill ? { fill } : {})} />
+    <Icon size={Math.round(size * LUCIDE_DRAW_SCALE)} color={color} strokeWidth={strokeWidth * LUCIDE_STROKE_SCALE} absoluteStrokeWidth {...(fill ? { fill } : {})} />
   </View>;
 }

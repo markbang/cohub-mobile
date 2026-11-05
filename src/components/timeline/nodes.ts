@@ -5,6 +5,7 @@ import type { TimelineAnimation, TimelineNode, TimelineTextStyle } from "@/modul
 import { DETAIL_SEPARATOR, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon } from "@/src/components/MessageContent";
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
+import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { formatMessageClock } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
@@ -54,9 +55,14 @@ function text(value: string, style: TimelineTextStyle, options?: { numberOfLines
 
 const LUCIDE_INSET = 24 * (1 / 0.9 - 1) / 2;
 
-/** Lucide on Android, SF Symbols on iOS, as `Glyph` draws them. */
+/** SF Symbols on iOS; on Android the glyph set drawn after them, or Lucide where it lacks one, as `Glyph` draws them. */
 export function icon(name: TimelineIconName, size: number, stroke: string, strokeWidth = 1.9): TimelineNode {
   const symbol = Platform.OS === "ios" ? { symbol: SF_SYMBOLS[name], weight: strokeWidth >= 2.05 ? "semibold" as const : "regular" as const } : null;
+  const glyph = symbol ? null : GLYPH_PATHS[name]?.outline;
+  // The native vector has no fill rule, so a shape that needs even-odd keeps Lucide.
+  if (glyph && !glyph.paths.some((path) => path.evenOdd)) {
+    return { type: "vector", viewBox: glyph.viewBox, paths: glyph.paths.map((path) => ({ d: path.d, fill: color(stroke) })), style: { width: size, height: size } };
+  }
   // Android draws Lucide to SF Symbols' measure, as `Glyph` does: 0.9 of the extent (a wider viewBox) and 0.7 of the stroke.
   const viewBox: readonly [number, number, number, number] = symbol ? [0, 0, 24, 24] : [-LUCIDE_INSET, -LUCIDE_INSET, 24 + LUCIDE_INSET * 2, 24 + LUCIDE_INSET * 2];
   return { type: "vector", viewBox, paths: symbol ? [] : iconPaths(name).map((d) => ({ d })), stroke: color(stroke), strokeWidth: symbol ? strokeWidth : strokeWidth * 0.7, absoluteStrokeWidth: true, style: { width: size, height: size }, ...symbol };

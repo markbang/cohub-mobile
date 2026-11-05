@@ -52,6 +52,7 @@ const packages = installed.map(({ root: repositoryRoot, licenseText, ...item }) 
 // Assets shipped in the bundle rather than through npm.
 const BUNDLED_ASSETS = [
   { name: "Inter (font, Android)", version: "4.1", license: "OFL-1.1", url: "https://github.com/rsms/inter", licenseText: readFileSync(new URL("assets/fonts/Inter-LICENSE.txt", root), "utf8").replace(/\r\n/g, "\n").trim() },
+  { name: "Framework7 Icons (glyphs, Android)", version: "5.0.5", license: "MIT", url: "https://github.com/framework7io/framework7-icons", licenseText: readFileSync(new URL("scripts/license-texts/framework7-icons.txt", root), "utf8").replace(/\r\n/g, "\n").trim() },
 ];
 packages.push(...BUNDLED_ASSETS);
 

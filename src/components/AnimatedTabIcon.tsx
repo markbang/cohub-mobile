@@ -1,9 +1,9 @@
-import type { LucideIcon } from "lucide-react-native";
 import { useEffect } from "react";
 import type { ColorValue } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { icons, type IconName } from "@/src/icons";
+import type { IconName } from "@/src/icons";
 import { motion } from "@/src/motion";
+import { Glyph } from "@/src/ui/Glyph";
 
 export type AnimatedTabIconName = "messages" | "layers" | "activity" | "user";
 
@@ -21,14 +21,10 @@ const iconNames: Record<AnimatedTabIconName, IconName> = {
   user: "user",
 };
 
-// iOS selects a tab with the filled symbol. These two read clearly when filled; the overlapping
-// message squares would merge into one shape, and the activity trace is a line on iOS too.
-const FILLED_WHEN_FOCUSED = new Set<AnimatedTabIconName>(["layers", "user"]);
 
 /** Tabs switch a hundred times a day, so selection only settles the icon's weight; it never pops. */
 export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconProps) {
   const progress = useSharedValue(focused ? 1 : 0);
-  const Icon: LucideIcon = icons[iconNames[name]];
 
   useEffect(() => {
     progress.set(withTiming(focused ? 1 : 0, { duration: motion.fade.duration }));
@@ -41,7 +37,8 @@ export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconP
 
   return (
     <Animated.View style={style}>
-      <Icon size={size} color={color} fill={focused && FILLED_WHEN_FOCUSED.has(name) ? String(color) : "none"} strokeWidth={focused ? 2 : 1.8} absoluteStrokeWidth />
+      {/* iOS selects a tab with the filled symbol; the glyph set's filled shape stands in, where it has one. */}
+      <Glyph name={iconNames[name]} size={size} color={color} strokeWidth={focused ? 2 : 1.8} fill={focused ? String(color) : undefined} />
     </Animated.View>
   );
 }
