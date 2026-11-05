@@ -226,7 +226,8 @@ function openScreen(lines, platform, link, first, ready) {
   // iOS asks once per simulator before handing a custom-scheme link to the app. An absent match
   // costs Maestro's ~7 s optional lookup, so only a flow's first link checks.
   if (platform === "ios" && first) lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
-  if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(ready)}`, "    timeout: 20000");
+  // Matched inside the element's text: iOS and Android often merge a card or row into one element.
+  if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${ready}.*`)}`, "    timeout: 20000");
   else lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 1500", "    optional: true");
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
