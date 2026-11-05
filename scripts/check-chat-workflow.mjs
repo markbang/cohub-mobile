@@ -1803,7 +1803,7 @@ const bubbleScope = {
   useAppActions: () => ({ client: null }),
   useSandboxImageUrls: () => new Map(),
   messageMarkdownImages,
-  textFace: () => undefined,
+  TEXT_FAMILY: undefined,
   NO_PATHS: [],
   BubbleContext: null,
   BubbleContentWidth: null,

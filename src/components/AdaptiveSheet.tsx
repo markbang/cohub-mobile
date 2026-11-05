@@ -70,7 +70,6 @@ export function AdaptiveSheet({
   contentStyle,
   fullHeight = false,
   confirm,
-  detent = "large",
   testID,
 }: AdaptiveSheetProps) {
   const theme = useAppTheme();
@@ -78,10 +77,8 @@ export function AdaptiveSheet({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const compact = Math.min(width, height) < COMPACT_BREAKPOINT;
-  // A large sheet is UIKit's page sheet: the full height under the status bar, no grabber, dragged by its header.
-  const page = compact && detent === "large";
-  // A page sheet rises from fully below the screen, as UIKit's does; a short one only from partway.
-  const hiddenOffset = page ? height : Math.min(height * 0.56, 520);
+  // Android sheets always wrap their content, up to the full height, so a short form stays short.
+  const hiddenOffset = Math.min(height * 0.56, 520);
   // design-system: iOS dims the screen under a sheet by a fifth, and by half in dark mode.
   const scrimOpacity = theme.mode === "dark" ? 0.5 : 0.2;
 
@@ -222,7 +219,7 @@ export function AdaptiveSheet({
   }, [compact, dragY, progress, revealDistance]);
   const availableHeight = Math.max(0, height - keyboardHeight);
   const maxHeight = compact
-    ? Math.max(0, availableHeight - insets.top - (page ? 0 : 12))
+    ? Math.max(0, availableHeight - insets.top - 12)
     : Math.max(0, Math.min(availableHeight - 48, 760));
   const bottomPadding = Math.max(insets.bottom, theme.spacing.lg);
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
@@ -258,11 +255,10 @@ export function AdaptiveSheet({
             exiting={visible ? panelExiting : undefined}
             accessibilityViewIsModal
             role="dialog"
-            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? page ? "" : "rounded-t-lg" : "max-w-125 rounded-lg"}`}
+            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
             style={[
               { borderCurve: "continuous" },
-              page ? PAGE_CORNERS : null,
-              { maxHeight, height: compact && (fullHeight || page) ? maxHeight : undefined },
+              { maxHeight, height: compact && fullHeight ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
@@ -270,13 +266,13 @@ export function AdaptiveSheet({
             <Freeze frozen={!visible}>
             <SheetDrag gesture={compact ? pan : null}>
               <View>
-                {compact && !page ? (
+                {compact ? (
                   <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
                     {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
                   </View>
                 ) : null}
                 {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
-                <View testID={page && dismissible && testID ? `${testID}-drag-handle` : undefined} className={`min-h-14 flex-row items-center px-2 ${page ? "pt-2" : "pb-2"}`}>
+                <View className="min-h-14 flex-row items-center px-2 pb-2">
                   <IconButton
                     filled
                     name="x"
@@ -292,7 +288,7 @@ export function AdaptiveSheet({
             {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (
               <ScrollView
-                style={fullHeight || page ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
+                style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
                 contentContainerStyle={resolvedContentStyle}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -319,7 +315,7 @@ export function AdaptiveSheet({
   );
 }
 
-/** Compact sheets drag from their top: the grabber and header, or the header alone on a page sheet. */
+/** Compact sheets drag from their top: the grabber and the header. */
 function SheetDrag({ gesture, children }: { gesture: ReturnType<typeof Gesture.Pan> | null; children: ReactElement }) {
   return gesture ? <GestureDetector gesture={gesture}>{children}</GestureDetector> : children;
 }
@@ -329,7 +325,5 @@ const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: R
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
-// UIKit's page sheet corner on a 402 pt iPhone, measured from its top edge.
-const PAGE_CORNERS = { borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
 const SCRIM = { backgroundColor: "#000000" } as const;

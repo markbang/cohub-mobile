@@ -292,8 +292,10 @@ export default function SpacesScreen() {
     />
     </BrandRefreshArea>
     <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
+    {/* A short form: sized to its fields on both platforms rather than a full-height page. */}
     <AdaptiveSheet
       visible={createOpen}
+      detent="fit"
       title={pickingFolder ? t("deviceRuntime.chooseFolder") : t("spaces.create.title")}
       onClose={closeCreate}
       dismissible={!creating}

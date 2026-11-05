@@ -20,7 +20,7 @@ import { loadEnvironmentPreference, saveEnvironmentPreference } from "@/src/data
 import { LocaleProvider, useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
 import { LoadingState } from "@/src/ui/Loader";
-import { PLATFORM_FONTS } from "@/src/ui/platform-fonts";
+import { PLATFORM_FONT_FAMILIES } from "@/src/ui/platform-fonts";
 import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { clearLauncherShortcuts } from "@/src/platform/quick-actions";
@@ -73,8 +73,9 @@ export default function RootLayout() {
   useUniwindThemeSync();
   // Code blocks, the file viewer, and the code editor all reference "SpaceMono";
   // keep the splash up until the bundled font is registered.
-  const [fontsLoaded, fontError] = useFonts({ SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"), ...PLATFORM_FONTS });
-  if (!fontsLoaded && !fontError) return null;
+  const [fontsLoaded, fontError] = useFonts({ SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf") });
+  const [platformFontsLoaded, platformFontError] = useFonts(PLATFORM_FONT_FAMILIES);
+  if ((!fontsLoaded && !fontError) || (!platformFontsLoaded && !platformFontError)) return null;
   return <LocaleProvider><TracedRoot><AuthEnvironmentRoot /></TracedRoot></LocaleProvider>;
 }
 
