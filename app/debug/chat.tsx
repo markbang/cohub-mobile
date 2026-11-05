@@ -5,7 +5,7 @@ import { FlatList, Text, View, useWindowDimensions } from "react-native";
 import { MessageBubble } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
-import { nativeChatTimeline } from "@/src/platform/chat-timeline";
+import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 
@@ -22,7 +22,9 @@ const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ fixture?: string }>();
+  // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it.
+  const params = useLocalSearchParams<{ fixture?: string; native?: string }>();
+  const useNative = nativeChatTimeline || (ChatTimelineView !== null && params.native === "1");
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
   const messages = useMemo(() => conversation(fixture), [fixture]);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
@@ -35,14 +37,19 @@ export default function DebugChatScreen() {
   const [probe, setProbe] = useState("probing…");
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!nativeChatTimeline) { setProbe("JS list"); return; }
+      if (!useNative) { setProbe("JS list"); return; }
       void timelineRef.current?.inspect().then((result) => {
         const frame = result.firstFrame ? `${Math.round(result.firstFrame.x)},${Math.round(result.firstFrame.y)} ${Math.round(result.firstFrame.width)}×${Math.round(result.firstFrame.height)}` : "none";
-        setProbe(`rows ${result.rows} · visible ${result.state?.visibleKeys.length ?? "?"} · first ${frame}`);
+        const state = result.state;
+        setProbe([
+          `rows ${result.rows} · visible ${state?.visibleKeys.length ?? "?"} · first ${frame}`,
+          `following ${state?.following} · toLatest ${state?.distanceToLatest === null || state?.distanceToLatest === undefined ? "?" : Math.round(state.distanceToLatest)} · toOldest ${state?.distanceToOldest === null || state?.distanceToOldest === undefined ? "?" : Math.round(state.distanceToOldest)}`,
+          `setRows failures ${result.rowsFailures}${result.rowsError ? ` · ${result.rowsError}` : ""}`,
+        ].join("\n"));
       }).catch((error: unknown) => setProbe(`probe failed: ${String(error)}`));
     }, 2000);
     return () => clearTimeout(timer);
-  }, [fixture]);
+  }, [fixture, useNative]);
 
   return <Screen edgeToEdge>
     <EdgeHeader onLayout={onHeaderLayout}>
@@ -53,7 +60,7 @@ export default function DebugChatScreen() {
       <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
     </EdgeHeader>
     <View className="flex-1 min-h-0 bg-background">
-      {nativeChatTimeline ? <NativeChatTimeline
+      {useNative ? <NativeChatTimeline
         key={fixture}
         ref={timelineRef}
         sessionId={`debug-${fixture}`}

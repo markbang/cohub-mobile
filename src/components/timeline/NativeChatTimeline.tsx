@@ -39,7 +39,7 @@ export type NativeChatTimelineHandle = {
   /** Resolves false when the message has no row yet. */
   scrollToMessage(messageKey: string, animated: boolean): Promise<boolean>;
   /** Debug: the native state and the first row's measured frame, to tell a layout fault from a paint fault. */
-  inspect(): Promise<{ rows: number; firstKey: string | null; state: TimelineState | null; firstFrame: { x: number; y: number; width: number; height: number } | null }>;
+  inspect(): Promise<{ rows: number; firstKey: string | null; state: TimelineState | null; firstFrame: { x: number; y: number; width: number; height: number } | null; rowsFailures: number; rowsError: string | null }>;
 };
 
 export type VisibleMessage = { message: MessageRecord; index: number; key: string };
@@ -327,6 +327,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   // A call made before the native view mounts is rejected; nothing else may change to resend it.
   const [resend, setResend] = useState(0);
   const rowsFailuresRef = useRef(0);
+  const rowsErrorRef = useRef<string | null>(null);
   const rowsRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (rowsRetryRef.current) clearTimeout(rowsRetryRef.current); }, []);
   useEffect(() => {
@@ -348,7 +349,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     for (const key of specs.keys) sent.set(key, specs.rows[key]!);
     sentRef.current = sent;
     sentKeysRef.current = specs.keys;
-    view.setRows(specs.keys, changed).then(() => { rowsFailuresRef.current = 0; }, (error: unknown) => {
+    view.setRows(specs.keys, changed).then(() => { rowsFailuresRef.current = 0; rowsErrorRef.current = null; }, (error: unknown) => {
+      rowsErrorRef.current = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300);
       // Native kept its previous rows, so the next attempt sends every row again.
       sentRef.current = new Map();
       sentKeysRef.current = [];
@@ -441,6 +443,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         firstKey,
         state: native ? await native.getState() : null,
         firstFrame: native && firstKey ? await native.measureNode(firstKey, null) : null,
+        rowsFailures: rowsFailuresRef.current,
+        rowsError: rowsErrorRef.current,
       };
     },
   }), []);

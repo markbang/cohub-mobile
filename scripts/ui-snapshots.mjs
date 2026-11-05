@@ -53,6 +53,8 @@ export const SCREENS = [
   { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
   { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
   { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
+  // The native timeline on the same fixtures, on iOS too, where the Chat screen draws the JS list.
+  { name: "chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
   // The first row, by position: the test account's newest Chat changes from run to run.
   { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }] },
   { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
