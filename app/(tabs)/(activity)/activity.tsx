@@ -13,6 +13,7 @@ import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGr
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
@@ -22,7 +23,7 @@ export default function ActivityScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef, contentTop, scrollInsets } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -41,15 +42,15 @@ export default function ActivityScreen() {
   };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   return <Screen edgeToEdge>
-    {/* Both platforms draw the Large Title, so it collapses into the bar on scroll. */}
-    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
       <LargeTitleBar title={t("tabs.activity")} scrollY={scrollY} />
       <ConnectionBanner visible={connectionUnavailable} />
-    </EdgeHeader>
+    </EdgeHeader>}
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => pullRefresh.onScroll(event)} scrollEventThrottle={16} {...scrollInsets(tabBarInset)} contentContainerStyle={{ paddingTop: contentTop, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
+    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => pullRefresh.onScroll(event)} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
       {pullRefresh.header}
-      <LargeTitle title={t("tabs.activity")} scrollY={scrollY} />
+      {nativeHeaders ? null : <LargeTitle title={t("tabs.activity")} scrollY={scrollY} />}
+      {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
       {/* One figure leads the screen: the balance on a dashboard card, tabular so it does not shift as it updates. */}
       <View className="mb-6 mt-4 px-4">
         <PressableScale accessibilityRole="button" accessibilityLabel={t("settings.section.billing")} onPress={() => router.push("/settings/billing")} className="gap-3 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}>

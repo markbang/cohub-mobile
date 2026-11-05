@@ -28,8 +28,7 @@ export function useEmptyListFill(empty: boolean): EmptyListFill {
   const [height, setHeight] = useState(0);
   return {
     onLayout: (event) => setHeight(event.nativeEvent.layout.height),
-    // Under a native bar the content starts below it; a drawn header leaves the status bar as the top inset.
-    style: empty && height > 0 ? { minHeight: Math.max(0, height - (headerHeight > 0 ? headerHeight : insets.top) - insets.bottom) } : undefined,
+    style: empty && height > 0 ? { minHeight: Math.max(0, height - headerHeight - insets.bottom) } : undefined,
   };
 }
 
