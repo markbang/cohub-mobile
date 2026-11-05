@@ -5,7 +5,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
-import type { NativeMenuAction } from "@/src/components/NativeMenu";
+import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { DeviceFolderBrowser, useDeviceFolderBrowser } from "@/src/components/DeviceFolderBrowser";
@@ -26,7 +26,7 @@ import { displaySpaceName } from "@/src/utils";
 import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
-import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
+import { useEmptyListFill } from "@/src/ui/NativeHeader";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
@@ -41,7 +41,7 @@ export default function SpacesScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef, contentTop, scrollInsets } = useEdgeChrome({ trackScroll: true });
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -238,26 +238,18 @@ export default function SpacesScreen() {
   });
   const openCreate = () => { setCreateError(null); setCreateOpen(true); };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
-  useNativeHeader({
-    title: t("tabs.spaces"),
-    search: { query, onQueryChange: setQuery, placeholder: t("spaces.search.placeholder") },
-    // Leading to trailing: the prominent action takes the trailing edge, as on Android.
-    items: [
-      { kind: "menu", label: t("spaces.filter.label"), icon: "filter", title: filterLabel, active: filter !== "recent", actions: filterActions },
-      { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
-    ],
-  });
   return <Screen edgeToEdge>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {/* Both platforms draw the Large Title, so it collapses into the bar on scroll; iOS keeps its system menu. */}
+    <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
-      <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
+      {nativeMenus ? <NativeMenuButton appearance="bar" icon="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} title={filterLabel} active={filter !== "recent"} actions={filterActions} testID="spaces-filter-menu-button" /> : <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
-      </View>
+      </View>}
       <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
     </>} />
     <ConnectionBanner visible={connectionUnavailable} />
     {dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
-    </EdgeHeader>}
+    </EdgeHeader>
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <LegendList
       ref={listRef}
@@ -274,15 +266,14 @@ export default function SpacesScreen() {
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       keyboardShouldPersistTaps="handled"
-      {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
-      contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
+      {...scrollInsets(tabBarInset)}
+      contentContainerStyle={{ paddingTop: contentTop, paddingBottom: tabBarInset, ...emptyFill.style }}
         onLayout={emptyFill.onLayout}
       ListHeaderComponent={<View>
         {pullRefresh.header}
-        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} />}
-        {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
+        <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} />
+        <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>
         <View className="px-3">
-        {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
         {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}

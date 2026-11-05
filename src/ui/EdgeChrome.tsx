@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useState, type ReactNode } from "react";
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle } from "react-native";
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
-import Animated, { interpolate, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { interpolate, useAnimatedRef, useAnimatedStyle, useDerivedValue, useScrollOffset, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
 import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
@@ -10,19 +10,31 @@ import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
 /**
  * With `trackScroll`, the scroll view given `scrollRef` drives `scrollY` on the UI thread, so the header's
  * veil and collapsing title follow the finger frame by frame, as UIKit's bar does, even while JS is busy.
+ *
+ * Tab roots spread `scrollInsets(bottom)` on that scroll view and start their content at `contentTop`. iOS
+ * keeps UIKit's automatic insets, which clear the status bar and the system tab bar, so the content starts
+ * the header's height below the status bar and `scrollY` counts from that inset; Android draws the whole
+ * window and insets the content itself.
  */
 export function useEdgeChrome(options?: { reserveComposer?: boolean; trackScroll?: boolean }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(insets.top + edgeChrome.headerMinHeight);
   const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom) : 0);
-  const scrollY = useSharedValue(0);
+  const automaticInsets = Platform.OS === "ios";
+  const statusInset = automaticInsets ? insets.top : 0;
+  const rawScrollY = useSharedValue(0);
   const scrollRef = useAnimatedRef<ScrollView>();
-  useScrollOffset(options?.trackScroll ? scrollRef : null, scrollY);
+  useScrollOffset(options?.trackScroll ? scrollRef : null, rawScrollY);
+  const scrollY = useDerivedValue(() => rawScrollY.get() + statusInset);
   return {
     headerHeight,
     footerHeight,
     scrollY,
     scrollRef,
+    contentTop: headerHeight - statusInset,
+    scrollInsets: (bottom: number) => automaticInsets
+      ? { contentInsetAdjustmentBehavior: "automatic" as const, scrollIndicatorInsets: { top: headerHeight - statusInset } }
+      : { contentInsetAdjustmentBehavior: "never" as const, scrollIndicatorInsets: { top: headerHeight, bottom } },
     onHeaderLayout: (event: LayoutChangeEvent) => setHeaderHeight(event.nativeEvent.layout.height),
     onFooterLayout: (event: LayoutChangeEvent) => setFooterHeight(event.nativeEvent.layout.height),
   };
@@ -62,7 +74,7 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
  * With `scrollY`, the fade shows only once content has scrolled under the header, so nothing is
  * veiled at rest; without it the fade is always on, for screens whose content starts beneath it.
  */
-export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void; scrollY?: SharedValue<number> }) {
+export function EdgeHeader({ children, onLayout, scrollY }: { children: ReactNode; onLayout: (event: LayoutChangeEvent) => void; scrollY?: Readonly<SharedValue<number>> }) {
   const insets = useSafeAreaInsets();
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), [0, edgeChrome.topFade], [0, 1], "clamp") : 1 }));
   return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>

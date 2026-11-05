@@ -28,9 +28,8 @@ const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 
 // Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
 // alert survives the route change and would cover the next screen.
-// The first list row under a tab root's search field at 402 pt wide; iOS's native Large Title and
-// search field sit lower than Android's drawn ones.
-const FIRST_ROW = { ios: "50%, 40%", android: "50%, 26%" };
+// The first list row under a tab root's search field at 402 pt wide; iOS's taller status bar puts it lower.
+const FIRST_ROW = { ios: "50%, 29%", android: "50%, 26%" };
 
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
