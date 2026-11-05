@@ -239,6 +239,8 @@ function openScreen(lines, platform, link, first, ready) {
 
 // A tap waits for the screen to settle, which never happens beside a spinner; a second is enough here.
 const SETTLE = "    waitToSettleTimeoutMs: 1000";
+// iOS 26 minimizes the tab bar to the current tab on scroll, and a tab root keeps its offset across deep links.
+const TAB_LABELS = new Set(["Chats", "Spaces", "Activity", "Me"]);
 
 function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
@@ -253,7 +255,11 @@ function pushSteps(lines, platform, steps = []) {
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
     else if (step.swipe === "up") lines.push("- swipe:", "    start: 50%, 72%", "    end: 50%, 32%", "    duration: 700");
     else if (step.swipe === "down") lines.push("- swipe:", "    start: 50%, 32%", "    end: 50%, 72%", "    duration: 700");
-    else lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
+    else {
+      // Scrolling back up brings a minimized tab bar back.
+      if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - swipe:", "          start: 50%, 32%", "          end: 50%, 72%", "          duration: 400", "      - waitForAnimationToEnd:", "          timeout: 5000");
+      lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
+    }
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
   }
 }
