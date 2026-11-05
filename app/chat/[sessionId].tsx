@@ -11,7 +11,7 @@ import { curves, motion } from "@/src/motion";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { KeyboardAvoidingView, KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
-import { AnchoredActionMenu, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { AnchoredActionMenu, type AnchoredMenuAction, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { ToastViewport, useToast } from "@/src/components/Toast";
@@ -1007,13 +1007,18 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     { icon: "copy", title: t("chat.titleActions.copy"), onPress: () => void copySessionTitle() },
     { icon: "square-pen", title: t("chat.titleActions.edit"), onPress: openRename },
   ];
-  const chatActions: AnchoredMenuAction[] = [
-    ...(tracing ? [{ icon: "activity" as const, title: "Scroll Diagnostics", onPress: () => { trace("experiment.mark", { origin: "chatMenu" }); router.push("/debug/chat-scroll"); } }] : []),
-    { icon: "share", title: t("chat.actions.share"), onPress: () => void shareChat() },
-    { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
-    { icon: "folder-open", title: t("chat.actions.openFiles"), disabled: !spaceId, onPress: () => setActivePanel("files") },
-    { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
-    { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
+  // Grouped as iOS menus are: this Chat, then its Space under the Space's name.
+  const chatSections: AnchoredMenuSection[] = [
+    { actions: [
+      { icon: "share", title: t("chat.actions.share"), onPress: () => void shareChat() },
+      { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
+      { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
+    ] },
+    { title: spaceName, actions: [
+      { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
+      { icon: "folder-open", title: t("chat.actions.openFiles"), disabled: !spaceId, onPress: () => setActivePanel("files") },
+    ] },
+    ...(tracing ? [{ actions: [{ icon: "activity" as const, title: "Scroll Diagnostics", onPress: () => { trace("experiment.mark", { origin: "chatMenu" }); router.push("/debug/chat-scroll"); } }] }] : []),
   ];
   const handleScroll = useCallback((event: ChatScrollEvent) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -1379,7 +1384,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     <SpacePanels edgeToEdge key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} actions={chatActions} testID="chat-actions-menu" /> : <View ref={moreButtonRef} collapsable={false} className={moreOpen ? "opacity-0" : undefined}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View>}</>} />
+        <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <View ref={moreButtonRef} collapsable={false} className={moreOpen ? "opacity-0" : undefined}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View>}</>} />
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
         </EdgeHeader>
@@ -1537,7 +1542,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       title={session ? displaySessionTitle(session) : t("chat.title")}
       testID="chat-actions-menu"
       onClose={closeMore}
-      actions={chatActions}
+      sections={chatSections}
     /></MenuPresence>
   </Screen>;
 }

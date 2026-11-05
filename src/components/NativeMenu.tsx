@@ -3,7 +3,7 @@ import type { IconName } from "@/src/icons";
 
 export type NativeMenuSection = { title?: string; actions: readonly NativeMenuAction[] };
 /** A menu item; `checked` draws the system check, `detail` a second line under the title. */
-export type NativeMenuAction = AnchoredMenuAction & { checked?: boolean; detail?: string };
+export type NativeMenuAction = AnchoredMenuAction;
 
 export type NativeMenuButtonProps = {
   icon: IconName;

@@ -9,27 +9,35 @@ import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
 import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
 import { MorphMenuSurface, useMenuPresence, type MorphRect } from "@/src/ui/MorphMenuSurface";
 
+/** A menu item; `checked` draws a check in place of its glyph and `detail` a second line, as iOS menus do. */
 export type AnchoredMenuAction = {
   icon: IconName;
   title: string;
   disabled?: boolean;
+  checked?: boolean;
+  detail?: string;
   onPress: () => void;
 };
+
+export type AnchoredMenuSection = { title?: string; actions: readonly AnchoredMenuAction[] };
 
 type AnchoredActionMenuProps = {
   anchorRef: RefObject<View | null>;
   title: string;
-  actions: readonly AnchoredMenuAction[];
+  /** One group; or pass `sections` for groups split by separators, as in an iOS menu. */
+  actions?: readonly AnchoredMenuAction[];
+  sections?: readonly AnchoredMenuSection[];
   onClose: () => void;
   testID: string;
 };
 
-export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID }: AnchoredActionMenuProps) {
+export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: sectionsProp, onClose, testID }: AnchoredActionMenuProps) {
+  const sections = (sectionsProp ?? [{ actions }]).filter((section) => section.actions.length > 0);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const focused = useIsFocused();
-  const contentWidth = Math.max(...actions.map((action) => Array.from(action.title).length * 9 + 16 * 2 + 22 + 12), 0);
+  const contentWidth = Math.max(...sections.flatMap((section) => section.actions).map((action) => Math.max(Array.from(action.title).length * 9, Array.from(action.detail ?? "").length * 7.5) + 16 * 2 + 22 + 12), 0);
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
   const [anchor, setAnchor] = useState<MorphRect | null>(null);
@@ -78,18 +86,25 @@ export function AnchoredActionMenu({ anchorRef, title, actions, onClose, testID 
       onClosed={onExited}
     >
       <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-2">
-        {actions.map((action) => <Pressable
-          key={action.title}
-          accessibilityRole="menuitem"
-          accessibilityLabel={action.title}
-          accessibilityState={{ disabled: Boolean(action.disabled) }}
-          disabled={action.disabled}
-          onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-          className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
-        >
-          <AppIcon name={action.icon} size={22} tone="secondary" />
-          <Text className="min-w-0 flex-1 text-body text-fg">{action.title}</Text>
-        </Pressable>)}
+        {sections.map((section, index) => <View key={section.title ?? index}>
+          {index > 0 ? <View className="mx-4 my-1.5 border-t border-border" /> : null}
+          {section.title ? <Text accessibilityRole="header" className="px-4 pb-1 pt-2 text-caption text-fg-muted">{section.title}</Text> : null}
+          {section.actions.map((action) => <Pressable
+            key={action.title}
+            accessibilityRole="menuitem"
+            accessibilityLabel={action.detail ? `${action.title}, ${action.detail}` : action.title}
+            accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
+            disabled={action.disabled}
+            onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
+            className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
+          >
+            <AppIcon name={action.checked ? "check" : action.icon} size={22} tone={action.checked ? "accent" : "secondary"} />
+            <View className="min-w-0 flex-1">
+              <Text className="text-body text-fg">{action.title}</Text>
+              {action.detail ? <Text numberOfLines={2} className="text-caption text-fg-muted">{action.detail}</Text> : null}
+            </View>
+          </Pressable>)}
+        </View>)}
       </ScrollView>
     </MorphMenuSurface> : null}
   </View>;

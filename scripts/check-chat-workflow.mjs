@@ -1490,36 +1490,37 @@ function findSpaceMenu(node) {
 findSpaceMenu(spaceMenuSource);
 assert.ok(spaceMenuElement);
 // The menu takes a named list (the iOS system menu shares it), so follow the name to its declaration.
-const spaceMenuActionsName = spaceMenuElement.attributes.properties.find((prop) => ts.isJsxAttribute(prop) && prop.name.getText(spaceMenuSource) === "actions").initializer.expression.getText(spaceMenuSource);
+const spaceMenuActionsName = spaceMenuElement.attributes.properties.find((prop) => ts.isJsxAttribute(prop) && prop.name.getText(spaceMenuSource) === "sections").initializer.expression.getText(spaceMenuSource);
 let spaceMenuActions;
 function findSpaceMenuActions(node) {
   if (ts.isVariableDeclaration(node) && node.name.getText(spaceMenuSource) === spaceMenuActionsName) spaceMenuActions = node.initializer.getText(spaceMenuSource);
   ts.forEachChild(node, findSpaceMenuActions);
 }
 findSpaceMenuActions(spaceMenuSource);
-assert.ok(spaceMenuActions, "the Space menu's actions are declared in the screen");
+assert.ok(spaceMenuActions, "the Space menu's sections are declared in the screen");
 const buildSpaceActions = new Function("space", "pinning", "t", "setActivePanel", "togglePin", "router", "checkpointing", "createCheckpoint", ts.transpileModule(`return (${spaceMenuActions});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
 for (const isPinned of [false, true]) {
   for (const pinning of [false, true]) {
     const events = [];
-    const actions = buildSpaceActions({ id: "space-123", isPinned }, pinning, (key) => key, (panel) => events.push(panel), () => events.push("togglePin"), { push: (route) => events.push(route) }, false, () => events.push("checkpoint"));
-    assert.deepEqual(actions.map((action) => action.icon), ["messages", "square-pen", isPinned ? "pin-off" : "pin", "folder-open", "bookmark"]);
-    assert.equal(actions[2].title, isPinned ? "space.unpin" : "space.pin");
-    assert.equal(actions[2].disabled, pinning);
+    const sections = buildSpaceActions({ id: "space-123", isPinned }, pinning, (key) => key, (panel) => events.push(panel), () => events.push("togglePin"), { push: (route) => events.push(route) }, false, () => events.push("checkpoint"));
+    assert.deepEqual(sections.map((section) => section.actions.map((action) => action.icon)), [["messages", "folder-open"], ["square-pen", isPinned ? "pin-off" : "pin", "bookmark"]]);
+    const actions = sections.flatMap((section) => section.actions);
+    assert.equal(actions[3].title, isPinned ? "space.unpin" : "space.pin");
+    assert.equal(actions[3].disabled, pinning);
     menuFocused = true;
-    const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), actions });
+    const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), sections });
     assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
     const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
     items[0].props.onPress();
     assert.deepEqual(events.splice(0), ["close", "chat"]);
     items[1].props.onPress();
+    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
+    items[2].props.onPress();
     assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
     if (!pinning) {
-      items[2].props.onPress();
+      items[3].props.onPress();
       assert.deepEqual(events.splice(0), ["close", "togglePin"]);
-    } else assert.equal(items[2].props.disabled, true);
-    items[3].props.onPress();
-    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
+    } else assert.equal(items[3].props.disabled, true);
   }
 }
 

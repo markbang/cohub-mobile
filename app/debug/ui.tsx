@@ -6,7 +6,7 @@ import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { GroupAddRow, GroupRow, GroupTile } from "@/src/components/GroupRow";
-import { NativeMenuButton, nativeMenus, type NativeMenuAction } from "@/src/components/NativeMenu";
+import { NativeMenuButton, nativeMenus, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
@@ -67,7 +67,7 @@ export default function DebugUiCatalogScreen() {
         {show("page") ? <PageSheetSection initiallyOpen={autoOpen && only === "page"} /> : null}
         {show("confirm") ? <ConfirmSection initiallyOpen={autoOpen && only === "confirm"} /> : null}
       </ScrollView>
-      <MenuPresence open={menuOpen}><AnchoredActionMenu anchorRef={menuAnchorRef} title="Actions" testID="ui-catalog-menu" actions={MENU_ACTIONS} onClose={() => setMenuOpen(false)} /></MenuPresence>
+      <MenuPresence open={menuOpen}><AnchoredActionMenu anchorRef={menuAnchorRef} title="Actions" testID="ui-catalog-menu" sections={MENU_SECTIONS} onClose={() => setMenuOpen(false)} /></MenuPresence>
     </Screen>
   );
 }
@@ -199,11 +199,20 @@ function StatesSection() {
   );
 }
 
-const MENU_ACTIONS: NativeMenuAction[] = [
-  { icon: "pin", title: "Pin", onPress: NOOP },
-  { icon: "share", title: "Share", onPress: NOOP },
-  { icon: "copy", title: "Copy link", onPress: NOOP },
-  { icon: "archive", title: "Archive", onPress: NOOP },
+// Groups, a checked choice, and a second line: what iOS menus show beyond a list of verbs.
+const MENU_SECTIONS: NativeMenuSection[] = [
+  { actions: [
+    { icon: "pin", title: "Pin", onPress: NOOP },
+    { icon: "share", title: "Share", onPress: NOOP },
+    { icon: "copy", title: "Copy link", onPress: NOOP },
+  ] },
+  { title: "Sort by", actions: [
+    { icon: "clock", title: "Recent", checked: true, onPress: NOOP },
+    { icon: "type", title: "Name", onPress: NOOP },
+  ] },
+  { actions: [
+    { icon: "archive", title: "Archive", detail: "Hidden from the list, still in search", onPress: NOOP },
+  ] },
 ];
 
 function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | null>; open: boolean; onOpen: () => void }) {
@@ -211,7 +220,7 @@ function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | 
     <Block label="Menu">
       <View className="flex-row">
         {nativeMenus
-          ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" actions={MENU_ACTIONS} testID="ui-catalog-menu-button" />
+          ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" sections={MENU_SECTIONS} testID="ui-catalog-menu-button" />
           : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={onOpen} testID="ui-catalog-menu-button" /></View>}
       </View>
     </Block>
