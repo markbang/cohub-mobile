@@ -45,6 +45,8 @@ export const SCREENS = [
   { name: "about", ready: "Cohub Mobile", link: "cohub://about" },
   // The tab roots scrolled: the Large Title collapsed into the bar.
   { name: "chats-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
+  // Released part-way through the collapse, the bar settles: here on the search field hidden.
+  { name: "chats-snap", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "nudge" }] },
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
   { name: "activity-scrolled", ready: "Usage details", link: "cohub://activity", steps: [{ waitGone: "Loading" }, { swipe: "up" }] },
   { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }] },
@@ -255,6 +257,7 @@ function pushSteps(lines, platform, steps = []) {
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
     else if (step.swipe === "up") lines.push("- swipe:", "    start: 50%, 72%", "    end: 50%, 32%", "    duration: 700");
+    else if (step.swipe === "nudge") lines.push("- swipe:", "    start: 50%, 60%", "    end: 50%, 55%", "    duration: 900");
     else if (step.swipe === "down") lines.push("- swipe:", "    start: 50%, 32%", "    end: 50%, 72%", "    duration: 700");
     else {
       // Tapping the minimized bar (the current tab's bubble, bottom leading) expands it again.

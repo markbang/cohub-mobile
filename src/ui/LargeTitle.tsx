@@ -82,8 +82,11 @@ const SEARCH_ORIGIN = { transformOrigin: "top" } as const;
  */
 export function useLargeTitleSnap(scrollRef: { current: ScrollView | null }, offsets: { hold: number; collapsed: number }, enabled: boolean) {
   const momentum = useRef(false);
-  const settle = (y: number) => {
-    const stops = offsets.hold > 0 ? [0, offsets.hold, offsets.collapsed] : [0, offsets.collapsed];
+  // A list that ends inside the collapse may rest at its end, so its last rows stay reachable.
+  const settle = ({ contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent) => {
+    const y = contentOffset.y;
+    const end = contentSize.height - layoutMeasurement.height;
+    const stops = [0, offsets.hold, offsets.collapsed, end].filter((stop, index, all) => stop >= 0 && stop <= end + 0.5 && all.indexOf(stop) === index);
     if (y <= 0 || y >= offsets.collapsed) return;
     const target = stops.reduce((best, stop) => Math.abs(stop - y) < Math.abs(best - y) ? stop : best, stops[0]);
     if (Math.abs(target - y) >= 1) scrollRef.current?.scrollTo({ y: target, animated: true });
@@ -91,15 +94,15 @@ export function useLargeTitleSnap(scrollRef: { current: ScrollView | null }, off
   if (!enabled) return {};
   return {
     onScrollEndDrag: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const y = event.nativeEvent.contentOffset.y;
+      const position = event.nativeEvent;
       momentum.current = false;
       // A fling settles in onMomentumScrollEnd; wait a frame to see whether one starts.
-      setTimeout(() => { if (!momentum.current) settle(y); }, 32);
+      setTimeout(() => { if (!momentum.current) settle(position); }, 32);
     },
     onMomentumScrollBegin: () => { momentum.current = true; },
     onMomentumScrollEnd: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       momentum.current = false;
-      settle(event.nativeEvent.contentOffset.y);
+      settle(event.nativeEvent);
     },
   };
 }
