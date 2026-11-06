@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cohub Mobile · iOS vs Android</title>
+<meta name="description" content="Cohub Mobile UI snapshots: the iOS system UI beside the drawn Android UI.">
+<style>
+  :root {
+    --bg: #f6f4f0; --fg: #1c1b19; --muted: #6f6b64; --line: #e3dfd7; --card: #fff; --accent: #c4510f;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111110; --fg: #f1efea; --muted: #9d9890; --line: #2a2926; --card: #1b1a18; --accent: #f07a32; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { max-width: 1120px; margin: 0 auto; padding: 48px 24px 8px; }
+  h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 8px; font-weight: 700; }
+  .note { font-size: 17px; margin: 0 0 8px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta a { color: inherit; }
+  .bar { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .bar-inner { max-width: 1120px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: var(--line); border-radius: 999px; padding: 3px; }
+  .seg button { border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgb(0 0 0 / .12); }
+  .spacer { flex: 1; }
+  nav.jump { display: flex; gap: 6px; flex-wrap: wrap; }
+  nav.jump a { font-size: 13px; color: var(--muted); text-decoration: none; padding: 4px 8px; border-radius: 8px; }
+  nav.jump a:hover { color: var(--fg); background: var(--line); }
+  main { max-width: 1120px; margin: 0 auto; padding: 8px 24px 80px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 40px 0 12px; }
+  .grid, .motion { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr)); gap: 16px; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 14px; scroll-margin-top: 64px; }
+  article h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+  figure { margin: 0; }
+  figcaption { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  figure img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); cursor: zoom-in; background: var(--line); }
+  dialog { border: 0; padding: 0; background: transparent; max-width: 96vw; max-height: 96vh; }
+  dialog::backdrop { background: rgb(0 0 0 / .78); }
+  dialog .pair { gap: 16px; }
+  dialog img { max-height: 90vh; width: auto; max-width: 46vw; border-radius: 16px; display: block; }
+  dialog figcaption { color: #ddd; }
+  .motion video { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #000; }
+  footer { max-width: 1120px; margin: 0 auto; padding: 0 24px 48px; color: var(--muted); font-size: 13px; }
+  [data-lang="en"] .zh, [data-lang="zh"] .en { display: none; }
+</style>
+</head>
+<body data-lang="zh">
+<header>
+  <h1><span class="zh">iOS 与 Android 界面对比</span><span class="en">iOS vs Android, side by side</span></h1>
+  <p class="note" id="note" hidden></p>
+  <div class="meta">
+    <span class="zh">左为 iOS 系统界面（参照），右为 Android 自绘界面。</span>
+    <span class="en">Left: the iOS system UI (the reference). Right: the drawn Android UI.</span>
+    <span id="meta"></span>
+  </div>
+</header>
+
+<div class="bar"><div class="bar-inner">
+  <div class="seg" role="group" aria-label="Theme" id="themes"></div>
+  <nav class="jump" id="jump"></nav>
+  <div class="spacer"></div>
+  <div class="seg" role="group" aria-label="Language">
+    <button data-lang="zh" aria-pressed="true">中文</button>
+    <button data-lang="en" aria-pressed="false">EN</button>
+  </div>
+</div></div>
+
+<main id="main"></main>
+
+<footer>
+  <span class="zh">Maestro 在 iOS 模拟器与 Android 模拟器（宽度对齐到 402pt）上自动截图和录屏。录屏不反映手势手感；CI 模拟器没有 GPU，模糊效果不准。</span>
+  <span class="en">Captured and recorded by Maestro on the iOS simulator and the Android emulator scaled to 402 pt wide. Recordings do not show gesture feel, and blur is unreliable without a GPU.</span>
+</footer>
+
+<dialog id="zoom"><div class="pair" id="zoom-pair"></div></dialog>
+
+<script id="report" type="application/json">__REPORT__</script>
+<script>
+// Labels for known screens and recordings. A capture the table does not know still renders, under
+// "Other screens" with its file name, so a new entry in scripts/ui-snapshots.mjs needs no edit here.
+const GROUPS = [
+  { zh: "组件目录", en: "Component catalog", screens: {
+    "catalog-type": ["字体层级", "Type ramp"],
+    "catalog-rows": ["设置行与分组行", "Settings and group rows"],
+    "catalog-controls": ["按钮与选择控件", "Buttons and selection"],
+    "catalog-states": ["空状态、错误与加载", "Empty, error and loading"],
+    "catalog-menu": ["菜单", "Menu"],
+    "catalog-sheet": ["Sheet（按内容）", "Sheet (fit)"],
+    "catalog-page": ["Sheet（整页表单）", "Page sheet"],
+    "catalog-confirm": ["确认框", "Confirmation"],
+  }},
+  { zh: "主页面", en: "Tab roots", screens: {
+    "chats": ["Chats", "Chats"],
+    "chats-snap": ["Chats 收起中途松手（自动停靠）", "Chats, released mid-collapse (settles)"],
+    "chats-scrolled": ["Chats 滚动后", "Chats, scrolled"],
+    "spaces": ["Spaces", "Spaces"],
+    "spaces-scrolled": ["Spaces 滚动后", "Spaces, scrolled"],
+    "activity": ["Activity", "Activity"],
+    "activity-scrolled": ["Activity 滚动后", "Activity, scrolled"],
+    "settings": ["Me", "Me"],
+    "settings-scrolled": ["Me 滚动后", "Me, scrolled"],
+  }},
+  { zh: "聊天页", en: "Chat", screens: {
+    "chat-conversation": ["对话（Markdown、表格、代码）", "Conversation (Markdown, table, code)"],
+    "chat-tools": ["工具调用", "Tool calls"],
+    "chat-long": ["长对话", "Long conversation"],
+    "chat-states": ["发送失败", "Failed send"],
+    "chat-native": ["原生时间线（强制开启）", "Native timeline (forced on)"],
+    "chat-real": ["真实会话", "A real Chat"],
+  }},
+  { zh: "其他页面", en: "Other screens", screens: {
+    "appearance": ["外观", "Appearance"],
+    "about": ["关于", "About"],
+  }},
+];
+const MOTIONS = {
+  "motion-tabs": ["切换标签", "Switching tabs"],
+  "motion-push": ["推入与返回", "Push and back"],
+  "motion-scroll-chats": ["Chats 滚动", "Scrolling Chats"],
+  "motion-scroll-spaces": ["Spaces 滚动", "Scrolling Spaces"],
+  "motion-scroll-activity": ["Activity 滚动", "Scrolling Activity"],
+  "motion-scroll-settings": ["Me 滚动", "Scrolling Me"],
+  "motion-chat": ["聊天页滚动", "Scrolling a Chat"],
+  "motion-space": ["空间页滚动", "Scrolling a Space"],
+  "motion-controls": ["开关、分段控件、筛选标签", "Switch, segmented control, chips"],
+  "motion-menu": ["菜单", "Menu"],
+  "motion-sheet": ["Sheet 打开与关闭", "Sheet open and close"],
+  "motion-confirm": ["确认框", "Confirmation"],
+};
+const THEMES = { light: ["浅色", "Light"], dark: ["深色", "Dark"] };
+
+const report = JSON.parse(document.getElementById("report").textContent);
+const esc = (value) => String(value).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const t = (zh, en) => `<span class="zh">${zh}</span><span class="en">${en}</span>`;
+const main = document.getElementById("main");
+const jump = document.getElementById("jump");
+let theme = report.themes[0];
+
+const known = new Set(GROUPS.flatMap((group) => Object.keys(group.screens)));
+const groups = GROUPS.map((group) => ({ ...group, names: Object.keys(group.screens).filter((name) => report.screens.includes(name)) }));
+const other = groups[groups.length - 1];
+other.names.push(...report.screens.filter((name) => !known.has(name)));
+const label = (group, name) => group.screens[name] ?? [name, name];
+
+function run(platform) {
+  const r = report.runs[platform];
+  const commit = `<a href="${report.repo}/commit/${esc(r.sha)}">${esc(r.sha.slice(0, 7))}</a>`;
+  return `${platform === "ios" ? "iOS" : "Android"} ${commit} · <a href="${report.repo}/actions/runs/${esc(r.id)}">${t("CI 运行", "CI run")}</a>`;
+}
+const same = report.runs.ios.sha === report.runs.android.sha;
+document.getElementById("meta").innerHTML = [
+  same ? `${esc(report.runs.ios.branch)} <a href="${report.repo}/commit/${esc(report.runs.ios.sha)}">${esc(report.runs.ios.sha.slice(0, 7))}</a>` : null,
+  same ? `<a href="${report.repo}/actions/runs/${esc(report.runs.ios.id)}">iOS run</a> · <a href="${report.repo}/actions/runs/${esc(report.runs.android.id)}">Android run</a>` : `${run("ios")} · ${run("android")}`,
+  esc(report.date.slice(0, 10)),
+  report.indexUrl ? `<a href="${esc(report.indexUrl)}">${t("全部报告", "All reports")}</a>` : null,
+].filter(Boolean).map((part) => `· ${part}`).join(" ");
+if (report.note) {
+  const note = document.getElementById("note");
+  note.textContent = report.note;
+  note.hidden = false;
+}
+
+document.getElementById("themes").innerHTML = report.themes.map((name, index) =>
+  `<button data-theme="${esc(name)}" aria-pressed="${index === 0}">${t(...(THEMES[name] ?? [name, name]))}</button>`).join("");
+
+function shot(name, platform) {
+  return `<figure><figcaption>${platform === "ios" ? "iOS" : "Android"}</figcaption><img loading="lazy" src="shots/${esc(name)}.${esc(theme)}.${platform}.webp" alt="${esc(name)} ${platform} ${esc(theme)}" data-name="${esc(name)}" onerror="this.closest('figure').style.visibility='hidden'"></figure>`;
+}
+function render() {
+  const visible = groups.filter((group) => group.names.length);
+  const motion = report.motions.length ? `<h2 id="motion">${t("动效（两端已按第一次画面变化对齐）", "Motion (aligned on each side's first change)")}</h2><div class="motion">${report.motions.map((name) =>
+    `<article><h3>${t(...(MOTIONS[name] ?? [esc(name), esc(name)]))}</h3><video src="motion/${esc(name)}.mp4" controls muted loop playsinline preload="metadata"></video></article>`).join("")}</div>` : "";
+  main.innerHTML = visible.map((group) => `<h2>${t(group.zh, group.en)}</h2><div class="grid">${group.names.map((name) =>
+    `<article id="${esc(name)}"><h3>${t(...label(group, name).map(esc))}</h3><div class="pair">${shot(name, "ios")}${shot(name, "android")}</div></article>`).join("")}</div>`).join("") + motion;
+  jump.innerHTML = visible.map((group) => `<a href="#${esc(group.names[0])}">${t(group.zh, group.en)}</a>`).join("")
+    + (report.motions.length ? `<a href="#motion">${t("动效", "Motion")}</a>` : "");
+}
+document.querySelectorAll("[data-theme]").forEach((button) => button.addEventListener("click", () => {
+  theme = button.dataset.theme;
+  document.querySelectorAll("[data-theme]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+  render();
+}));
+document.querySelectorAll("button[data-lang]").forEach((button) => button.addEventListener("click", () => {
+  document.body.dataset.lang = button.dataset.lang;
+  document.documentElement.lang = button.dataset.lang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("button[data-lang]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+}));
+if (!navigator.language.startsWith("zh")) document.querySelector('button[data-lang="en"]').click();
+const zoom = document.getElementById("zoom");
+main.addEventListener("click", (event) => {
+  const name = event.target.dataset?.name;
+  if (!name) return;
+  document.getElementById("zoom-pair").innerHTML = shot(name, "ios") + shot(name, "android");
+  zoom.showModal();
+});
+zoom.addEventListener("click", () => zoom.close());
+render();
+</script>
+</body>
+</html>

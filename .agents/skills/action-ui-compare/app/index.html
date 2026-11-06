@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cohub Mobile · UI Compare</title>
+<meta name="description" content="Every published iOS-vs-Android UI snapshot report for Cohub Mobile.">
+<meta name="theme-color" content="#f6f4f0">
+<style>
+  :root {
+    --bg: #f6f4f0; --fg: #1c1b19; --muted: #6f6b64; --line: #e3dfd7; --card: #fff; --ok: #2f7d4f; --bad: #b3402a;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111110; --fg: #f1efea; --muted: #9d9890; --line: #2a2926; --card: #1b1a18; --ok: #5cbf86; --bad: #f07a5f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 48px 0 16px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.02em; margin: 0; font-weight: 700; flex: 1; min-width: 240px; }
+  .seg { display: inline-flex; background: var(--line); border-radius: 999px; padding: 3px; }
+  .seg button { border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgb(0 0 0 / .12); }
+  input[type="search"] { width: 100%; font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin: 0 0 16px; }
+  ol { list-style: none; margin: 0; padding: 0 0 64px; display: grid; gap: 12px; }
+  li a.card { display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 12px; color: inherit; text-decoration: none; transition: border-color .15s ease; }
+  li a.card:hover { border-color: var(--muted); }
+  .thumb { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .thumb img { width: 100%; aspect-ratio: 9 / 19.5; object-fit: cover; object-position: top; border-radius: 8px; background: var(--line); display: block; }
+  .title { font-weight: 600; font-size: 16px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .title code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  .note { margin: 2px 0 0; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 4px; display: flex; gap: 6px 12px; flex-wrap: wrap; }
+  .bad { color: var(--bad); }
+  .empty { color: var(--muted); padding: 48px 0; text-align: center; }
+  [data-lang="en"] .zh, [data-lang="zh"] .en { display: none; }
+  @media (max-width: 520px) { li a.card { grid-template-columns: 80px 1fr; } }
+</style>
+</head>
+<body data-lang="zh">
+<div class="wrap">
+  <header>
+    <h1><span class="zh">iOS 与 Android 界面对比记录</span><span class="en">iOS vs Android reports</span></h1>
+    <div class="seg" role="group" aria-label="Language">
+      <button data-lang="zh" aria-pressed="true">中文</button>
+      <button data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </header>
+  <input type="search" id="q" placeholder="branch / commit / note" aria-label="Filter">
+  <ol id="list"><li class="empty">…</li></ol>
+</div>
+<script>
+// Written by .agents/skills/action-ui-compare/publish.mjs; the App itself never needs republishing.
+const REGISTRY = "https://public.cohub.live/p/c649d081-fa43-411e-b2d0-bf1d746f3ae6/ui-compare/reports.json";
+const PREFERRED_THUMB = ["chats", "chat-conversation", "settings", "catalog-rows"];
+const list = document.getElementById("list");
+const q = document.getElementById("q");
+const t = (zh, en) => `<span class="zh">${zh}</span><span class="en">${en}</span>`;
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+let reports = [];
+
+function card(report) {
+  const base = report.url.replace(/index\.html$/, "");
+  const thumb = PREFERRED_THUMB.find((name) => report.screens.includes(name)) ?? report.screens[0];
+  const theme = report.themes.includes("light") ? "light" : report.themes[0];
+  const { ios, android } = report.runs;
+  const sha = ios.sha === android.sha ? `<code>${esc(ios.sha.slice(0, 7))}</code>` : `<code>iOS ${esc(ios.sha.slice(0, 7))}</code><code>Android ${esc(android.sha.slice(0, 7))}</code>`;
+  const failed = [ios, android].filter((run) => run.conclusion !== "success").length;
+  const date = new Date(report.date).toLocaleString(document.documentElement.lang, { dateStyle: "medium", timeStyle: "short" });
+  return `<li><a class="card" href="${esc(report.url)}" target="_blank" rel="noopener">
+    <div class="thumb">${thumb ? ["ios", "android"].map((p) => `<img loading="lazy" alt="" src="${esc(base)}shots/${esc(thumb)}.${esc(theme)}.${p}.webp">`).join("") : ""}</div>
+    <div>
+      <div class="title">${esc(ios.branch)} ${sha}</div>
+      ${report.note ? `<p class="note">${esc(report.note)}</p>` : ""}
+      <div class="meta">
+        <span>${esc(date)}</span>
+        <span>${t(`${report.screens.length} 个画面`, `${report.screens.length} screens`)} · ${esc(report.themes.join(" + "))}</span>
+        <span>${t(`${report.motions.length} 段动效`, `${report.motions.length} recordings`)}</span>
+        ${failed ? `<span class="bad">${t("CI 未全部通过", "CI not fully green")}</span>` : ""}
+      </div>
+    </div>
+  </a></li>`;
+}
+
+function render() {
+  const needle = q.value.trim().toLowerCase();
+  const shown = reports.filter((r) => !needle || [r.runs.ios.branch, r.runs.ios.sha, r.runs.android.sha, r.note].some((v) => String(v ?? "").toLowerCase().includes(needle)));
+  list.innerHTML = shown.length ? shown.map(card).join("") : `<li class="empty">${t("没有报告", "No reports")}</li>`;
+}
+
+q.addEventListener("input", render);
+document.querySelectorAll("button[data-lang]").forEach((button) => button.addEventListener("click", () => {
+  document.body.dataset.lang = button.dataset.lang;
+  document.documentElement.lang = button.dataset.lang === "zh" ? "zh-CN" : "en";
+  document.querySelectorAll("button[data-lang]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+  render();
+}));
+if (!navigator.language.startsWith("zh")) document.querySelector('button[data-lang="en"]').click();
+
+// The CDN caches for 5 minutes; a fresh query shows a report as soon as it is recorded.
+fetch(`${REGISTRY}?t=${Date.now()}`)
+  .then((response) => {
+    if (response.status === 404) return { reports: [] };
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  })
+  .then((data) => { reports = data.reports.sort((a, b) => b.date.localeCompare(a.date)); render(); })
+  .catch((error) => { list.innerHTML = `<li class="empty">${t("读取报告列表失败", "Could not load reports")}: ${esc(error.message)}</li>`; });
+</script>
+</body>
+</html>
