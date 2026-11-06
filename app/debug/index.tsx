@@ -1,9 +1,12 @@
 import { useRouter } from "expo-router";
 import * as Updates from "expo-updates";
+import type { ReactNode } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useAppActions, useAppSelector } from "@/src/data/context";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
+import { setFrameProbeEnabled, useFrameProbeEnabled } from "@/src/components/useFrameProbe";
 import { useAppTheme, useFontScalePreference } from "@/src/theme";
+import { AppSwitch } from "@/src/ui/AppSwitch";
 import { AppIcon, Screen, SectionHeader, type IconName } from "@/src/ui";
 
 function updateInfo() {
@@ -23,6 +26,7 @@ export default function DebugMenuScreen() {
   const { installationId } = useAppActions();
   const connectionState = useAppSelector((app) => app.connectionState);
   const fontScale = useFontScalePreference();
+  const frameProbe = useFrameProbeEnabled();
   const version = getInstalledAppVersion();
   const updates = updateInfo();
 
@@ -40,6 +44,7 @@ export default function DebugMenuScreen() {
         <DebugRow icon="list-tree" title="长列表性能" detail="500 / 2000 / 10000 条消息" onPress={() => router.push("/debug/list")} />
         <DebugRow icon="messages" title="Chat Fixtures" detail="聊天页外壳 + 原生时间线，固定对话数据" onPress={() => router.push("/debug/chat")} />
         <DebugRow icon="palette" title="UI Catalog" detail="共享组件一览，供 iOS / Android 截图对比" onPress={() => router.push("/debug/ui")} />
+        <DebugRow icon="activity" title="卡顿探针" detail="记录 UI 掉帧与 JS 阻塞到诊断日志，随反馈上传" trailing={<AppSwitch value={frameProbe} onValueChange={setFrameProbeEnabled} accessibilityLabel="卡顿探针" />} />
       </View>
 
       <SectionHeader title="运行时 / 数据" />
@@ -70,7 +75,7 @@ export default function DebugMenuScreen() {
   );
 }
 
-function DebugRow({ icon, title, detail, onPress }: { icon: IconName; title: string; detail: string; onPress?: () => void }) {
+function DebugRow({ icon, title, detail, onPress, trailing }: { icon: IconName; title: string; detail: string; onPress?: () => void; trailing?: ReactNode }) {
   const content = (
     <View className="min-h-16 flex-row items-center gap-3 px-3 border-b border-border">
       <View className="w-8 h-8 rounded-sm items-center justify-center bg-surface-raised">
@@ -80,7 +85,7 @@ function DebugRow({ icon, title, detail, onPress }: { icon: IconName; title: str
         <Text className="text-body font-semibold text-fg">{title}</Text>
         <Text numberOfLines={2} className="text-caption text-fg-muted mt-0.5">{detail}</Text>
       </View>
-      {onPress ? <AppIcon name="chevron-right" size={18} tone="faint" /> : null}
+      {trailing ?? (onPress ? <AppIcon name="chevron-right" size={18} tone="faint" /> : null)}
     </View>
   );
   return onPress ? (
