@@ -44,10 +44,10 @@ export const SCREENS = [
   { name: "appearance", ready: "Accent color", link: "cohub://appearance" },
   { name: "about", ready: "Cohub Mobile", link: "cohub://about" },
   // The tab roots scrolled: the Large Title collapsed into the bar.
+  // Released part-way through the collapse, the bar settles: here on the search field hidden. Before
+  // chats-scrolled, so Chats is still at its top.
+  { name: "chats-snap", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "nudge" }] },
   { name: "chats-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
-  // Released part-way through the collapse, the bar settles: here on the search field hidden.
-  // A second tap on the current tab scrolls it back to the top first.
-  { name: "chats-snap", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Chats" }, { swipe: "nudge" }] },
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
   { name: "activity-scrolled", ready: "Usage details", link: "cohub://activity", steps: [{ waitGone: "Loading" }, { swipe: "up" }] },
   { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }] },
