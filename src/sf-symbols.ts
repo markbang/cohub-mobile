@@ -82,6 +82,7 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   "trending-up": "chart.line.uptrend.xyaxis",
   type: "textformat",
   user: "person",
+  "user-circle": "person.crop.circle",
   wifi: "wifi",
   x: "xmark",
   zap: "bolt",

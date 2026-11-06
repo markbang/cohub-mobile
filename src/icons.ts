@@ -77,6 +77,7 @@ import Type from "lucide-react-native/icons/type";
 import Trash2 from "lucide-react-native/icons/trash";
 import TrendingUp from "lucide-react-native/icons/trending-up";
 import UserRound from "lucide-react-native/icons/user-round";
+import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import Wifi from "lucide-react-native/icons/wifi";
 import X from "lucide-react-native/icons/x";
 import Zap from "lucide-react-native/icons/zap";
@@ -169,6 +170,7 @@ export const icons = {
   "trending-up": TrendingUp,
   type: Type,
   user: UserRound,
+  "user-circle": CircleUserRound,
   wifi: Wifi,
   x: X,
   zap: Zap,

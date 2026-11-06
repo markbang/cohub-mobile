@@ -40,7 +40,7 @@ export default function TabLayout() {
         name="(me)"
         options={{
           title: t("tabs.me"),
-          tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="user" color={color} size={size} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="user-circle" color={color} size={size} focused={focused} />,
         }}
       />
     </Tabs>

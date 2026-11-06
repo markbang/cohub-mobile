@@ -5,7 +5,7 @@ import type { IconName } from "@/src/icons";
 import { motion } from "@/src/motion";
 import { Glyph } from "@/src/ui/Glyph";
 
-export type AnimatedTabIconName = "messages" | "layers" | "activity" | "user";
+export type AnimatedTabIconName = "messages" | "layers" | "activity" | "user-circle";
 
 type AnimatedTabIconProps = {
   name: AnimatedTabIconName;
@@ -18,7 +18,7 @@ const iconNames: Record<AnimatedTabIconName, IconName> = {
   messages: "messages",
   layers: "layers",
   activity: "activity",
-  user: "user",
+  "user-circle": "user-circle",
 };
 
 
