@@ -23,8 +23,8 @@ import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
-import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
@@ -45,7 +45,9 @@ export default function ChatsScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
+  const titleScroll = largeTitleScroll(true);
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks, sessionLatestTurns: state.sessionLatestTurns, sessionTurnStatuses: state.sessionTurnStatuses }), shallowEqual);
@@ -207,8 +209,8 @@ export default function ChatsScreen() {
 
   return (
     <Screen edgeToEdge>
-      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-      <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} actions={<>
+      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
+      <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <View ref={sourceButtonRef} collapsable={false} className={sourceMenuOpen ? "opacity-0" : undefined}>
           <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </View>
@@ -217,14 +219,16 @@ export default function ChatsScreen() {
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>}
+      <EdgeBlurTarget attach={attachBlurTarget}>
       <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
       <LegendList
         ref={listRef}
         refScrollView={scrollRef}
         onScroll={(event) => { pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
         onScrollBeginDrag={(event) => { draggingRef.current = true; holdRowOrder(); pullRefresh.onScrollBeginDrag(event); }}
-        onScrollEndDrag={() => { draggingRef.current = false; releaseRowOrder(); }}
-        onMomentumScrollEnd={() => { draggingRef.current = false; releaseRowOrder(); }}
+        onScrollEndDrag={(event) => { draggingRef.current = false; releaseRowOrder(); titleSnap.onScrollEndDrag?.(event); }}
+        onMomentumScrollBegin={titleSnap.onMomentumScrollBegin}
+        onMomentumScrollEnd={(event) => { draggingRef.current = false; releaseRowOrder(); titleSnap.onMomentumScrollEnd?.(event); }}
         scrollEventThrottle={16}
         data={shownItems}
         extraData={rowExtraData}
@@ -249,8 +253,8 @@ export default function ChatsScreen() {
         onLayout={emptyFill.onLayout}
         ListHeaderComponent={<View>
           {pullRefresh.header}
-          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} />}
-          {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></View>}
+          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} />}
+          {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY}><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></LargeTitleSearch>}
           <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
@@ -261,6 +265,7 @@ export default function ChatsScreen() {
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
       </BrandRefreshArea>
+      </EdgeBlurTarget>
       <MenuPresence open={sourceMenuOpen}><AnchoredActionMenu
         anchorRef={sourceButtonRef}
         title={t("chats.source.title")}
