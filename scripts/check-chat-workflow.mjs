@@ -4340,6 +4340,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   assert.equal(released.session, pagedAway.session);
   const atTail = { sessionViews: { fixture: { ...windowOf(1, 25, false, false), messages: [], historyLoaded: true } } };
   assert.equal(reduceQueueFailure(atTail, { type: "session-release", sessionId: "fixture" }), atTail, "a window at the tail stays warm for the next open");
+  assert.equal(reduceQueueFailure({ sessionViews: { fixture: { ...pagedAway, refreshing: true } } }, { type: "session-release", sessionId: "fixture" }).sessionViews.fixture.refreshing, false, "a release also drops the spinner of a paged-away window");
   const contextFunction = (name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource);
   const viewScope = {
     emptyView: () => ({ messages: [], turns: [], hasMoreOlder: false, hasMoreNewer: false, windowGeneration: 0, stream: null }),
@@ -4354,6 +4355,14 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
   };
   const reduceView = new Function(...Object.keys(viewScope), ts.transpileModule(`${contextFunction("turnClientMessageId")}\n${contextFunction("mergeTurnRecords")}\n${reducerFunction.getText(contextSource)}; return reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(viewScope));
   const viewOf = (window) => ({ sessionViews: { fixture: { ...window, messages: [], windowGeneration: 0, stream: null } }, sessionLatestTurns: {} });
+  // A finalized turn's refresh is still in flight when the closed Chat is released; its end is dropped as stale.
+  const orphaned = [
+    { type: "session-refresh-start", sessionId: "fixture" },
+    { type: "session-release", sessionId: "fixture" },
+    { type: "session-refresh-start", sessionId: "fixture", silent: true, catchUp: true },
+    { type: "session-refresh-end", sessionId: "fixture", silent: true },
+  ].reduce(reduceView, viewOf(windowOf(71, 100, true, false))).sessionViews.fixture;
+  assert.equal(orphaned.refreshing, false, "a release drops the pull spinner of a refresh whose end it orphaned, so the reopened Chat settles");
   const tailView = viewOf(windowOf(71, 100, true, false));
   const jumped = reduceView(tailView, { type: "session-window-success", sessionId: "fixture", turns: turnRange(1, 25), hasMoreOlder: false, hasMoreNewer: true }).sessionViews.fixture;
   assert.deepEqual([jumped.turns[0].sequence, jumped.turns.at(-1).sequence, jumped.hasMoreNewer, jumped.newestCursor, jumped.windowGeneration], [1, 25, true, 25, 0], "a jump far from the loaded turns pages forward from its own window, not across a gap; the turn jump places it itself");
