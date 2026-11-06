@@ -1,6 +1,5 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
 import type { MessageRecord, SessionListFork, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
-import { isOptimisticFollowup } from "./followup-queue";
 import { turnSequenceForMessage } from "./session-history";
 import type { SessionSeenEntry, SessionSeenState } from "./chat-read-state";
 
@@ -305,9 +304,9 @@ export async function saveMessages(userKey: string, sessionId: string, messages:
     );
     try {
       for (const message of messages) {
-        // An unaccepted upload is a transient queue placeholder, not resumable server work; agent
-        // steps belong to the execution trace.
-        if (isOptimisticFollowup(message) || message.meta?.messageKind === "assistant_intermediate") continue;
+        // Agent steps belong to the execution trace. Unaccepted sends, queued follow-ups included, are
+        // kept so a cold start can settle them into failed sends instead of losing them.
+        if (message.meta?.messageKind === "assistant_intermediate") continue;
         const meta = message.meta ? { ...message.meta } : null;
         if (meta) delete meta._mobileLive;
         const persistable = { ...message, meta };
@@ -412,6 +411,17 @@ export async function clearComposerDraft(userKey: string, spaceId: string, scope
     "DELETE FROM composer_drafts WHERE user_key = ? AND draft_key = ?",
     userKey,
     composerDraftKey(spaceId, scope),
+  );
+}
+
+/** Clears the draft only while it still holds `expected`, so text written since by another screen survives. */
+export async function clearComposerDraftIf(userKey: string, spaceId: string, scope: ComposerDraftScope, expected: string) {
+  const db = await database();
+  await db.runAsync(
+    "DELETE FROM composer_drafts WHERE user_key = ? AND draft_key = ? AND text = ?",
+    userKey,
+    composerDraftKey(spaceId, scope),
+    expected,
   );
 }
 

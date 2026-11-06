@@ -812,6 +812,7 @@ export const en = {
   "chat.draft.loadingSpace": "Loading Space",
   "chat.draft.loadSpaceFailed": "Unable to load this Space.",
   "chat.draft.starting": "Starting Chat…",
+  "chat.draft.retryFirst": "Retry or delete the message above first.",
   "chat.draft.title": "What are you working on?",
   "chat.draft.body":
     "Your first message will become the conversation title automatically.",

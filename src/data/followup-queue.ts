@@ -27,7 +27,8 @@ export function followupQueueItems(turns: readonly SessionTurnRecord[], activeTu
   }));
   const pending = messages.filter(isOptimisticFollowup).filter((message) => !turns.some((turn) =>
     (typeof message.meta?.clientMessageId === "string" && turn.meta?.clientMessageId === message.meta.clientMessageId)
-      || turn.sequence === message.meta?.turnSequence
+      // An unsubmitted send's Turn number is provisional and never matches by number.
+      || (message.meta?.awaitingSubmit !== true && turn.sequence === message.meta?.turnSequence)
   )).map((message): FollowupQueueItem => ({
     key: message.id, preview: followupPreviewText({ userText: message.text }),
     sequence: Number(message.meta?.turnSequence),
@@ -66,3 +67,63 @@ export async function steerQueuedFollowup(client: CohubClient, spaceId: string, 
 export async function cancelQueuedFollowup(client: CohubClient, spaceId: string, sessionId: string, turnId: string) {
   return client.space(spaceId).session(sessionId).cancelTurn(turnId);
 }
+
+type SendJob = { id: string; order: number; run: () => Promise<void>; resolve: () => void; reject: (error: unknown) => void };
+type SendLane = { jobs: SendJob[]; running: string | null; blockedBy: string | null };
+
+/**
+ * One FIFO per Chat. A send goes out only after the one ahead of it was accepted, so the server
+ * numbers Turns in the order they were sent; it never waits for the agent. A failed send holds the
+ * sends behind it until the user retries or deletes it.
+ */
+export function createSendQueue() {
+  const lanes = new Map<string, SendLane>();
+  const lane = (key: string) => {
+    let value = lanes.get(key);
+    if (!value) lanes.set(key, value = { jobs: [], running: null, blockedBy: null });
+    return value;
+  };
+  const pump = (key: string) => {
+    const current = lane(key);
+    if (current.running !== null || current.blockedBy !== null) return;
+    const job = current.jobs.shift();
+    if (!job) return;
+    current.running = job.id;
+    job.run().then(() => {
+      current.running = null;
+      job.resolve();
+      pump(key);
+    }, (error: unknown) => {
+      current.running = null;
+      current.blockedBy = job.id;
+      job.reject(error);
+    });
+  };
+  return {
+    /** Ordered by `order`, so a retry takes back the place of the send it replaces. */
+    enqueue(key: string, job: { id: string; order: number; run: () => Promise<void> }): Promise<void> {
+      return new Promise<void>((resolve, reject) => {
+        const jobs = lane(key).jobs;
+        const index = jobs.findIndex((item) => item.order > job.order);
+        jobs.splice(index < 0 ? jobs.length : index, 0, { ...job, resolve, reject });
+        pump(key);
+      });
+    },
+    /** The failed send was retried or deleted; the sends behind it continue. */
+    release(key: string, id: string) {
+      const current = lanes.get(key);
+      if (current?.blockedBy !== id) return;
+      current.blockedBy = null;
+      pump(key);
+    },
+    blocked(): [string, string][] {
+      return [...lanes].flatMap(([key, value]) => value.blockedBy === null ? [] : [[key, value.blockedBy] as [string, string]]);
+    },
+    has(key: string, id: string) {
+      const current = lanes.get(key);
+      return Boolean(current && (current.running === id || current.jobs.some((job) => job.id === id)));
+    },
+  };
+}
+
+export type SendQueue = ReturnType<typeof createSendQueue>;

@@ -10,7 +10,7 @@ import Animated, { cubicBezier, Easing, FadeIn, FadeOut, ReduceMotion, useAnimat
 import { curves, motion } from "@/src/motion";
 import type { LegendListRef } from "@legendapp/list/react-native";
 import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
-import { KeyboardAvoidingView, KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
+import { KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
 import { AnchoredActionMenu, type AnchoredMenuAction, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
@@ -18,7 +18,7 @@ import { ToastViewport, useToast } from "@/src/components/Toast";
 import { copyMessageText, MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { SendBubbleOverlay } from "@/src/components/SendBubbleOverlay";
 import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
-import { isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
+import { createSendFlight, isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
 import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess";
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
 import { latestMessageId } from "@/src/data/chat-read-state";
@@ -36,6 +36,8 @@ import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useModelCatalog, useSession, useSessionStream } from "@/src/data/context";
 import { useScreenQuery, useSyncQuery } from "@/src/data/query";
+import type { ComposerDraftScope } from "@/src/data/local-db";
+import { createNewChatDraft } from "@/src/data/new-chat-draft";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
 import { useComposerSlashCommands } from "@/src/data/use-composer-slash";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -57,7 +59,7 @@ import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, ty
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
 import { harnessLabel, HttpError, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
 import { appendVoiceText as appendDictation } from "@/src/data/voice-append";
-import { chatThreadPlaceholder, failedSendDraft, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
+import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, isSubmittingSend, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
 import { config } from "@/src/config";
 import { useTranslation } from "@/src/i18n";
@@ -76,7 +78,6 @@ import { previewLocalFile } from "@/src/platform/file-preview";
 import { takeIncomingShare } from "@/src/platform/incoming-share";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[]; shared?: string | string[] };
-type CreatedChat = { sessionId: string; transition: SendBubbleTransition | null };
 const NEW_COMPOSER_DRAFT_SCOPE = { kind: "new" } as const;
 const messageViewabilityConfig = { itemVisiblePercentThreshold: 20 };
 /** Only used to estimate the destination of a jump the list cannot resolve on its own. */
@@ -159,23 +160,14 @@ export default function ChatScreen() {
   const parsedTurn = rawTurn ? Number(rawTurn) : NaN;
   const initialTurnSequence = Number.isSafeInteger(parsedTurn) && parsedTurn > 0 ? parsedTurn : null;
   const initialTurnId = rawTurnId?.trim() || null;
-  const [createdChat, setCreatedChat] = useState<CreatedChat | null>(null);
+  // A new Chat stays on this one surface after the server creates it: same component, no remount,
+  // no Stack transition. The route only learns the id for deep links and restoration.
+  const [draft] = useState(() => sessionId === "new" && spaceId ? { spaceId, fromShare: (Array.isArray(params.shared) ? params.shared[0] : params.shared) === "1" } : null);
+  const onCreated = useCallback((id: string) => router.setParams({ sessionId: id }), [router]);
   if (!sessionId) return <MissingChat />;
-  if (sessionId === "new") {
-    return spaceId
-      ? <DraftChatContent
-          spaceId={spaceId}
-          fromShare={(Array.isArray(params.shared) ? params.shared[0] : params.shared) === "1"}
-          onCreated={({ session, transition }) => {
-            setCreatedChat({ sessionId: session.id, transition });
-            // Update the deep-linkable identity without pushing a new screen or replaying
-            // the native stack transition. The current surface continues in place.
-            router.setParams({ sessionId: session.id });
-          }}
-        />
-      : <MissingChat />;
-  }
-  return <ChatContent key={sessionId} sessionId={sessionId} initialTurnSequence={initialTurnSequence} initialTurnId={initialTurnId} initialSendTransition={createdChat?.sessionId === sessionId ? createdChat.transition : null} />;
+  if (draft) return <ChatContent sessionId={sessionId === "new" ? null : sessionId} draft={draft} onCreated={onCreated} initialTurnSequence={null} initialTurnId={null} />;
+  if (sessionId === "new") return <MissingChat />;
+  return <ChatContent key={sessionId} sessionId={sessionId} initialTurnSequence={initialTurnSequence} initialTurnId={initialTurnId} />;
 }
 
 // iOS swipe-back is silently cancelled when the SpacePanels pager wins the horizontal drag; the
@@ -207,14 +199,31 @@ function useBackPressTrace(source: string, root: ReturnType<typeof useNavigation
   }, [root, source]);
 }
 
-function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSendTransition }: { sessionId: string; initialTurnSequence: number | null; initialTurnId: string | null; initialSendTransition?: SendBubbleTransition | null }) {
+type ChatDraft = { spaceId: string; fromShare: boolean };
+
+/**
+ * One Chat surface. With `draft` it starts as a new Chat in that Space: the first send shows its
+ * bubble here at once, and when the server creates the Chat this same component carries on with it.
+ */
+function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initialTurnSequence, initialTurnId }: { sessionId: string | null; draft?: ChatDraft | null; onCreated?: (sessionId: string) => void; initialTurnSequence: number | null; initialTurnId: string | null }) {
+  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  // "" until a new Chat exists; every session-scoped effect below is a no-op for it.
+  const sessionId = routeSessionId ?? createdSessionId ?? "";
+  // The first message of a new Chat, held here while the server creates it (or after it failed to).
+  const [pendingNew, setPendingNew] = useState<MessageRecord | null>(null);
+  // A late answer must not set the route params of whatever screen is focused after this one closed.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const router = useRouter();
   const rootNavigation = useNavigationContainerRef();
   const traceBackPress = useBackPressTrace("chat", rootNavigation);
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client, refreshHome, sendMessage, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  const { client, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -224,13 +233,27 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const view = useSession(sessionId);
   const sessionSummary = useAppSelector((app) => app.state.sessions.find((item) => item.id === sessionId) ?? null);
   const session = view.session ?? sessionSummary;
-  const spaceId = view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
+  const spaceId = draft?.spaceId ?? view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
+  const listedSpace = useAppSelector((app) => (draft ? app.state.spaces.find((item) => item.id === draft.spaceId) ?? null : null));
+  // A cold start can open a new Chat before the Space list arrives. Only the server saying it is gone or
+  // off-limits means unavailable; an offline or failed request can be retried.
+  const spaceLookup = useScreenQuery({
+    queryKey: [`space:${spaceId}:detail`],
+    queryFn: async (): Promise<SpaceRecord> => {
+      const remote = await client!.spaces.get(spaceId);
+      upsertSpace(remote);
+      return remote;
+    },
+    enabled: Boolean(draft) && listedSpace === null && Boolean(client && spaceId),
+    retry: 0,
+  });
+  const draftSpace = draft ? listedSpace ?? spaceLookup.data ?? null : null;
   const runtime = useSpaceRuntime(spaceId);
   useSyncQuery(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
   const composerRef = useRef<View>(null);
   const composerMenuSourceRef = useRef<View>(null);
-  const [sendTransition, setSendTransition] = useState<SendBubbleTransition | null>(() => initialSendTransition ?? null);
+  const [sendTransition, setSendTransition] = useState<SendBubbleTransition | null>(null);
   const composerMeasurementRef = useRef<ComposerInputMeasurement>({ input: null, scrollY: 0 });
   const sendRootRef = useAnimatedRef<View>();
   const sendBubbleRef = useAnimatedRef<View>();
@@ -238,10 +261,9 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const attachmentSourceRef = useRef<View>(null);
   const attachmentScrollYRef = useRef(0);
   const queueScrollRef = useRef<ScrollView>(null);
-  const submitLockRef = useRef(false);
-  // Read by the row-level retry, whose identity must not change with every send.
-  const sendingRef = useRef(false);
   const sendGenerationRef = useRef(0);
+  // The latest send owns the flight; a slower measurement from an earlier one is dropped.
+  const sendTokenRef = useRef(0);
   const reducedMotion = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
   const completeSendTransition = useCallback((id: string) => {
@@ -252,6 +274,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     setSendTransition(null);
   }, []));
   useFocusEffect(useCallback(() => {
+    if (!sessionId) return;
     recordDebugEvent("chat.screen.focus", { session: debugAlias("session", sessionId) });
     setForegroundSession(sessionId);
     return () => {
@@ -276,7 +299,17 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const inputRef = useRef("");
   const inputEditedRef = useRef(false);
   const draftLoadedRef = useRef(false);
-  const draftScope = useMemo(() => ({ kind: "session" as const, sessionId }), [sessionId]);
+  const draftScope = useMemo<ComposerDraftScope>(() => (sessionId ? { kind: "session", sessionId } : NEW_COMPOSER_DRAFT_SCOPE), [sessionId]);
+  const [newChatDraft] = useState(() => createNewChatDraft({
+    save: (text) => saveComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE, text),
+    clearIf: (text) => clearComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE, text),
+  }));
+  // Set when a new Chat is created: the composer keeps what it holds and saves it as that Chat's draft.
+  const takeoverRef = useRef(false);
+  const persistDraft = useCallback((scope: ComposerDraftScope, text: string) => {
+    if (scope.kind === "new") newChatDraft.persist(text);
+    else void saveComposerDraft(spaceId, scope, text).catch(() => undefined);
+  }, [newChatDraft, saveComposerDraft, spaceId]);
   const updateInput = useCallback((next: string) => {
     inputEditedRef.current = true;
     inputRef.current = next;
@@ -291,44 +324,51 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     onMentionsFocusChange(focused);
     onSlashFocusChange(focused);
   }, [onMentionsFocusChange, onSlashFocusChange]);
-  useEffect(() => { sendingRef.current = view.sending; }, [view.sending]);
   const [sendFeedback, setSendFeedback] = useState<"idle" | "success">("idle");
   const sendFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (sendFeedbackTimerRef.current !== null) clearTimeout(sendFeedbackTimerRef.current); }, []);
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
+  // Sending reads the composer from refs: they are cleared with the send, so a second tap that lands
+  // before the cleared composer renders finds nothing to send again.
+  const attachmentsRef = useRef<AttachmentDraft[]>([]);
+  useLayoutEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
   const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, sessionId, attachments);
   useEffect(() => { if (attachments.length === 0) attachmentScrollYRef.current = 0; }, [attachments.length]);
   useEffect(() => {
+    if (takeoverRef.current) {
+      takeoverRef.current = false;
+      draftLoadedRef.current = true;
+      persistDraft(draftScope, inputRef.current);
+      return;
+    }
     let active = true;
     inputEditedRef.current = false;
     draftLoadedRef.current = false;
     inputRef.current = "";
     void loadComposerDraft(spaceId, draftScope)
-      .then((draft) => {
+      .then((saved) => {
         if (!active) return;
         draftLoadedRef.current = true;
         if (inputEditedRef.current) {
-          void saveComposerDraft(spaceId, draftScope, inputRef.current).catch(() => undefined);
+          persistDraft(draftScope, inputRef.current);
           return;
         }
-        inputRef.current = draft;
-        setInput(draft);
+        inputRef.current = saved;
+        setInput(saved);
       })
       .catch(() => {
         if (active) draftLoadedRef.current = true;
       });
     return () => { active = false; };
-  }, [draftScope, loadComposerDraft, saveComposerDraft, spaceId]);
+  }, [draftScope, loadComposerDraft, persistDraft, spaceId]);
   useEffect(() => {
     if (!draftLoadedRef.current) return;
-    const timer = setTimeout(() => {
-      void saveComposerDraft(spaceId, draftScope, input).catch(() => undefined);
-    }, 400);
+    const timer = setTimeout(() => persistDraft(draftScope, input), 400);
     return () => clearTimeout(timer);
-  }, [draftScope, input, saveComposerDraft, spaceId]);
+  }, [draftScope, input, persistDraft]);
   useEffect(() => () => {
-    if (draftLoadedRef.current) void saveComposerDraft(spaceId, draftScope, inputRef.current).catch(() => undefined);
-  }, [draftScope, saveComposerDraft, spaceId]);
+    if (draftLoadedRef.current) persistDraft(draftScope, inputRef.current);
+  }, [draftScope, persistDraft]);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -559,7 +599,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [saveSessionReadSequence, sessionId, trace]);
   const { onViewableItemsChanged, measureVisibleRows, trackRow } = useChatVisibleRows({ viewportRef: listContainerRef, topInset: headerHeight, bottomInset: footerHeight, onVisible: onVisibleRows });
   useSpaceRealtime(spaceId ? [spaceId] : []);
-  const spaceName = view.space ? displaySpaceName(view.space) : sessionSummary?.space?.name || t("space.fallbackName");
+  const spaceName = draftSpace ? displaySpaceName(draftSpace) : view.space ? displaySpaceName(view.space) : sessionSummary?.space?.name || t("space.fallbackName");
   const listedSpaceAvatarUrl = useAppSelector((app) => (spaceId ? app.state.spaces.find((item) => item.id === spaceId)?.publicProfile?.avatarUrl : undefined));
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
@@ -574,13 +614,14 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   }, [completeSendTransition, sendTransition, transitionQueueItem]);
   useEffect(() => { recordDebugEvent("chat.queue.state", { count: queuedFollowups.length, ids: queuedFollowups.map((turn) => chatScrollTrace.alias("turn", turn.id)) }); }, [queuedFollowups]);
   const messages = useMemo(() => {
+    if (pendingNew) return [pendingNew];
     const history = messagesFromTurns(view.turns);
     return messagesInWindow(withTurnSequences(
       mergeDisplayMessages(history.length > 0 ? history : view.messages, history.length > 0 ? view.messages : [])
         .filter((message) => !isOptimisticFollowup(message) && !isAssistantIntermediate(message) && hasRenderableMessage(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId))),
       view.turns,
     ), { turns: view.turns, hasMoreNewer: view.hasMoreNewer });
-  }, [queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
+  }, [pendingNew, queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
@@ -604,12 +645,12 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
       loading: view.loading, historyLoaded: view.historyLoaded, refreshing: view.refreshing,
       loadingOlder: view.loadingOlder, loadingNewer: view.loadingNewer,
       hasMoreOlder: view.hasMoreOlder, hasMoreNewer: view.hasMoreNewer,
-      streamStatus: view.stream?.status ?? null, sending: view.sending,
+      streamStatus: view.stream?.status ?? null, submitting: view.messages.some(isSubmittingSend),
       activePanel, currentTurnSequence, turnNavigatorOpen,
       initialTurnSequence, hasInitialTurnId: initialTurnId !== null,
       inverted: false, maintainVisibleContentPosition: !followingTail,
     });
-  }, [activePanel, currentTurnSequence, followingTail, initialTurnId, initialTurnSequence, messages.length, trace, tracing, turnNavigatorOpen, view.hasMoreNewer, view.hasMoreOlder, view.historyLoaded, view.loading, view.loadingNewer, view.loadingOlder, view.refreshing, view.sending, view.stream?.status, view.turns.length]);
+  }, [activePanel, currentTurnSequence, followingTail, initialTurnId, initialTurnSequence, messages.length, trace, tracing, turnNavigatorOpen, view.hasMoreNewer, view.hasMoreOlder, view.historyLoaded, view.loading, view.loadingNewer, view.loadingOlder, view.messages, view.refreshing, view.stream?.status, view.turns.length]);
   const { fontScale } = useWindowDimensions();
   // App text size changes row heights, so it participates in the measurement cache key.
   const textSizeToken = typography.chatBody.fontSize;
@@ -646,16 +687,23 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   const liveStream = shouldShowLiveStream(view.stream, messages);
   // Mounting LegendList empty then filling it drops `initialScrollAtEnd`, so the first paint
   // would show the oldest rows and jump. Wait until there is a tail to pin to.
-  const timelineReady = messages.length > 0 || view.historyLoaded || Boolean(liveStream) || view.sending;
+  // Each send is tracked on its own row; none of them blocks the composer.
+  const submitting = view.messages.some(isSubmittingSend);
+  const starting = pendingNew !== null && !isFailedSend(pendingNew);
+  const pendingReply = starting || submitting;
+  const retryDisabled = Boolean(sessionId) && !view.historyLoaded;
+  const timelineReady = messages.length > 0 || view.historyLoaded || Boolean(liveStream) || submitting;
   // The list stays invisible until it has settled on the tail, so the opening state covers that too.
-  const placeholder = chatThreadPlaceholder({
-    messageCount: messages.length,
-    historyLoaded: view.historyLoaded,
-    error: view.error,
-    hasLiveActivity: Boolean(liveStream || view.sending),
-  }) ?? (timelineReady && !listLoaded ? "opening" : null);
+  const placeholder = !sessionId
+    ? (pendingNew ? null : "draft")
+    : chatThreadPlaceholder({
+      messageCount: messages.length,
+      historyLoaded: view.historyLoaded,
+      error: view.error,
+      hasLiveActivity: Boolean(liveStream || submitting),
+    }) ?? (timelineReady && !listLoaded ? "opening" : null);
   const threadPlaceholder = placeholder === "opening" && !openingDelayElapsed ? null : placeholder;
-  const running = latestTurnStatus === "running" || view.sending || (liveStream && isLiveStreamStatus(view.stream?.status ?? ""));
+  const running = Boolean(sessionId) && (latestTurnStatus === "running" || submitting || (liveStream && isLiveStreamStatus(view.stream?.status ?? "")));
   const appendVoiceText = useCallback((text: string) => {
     updateInput(appendDictation(inputRef.current, text));
   }, [updateInput]);
@@ -672,7 +720,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
   });
 
   useEffect(() => {
-    markChatEntry("screen.mount", entryStatsRef.current);
+    markChatEntry("screen.mount", { ...entryStatsRef.current, nativeTimeline: nativeChatTimeline });
     const timer = setTimeout(() => markChatEntry("settled", { ...entryStatsRef.current, renders: entryRendersRef.current }), 1000);
     return () => clearTimeout(timer);
   }, []);
@@ -704,6 +752,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     readStateLoadedRef.current = false;
     readSequenceRef.current = null;
     savedReadSequenceRef.current = null;
+    if (!sessionId) return;
     void loadSessionReadSequence(sessionId).then((sequence) => {
       if (!active) return;
       readSequenceRef.current = sequence;
@@ -880,6 +929,19 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     if (attachments.length + next.length > MAX_ATTACHMENTS) showToast({ title: t("chat.attachmentLimit", { count: MAX_ATTACHMENTS }), tone: "danger" });
     setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
   };
+  // What another app shared fills a new Chat's composer once; the user reviews it and sends it themselves.
+  const shareTakenRef = useRef(false);
+  useEffect(() => {
+    if (!draft?.fromShare || shareTakenRef.current) return;
+    shareTakenRef.current = true;
+    void takeIncomingShare().then((share) => {
+      if (!share) return;
+      if (share.text) updateInput([inputRef.current, share.text].filter(Boolean).join("\n\n"));
+      if (share.attachments.length > 0) appendAttachments(share.attachments);
+    }, (error: unknown) => showToast({ title: t("share.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
+    // Runs once per screen; `appendAttachments` only reads the attachment count for its limit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.fromShare]);
   const pickAttachments = async () => {
     setAttachmentMenuOpen(false);
     try {
@@ -1216,106 +1278,182 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     router.push({ pathname: "/chat/[sessionId]", params: { sessionId: ref.sessionId, turnId: ref.turnId } });
   }, [navigation, router]);
 
-  const submit = async () => {
-    if ((!input.trim() && attachments.length === 0) || view.sending || submitLockRef.current) return;
-    submitLockRef.current = true;
+  // The flight from the composer for the send about to be inserted: measured before the composer
+  // clears, never awaited, and dropped unless it is ready before the bubble's first frame.
+  const beginSendFlight = (text: string, files: AttachmentDraft[]) => {
     const generation = sendGenerationRef.current;
-    const text = input;
-    const files = attachments;
-    recordDebugEvent("chat.send.pressed", { hasText: Boolean(text.trim()), attachmentCount: files.length, keyboardExpected: true });
-    const harness = composerHarness;
-    let optimisticCreated = false;
-    try {
-      if (!canUseRuntimeHarness(runtime.status, harness)) {
-        showToast({ title: t("runtime.unavailable.title"), message: t("runtime.unavailable.body"), tone: "danger" });
-        return;
-      }
+    const token = ++sendTokenRef.current;
+    setSendTransition(null);
+    const flight = createSendFlight((message, source) => {
+      if (token !== sendTokenRef.current || generation !== sendGenerationRef.current) return;
+      recordDebugEvent("chat.send_transition.source_measured", { ...source });
+      setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) ? "queue" : "bubble" });
+    });
+    if (reducedMotion) flight.expire();
+    else {
       const { input: field, scrollY } = composerMeasurementRef.current;
-      const source = reducedMotion ? null : await measureSendBubbleSource(files.length > 0 ? attachmentSourceRef.current : field, sendRootRef.current, files.length > 0 ? attachmentScrollYRef.current : scrollY);
-      if (generation !== sendGenerationRef.current) return;
-      haptics.commit();
-      setSendTransition(null);
-      inputRef.current = "";
-      setInput("");
-      setAttachments([]);
-      void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
-      recordDebugEvent("chat.send.composer_cleared");
-      await sendMessage(sessionId, text, files, {
-        model: activeModel,
-        harness,
-        onOptimistic: (message) => {
-          optimisticCreated = true;
-          if (source) {
-            recordDebugEvent("chat.send_transition.source_measured", { ...source });
-            setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) ? "queue" : "bubble" });
-          }
-          if (!isOptimisticFollowup(message)) {
-            cancelTurnScroll();
-            setFollowingTail(true);
-            requestFollowTail(!reducedMotion);
-          }
-        },
-      });
-      setSendFeedback("success");
-      if (sendFeedbackTimerRef.current !== null) clearTimeout(sendFeedbackTimerRef.current);
-      sendFeedbackTimerRef.current = setTimeout(() => {
-        sendFeedbackTimerRef.current = null;
-        setSendFeedback("idle");
-      }, 700);
-    } catch (error) {
-      recordDebugEvent("chat.send.transition_cancelled");
-      setSendTransition(null);
-      // Once the bubble exists it carries the failure and its retry. Before that nothing on
-      // screen holds the message, so it goes back to the composer, ahead of anything typed since.
-      if (!optimisticCreated) {
-        updateInput([text, inputRef.current].filter(Boolean).join("\n\n"));
-        setAttachments((current) => [...files, ...current]);
-        showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
-      }
-    } finally {
-      submitLockRef.current = false;
+      measureSendBubbleSource(files.length > 0 ? attachmentSourceRef.current : field, sendRootRef.current, files.length > 0 ? attachmentScrollYRef.current : scrollY, flight.measured);
     }
+    return {
+      inserted: (message: MessageRecord) => {
+        flight.inserted(message);
+        requestAnimationFrame(flight.expire);
+      },
+    };
+  };
+  const showSent = () => {
+    setSendFeedback("success");
+    if (sendFeedbackTimerRef.current !== null) clearTimeout(sendFeedbackTimerRef.current);
+    sendFeedbackTimerRef.current = setTimeout(() => {
+      sendFeedbackTimerRef.current = null;
+      setSendFeedback("idle");
+    }, 700);
+  };
+  const clearComposer = () => {
+    inputRef.current = "";
+    attachmentsRef.current = [];
+    setInput("");
+    setAttachments([]);
+  };
+  // Nothing on screen holds a message that failed before its bubble existed, so it goes back to the
+  // composer, ahead of anything typed since.
+  const restoreComposer = (text: string, files: AttachmentDraft[]) => {
+    updateInput([text, inputRef.current].filter(Boolean).join("\n\n"));
+    setAttachments((current) => [...files, ...current]);
   };
 
-  const retrySend = useCallback(async (message: MessageRecord) => {
-    const draft = failedSendDraft(message);
-    // Until the server history lands, a cached failed row may be a send it already accepted.
-    if (!draft || submitLockRef.current || sendingRef.current || !getAppState().sessionViews[sessionId]?.historyLoaded) return;
-    submitLockRef.current = true;
+  // A new Chat's first message: its bubble and the starting reply show at once; the server's Chat
+  // takes over this same surface, and a failure stays on the bubble with retry and delete.
+  const startNewChat = (text: string, files: AttachmentDraft[], model: ChatModelSelection | null, harness: RuntimeHarness, flight: { inserted: (message: MessageRecord) => void } | null) => {
+    if (!draftSpace) return;
+    let pending: MessageRecord | null = null;
+    sendNewMessage(draftSpace.id, text, files, {
+      model,
+      harness,
+      onOptimistic: (message) => {
+        pending = message;
+        setPendingNew(message);
+        flight?.inserted(message);
+      },
+    }).then((result) => {
+      newChatDraft.accepted(!mountedRef.current);
+      if (!mountedRef.current) return;
+      takeoverRef.current = true;
+      setCreatedSessionId(result.session.id);
+      setPendingNew(null);
+      onCreated?.(result.session.id);
+      showSent();
+    }, (error: unknown) => {
+      const message = error instanceof Error ? error.message : t("chat.startFailed.body");
+      if (!mountedRef.current) return;
+      if (pending) {
+        setPendingNew(failedSendMessage(pending, message));
+        return;
+      }
+      restoreComposer(text, files);
+      newChatDraft.discard(inputRef.current);
+      showToast({ title: t("chat.startFailed.title"), message, tone: "danger" });
+    });
+  };
+
+  const submit = () => {
+    const text = inputRef.current;
+    const files = attachmentsRef.current;
+    if (!text.trim() && files.length === 0) return;
+    const harness = composerHarness;
+    recordDebugEvent("chat.send.pressed", { hasText: Boolean(text.trim()), attachmentCount: files.length, keyboardExpected: true, newChat: !sessionId });
+    if (!canUseRuntimeHarness(runtime.status, harness)) {
+      showToast({ title: t("runtime.unavailable.title"), message: t("runtime.unavailable.body"), tone: "danger" });
+      return;
+    }
+    if (!sessionId && pendingNew) {
+      showToast({ title: t("chat.startFailed.title"), message: t("chat.draft.retryFirst"), tone: "danger" });
+      return;
+    }
+    const flight = beginSendFlight(text, files);
     haptics.commit();
-    let replaced = false;
-    try {
-      await sendMessage(sessionId, draft.text, draft.attachments, {
-        model: draft.model,
-        ...(draft.harness ? { harness: draft.harness } : {}),
-        onOptimistic: (optimistic) => {
-          // The failed row stays until its replacement exists, so an early failure loses nothing.
-          replaced = true;
-          discardFailedSend(sessionId, message.id);
-          if (isOptimisticFollowup(optimistic)) return;
+    if (!sessionId) {
+      newChatDraft.send(text, "");
+      clearComposer();
+      startNewChat(text, files, activeModel, harness, flight);
+      return;
+    }
+    clearComposer();
+    void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
+    recordDebugEvent("chat.send.composer_cleared");
+    let optimisticCreated = false;
+    sendMessage(sessionId, text, files, {
+      model: activeModel,
+      harness,
+      onOptimistic: (message) => {
+        optimisticCreated = true;
+        flight.inserted(message);
+        if (!isOptimisticFollowup(message)) {
           cancelTurnScroll();
           setFollowingTail(true);
           requestFollowTail(!reducedMotion);
-        },
-      });
-    } catch (error) {
-      if (!replaced) showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
-    } finally {
-      submitLockRef.current = false;
+        }
+      },
+    }).then(showSent, (error: unknown) => {
+      // Once the bubble exists it carries the failure and its retry.
+      if (optimisticCreated) return;
+      restoreComposer(text, files);
+      showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
+    });
+  };
+
+  const retrySend = (message: MessageRecord) => {
+    const draft = failedSendDraft(message);
+    if (!draft) return;
+    if (!sessionId) {
+      if (pendingNew?.id !== message.id) return;
+      haptics.commit();
+      newChatDraft.send(draft.text, inputRef.current);
+      startNewChat(draft.text, draft.attachments, draft.model, draft.harness ?? "cohub", null);
+      return;
     }
-  }, [cancelTurnScroll, discardFailedSend, getAppState, reducedMotion, requestFollowTail, sendMessage, sessionId, setFollowingTail, showToast, t]);
-  const discardSend = useCallback((message: MessageRecord) => discardFailedSend(sessionId, message.id), [discardFailedSend, sessionId]);
+    // Until the server history lands, a cached failed row may be a send it already accepted.
+    if (!getAppState().sessionViews[sessionId]?.historyLoaded) return;
+    haptics.commit();
+    let replaced = false;
+    sendMessage(sessionId, draft.text, draft.attachments, {
+      model: draft.model,
+      ...(draft.harness ? { harness: draft.harness } : {}),
+      retryOf: message,
+      onOptimistic: (optimistic) => {
+        replaced = true;
+        if (isOptimisticFollowup(optimistic)) return;
+        cancelTurnScroll();
+        setFollowingTail(true);
+        requestFollowTail(!reducedMotion);
+      },
+    }).catch((error: unknown) => {
+      if (!replaced) showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
+    });
+  };
+  // Rows keep their handler identity across sends, so they call through to the latest closure.
+  const retrySendRef = useRef(retrySend);
+  useLayoutEffect(() => { retrySendRef.current = retrySend; });
+  const retryRow = useCallback((message: MessageRecord) => retrySendRef.current(message), []);
+  const discardSend = useCallback((message: MessageRecord) => {
+    if (sessionId) {
+      discardFailedSend(sessionId, message.id);
+      return;
+    }
+    setPendingNew((current) => (current?.id === message.id ? null : current));
+    newChatDraft.discard(inputRef.current);
+  }, [discardFailedSend, newChatDraft, sessionId]);
 
   // FlatList and its cells are PureComponents: bailing out depends on every prop keeping its
   // identity. These are stable across stream batches, so a live turn no longer re-renders every
   // mounted row (the live step list subscribes on its own instead).
   const streamTurnId = view.stream?.turnId ?? null;
-  const replyAnchor = liveStream || (view.sending && !view.messages.some(isOptimisticFollowup)) ? liveReplyAnchor(messages, liveStream ? streamTurnId : null, view.hasMoreNewer) : null;
+  const replyAnchor = liveStream || pendingReply ? liveReplyAnchor(messages, liveStream ? streamTurnId : null, view.hasMoreNewer) : null;
   // LegendList memoizes each row on [item, extraData]; fork/send-transition state renders
   // inside a row but never changes `messages`, so it must flow through extraData to reach it.
   const rowExtraData = useMemo(
-    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, historyLoaded: view.historyLoaded, t, theme }),
-    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, arrivalBaseline, view.historyLoaded, t, theme],
+    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, t, theme }),
+    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, t, theme],
   );
   const keyExtractor = useCallback((item: MessageRecord) => messageRowKey(item), []);
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
@@ -1337,7 +1475,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     lastScrollRef.current = { ...lastScrollRef.current, viewport: event.nativeEvent.layout.height };
     measureVisibleRows();
   }, [measureVisibleRows, trace]);
-  const handleListRefresh = useCallback(() => { void refreshSession(sessionId); }, [refreshSession, sessionId]);
+  const handleListRefresh = useCallback(() => { if (sessionId) void refreshSession(sessionId); }, [refreshSession, sessionId]);
   const pullRefresh = useBrandRefresh({ refreshing: view.refreshing, onRefresh: handleListRefresh, scrollEventThrottle: 100 });
   const { onScroll: trackPull, onScrollBeginDrag: trackPullStart, onScrollEndDrag: trackPullEnd } = pullRefresh;
   const handleListScroll = useCallback((event: ChatScrollEvent) => { handleScroll(event); trackPull(event); }, [handleScroll, trackPull]);
@@ -1375,16 +1513,22 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onRetry={retrySend} retryDisabled={!view.historyLoaded} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
-  }, [arrivalBaseline, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retrySend, view.historyLoaded, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || windowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || windowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
+  }, [arrivalBaseline, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, windowWidth]);
 
+  if (draft && !draftSpace && !sessionId) {
+    const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
+    if (!failure) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
+    if (!(failure instanceof HttpError && (failure.status === 404 || failure.status === 403))) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={failure.message.trim() || t("chat.draft.loadSpaceFailed")} onRetry={() => void spaceLookup.refetch()} /></View></Screen>;
+    return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
+  }
   if (view.loading && !session && view.messages.length === 0 && view.turns.length === 0) return <Screen edgeToEdge><EdgeHeader onLayout={onHeaderLayout}><TopBar transparent title={t("chat.title")} onBack={() => { traceBackPress(); router.back(); }} /></EdgeHeader><View style={{ flex: 1, paddingTop: headerHeight }}><ChatThreadPlaceholder kind="opening" /></View></Screen>;
   return <Screen edgeToEdge>
     <View className="flex-1" accessibilityElementsHidden={moreOpen || titleMenuOpen} importantForAccessibility={moreOpen || titleMenuOpen ? "no-hide-descendants" : "auto"}>
     <SpacePanels edgeToEdge key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <View ref={moreButtonRef} collapsable={false} className={moreOpen ? "opacity-0" : undefined}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View>}</>} />
+        {!sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <View ref={moreButtonRef} collapsable={false} className={moreOpen ? "opacity-0" : undefined}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></View>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
         </EdgeHeader>
@@ -1408,7 +1552,8 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           hasMoreNewer={view.hasMoreNewer}
           loadingOlder={view.loadingOlder}
           loadingNewer={view.loadingNewer}
-          historyLoaded={view.historyLoaded}
+          retryDisabled={retryDisabled}
+          pendingReply={pendingReply}
           arrivalBaseline={arrivalBaseline}
           forkingTurnId={forkingTurnId}
           flight={timelineFlight}
@@ -1420,7 +1565,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           lookupSession={lookupSession}
           onOpenRelated={openRelatedSession}
           onCopy={handleCopyMessage}
-          onRetry={retrySend}
+          onRetry={retryRow}
           onDiscard={discardSend}
           onFork={forkMessage}
           onLoadOlder={timelineLoadOlder}
@@ -1474,7 +1619,7 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
           onContentSizeChange={handleContentSizeChange}
           {...pullRefresh.listProps}
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
-          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
+          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={false} availableWidth={listWidth || windowWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
         </RenderErrorBoundary>
         {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
@@ -1496,11 +1641,11 @@ function ChatContent({ sessionId, initialTurnSequence, initialTurnId, initialSen
         </Animated.View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onStop={() => void stopGeneration()} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
+        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={view.sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={view.loading || stopping} running={running} hasAttachment={attachments.length > 0} placeholder={running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
@@ -1559,26 +1704,30 @@ function LiveTurnProcess({ sessionId, turn, client, spaceId }: { sessionId: stri
   return <TurnProcess turn={turn} client={client} spaceId={spaceId} />;
 }
 
-function LiveReply({ sessionId, showStream, processInRow, availableWidth }: { sessionId: string; showStream: boolean; processInRow: boolean; availableWidth: number }) {
+function LiveReply({ sessionId, showStream, pending, processInRow, availableWidth }: { sessionId: string; showStream: boolean; pending: boolean; processInRow: boolean; availableWidth: number }) {
   const stream = useSessionStream(sessionId);
   const streamStartedAt = useAppSelector(({ state }) => {
     const turn = stream?.turnId ? state.sessionViews[sessionId]?.turns.find((item) => item.id === stream.turnId) : undefined;
     return turn ? turn.startedAt ?? turn.createdAt : null;
   });
-  const pendingReply = useAppSelector(({ state }) => {
-    const view = state.sessionViews[sessionId];
-    return Boolean(view?.sending && !view.messages.some(isOptimisticFollowup));
-  });
   if (showStream && stream) return <View testID="chat-live-reply">
     {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
     <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={stream.outputAt ?? streamStartedAt} availableWidth={availableWidth} />
   </View>;
-  return pendingReply ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;
+  return pending ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;
 }
 
-function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
+function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" | "draft" }) {
   const { t } = useTranslation();
   if (kind === "opening") return <LoadingState label={t("chat.placeholder.opening")} />;
+  if (kind === "draft") return (
+    <View className="flex-1 items-center justify-center px-7 pb-4">
+      <Mascot size={84} blink />
+      <Text className="mt-4 text-center text-headline font-semibold text-fg">{t("chat.draft.title")}</Text>
+      <Text className="text-body text-fg-muted mt-2 max-w-72 text-center">{t("chat.draft.body")}</Text>
+      <Text className="text-caption text-fg-faint mt-4">{t("chat.draft.subtitle")}</Text>
+    </View>
+  );
   return (
     <View className="flex-1 items-center justify-center p-7">
       <Mascot size={72} />
@@ -1586,209 +1735,6 @@ function ChatThreadPlaceholder({ kind }: { kind: "opening" | "empty" }) {
       <Text className="text-body text-fg-muted text-center mt-2 max-w-72">{t("chat.placeholder.empty.body")}</Text>
     </View>
   );
-}
-
-function DraftChatContent({ spaceId, fromShare, onCreated }: { spaceId: string; fromShare: boolean; onCreated: (created: { session: SessionRecord; transition: SendBubbleTransition | null }) => void }) {
-  useSpaceRealtime([spaceId]);
-  const router = useRouter();
-  const { t } = useTranslation();
-  const showToast = useToast();
-  const { client, sendNewMessage, upsertSpace, getAccessToken, loadModels, loadModelStatus, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
-  const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
-  const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
-  const runtime = useSpaceRuntime(spaceId);
-  const listedSpace = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId) ?? null);
-  // `space.id` is always `spaceId` once the screen renders a Space.
-  const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
-  const spaceListed = listedSpace !== null;
-  // A cold start can open this before the Space list arrives. Only the server saying it is gone or
-  // off-limits means unavailable; an offline or failed request can be retried.
-  const spaceLookup = useScreenQuery({
-    queryKey: [`space:${spaceId}:detail`],
-    queryFn: async (): Promise<SpaceRecord> => {
-      const remote = await client!.spaces.get(spaceId);
-      upsertSpace(remote);
-      return remote;
-    },
-    enabled: !spaceListed && Boolean(client && spaceId),
-    retry: 0,
-  });
-  const space = listedSpace ?? spaceLookup.data ?? null;
-  const lookupFailure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
-  const spaceLookupError = lookupFailure ? {
-    missing: lookupFailure instanceof HttpError && (lookupFailure.status === 404 || lookupFailure.status === 403),
-    message: lookupFailure.message.trim() || t("chat.draft.loadSpaceFailed"),
-  } : null;
-  const { headerHeight, onHeaderLayout } = useEdgeChrome();
-  const keyboardCoveredInset = useKeyboardCoveredInset();
-  const composerRef = useRef<View>(null);
-  const composerMenuSourceRef = useRef<View>(null);
-  const composerMeasurementRef = useRef<ComposerInputMeasurement>({ input: null, scrollY: 0 });
-  const sendRootRef = useRef<View>(null);
-  const attachmentSourceRef = useRef<View>(null);
-  const attachmentScrollYRef = useRef(0);
-  const reducedMotion = useReducedMotion();
-  const [input, setInput] = useState("");
-  const inputRef = useRef("");
-  const inputEditedRef = useRef(false);
-  const draftLoadedRef = useRef(false);
-  const updateInput = useCallback((next: string) => {
-    inputEditedRef.current = true;
-    inputRef.current = next;
-    setInput(next);
-  }, []);
-  const mentions = useComposerMentions({ value: input, onChange: updateInput, currentSpaceId: spaceId, composer: composerMeasurementRef });
-  const slash = useComposerSlashCommands({ value: input, onChange: updateInput, spaceId, composer: composerMeasurementRef });
-  const { onFocusChange: onMentionsFocusChange } = mentions;
-  const { onFocusChange: onSlashFocusChange } = slash;
-  // The hooks' focus setters are stable, so this handler is too.
-  const handleComposerFocus = useCallback((focused: boolean) => {
-    onMentionsFocusChange(focused);
-    onSlashFocusChange(focused);
-  }, [onMentionsFocusChange, onSlashFocusChange]);
-  const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
-  const { target: uploadTarget, release: releaseUpload } = useComposerUploads(spaceId, undefined, attachments);
-  useEffect(() => {
-    let active = true;
-    inputEditedRef.current = false;
-    draftLoadedRef.current = false;
-    inputRef.current = "";
-    void loadComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE)
-      .then((draft) => {
-        if (!active) return;
-        draftLoadedRef.current = true;
-        if (inputEditedRef.current) {
-          void saveComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE, inputRef.current).catch(() => undefined);
-          return;
-        }
-        inputRef.current = draft;
-        setInput(draft);
-      })
-      .catch(() => {
-        if (active) draftLoadedRef.current = true;
-      });
-    return () => { active = false; };
-  }, [loadComposerDraft, saveComposerDraft, spaceId]);
-  useEffect(() => {
-    if (!draftLoadedRef.current) return;
-    const timer = setTimeout(() => {
-      void saveComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE, input).catch(() => undefined);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [input, saveComposerDraft, spaceId]);
-  useEffect(() => () => {
-    if (draftLoadedRef.current) void saveComposerDraft(spaceId, NEW_COMPOSER_DRAFT_SCOPE, inputRef.current).catch(() => undefined);
-  }, [saveComposerDraft, spaceId]);
-  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
-  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-  const [harnessMenuOpen, setHarnessMenuOpen] = useState(false);
-  const [selectedHarness, setSelectedHarness] = useState<RuntimeHarness>("cohub");
-  const [localModelsByHarness, setLocalModelsByHarness] = useState<Partial<Record<LocalHarness, ChatModelSelection | null>>>({});
-  const [selectedModel, setSelectedModel] = useState<ChatModelSelection | null>(null);
-  const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
-  const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
-  const appendVoiceText = useCallback((text: string) => {
-    updateInput(appendDictation(inputRef.current, text));
-  }, [updateInput]);
-  const voice = useNativeVoiceInput({ getAccessToken, onFinal: appendVoiceText });
-  const appendAttachments = (next: AttachmentDraft[]) => {
-    if (attachments.length + next.length > MAX_ATTACHMENTS) showToast({ title: t("chat.attachmentLimit", { count: MAX_ATTACHMENTS }), tone: "danger" });
-    setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
-  };
-  // What another app shared fills the composer once; the user reviews it and sends it themselves.
-  const shareTakenRef = useRef(false);
-  useEffect(() => {
-    if (!fromShare || shareTakenRef.current) return;
-    shareTakenRef.current = true;
-    void takeIncomingShare().then((share) => {
-      if (!share) return;
-      if (share.text) updateInput([inputRef.current, share.text].filter(Boolean).join("\n\n"));
-      if (share.attachments.length > 0) appendAttachments(share.attachments);
-    }, (error: unknown) => showToast({ title: t("share.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
-    // Runs once per screen; `appendAttachments` only reads the attachment count for its limit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromShare]);
-  const pickAttachments = async () => { setAttachmentMenuOpen(false); try { const result = await withForegroundHandoff(() => DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true })); if (result.canceled) return; appendAttachments(result.assets.map((asset) => ({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || "application/octet-stream", size: asset.size ?? 0 }))); } catch (error) { showToast({ title: t("chat.attachmentUnavailable.title"), message: error instanceof Error ? error.message : t("chat.attachmentUnavailable.body"), tone: "danger" }); } };
-  const pickPhotos = async () => { setAttachmentMenuOpen(false); try { const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync()); if (!permission.granted) { showToast({ title: t("chat.photoOff.title"), message: t("chat.photoOff.body"), tone: "danger" }); return; } const result = await withForegroundHandoff(() => ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.88 })); if (result.canceled) return; appendAttachments(result.assets.map((asset, index) => ({ uri: asset.uri, name: asset.fileName || `image-${index + 1}.jpg`, mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }))); } catch (error) { showToast({ title: t("chat.photoPickerUnavailable.title"), message: error instanceof Error ? error.message : t("chat.photoPickerUnavailable.body"), tone: "danger" }); } };
-  const takePhoto = async () => { setAttachmentMenuOpen(false); try { const permission = await withForegroundHandoff(() => ImagePicker.requestCameraPermissionsAsync()); if (!permission.granted) { showToast({ title: t("chat.cameraOff.title"), message: t("chat.cameraOff.body"), tone: "danger" }); return; } const result = await withForegroundHandoff(() => ImagePicker.launchCameraAsync({ mediaTypes: ["images"], allowsEditing: true, quality: 0.88 })); if (result.canceled) return; const asset = result.assets[0]; if (asset) appendAttachments([{ uri: asset.uri, name: asset.fileName || "camera-photo.jpg", mimeType: asset.mimeType || "image/jpeg", size: asset.fileSize ?? 0 }]); } catch (error) { showToast({ title: t("chat.cameraUnavailable.title"), message: error instanceof Error ? error.message : t("chat.cameraUnavailable.body"), tone: "danger" }); } };
-  const submit = async () => {
-    if (!space || sending || (!input.trim() && attachments.length === 0)) return;
-    const text = input;
-    const files = attachments;
-    setSending(true);
-    try {
-      if (!canUseRuntimeHarness(runtime.status, selectedHarness)) {
-        showToast({ title: t("runtime.unavailable.title"), message: t("runtime.unavailable.body"), tone: "danger" });
-        return;
-      }
-      const { input: field, scrollY } = composerMeasurementRef.current;
-      const source = reducedMotion
-        ? null
-        : await measureSendBubbleSource(
-            files.length > 0 ? attachmentSourceRef.current : field,
-            sendRootRef.current,
-            files.length > 0 ? attachmentScrollYRef.current : scrollY,
-          );
-      inputRef.current = "";
-      setInput("");
-      setAttachments([]);
-      void clearComposerDraft(space.id, NEW_COMPOSER_DRAFT_SCOPE).catch(() => undefined);
-      const requestModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
-      const result = await sendNewMessage(space.id, text, files, { model: requestModel, harness: selectedHarness });
-      onCreated({
-        session: result.session,
-        transition: source ? { message: result.message, text, source, attachments: files, destination: "bubble" } : null,
-      });
-    } catch (error) {
-      updateInput(text);
-      setAttachments(files);
-      showToast({ title: t("chat.startFailed.title"), message: error instanceof Error ? error.message : t("chat.startFailed.body"), tone: "danger" });
-    } finally {
-      setSending(false);
-    }
-  };
-  // The catalog names the selected model; before it loads the trigger would show the raw id.
-  useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
-  if (!space && !spaceLookupError) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><LoadingState label={t("chat.draft.loadingSpace")} /></Screen>;
-  if (!space && !spaceLookupError?.missing) return <Screen><TopBar drawn title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 justify-center"><DataError message={spaceLookupError?.message ?? t("chat.draft.loadSpaceFailed")} onRetry={() => void spaceLookup.refetch()} /></View></Screen>;
-  if (!space) return <Screen><TopBar drawn title={t("chat.spaceUnavailable")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center p-6"><Text className="text-body text-fg-muted text-center">{t("chat.spaceUnavailable.body")}</Text></View></Screen>;
-  const spaceName = displaySpaceName(space);
-  const activeModel = selectedHarness === "cohub" ? selectedModel : localModelsByHarness[selectedHarness] ?? null;
-  const modelLabel = activeModel?.name || activeModel?.id || (selectedHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
-  const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
-  const selectedStatus = selectedHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
-  return <Screen edgeToEdge>
-    <SpacePanels edgeToEdge key={space.id} spaceId={space.id} spaceName={spaceName} spaceAvatarUrl={space.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } })} onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })} onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}>
-      <View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
-        <EdgeHeader onLayout={onHeaderLayout}>
-        <TopBar transparent title={spaceName} onBack={() => router.back()} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} />
-        <ConnectionBanner visible={connectionUnavailable} />
-        </EdgeHeader>
-        <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={-keyboardCoveredInset} style={{ flex: 1, minHeight: 0, paddingTop: headerHeight }}>
-          <View className="flex-1 min-h-0 items-center justify-center px-7 pb-4">
-            <Mascot size={84} blink />
-            <Text className="mt-4 text-center text-headline font-semibold text-fg">{t("chat.draft.title")}</Text>
-            <Text className="text-body text-fg-muted mt-2 max-w-72 text-center">{t("chat.draft.body")}</Text>
-            <Text className="text-caption text-fg-faint mt-4">{t("chat.draft.subtitle")}</Text>
-          </View>
-          {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
-          {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={{ marginHorizontal: 12, marginBottom: 6 }} /> : null}
-          {attachments.length > 0 ? <View className="bg-background px-3 pt-1"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
-          {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-          <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: selectedHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={selectedHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={() => void submit()} onAttach={() => { setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
-          { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
-          { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
-          { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={sending} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { setAttachmentMenuOpen(false); if (selectedHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={selectedStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={sending} hasAttachment={attachments.length > 0} placeholder={sending ? t("chat.draft.starting") : t("ui.composer.placeholder")} />
-        </KeyboardAvoidingView>
-        {runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={selectedHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
-        <MenuPresence open={modelSelectorOpen}>{selectedHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(selectedHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, selectedHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [selectedHarness]: model })); setModelSelectorOpen(false); }} />}</MenuPresence>
-        <MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence>
-        <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="new-chat-notice-sheet" />
-      </View>
-    </SpacePanels>
-  </Screen>;
 }
 
 /** The model the Chat last ran with, from the newest agent Turn or, before any, the newest reply. */

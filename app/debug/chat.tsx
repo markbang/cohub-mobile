@@ -80,7 +80,8 @@ export default function DebugChatScreen() {
         hasMoreNewer={false}
         loadingOlder={false}
         loadingNewer={false}
-        historyLoaded
+        retryDisabled={false}
+        pendingReply={false}
         arrivalBaseline={null}
         forkingTurnId={null}
         flight={null}

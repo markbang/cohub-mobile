@@ -1,6 +1,7 @@
 import type { SpaceListSpace } from "@/src/data/space-list";
 import { useState } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { ContextMenu } from "@/src/components/ContextMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import { type SpaceSessionCount } from "@/src/data/space-session-counts";
@@ -13,6 +14,7 @@ import { debugAlias } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
 import { SwipeActions } from "@/src/ui/SwipeActions";
 import { haptics } from "@/src/platform/haptics";
+import { motion } from "@/src/motion";
 
 type SpaceRowProps = {
   space: SpaceListSpace;
@@ -29,13 +31,18 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
   const active = space.status === "running" || space.status === "bootstrapping";
   const pinned = space.isPinned === true;
   const age = useRelativeTime(space.lastActivityAt);
+  // A count already known at mount (cache, recycled row) appears without a fade.
+  const [countKnownAtMount] = useState(() => sessionCount != null);
   const countLabel = sessionCount
     ? sessionCount.hasMore
       ? t("space.chatCount.more", { count: sessionCount.count })
       : t(sessionCount.count === 1 ? "space.chatCount.one" : "space.chatCount.other", { count: sessionCount.count })
     : null;
   // The second line carries either the description or the chat count; never both.
-  const subtitle = space.description?.trim() || null;
+  const description = space.description?.trim() || null;
+  // Without a description the second line is always laid out, so a count arriving later fades in
+  // without re-centering the title and time.
+  const subtitle = description ?? <Text className="text-subhead" importantForAccessibility="no" accessibilityElementsHidden> </Text>;
   const row = (
     <ListRow
       leading={<View className="flex-1 justify-center"><Avatar name={name} uri={space.publicProfile?.avatarUrl} size={LIST_AVATAR_SIZE} online={active} /></View>}
@@ -43,7 +50,7 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
       titlePrefix={pinned ? <AppIcon name="pin" size={12} tone="faint" /> : null}
       meta={age}
       subtitle={subtitle}
-      trailing={sessionCount && countLabel && !subtitle ? <Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /> : null}
+      trailing={sessionCount && countLabel && !description ? <Animated.View entering={countKnownAtMount ? undefined : FadeIn.duration(motion.fade.duration)}><Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /></Animated.View> : null}
       accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
       accessibilityHint={onTogglePin && !pinning ? t("space.longPressHint") : undefined}
       onPress={() => { traceAction("space_row", { space: debugAlias("space", space.id), active, pinned }); onPress(); }}
