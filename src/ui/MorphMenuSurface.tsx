@@ -1,10 +1,14 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
-import Animated, { Extrapolation, ReduceMotion, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, Extrapolation, ReduceMotion, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { RADIUS } from "@/src/design/tokens";
 import { menuMorph, motion } from "@/src/motion";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+
+const CLOSE_EASING = Easing.bezier(...menuMorph.close.curve);
+/** iOS 26's menu corner, measured; the composer's panel keeps the sheet radius. */
+const GLASS_MENU_RADIUS = 32;
 
 export type MorphRect = { x: number; y: number; width: number; height: number };
 
@@ -31,6 +35,7 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
   const glass = useGlassMaterial();
   const reduced = useReducedMotion();
   const progress = useSharedValue(0);
+  const opening = useSharedValue(open);
   const [box, setBox] = useState<MorphRect | null>(null);
   const onClosedRef = useRef(onClosed);
   useLayoutEffect(() => { onClosedRef.current = onClosed; }, [onClosed]);
@@ -45,17 +50,18 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
       "worklet";
       if (finished && target === 0) scheduleOnRN(finishClose);
     };
+    opening.set(open);
     progress.set(reduced
       ? withTiming(target, { duration: open ? motion.fade.duration : motion.fadeOut.duration, reduceMotion: ReduceMotion.Never }, done)
-      : withSpring(target, open ? menuMorph.open : menuMorph.close, done));
-  }, [measured, open, progress, reduced]);
+      : open ? withSpring(target, menuMorph.open, done) : withTiming(target, { duration: menuMorph.close.duration, easing: CLOSE_EASING }, done));
+  }, [measured, open, opening, progress, reduced]);
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { x, y, width, height } = event.nativeEvent.layout;
     setBox((current) => current && current.x === x && current.y === y && current.width === width && current.height === height ? current : { x, y, width, height });
   };
 
-  const radius = material === "panel" ? RADIUS.lg : RADIUS.md;
+  const radius = material === "panel" ? RADIUS.lg : GLASS_MENU_RADIUS;
   const from = { x: anchor.x - (box?.x ?? 0), y: anchor.y - (box?.y ?? 0), width: anchor.width, height: anchor.height };
   const fromRadius = Math.min(anchor.width, anchor.height) / 2;
 
@@ -75,24 +81,30 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
     };
   });
 
+  // The rows ride the panel's frame, scaled with it from its corner, as UIKit's do; they come in over the open
+  // and are gone within the close's first 50 ms.
   const contentStyle = useAnimatedStyle(() => {
     const p = progress.get();
-    // Rows arrive once the panel is mostly open and leave before it is back in the control.
-    const opacity = reduced ? p : interpolate(p, [0.35, 0.85], [0, 1], Extrapolation.CLAMP);
-    return { opacity, transform: [{ scale: reduced ? 1 : interpolate(p, [0, 1], [0.86, 1]) }] };
+    if (reduced || !box) return { opacity: p };
+    const opacity = interpolate(p, opening.get() ? [0.3, 0.9] : [0.7, 0.97], [0, 1], Extrapolation.CLAMP);
+    const width = from.width + (box.width - from.width) * p;
+    const height = from.height + (box.height - from.height) * p;
+    return { opacity, transform: [{ translateX: from.x * (1 - p) }, { translateY: from.y * (1 - p) }, { scaleX: width / box.width }, { scaleY: height / box.height }] };
   });
 
   return <View {...viewProps} pointerEvents={open ? "auto" : "none"} onLayout={onLayout} style={[{ position: "absolute" }, style]}>
     {material === "panel"
       ? <Animated.View pointerEvents="none" className="border-border bg-surface shadow-float" style={[styles.backdrop, { borderWidth: StyleSheet.hairlineWidth }, backdropStyle]} />
-      : <Animated.View pointerEvents="none" className={glass === "liquid" ? undefined : "shadow-float"} style={[styles.backdrop, backdropStyle]}>
-        <GlassBackground radius={radius} />
+      : <Animated.View pointerEvents="none" className={glass === "liquid" ? undefined : "shadow-glass"} style={[styles.backdrop, backdropStyle]}>
+        <GlassBackground radius={radius} solidClassName="bg-glass-menu" rim />
       </Animated.View>}
-    <Animated.View style={[styles.content, { borderRadius: radius, transformOrigin: [from.x + from.width / 2, from.y + from.height / 2, 0] }, contentStyle]}>
+    <Animated.View style={[styles.content, CONTENT_ORIGIN, { borderRadius: radius }, contentStyle]}>
       {children}
     </Animated.View>
   </View>;
 }
+
+const CONTENT_ORIGIN = { transformOrigin: "left top" } as const;
 
 const styles = StyleSheet.create({
   backdrop: { position: "absolute", overflow: "hidden", borderCurve: "continuous" },

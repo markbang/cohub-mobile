@@ -93,6 +93,7 @@ const GLYPHS = {
   type: "textformat",
   upload: "tray_arrow_up",
   user: "person",
+  "user-circle": "person_crop_circle",
   wallet: "creditcard",
   wifi: "wifi",
   wrench: "wrench",

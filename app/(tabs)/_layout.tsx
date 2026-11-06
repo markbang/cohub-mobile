@@ -2,12 +2,14 @@ import { Tabs } from "expo-router";
 import { AnimatedTabIcon } from "@/src/components/AnimatedTabIcon";
 import { FloatingTabBar, TabBlurTargetsProvider, TabScreenLayout } from "@/src/components/FloatingTabBar";
 import { useTranslation } from "@/src/i18n";
+import { TabBarMinimizeProvider } from "@/src/ui/tab-bar-minimize";
 
 export default function TabLayout() {
   const { t } = useTranslation();
   // Tabs are peers, not a hierarchy: switching must never slide.
   return (
     <TabBlurTargetsProvider>
+    <TabBarMinimizeProvider>
     <Tabs
       screenOptions={{ headerShown: false, animation: "none" }}
       screenLayout={({ route, children }) => <TabScreenLayout routeKey={route.key}>{children}</TabScreenLayout>}
@@ -38,10 +40,11 @@ export default function TabLayout() {
         name="(me)"
         options={{
           title: t("tabs.me"),
-          tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="user" color={color} size={size} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="user-circle" color={color} size={size} focused={focused} />,
         }}
       />
     </Tabs>
+    </TabBarMinimizeProvider>
     </TabBlurTargetsProvider>
   );
 }

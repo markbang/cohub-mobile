@@ -16,6 +16,8 @@
   --color-surface-raised: #efebe4;
   --color-surface-pressed: #e6e1d8;
   --color-surface-float: #ffffff;
+  --color-glass-control: #fdfbf7;
+  --color-glass-menu: #faf7f2;
   --color-press-overlay: rgba(8, 9, 11, 0.08);
   --color-border: #e8e3da;
   --color-border-strong: #cdc6ba;
@@ -75,6 +77,7 @@
   --text-code: 13px;
   --text-code--line-height: 20px;
   --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
+  --shadow-glass: 0 8px 36px rgba(0, 0, 0, 0.1);
 }
 
 @media android {
@@ -97,6 +100,8 @@
       --color-surface-raised: #efebe4;
       --color-surface-pressed: #e6e1d8;
       --color-surface-float: #ffffff;
+      --color-glass-control: #fdfbf7;
+      --color-glass-menu: #faf7f2;
       --color-press-overlay: rgba(8, 9, 11, 0.08);
       --color-border: #e8e3da;
       --color-border-strong: #cdc6ba;
@@ -138,6 +143,8 @@
       --color-surface-raised: #2c2c2e;
       --color-surface-pressed: #3a3a3c;
       --color-surface-float: #2c2c2e;
+      --color-glass-control: #171719;
+      --color-glass-menu: #171718;
       --color-press-overlay: rgba(255, 255, 255, 0.12);
       --color-border: #38383a;
       --color-border-strong: #48484a;

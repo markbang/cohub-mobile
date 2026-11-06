@@ -37,7 +37,6 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const focused = useIsFocused();
-  const contentWidth = Math.max(...sections.flatMap((section) => section.actions).map((action) => Math.max(Array.from(action.title).length * 9, Array.from(action.detail ?? "").length * 7.5) + 16 * 2 + 22 + 12), 0);
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
   const [anchor, setAnchor] = useState<MorphRect | null>(null);
@@ -51,11 +50,10 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
           anchor: { x: anchorX, y: anchorY, width: anchorWidth, height: anchorHeight },
           viewport: { x, y, width: viewportWidth, height: viewportHeight },
           bottomInset: insets.bottom,
-          contentWidth,
         }));
       });
     });
-  }, [anchorRef, contentWidth, insets.bottom]);
+  }, [anchorRef, insets.bottom]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(measure);
@@ -85,10 +83,10 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
       open={open}
       onClosed={onExited}
     >
-      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerClassName="py-2">
+      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
         {sections.map((section, index) => <View key={section.title ?? index}>
-          {index > 0 ? <View className="mx-4 my-1.5 border-t border-border" /> : null}
-          {section.title ? <Text accessibilityRole="header" className="px-4 pb-1 pt-2 text-caption text-fg-muted">{section.title}</Text> : null}
+          {index > 0 ? <View className="bg-border" style={styles.separator} /> : null}
+          {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-faint" style={styles.header}>{section.title}</Text> : null}
           {section.actions.map((action) => <Pressable
             key={action.title}
             accessibilityRole="menuitem"
@@ -96,12 +94,13 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
             accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
             disabled={action.disabled}
             onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-            className="min-h-12 flex-row items-center gap-3 px-4 py-3 active:bg-surface-pressed disabled:opacity-45"
+            className="flex-row items-center active:bg-surface-pressed disabled:opacity-45"
+            style={action.detail ? styles.detailRow : styles.row}
           >
-            <AppIcon name={action.checked ? "check" : action.icon} size={22} tone="secondary" />
+            <View style={styles.glyph}><AppIcon name={action.checked ? "check" : action.icon} size={action.checked ? 17 : 22} tone="fg" /></View>
             <View className="min-w-0 flex-1">
               <Text className="text-body text-fg">{action.title}</Text>
-              {action.detail ? <Text numberOfLines={2} className="text-caption text-fg-muted">{action.detail}</Text> : null}
+              {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-faint" style={styles.detail}>{action.detail}</Text> : null}
             </View>
           </Pressable>)}
         </View>)}
@@ -110,6 +109,15 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
   </View>;
 }
 
+// iOS 26's pull-down menu, measured at 402 pt and refitted to Inter's metrics so cap heights land where SF's
+// do: 42 pt rows, a 28 pt glyph slot centred 40 pt in, titles 65 pt in, separators inset 24 pt with 10 pt around.
 const styles = StyleSheet.create({
+  content: { paddingVertical: 9.6 },
+  row: { minHeight: 42, paddingLeft: 26, paddingRight: 16 },
+  detailRow: { paddingTop: 12.6, paddingBottom: 9.25, paddingLeft: 26, paddingRight: 16 },
+  glyph: { width: 28, marginRight: 11, alignItems: "center" },
+  detail: { marginTop: -2, lineHeight: 18 },
+  separator: { height: 1, marginHorizontal: 24, marginVertical: 10 },
+  header: { paddingLeft: 28, paddingRight: 16, paddingTop: 3.5, paddingBottom: 7.5 },
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 20, elevation: 20 },
 });

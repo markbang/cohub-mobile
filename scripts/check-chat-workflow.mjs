@@ -1289,7 +1289,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH_SIZE: undefined });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null, SOLID_GLASS_SHADOW: "" });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1311,8 +1311,8 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
     assert.equal(scrim.props.start.y, edge === "top" ? 0 : 1);
     assert.equal(scrim.props.end.y, edge === "top" ? 1 : 0);
   }
-  assert.equal(header.props.style.minHeight, 56);
-  assert.equal(header.props.style.maxHeight, undefined, "large text must be able to increase header height");
+  assert.equal(header.props.style[0].minHeight, 56);
+  assert.equal(header.props.style[0].maxHeight, undefined, "large text must be able to increase header height");
   assert.equal([...headerClasses].some((name) => /^(max-h-|h-|border)/.test(name)), false, "no fixed height or bottom border");
   const headerNodes = chromeNodes(header);
   assert.equal(headerNodes.find((node) => node.props?.accessibilityRole === "header").props.numberOfLines, 1);
@@ -1388,12 +1388,10 @@ assert.equal(visibleRowEvents.length, previousVisibilityEvents + 1, "unmount can
 
 const chatMenuInput = { anchor: { x: 338, y: 63, width: 44, height: 44 }, viewport: { x: 0, y: 47, width: 390, height: 763 }, bottomInset: 34 };
 const chatMenuLayout = getAnchoredMenuLayout(chatMenuInput);
-assert.deepEqual(chatMenuLayout, { left: 202, top: 16, width: 180, maxHeight: 705 });
-assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 140 }).width, 180, "short menus retain the minimum width");
-assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 230 }).width, 230, "menus expand to their content width");
-assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 400 }).width, 280, "long menus respect the maximum width");
-assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, contentWidth: 230, viewport: { ...chatMenuInput.viewport, width: 160 } }).width, 144, "narrow screens take precedence over the minimum width");
-assert.equal(chatMenuLayout.left + chatMenuLayout.width, chatMenuInput.anchor.x + chatMenuInput.anchor.width, "menu aligns to the trigger's right edge");
+assert.deepEqual(chatMenuLayout, { left: 132, top: 16, width: 250, maxHeight: 705 });
+assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, viewport: { ...chatMenuInput.viewport, width: 160 } }).width, 144, "narrow screens take precedence over the menu width");
+assert.equal(chatMenuLayout.left + chatMenuLayout.width, chatMenuInput.anchor.x + chatMenuInput.anchor.width, "a trailing trigger's menu aligns to its right edge");
+assert.equal(getAnchoredMenuLayout({ ...chatMenuInput, anchor: { ...chatMenuInput.anchor, x: 16 } }).left, 16, "a leading trigger's menu aligns to its left edge");
 assert.equal(chatMenuLayout.top + chatMenuInput.viewport.y, chatMenuInput.anchor.y, "the menu opens over its trigger, which it replaces");
 assert.deepEqual(getAnchoredMenuLayout({ ...chatMenuInput, anchor: { ...chatMenuInput.anchor, x: 358, y: 93 }, viewport: { ...chatMenuInput.viewport, x: 20, y: 77 } }), chatMenuLayout, "screen-local coordinates account for safe areas and window offsets");
 for (const width of [240, 320, 390, 844]) {
