@@ -83,15 +83,15 @@ export function EdgeBlurTarget({ attach, children }: { attach: (node: View | nul
  * bar fades about 80% into the background behind a light blur (σ ≈ 2 pt), and comes back into focus from
  * the bar's lower third to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the
  * bar's bottom edge); later layers blur more and cover less, so the radius steps down the edge. Dimezis
- * blurs the whole target before cropping it to a layer, so the layers meet without seams, and the veil
- * hides the grain it draws over each.
+ * blurs the whole target before cropping it to a layer, so the layers meet without seams.
+ *
+ * Dimezis also draws a 15% grain over each layer, which iOS does not; the blur therefore stops where the
+ * veil is still 0.8 and hides it. Below that iOS blurs by under 1.3 pt, which the veil alone stands in for.
  */
 const SOFT_EDGE_TAIL = 36;
 const SOFT_EDGE_LAYERS = [
-  { bottom: 12, sigma: 0.4 },
-  { bottom: 0, sigma: 0.8 },
-  { bottom: -14, sigma: 1.3 },
-  { bottom: -30, sigma: 2 },
+  { bottom: -21, sigma: 1.5 },
+  { bottom: -33, sigma: 2 },
 ] as const;
 // Veil opacity down the edge, from 21 pt above the bar's bottom edge to the end of the tail.
 const SOFT_EDGE_VEIL_TOP = 21;
