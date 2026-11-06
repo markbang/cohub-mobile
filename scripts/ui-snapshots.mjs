@@ -46,7 +46,8 @@ export const SCREENS = [
   // The tab roots scrolled: the Large Title collapsed into the bar.
   { name: "chats-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
   // Released part-way through the collapse, the bar settles: here on the search field hidden.
-  { name: "chats-snap", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "nudge" }] },
+  // A second tap on the current tab scrolls it back to the top first.
+  { name: "chats-snap", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Chats" }, { swipe: "nudge" }] },
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
   { name: "activity-scrolled", ready: "Usage details", link: "cohub://activity", steps: [{ waitGone: "Loading" }, { swipe: "up" }] },
   { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }] },
