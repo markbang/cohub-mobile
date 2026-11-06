@@ -23,8 +23,8 @@ import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
-import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 
@@ -41,7 +41,9 @@ export default function SpacesScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
+  const titleScroll = largeTitleScroll(true);
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -248,8 +250,8 @@ export default function SpacesScreen() {
     ],
   });
   return <Screen edgeToEdge>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
-    <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} actions={<>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
+    <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
       <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
       </View>
@@ -258,8 +260,10 @@ export default function SpacesScreen() {
     <ConnectionBanner visible={connectionUnavailable} />
     {dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>}
+    <EdgeBlurTarget attach={attachBlurTarget}>
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
     <LegendList
+      {...titleSnap}
       ref={listRef}
       refScrollView={scrollRef}
       onScroll={(event) => pullRefresh.onScroll(event)}
@@ -279,8 +283,8 @@ export default function SpacesScreen() {
         onLayout={emptyFill.onLayout}
       ListHeaderComponent={<View>
         {pullRefresh.header}
-        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} />}
-        {nativeHeaders ? null : <View className="px-4 pb-2"><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></View>}
+        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} />}
+        {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY}><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></LargeTitleSearch>}
         <View className="px-3">
         {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
@@ -291,6 +295,7 @@ export default function SpacesScreen() {
       ListEmptyComponent={listLoading ? <LoadingRows count={4} /> : emptyError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : searchEmpty}
     />
     </BrandRefreshArea>
+    </EdgeBlurTarget>
     <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
     {/* A short form: sized to its fields on both platforms rather than a full-height page. */}
     <AdaptiveSheet

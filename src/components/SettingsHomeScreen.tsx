@@ -19,12 +19,14 @@ import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useThemePreference } from "@/src/theme";
 import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
-import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { LargeTitle, LargeTitleBar, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 
 export function SettingsHomeScreen() {
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
+  const titleScroll = largeTitleScroll(false);
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   useScrollToTop(scrollRef);
   const { t, preference: language, setPreference: setLanguage } = useTranslation();
   const showToast = useToast();
@@ -73,8 +75,9 @@ export function SettingsHomeScreen() {
   };
 
   return <Screen edgeToEdge>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}><LargeTitleBar title={t("tabs.me")} scrollY={scrollY} /></EdgeHeader>}
-    <ScrollView ref={scrollRef} scrollEnabled={!selecting} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}><LargeTitleBar title={t("tabs.me")} scrollY={scrollY} /></EdgeHeader>}
+    <EdgeBlurTarget attach={attachBlurTarget}>
+    <ScrollView ref={scrollRef} {...titleSnap} scrollEnabled={!selecting} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
       {nativeHeaders ? null : <LargeTitle title={t("tabs.me")} scrollY={scrollY} />}
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
       <View className="mb-6 mt-4 px-4">
@@ -152,6 +155,7 @@ export function SettingsHomeScreen() {
         <Text className="text-center text-micro tabular-nums text-fg-faint">Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
       </Pressable>
     </ScrollView>
+    </EdgeBlurTarget>
     <ConfirmSheet
       visible={signOutOpen}
       title={t("profile.signOut.title")}

@@ -12,9 +12,9 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, Screen, SectionHeader, SettingsGroup } from "@/src/ui";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { PressableScale } from "@/src/ui/PressableScale";
-import { EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
+import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
-import { LargeTitle, LargeTitleBar } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
 import { billingStatusLabel } from "@/src/utils";
@@ -23,7 +23,9 @@ export default function ActivityScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
-  const { headerHeight, onHeaderLayout, scrollY, scrollRef } = useEdgeChrome({ trackScroll: true });
+  const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
+  const titleScroll = largeTitleScroll(false);
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const { credits, activity, refresh } = useActivity();
   const [pullRefreshing, setPullRefreshing] = useState(false);
@@ -42,12 +44,13 @@ export default function ActivityScreen() {
   };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   return <Screen edgeToEdge>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.activity")} scrollY={scrollY} />
       <ConnectionBanner visible={connectionUnavailable} />
     </EdgeHeader>}
+    <EdgeBlurTarget attach={attachBlurTarget}>
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
-    <ScrollView ref={scrollRef} className="flex-1" onScroll={(event) => pullRefresh.onScroll(event)} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
+    <ScrollView ref={scrollRef} {...titleSnap} className="flex-1" onScroll={(event) => pullRefresh.onScroll(event)} scrollEventThrottle={16} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} refreshControl={pullRefresh.listProps.refreshControl} onScrollBeginDrag={pullRefresh.onScrollBeginDrag}>
       {pullRefresh.header}
       {nativeHeaders ? null : <LargeTitle title={t("tabs.activity")} scrollY={scrollY} />}
       {nativeHeaders ? <ConnectionBanner visible={connectionUnavailable} /> : null}
@@ -81,5 +84,6 @@ export default function ActivityScreen() {
       {activity?.data ? <View className="mx-4 rounded-md bg-surface p-4" style={{ borderCurve: "continuous" }}><ActivityHeatmap hourly={activity.data.hourly} days={activity.data.days} /></View> : !activity?.error ? <ActivityHeatmapSkeleton /> : null}
     </ScrollView>
     </BrandRefreshArea>
+    </EdgeBlurTarget>
   </Screen>;
 }
