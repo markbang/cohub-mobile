@@ -1,5 +1,98 @@
 # Changelog
 
+## [2.3.10](https://github.com/markbang/cohub-mobile/compare/v2.3.9...v2.3.10) (2026-11-06)
+
+
+### Features
+
+* **android:** collapse tab-root Large Titles into the bar on scroll ([ed4cad0](https://github.com/markbang/cohub-mobile/commit/ed4cad0a3418702465a48808e8851079f1ab40cb))
+* **android:** draw glyphs from Framework7 Icons, drawn after SF Symbols ([d4f4929](https://github.com/markbang/cohub-mobile/commit/d4f492929a43241253bfcd5e2ae5acba8958d794))
+* **android:** draw iOS 26's soft scroll edge and Large Title collapse on tab roots ([#189](https://github.com/markbang/cohub-mobile/issues/189)) ([97c7a70](https://github.com/markbang/cohub-mobile/commit/97c7a70a71412df62e1155bf68c1a47e0300423e))
+* **android:** draw Lucide glyphs to SF Symbols' size and weight ([dfeb669](https://github.com/markbang/cohub-mobile/commit/dfeb669fb32c773e99984d376e663b40c77445e9))
+* **android:** draw text in Inter in place of SF Pro ([f5abc8d](https://github.com/markbang/cohub-mobile/commit/f5abc8daeb9444500cd68db353e9a9b585a6daa9))
+* **android:** drive tab-root headers from the scroll on the UI thread ([fd92a7a](https://github.com/markbang/cohub-mobile/commit/fd92a7a2fdfef2b56872ffa78c01e51da1ca7ed8))
+* **chat:** crop camera photos before attaching ([#185](https://github.com/markbang/cohub-mobile/issues/185)) ([d4398e6](https://github.com/markbang/cohub-mobile/commit/d4398e66daf183b797921d48fc1faf769919c526))
+* **debug:** add Chat fixtures over the real timeline and chrome ([f0784cb](https://github.com/markbang/cohub-mobile/commit/f0784cb6fbe1b9d5d9b574f9f93680dc49070b5c))
+* **debug:** print the native timeline's layout diagnostics on Chat fixtures ([69939c8](https://github.com/markbang/cohub-mobile/commit/69939c820494443063bc014d681ee07b317e68ce))
+* **debug:** report the native timeline's setRows failures and state on Chat fixtures ([a6f9b93](https://github.com/markbang/cohub-mobile/commit/a6f9b937bf32deeef4d425cb946ef6a323745ee1))
+* **debug:** show loaded fonts and Inter weight samples in the UI catalog ([bff612a](https://github.com/markbang/cohub-mobile/commit/bff612a4568c3769614abf93fef9ac64d7664747))
+* **debug:** show the native timeline's state and first row frame on Chat fixtures ([04d3f92](https://github.com/markbang/cohub-mobile/commit/04d3f92b7051a22af31dac42becb420897f00468))
+* **debug:** show the native timeline's viewport and content on Chat fixtures ([722d991](https://github.com/markbang/cohub-mobile/commit/722d991221cacb30e4a7fdfcd797a807baf2afde))
+* **debug:** show the platform font load error in the UI catalog ([9cccd4a](https://github.com/markbang/cohub-mobile/commit/9cccd4aed429c0e5cdfd04d0bebc430f877ffed8))
+* **ios:** draw tab-root Large Titles so they collapse on scroll ([943a682](https://github.com/markbang/cohub-mobile/commit/943a682403089b4278b33918a9b9f4fe3f415820))
+* **ios:** use UIKit's Large Title on tab roots again ([#188](https://github.com/markbang/cohub-mobile/issues/188)) ([5c264e3](https://github.com/markbang/cohub-mobile/commit/5c264e39be0b65243b6680b780ac2926ed6715d5))
+* **ui:** count Spaces per filter and explain Chat sources in their menus ([4bfe4c7](https://github.com/markbang/cohub-mobile/commit/4bfe4c78f1f835c0ab7917416a54a06ccf77463f))
+* **ui:** draw Android controls to iOS 26 measurements and fix iOS bar insets ([e254bb8](https://github.com/markbang/cohub-mobile/commit/e254bb81a85c72d52ce750711af82cfe360c4013))
+* **ui:** group menus into sections with checks and second lines ([c87d050](https://github.com/markbang/cohub-mobile/commit/c87d05045cbcc5144fe97b9d151f7ed97a377d49))
+
+
+### Fixes
+
+* **android:** load Inter as one family, and size sheets to their content ([27b4ed6](https://github.com/markbang/cohub-mobile/commit/27b4ed6fe01f4f0f3ecb05ab7d5d59a4e171c6a3))
+* **android:** position Space panel pages with a transform only ([61c1260](https://github.com/markbang/cohub-mobile/commit/61c12603aef20f3008fd21c5002b338fcb7c1a70))
+* **android:** stop the Space panel pager from scrolling to focused children ([ec5de79](https://github.com/markbang/cohub-mobile/commit/ec5de79fb99048f84e7fe16498bb5c5a97500567))
+* **chat:** stop the Android pull from claiming drags on a pinned short chat ([#183](https://github.com/markbang/cohub-mobile/issues/183)) ([08e362c](https://github.com/markbang/cohub-mobile/commit/08e362ce846e5e18fb0b8bed203109b025a77244))
+* **debug:** overlay the UI catalog menu over the whole screen ([cba72d2](https://github.com/markbang/cohub-mobile/commit/cba72d21a54ba6ec181e02145979dbe276372463))
+* **fonts:** let expo-asset import React Native past Uniwind's shim ([8308ecf](https://github.com/markbang/cohub-mobile/commit/8308ecf6c47cde9f9f3e6ecff0500ced6a41b577))
+* **ios:** bind Chat timeline rows before their type's first recycle ([#186](https://github.com/markbang/cohub-mobile/issues/186)) ([8584a88](https://github.com/markbang/cohub-mobile/commit/8584a8884e6cb7b96dda94a6c3e817030ebd4fd3))
+* **ios:** bound context-menu rows to the row width so long previews truncate ([e2c75d4](https://github.com/markbang/cohub-mobile/commit/e2c75d45e0920a160f7d3378d908bb4ab9bd5bc9))
+* **ios:** draw Chats with the JS list until the native timeline paints ([c139851](https://github.com/markbang/cohub-mobile/commit/c13985163bc74e5ad4ee363829714524ca7fe870))
+* **ios:** hand UIKit each screen's main scroll view so the tab bar minimizes on scroll ([7f74252](https://github.com/markbang/cohub-mobile/commit/7f7425294d27bafc93ae1763bad169409e2885f4))
+* **ios:** let tab-root Large Titles collapse on scroll ([4633a92](https://github.com/markbang/cohub-mobile/commit/4633a92e30dad8e23a3caafe7178b4e3f3d78203))
+* **ios:** minimize the tab bar on scroll ([#187](https://github.com/markbang/cohub-mobile/issues/187)) ([7f74252](https://github.com/markbang/cohub-mobile/commit/7f7425294d27bafc93ae1763bad169409e2885f4))
+* **ios:** pin context-menu rows to their width so long previews truncate ([3cc19eb](https://github.com/markbang/cohub-mobile/commit/3cc19eb0e373cea7f13904d353e63444e71bb16e))
+* **ui:** draw the menu check in the glyph color, as iOS does ([f6518db](https://github.com/markbang/cohub-mobile/commit/f6518db6ca744fe31dff4dde7e4817b1dec989cc))
+* **ui:** enter Android page sheets and alerts as UIKit does ([3ac4e33](https://github.com/markbang/cohub-mobile/commit/3ac4e33253aa6126b75365c10c340251c4baba22))
+* **ui:** scale only Android chevrons to iOS sizes ([09cac35](https://github.com/markbang/cohub-mobile/commit/09cac35c9eea31538f7e5827a535d159ce003e6e))
+* **ui:** size Android glyphs as SF Symbols fill their box ([d00dcaa](https://github.com/markbang/cohub-mobile/commit/d00dcaa0f63259241c554eee14f5f7ba8eb47bb3))
+* **ui:** size short sheets to their rows and widen Android menus to UIKit's minimum ([ed09720](https://github.com/markbang/cohub-mobile/commit/ed097208cc8fd896488161886797aa2a7c28cfb2))
+
+
+### Performance
+
+* **ci:** check the iOS link prompt only after a flow's first link ([2acb118](https://github.com/markbang/cohub-mobile/commit/2acb11819d3faa4d89406a591d97da084e312673))
+
+
+### Build
+
+* **ios:** sign simulator builds to run locally so the keychain works ([4b4a6ca](https://github.com/markbang/cohub-mobile/commit/4b4a6ca16ee2c6b33bfcca786c2988327de012d8))
+
+
+### CI
+
+* **ui:** add side-by-side iOS and Android UI snapshots ([e727f9f](https://github.com/markbang/cohub-mobile/commit/e727f9f7980c32c1e9f59cd148e5ad8cc6f722fb))
+* **ui:** align paired recordings on their first change and stop waiting on spinners ([aedd564](https://github.com/markbang/cohub-mobile/commit/aedd5645cc80cd8dbda37dcc884a73d3f999a2ac))
+* **ui:** bring a minimized iOS tab bar back before tapping a tab ([6298861](https://github.com/markbang/cohub-mobile/commit/6298861f0a867ab27fe37aa6c1fa01db7497ba58))
+* **ui:** cache Metro transforms across snapshot runs ([86755b1](https://github.com/markbang/cohub-mobile/commit/86755b12628d4eec10f75f510e5558cd88d47bbb))
+* **ui:** cap each Maestro attempt at 30 minutes so a hung iOS run retries ([bae6c02](https://github.com/markbang/cohub-mobile/commit/bae6c02a2e553ce2ae3ad893a27c67d648981349))
+* **ui:** capture a real Chat only once it has stopped opening ([cbb2bc4](https://github.com/markbang/cohub-mobile/commit/cbb2bc407d5e6413f6d6ff4b66d02832bda0da31))
+* **ui:** capture Activity once its figures have loaded ([203c678](https://github.com/markbang/cohub-mobile/commit/203c678aaad34a13ea399872b417da264fae2202))
+* **ui:** capture Chat fixtures and the page sheet, and steady the Android emulator ([20c17a7](https://github.com/markbang/cohub-mobile/commit/20c17a7cfd1b9a147a00127d560a76600c4b2727))
+* **ui:** capture overlay screens last from a fresh launch ([4047c99](https://github.com/markbang/cohub-mobile/commit/4047c9937ac290e3d7e7817f043ef2df157aefd2))
+* **ui:** capture scrolled tab roots and record scrolling on the main screens ([8d1e318](https://github.com/markbang/cohub-mobile/commit/8d1e318d43b2b1b5c2c40896384c810191edc619))
+* **ui:** confirm iOS link prompts and open the catalog menu by id ([651d58d](https://github.com/markbang/cohub-mobile/commit/651d58d237f68a484b72ffe00bf7476bdebb5aed))
+* **ui:** drop oversized logs instead of reading them for redaction ([af1c690](https://github.com/markbang/cohub-mobile/commit/af1c690abaedc82d65fe9dd955a282c3ef559344))
+* **ui:** emit one Maestro document header per flow ([0846ff4](https://github.com/markbang/cohub-mobile/commit/0846ff44225dc603b43cbde4b089bdf4161cfc97))
+* **ui:** expand a minimized iOS tab bar by tapping it ([48c95ec](https://github.com/markbang/cohub-mobile/commit/48c95ecce5b8e198021a3717c59cf05fb7cbd633))
+* **ui:** keep Android 'not responding' dialogs off the snapshots ([ff75da0](https://github.com/markbang/cohub-mobile/commit/ff75da0eacfda610c1cdba42318f33b4d672a43c))
+* **ui:** keep Maestro evidence and cache binaries when snapshots fail ([5c28288](https://github.com/markbang/cohub-mobile/commit/5c28288b23b648fa391365679b711be8ad73f1e6))
+* **ui:** keep reloading until Metro serves the first bundle ([7dc77b3](https://github.com/markbang/cohub-mobile/commit/7dc77b342abc3856761ed8400097a84b24d3820c))
+* **ui:** let the emulator settle after a theme switch and retry Maestro twice ([a5c20eb](https://github.com/markbang/cohub-mobile/commit/a5c20ebcfe7ba6a0cfdff1aca6dd8b5231eeb20e))
+* **ui:** match each screen's ready text inside merged elements ([93c5205](https://github.com/markbang/cohub-mobile/commit/93c520513122c7c11c24ab1160ff95005946ac2f))
+* **ui:** open the first Chat and Space by position ([67c4fb7](https://github.com/markbang/cohub-mobile/commit/67c4fb7dc632e0538f294abbde7a158f8cd0a363))
+* **ui:** record interactions side by side and match the iPhone 17 Pro width ([df87168](https://github.com/markbang/cohub-mobile/commit/df87168b6d539a80dd2efa6ebdf42cbb2425dbff))
+* **ui:** redact credentials in a step that also runs on cancel ([074a13a](https://github.com/markbang/cohub-mobile/commit/074a13a63bbbe5c16789e60f2f0f20b370bdb02f))
+* **ui:** redact Maestro credentials, reload past a cold Metro, tap the terms checkbox ([2a11ef5](https://github.com/markbang/cohub-mobile/commit/2a11ef53cf1f40aee75c68aadda7defaf4c520ac))
+* **ui:** retry a snapshot run once when Maestro's driver dies ([861fe46](https://github.com/markbang/cohub-mobile/commit/861fe46128a4b45352dfe809d379b43a02c0a2fc))
+* **ui:** split UI snapshots into per-platform workflows ([8ec5aa7](https://github.com/markbang/cohub-mobile/commit/8ec5aa7d552fd8fe43565428a33dc92273ba7740))
+* **ui:** tap each platform's first row and give a real Chat longer to open ([d8f4dea](https://github.com/markbang/cohub-mobile/commit/d8f4deae9f084e0d81f254ba1879e86134b0a09e))
+* **ui:** upload Maestro debug output and allow a slow iOS driver start ([3ae825f](https://github.com/markbang/cohub-mobile/commit/3ae825f8f2c8a64d7ea6f24a3edea216fe578f99))
+* **ui:** upload native cohub-diag log lines beside the logs ([9f7dc4b](https://github.com/markbang/cohub-mobile/commit/9f7dc4be6117b59313bfb26d2163d598a2220aa1))
+* **ui:** wait for a row both platforms expose on Activity ([eda0728](https://github.com/markbang/cohub-mobile/commit/eda07280a488628ad975dfca771358dc20c9ba33))
+* **ui:** wait for each screen's own text before capturing it ([6dcc190](https://github.com/markbang/cohub-mobile/commit/6dcc1909e3af44fdca85c42b938e74c52f2c310f))
+* **ui:** wait for what a tap opens before capturing it ([7f90a26](https://github.com/markbang/cohub-mobile/commit/7f90a265cf672de12fa541345701976fa9eb74ab))
+* **ui:** write Maestro screenshots inside its test output directory ([21e085a](https://github.com/markbang/cohub-mobile/commit/21e085acdf7975943b395d59373b6bb339b5f16a))
+
 ## [2.3.9](https://github.com/markbang/cohub-mobile/compare/v2.3.8...v2.3.9) (2026-11-04)
 
 
