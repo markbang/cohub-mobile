@@ -223,6 +223,25 @@ function preamble(platform) {
     "    when:",
     "      visible: \"Continue with Cohub\"",
     `    file: ${yamlString(login)}`,
+    // A cached debug APK predates the latest release, so Android offers it; "Not now" snoozes it across launches.
+    ...(platform === "android" ? [
+      "- extendedWaitUntil:",
+      "    visible: \"Update available.*\"",
+      "    timeout: 15000",
+      "    optional: true",
+      "- runFlow:",
+      "    when:",
+      "      visible: \"Update available.*\"",
+      "    commands:",
+      "      - runFlow:",
+      "          when:",
+      "            notVisible: \"^Not now$\"",
+      "          commands:",
+      "            - tapOn: \"Update available.*\"",
+      "      - tapOn: \"^Not now$\"",
+      "      - waitForAnimationToEnd:",
+      "          timeout: 5000",
+    ] : []),
   ];
 }
 
