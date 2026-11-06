@@ -1900,6 +1900,7 @@ export function AppProvider({
             runtimePhase: null,
             runtimeProvider: null,
             runtimeModel: null,
+            outputAt: event.state.contentBlocks.length || event.intermediateMessages.length ? new Date().toISOString() : null,
           };
           if (stream.status === "streaming") streamBatch.push(stream);
           else {

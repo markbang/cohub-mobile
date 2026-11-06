@@ -305,7 +305,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
             if (show) {
               const live = stream.status === "pending" || stream.status === "streaming";
-              const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
+              const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: stream.outputAt ?? streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
               const process = row.processInRow ? null : streamingProcessNode(ctx, stream.turnId ?? "live", stream.intermediateMessages, thinkingBlocks(stream.contentBlocks));
               return { type: "live", node: { type: "view", children: process ? [process, card] : [card] } };
             }

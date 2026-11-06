@@ -57,6 +57,8 @@ export type StreamView = {
   runtimePhase: "llm_call_started" | null;
   runtimeProvider: string | null;
   runtimeModel: string | null;
+  /** Client time of the agent's latest output; null until the stream carries any. */
+  outputAt: string | null;
 };
 
 export type SessionView = {

@@ -21,6 +21,7 @@ export function pendingStreamForTurn(turnId: string | null): {
   runtimePhase: null;
   runtimeProvider: null;
   runtimeModel: null;
+  outputAt: null;
 } {
   return {
     status: "pending",
@@ -31,6 +32,7 @@ export function pendingStreamForTurn(turnId: string | null): {
     runtimePhase: null,
     runtimeProvider: null,
     runtimeModel: null,
+    outputAt: null,
   };
 }
 
