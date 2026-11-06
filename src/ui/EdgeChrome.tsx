@@ -79,21 +79,29 @@ export function EdgeBlurTarget({ attach, children }: { attach: (node: View | nul
 }
 
 /**
- * iOS 26's soft scroll edge, measured on its tab roots: content under the status bar and the bar is blurred
- * (σ ≈ 6 pt) behind a faint veil of the background, and comes back into focus over the bar's lower half and
- * 24 pt below it. Each layer reaches from the top to `bottom` (pt from the bar's bottom edge); later layers
- * blur more and cover less, so the radius steps down the edge. Dimezis blurs the whole target before
- * cropping it to a layer, so the layers meet without seams.
+ * iOS 26's soft scroll edge, fitted on its tab roots in both themes: content under the status bar and the
+ * bar fades about 80% into the background behind a light blur (σ ≈ 2 pt), and comes back into focus from
+ * the bar's lower third to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the
+ * bar's bottom edge); later layers blur more and cover less, so the radius steps down the edge. Dimezis
+ * blurs the whole target before cropping it to a layer, so the layers meet without seams, and the veil
+ * hides the grain it draws over each.
  */
-const SOFT_EDGE_TAIL = 24;
+const SOFT_EDGE_TAIL = 36;
 const SOFT_EDGE_LAYERS = [
-  { bottom: 24, sigma: 0.8 },
-  { bottom: 12, sigma: 1.8 },
-  { bottom: 0, sigma: 3 },
-  { bottom: -16, sigma: 4.5 },
-  { bottom: -36, sigma: 6 },
+  { bottom: 12, sigma: 0.4 },
+  { bottom: 0, sigma: 0.8 },
+  { bottom: -14, sigma: 1.3 },
+  { bottom: -30, sigma: 2 },
 ] as const;
-const SOFT_EDGE_VEIL = 0.15;
+// Veil opacity down the edge, from 21 pt above the bar's bottom edge to the end of the tail.
+const SOFT_EDGE_VEIL_TOP = 21;
+const SOFT_EDGE_VEIL = [
+  { at: -21, alpha: 0.8 },
+  { at: -9, alpha: 0.5 },
+  { at: 0, alpha: 0.45 },
+  { at: 21, alpha: 0.12 },
+  { at: SOFT_EDGE_TAIL, alpha: 0 },
+] as const;
 
 // expo-blur hands Dimezis `intensity / blurReductionFactor`, which it multiplies by 4 into RenderEffect's
 // radius, and HWUI turns that radius into σ = 0.57735 r + 0.5 px. Intensity 1 keeps the tint overlay,
@@ -105,7 +113,7 @@ function blurReduction(sigma: number) {
 
 function SoftEdge({ target }: { target: RefObject<View | null> }) {
   const { colors } = useAppTheme();
-  const veil = colorWithOpacity(colors.background, SOFT_EDGE_VEIL);
+  const span = SOFT_EDGE_VEIL_TOP + SOFT_EDGE_TAIL;
   return <>
     {SOFT_EDGE_LAYERS.map(({ bottom, sigma }) => <BlurView
       key={bottom}
@@ -115,8 +123,13 @@ function SoftEdge({ target }: { target: RefObject<View | null> }) {
       blurReductionFactor={blurReduction(sigma)}
       style={[StyleSheet.absoluteFill, { bottom: SOFT_EDGE_TAIL - bottom }]}
     />)}
-    <View style={[StyleSheet.absoluteFill, { bottom: SOFT_EDGE_TAIL + 10, backgroundColor: veil }]} />
-    <LinearGradient pointerEvents="none" colors={[veil, colorWithOpacity(colors.background, 0)]} style={{ position: "absolute", left: 0, right: 0, bottom: SOFT_EDGE_TAIL - 10, height: 20 }} />
+    <View style={[StyleSheet.absoluteFill, { bottom: span, backgroundColor: colorWithOpacity(colors.background, SOFT_EDGE_VEIL[0].alpha) }]} />
+    <LinearGradient
+      pointerEvents="none"
+      colors={SOFT_EDGE_VEIL.map(({ alpha }) => colorWithOpacity(colors.background, alpha)) as unknown as readonly [string, string, ...string[]]}
+      locations={SOFT_EDGE_VEIL.map(({ at }) => (at + SOFT_EDGE_VEIL_TOP) / span) as unknown as readonly [number, number, ...number[]]}
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: span }}
+    />
   </>;
 }
 
