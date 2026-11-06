@@ -30,6 +30,7 @@ import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 import "@/src/platform/predictive-back";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { record as recordDebugEvent, useDebugDiagnosticsLifecycle } from "@/src/data/debug-session";
+import { useFrameProbe } from "@/src/components/useFrameProbe";
 import { globalTouchHandlers, installInteractionInstrumentation, useRouteTracking } from "@/src/data/interaction-trace";
 
 export { ErrorBoundary } from "expo-router";
@@ -125,6 +126,7 @@ function AuthEnvironmentRoot() {
 
 function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEnvironment; onSelectEnvironment: (environment: CohubEnvironment) => void }) {
   useDebugDiagnosticsLifecycle();
+  useFrameProbe();
   const { client, isInitialized, isAuthenticated, signIn, signOut } = useLogto();
   const theme = useAppTheme();
   const [authLoading, setAuthLoading] = useState(false);
