@@ -3289,12 +3289,22 @@ function panelPagerHarness(initialPanel = null) {
 const pagerHarness = panelPagerHarness();
 assert.equal(pagerHarness.contentShift(), -344, "the closed page is in place from the first render, before any layout event");
 assert.equal(pagerHarness.swipeEnabled(), true, "the swipe needs no native handshake");
-assert.ok(pagerHarness.nodes().some((node) => node.type === "ChatPanel"), "Chats are mounted before the first swipe reveals them");
-assert.ok(pagerHarness.nodes().some((node) => node.type === "FilesPanel"), "Files are mounted and start loading before the first swipe reveals them");
+// A device trace (cfeed 01M6RSD6H1SPQ7VG3WBVZJFR72) put 0.5–1.2 s JS stalls right after the panels' own
+// queries answered while a Chat opened, so they mount on first use rather than with the Chat.
+assert.equal(pagerHarness.nodes().some((node) => node.type === "ChatPanel" || node.type === "FilesPanel"), false, "opening a Chat does not mount, fetch, or render the hidden panels");
 assert.deepEqual(pagerHarness.swipe().config.activeOffsetX, [-PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_ACTIVATION_PX]);
 assert.deepEqual(pagerHarness.swipe().config.failOffsetY, [-PANEL_SWIPE_VERTICAL_SLOP_PX, PANEL_SWIPE_VERTICAL_SLOP_PX], "vertical travel hands the touch to the timeline");
 assert.deepEqual(pagerHarness.swipe().config.hitSlop, { top: -56 }, "header touches never start the swipe, so the back button and iOS edge-back keep working");
 assert.equal(panelsPredictiveBackBlocked, false, "a closed pager lets the back gesture preview the screen underneath");
+{
+  const swiped = panelPagerHarness();
+  swiped.swipe().handlers.onStart({ translationX: -PANEL_SWIPE_ACTIVATION_PX });
+  // The drag-begin reaction runs after a render; its state update renders again.
+  swiped.render();
+  swiped.render();
+  assert.deepEqual(["ChatPanel", "FilesPanel"].map((type) => swiped.nodes().some((node) => node.type === type)), [true, true], "the first drag mounts both panels, so the one it reveals renders under the finger");
+  assert.deepEqual(["ChatPanel", "FilesPanel"].map((type) => panelPagerHarness("files").nodes().some((node) => node.type === type)), [true, true], "a panel opened from a menu mounts at once");
+}
 pagerHarness.setPanel("chat");
 assert.equal(panelsPredictiveBackBlocked, true, "an open panel closes on back, so the gesture must not preview a pop");
 pagerHarness.setPanel(null);
