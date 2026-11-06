@@ -88,7 +88,9 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   `text-on-accent`, not a tinted wash; unselected ones sit on the surface one level up. The tab
   bar is the exception, as on iOS: its lens is a tint and the selected tab is marked by accent color.
 - **Flat content, floating chrome.** Only the tab bar, menus, toasts, banners, and the composer use
-  `shadow-float`. Cards are separated by surface color, not shadow.
+  `shadow-float`. Cards are separated by surface color, not shadow. Android's solid stand-ins for
+  iOS glass bar buttons and drawn menus use `bg-glass-control` / `bg-glass-menu` with `shadow-glass`,
+  measured from the iOS 26 captures.
 - **Surfaces step, borders don't.** A surface stands out from what it sits on by a step in
   lightness, not an outline. Floating chrome without raised blocks inside (tab bar, action and
   context menus, toasts, the offline banner, jump-to-latest) uses `bg-surface-float`: the card
@@ -218,7 +220,7 @@ Shared primitives keep their current names and props so screens migrate without 
 | `SettingsSelectRow` | A settings row that picks one of a few values in place, as an iOS pop-up button: the value and `chevrons-up-down` at the trailing edge, a glass menu that springs out of it with a check on the current value. Tap opens it; a press held 120 ms opens it under the finger, and sliding onto a value and letting go picks it, with a selection haptic per row. Used for Language and Web browsing; longer or richer choices keep their own page. iOS renders the system pop-up button (`@expo/ui` SwiftUI `Picker`, `SettingsSelectRow.ios.tsx`); Android renders the drawn one with the same props. |
 | `EmptyState`, `DataError`, skeletons | A skeleton traces the content it stands in for (`src/ui/Skeleton.tsx`): `LoadingRows` for `ListRow` cards, `LoadingFlatRows` for bordered file and picker rows, `LoadingDocument` for code and diffs, `LoadingSections` for settings-style pages; content of unknown shape (web previews) uses `LoadingState`. Errors use an icon retry button. |
 | `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`, balanced against the actions; `transparent` puts it on a content-width glass capsule that drops the leading balance, centering between the back button and the actions so long titles use the slack beside the back button; `large` puts a `text-display` Large Title under the bar (Settings); `titleHidden` leaves tab roots (Chats, Spaces, Activity) with only their buttons, the selected tab naming the screen, and keeps the title as the screen reader's header. |
-| `FloatingTabBar` | Icon + label, 62 pt, content-width capsule, `shadow-float`, a lens that lifts and follows a drag. |
+| `FloatingTabBar` | Icon + label, 62 pt, content-width capsule, `shadow-float`, a lens that lifts and follows a drag. Scrolling a tab root down minimizes it to a 48 pt circle holding the selected glyph, as UIKit's `onScrollDown`; scrolling up or tapping the circle restores it. |
 
 ## 4. Screens
 

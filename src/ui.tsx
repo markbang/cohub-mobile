@@ -25,6 +25,7 @@ import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import type { IconName } from "@/src/icons";
+import Svg, { Path } from "react-native-svg";
 import { Glyph } from "@/src/ui/Glyph";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -110,14 +111,14 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
  * `filled` draws the glyph on a solid circle, for bar buttons over content. `accent` fills with the accent and is
  * kept for a screen's one primary action; `active` marks a control in a non-default state with an accent glyph only.
  */
-export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, glyphSize, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; /** Overrides the glyph's size, as for Android's back chevron. */ glyphSize?: number; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
+export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, glyph, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; /** Replaces the drawn glyph, as for Android's back chevron. */ glyph?: ReactNode; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
   const bar = useContext(BarButtonContext);
   const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
   const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
-  const icon = <AppIcon name={name} size={glyphSize ?? (filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5))} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
+  const icon = glyph ?? <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   return (
     <Pressable
       accessibilityRole="button"
@@ -135,9 +136,9 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
     >
       {filled
         // A 44 pt glass circle, as iOS 26 draws bar buttons.
-        ? ({ pressed }) => <View className="size-11 items-center justify-center" style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
+        ? ({ pressed }) => <View className={`size-11 items-center justify-center rounded-full ${SOLID_GLASS_SHADOW}`} style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
           {/* Glass where the platform draws it; an accent button is glass tinted with the accent. */}
-          <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} />
+          <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} solidClassName="bg-glass-control" rim />
           {icon}
         </View>
         : icon}
@@ -146,6 +147,8 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 }
 
 const FILLED_ICON_SIZE = 18;
+// Android draws bar buttons solid, so the glass's soft shadow is drawn with them; iOS glass casts its own.
+const SOLID_GLASS_SHADOW = Platform.OS === "android" ? "shadow-glass" : "";
 /** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
 const MODEL_DETAIL_SHRINK = { flexShrink: 100 } as const;
 
@@ -197,8 +200,20 @@ export function Screen({ children, scroll = false, refreshing = false, onRefresh
 }
 
 const TOP_EDGE = ["top"] as const;
-// iOS's own back chevron stands about 20 pt tall; Android draws that size. iOS drawn bars keep their symbol size.
-const BACK_GLYPH_SIZE = Platform.OS === "android" ? 32 : undefined;
+
+// iOS 26's back chevron, fitted to its pixels in the 44 pt button: a 2.5 pt round stroke, 8.4 × 16.2 pt
+// between its stroke centres, its point 5.8 pt left of and 0.33 pt below the button's centre.
+const BACK_CHEVRON_PATH = "M24.6 14.23 L16.2 22.33 L24.6 30.43";
+function BackChevron() {
+  const theme = useAppTheme();
+  return <Svg pointerEvents="none" width={44} height={44} viewBox="0 0 44 44">
+    <Path d={BACK_CHEVRON_PATH} stroke={theme.colors.text} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+  </Svg>;
+}
+// iOS drawn bars keep their symbol.
+const BACK_GLYPH = Platform.OS === "android" ? <BackChevron /> : undefined;
+// iOS 26's navigation bar keeps its buttons in the top 44 pt and ends 10 pt below them, so content starts there.
+const DRAWN_BAR_TAIL = Platform.OS === "android" ? { paddingBottom: 10 } : null;
 /** Two lines (headline + caption) and the 2 pt inset make 44, so one radius keeps it a capsule with or without a subtitle. */
 const TITLE_CAPSULE = { minHeight: 44, borderRadius: 22, borderCurve: "continuous" } as const;
 const FILL = { flex: 1 } as const;
@@ -246,7 +261,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     {subtitle ? <Text numberOfLines={1} className="text-center text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
   const titleContent = children ?? (capsule
-    ? <View className="max-w-full self-center justify-center px-4 py-0.5" style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} />{titleText}</View>
+    ? <View className={`max-w-full self-center justify-center px-4 py-0.5 ${SOLID_GLASS_SHADOW}`} style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} solidClassName="bg-glass-control" rim />{titleText}</View>
     : titleText);
   // Each bar slot is a 44 pt glass circle; slots sit 12 apart, as in an iOS 26 bar.
   const leadingWidth = onBack || leading ? 44 + 12 : 0;
@@ -258,7 +273,7 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
       <View className="flex-row items-center gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="chevron-left" glyphSize={BACK_GLYPH_SIZE} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {onBack ? <IconButton filled name="chevron-left" glyph={BACK_GLYPH} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
         {actions ? <View className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
       </View>
@@ -269,11 +284,11 @@ export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, c
     </View>
   );
   return (
-    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-3 px-4 ${transparent ? "" : "bg-background"}`} style={{ minHeight: edgeChrome.headerMinHeight }}>
+    <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-3 px-4 ${transparent ? "" : "bg-background"}`} style={[{ minHeight: edgeChrome.headerMinHeight }, transparent || children ? null : DRAWN_BAR_TAIL]}>
       {onBack ? <IconButton
         filled
         name="chevron-left"
-        glyphSize={BACK_GLYPH_SIZE}
+        glyph={BACK_GLYPH}
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}

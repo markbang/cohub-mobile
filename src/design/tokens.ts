@@ -6,7 +6,7 @@
  */
 
 export type ColorKey =
-  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "pressOverlay"
+  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "pressOverlay"
   | "border" | "borderStrong"
   | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton"
   | "text" | "textSecondary" | "textMuted" | "textFaint"
@@ -26,6 +26,8 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   surfaceRaised: "surface-raised",
   surfacePressed: "surface-pressed",
   surfaceFloat: "surface-float",
+  glassControl: "glass-control",
+  glassMenu: "glass-menu",
   pressOverlay: "press-overlay",
   border: "border",
   borderStrong: "border-strong",
@@ -70,6 +72,9 @@ export const lightPalette: Palette = {
   surfaceRaised: "#efebe4",
   surfacePressed: "#e6e1d8",
   surfaceFloat: "#ffffff",
+  // iOS 26 Liquid Glass over `background`, as measured: a bar button and a pull-down menu.
+  glassControl: "#fdfbf7",
+  glassMenu: "#faf7f2",
   pressOverlay: "rgba(8, 9, 11, 0.08)",
   border: "#e8e3da",
   borderStrong: "#cdc6ba",
@@ -118,6 +123,8 @@ export const darkPalette: Palette = {
   surfacePressed: "#3a3a3c",
   // A shadow barely shows on a dark page, so floating chrome steps up a level instead of drawing a border.
   surfaceFloat: "#2c2c2e",
+  glassControl: "#171719",
+  glassMenu: "#171718",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
   border: "#38383a",
   borderStrong: "#48484a",
@@ -213,3 +220,5 @@ export const LIST_AVATAR_SIZE = 46;
  * The color is fixed black on purpose: a shadow is darkness, not a themed hue, so Config themes do not tint it.
  */
 export const SHADOW_FLOAT = "0 6px 20px rgba(0, 0, 0, 0.14)";
+/** iOS 26's glass bar buttons and menus, fitted to their measured falloff: a wide, faint shadow sunk below. */
+export const SHADOW_GLASS = "0 8px 36px rgba(0, 0, 0, 0.1)";

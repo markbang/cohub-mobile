@@ -39,6 +39,19 @@ export const springs = {
   dockPress: { mass: 1, stiffness: 311, damping: 0.593 * 2 * Math.sqrt(311) },
   dockJelly: { mass: 1, stiffness: 100, damping: 0.4 * 2 * Math.sqrt(100) },
   dockTrack: { duration: 120, dampingRatio: 1 },
+  /** The minimized tab bar growing back, fitted to UIKit's: it peaks 1.4% past full width at 240 ms. */
+  tabBarExpand: { mass: 1, stiffness: 475, damping: 0.8 * 2 * Math.sqrt(475) },
+} as const;
+
+/**
+ * UIKit's tab bar minimizing on scroll, fitted frame by frame (iOS 26): the bar squeezes in by about 13 pt
+ * a side over 180 ms (`squeeze`), collapses into a 48 pt circle around the selected tab from 150 ms
+ * (`collapse`), and lets the squeeze go once it has arrived (`release`).
+ */
+export const tabBarMinimize = {
+  squeeze: { duration: 180, curve: [0.42, 0, 1, 1] },
+  collapse: { delay: 150, duration: 260, curve: [0.3, 0, 0.2, 1] },
+  release: { delay: 170, duration: 300, curve: [0.25, 0.1, 0.25, 1] },
 } as const;
 
 /** Pressed scale for card/row press feedback; 1 means resting. */
@@ -66,12 +79,12 @@ export const popover = {
 } as const;
 
 /**
- * A drawn menu grows out of the control that opened it and shrinks back into it, as iOS 26 menus do.
- * The open carries a trace of overshoot so the panel lands; the close settles straight into the control.
+ * A drawn menu grows out of the control that opened it and shrinks back into it, as iOS 26 menus do, fitted
+ * frame by frame: the open springs 3% past full size at 140 ms; the close accelerates into the control in 220 ms.
  */
 export const menuMorph = {
-  open: { duration: 360, dampingRatio: 0.84 },
-  close: { duration: 280, dampingRatio: 1 },
+  open: { mass: 1, stiffness: 1150, damping: 0.75 * 2 * Math.sqrt(1150) },
+  close: { duration: 220, curve: [0.42, 0, 1, 1] },
 } as const;
 
 /** Drawn Android alerts: UIAlertController's entrance, shrinking from 1.2 × while it fades in. */

@@ -5,7 +5,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ANDROID_FONT_FAMILY, COLOR_CSS_NAMES, RADIUS, SHADOW_FLOAT, TEXT_RAMP, darkPalette, interTracking, lightPalette } from "../src/design/tokens.ts";
+import { ANDROID_FONT_FAMILY, COLOR_CSS_NAMES, RADIUS, SHADOW_FLOAT, SHADOW_GLASS, TEXT_RAMP, darkPalette, interTracking, lightPalette } from "../src/design/tokens.ts";
 
 // Resolved from this file, like the token import, so the script works from any directory.
 const TARGET = fileURLToPath(new URL("../global.css", import.meta.url));
@@ -27,6 +27,7 @@ const theme = [
     ...(weight ? [`--text-${name}--font-weight: ${weight};`] : []),
   ]),
   `--shadow-float: ${SHADOW_FLOAT};`,
+  `--shadow-glass: ${SHADOW_GLASS};`,
 ];
 
 // Android text: each ramp class takes the Inter family and Inter's tracking for its size; the ramp's

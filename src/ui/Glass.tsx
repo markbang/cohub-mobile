@@ -48,6 +48,8 @@ type GlassBackgroundProps = {
   /** Background class used when glass is unavailable, so solid surfaces keep their level. */
   solidClassName?: string;
   blurTarget?: RefObject<View | null> | null;
+  /** The solid stand-in draws Liquid Glass's 1 pt rim, which only shows on a dark page. */
+  rim?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -56,7 +58,7 @@ type GlassBackgroundProps = {
  * its own view (refs, measurement, layout) and only its backdrop changes with the platform. Touches
  * belong to the control above it, so Liquid Glass's own touch response is not used.
  */
-export function GlassBackground({ radius, glass = "regular", tint, solidClassName = "bg-surface-float", blurTarget = null, style }: GlassBackgroundProps) {
+export function GlassBackground({ radius, glass = "regular", tint, solidClassName = "bg-surface-float", blurTarget = null, rim = false, style }: GlassBackgroundProps) {
   const theme = useAppTheme();
   const material = useGlassMaterial({ blurTarget });
   const shape = { borderRadius: radius, borderCurve: "continuous" as const };
@@ -82,7 +84,10 @@ export function GlassBackground({ radius, glass = "regular", tint, solidClassNam
       {/* design-system-end */}
     </View>;
   }
-  return <View pointerEvents="none" className={tint ? undefined : solidClassName} style={[StyleSheet.absoluteFill, shape, tint ? { backgroundColor: tint } : null, style]} />;
+  // design-system-begin: the rim derives from the theme's text color at runtime, as the frosted one does.
+  const rimStyle = rim && theme.mode === "dark" ? { borderWidth: 1, borderColor: colorWithOpacity(theme.colors.text, 0.13) } : null;
+  // design-system-end
+  return <View pointerEvents="none" className={tint ? undefined : solidClassName} style={[StyleSheet.absoluteFill, shape, tint ? { backgroundColor: tint } : null, rimStyle, style]} />;
 }
 
 /** Lets neighbouring Liquid Glass shapes merge as they near each other; a plain view elsewhere. */

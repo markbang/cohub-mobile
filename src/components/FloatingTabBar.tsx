@@ -3,16 +3,17 @@ import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { Keyboard, Platform, View, useWindowDimensions } from "react-native";
+import { Keyboard, Platform, Pressable, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardEvents } from "react-native-keyboard-controller";
-import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { curves, springs } from "@/src/motion";
+import { curves, springs, tabBarMinimize } from "@/src/motion";
 import { edgeChrome, MAX_FONT_SCALE, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
+import { useTabBarMinimized } from "@/src/ui/tab-bar-minimize";
 
 // Geometry and feel follow UIKit's iOS 26 tab bar: a lens rests under the selected tab, lifts and
 // grows under a press, follows a drag across the bar, and settles on the tab it is let go over.
@@ -46,6 +47,23 @@ const BAR_BOTTOM_MARGIN = 8;
 const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
 /** Room around the bar for its glass group, so a lifted lens is not clipped where it overhangs the bar. */
 const GLASS_OUTSET = 16;
+// Minimized, the bar is a 48 pt circle 7 pt in from its leading end, holding only the selected tab's glyph.
+const MINIMIZED_SIZE = 48;
+const MINIMIZED_INSET = 7;
+const MINIMIZED_CENTER = MINIMIZED_INSET + MINIMIZED_SIZE / 2;
+// The squeeze's inset a side at its height, for the bar's width at that moment.
+const SQUEEZE_BASE = 3;
+const SQUEEZE_PER_WIDTH = 0.028;
+/** Without its label, the selected glyph drops to the bar's centre line: half the label and its gap. */
+const MINIMIZED_GLYPH_DROP = 8;
+const SQUEEZE_IN = Easing.bezier(...tabBarMinimize.squeeze.curve);
+const COLLAPSE = Easing.bezier(...tabBarMinimize.collapse.curve);
+const RELEASE = Easing.bezier(...tabBarMinimize.release.curve);
+
+function clamp01(value: number) {
+  "worklet";
+  return Math.min(Math.max(value, 0), 1);
+}
 
 const AnimatedGlassView = Animated.createAnimatedComponent(GlassView);
 
@@ -135,6 +153,11 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const itemWidth = pitch > 0 ? pitch : LENS_WIDTH;
 
   const hidden = useSharedValue(0);
+  // Minimizing: `collapse` runs the bar from full (0) to the circle (1); `squeeze` pulls it in on the way.
+  const minimizeRequest = useTabBarMinimized();
+  const collapse = useSharedValue(0);
+  const squeeze = useSharedValue(0);
+  const [minimized, setMinimized] = useState(false);
   const selected = useSharedValue(state.index);
   // Lens position in tabs, its target, and its lift (0 resting, 1 lifted).
   const lens = useSharedValue(state.index);
@@ -195,6 +218,29 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     hidden.set(withTiming(keyboardVisible ? 1 : 0, { duration: 180, easing: EASE_IN_OUT }));
   }, [hidden, keyboardVisible]);
 
+  useAnimatedReaction(() => (minimizeRequest ? minimizeRequest.get() : 0), (next, previous) => {
+    if (next === previous || (previous === null && next === 0)) return;
+    if (next === 1) {
+      const { squeeze: inward, collapse: run, release } = tabBarMinimize;
+      squeeze.set(withSequence(
+        withTiming(1, { duration: inward.duration, easing: SQUEEZE_IN }),
+        withDelay(release.delay, withTiming(0, { duration: release.duration, easing: RELEASE })),
+      ));
+      collapse.set(withDelay(run.delay, withTiming(1, { duration: run.duration, easing: COLLAPSE })));
+    } else {
+      squeeze.set(withTiming(0, { duration: 120 }));
+      collapse.set(withSpring(0, springs.tabBarExpand));
+    }
+    scheduleOnRN(setMinimized, next === 1);
+  });
+
+  // Choosing a tab some other way (a link, a notification) brings the whole bar back.
+  useEffect(() => { minimizeRequest?.set(0); }, [minimizeRequest, state.index]);
+  const expand = useCallback(() => { minimizeRequest?.set(0); }, [minimizeRequest]);
+  const selectedRoute = routes[state.index];
+  const selectedTitle = selectedRoute ? descriptors[selectedRoute.key]?.options.title : undefined;
+  const selectedLabel = typeof selectedTitle === "string" ? selectedTitle : selectedRoute?.name;
+
   // UIKit keeps the lens lifted until it has risen all the way and arrived.
   useAnimatedReaction(() => [lens.get(), lift.get()] as const, ([position, lifted]) => {
     if (!dropping.get() || touching.get() || lifted < LIFT_SNAP) return;
@@ -227,6 +273,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   }
 
   const gesture = Gesture.Manual()
+    .enabled(!minimized)
     .onTouchesDown((event, manager) => {
       const touch = event.allTouches[0];
       if (!touch || touching.get()) return;
@@ -323,8 +370,23 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       top: GLASS_OUTSET + (BAR_HEIGHT - height) / 2,
     };
   });
-  const restingLensStyle = useAnimatedStyle(() => ({ opacity: 1 - lift.get() }));
-  const liftedLensStyle = useAnimatedStyle(() => ({ opacity: lift.get() }));
+  // The bar's glass, drawn on its own frame so minimizing re-lays-out nothing else.
+  const glassFrameStyle = useAnimatedStyle(() => {
+    const q = collapse.get();
+    const width = barWidth + (MINIMIZED_SIZE - barWidth) * q;
+    const height = BAR_HEIGHT + (MINIMIZED_SIZE - BAR_HEIGHT) * q;
+    const inset = squeeze.get() * (SQUEEZE_BASE + SQUEEZE_PER_WIDTH * width);
+    const insetY = inset * height / width;
+    return {
+      left: GLASS_OUTSET + MINIMIZED_INSET * q + inset,
+      top: GLASS_OUTSET + (BAR_HEIGHT - height) / 2 + insetY,
+      width: width - inset * 2,
+      height: height - insetY * 2,
+    };
+  });
+  // The selection capsule goes first, as the bar starts to close.
+  const restingLensStyle = useAnimatedStyle(() => ({ opacity: (1 - lift.get()) * (1 - clamp01(collapse.get() / 0.12)) }));
+  const liftedLensStyle = useAnimatedStyle(() => ({ opacity: lift.get() * (1 - clamp01(collapse.get() / 0.12)) }));
 
   return (
     <Animated.View
@@ -339,11 +401,13 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     >
       <EdgeScrim edge="bottom" style={{ top: -edgeChrome.fade }} />
       <GestureDetector gesture={gesture}>
-        {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
-        <Animated.View accessibilityRole="tablist" className={`self-center rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={[{ height: BAR_HEIGHT, width: barWidth }, surfaceStyle]}>
+        <Animated.View accessibilityRole="tablist" pointerEvents={minimized ? "none" : "auto"} className="self-center" style={[{ height: BAR_HEIGHT, width: barWidth }, surfaceStyle]}>
           {/* One glass group holds the bar and the lifted lens so the two merge as liquid where they meet. */}
           <GlassGroup spacing={LENS_GROWTH * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
-            <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} style={{ top: GLASS_OUTSET, left: GLASS_OUTSET, right: GLASS_OUTSET, bottom: GLASS_OUTSET }} />
+            {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
+            <Animated.View className={`absolute rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={glassFrameStyle}>
+              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} />
+            </Animated.View>
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
           <Animated.View pointerEvents="none" className="absolute" style={[LENS_FRAME, lensStyle]}>
@@ -374,12 +438,21 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
                   activeColor={theme.colors.accent}
                   onSelect={select}
                   width={itemWidth}
+                  collapse={collapse}
+                  minimizedShift={MINIMIZED_CENTER - (BAR_PADDING + (LENS_WIDTH - itemWidth) / 2 + itemWidth * (index + 0.5))}
                 />
               );
             })}
           </View>
         </Animated.View>
       </GestureDetector>
+      {/* Minimized, the circle only brings the bar back, as UIKit's does. */}
+      {minimized ? <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={selectedLabel}
+        onPress={expand}
+        style={{ position: "absolute", left: (windowWidth - barWidth) / 2 + MINIMIZED_INSET, bottom: barBottomOffset(insets.bottom) + (BAR_HEIGHT - MINIMIZED_SIZE) / 2, width: MINIMIZED_SIZE, height: MINIMIZED_SIZE }}
+      /> : null}
     </Animated.View>
   );
 }
@@ -423,21 +496,30 @@ type TabItemProps = {
   activeColor: string;
   onSelect: (index: number) => void;
   width: number;
+  collapse: SharedValue<number>;
+  /** How far the glyph travels to the minimized circle's centre. */
+  minimizedShift: number;
 };
 
 /**
  * One destination. Its accent shows wherever the lens is over it, not only once navigation
  * settles, so a drag lights each tab it crosses. Touch is the bar's; screen readers activate here.
  */
-function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift, restIcon, activeIcon, restColor, activeColor, onSelect, width }: TabItemProps) {
+function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift, restIcon, activeIcon, restColor, activeColor, onSelect, width, collapse, minimizedShift }: TabItemProps) {
+  // Minimizing, the other tabs fade out while the selected glyph moves into the circle and sheds its label.
   const contentStyle = useAnimatedStyle(() => {
     const over = Math.max(0, 1 - Math.abs(lens.get() - index));
-    return { transform: [{ scale: 1 + LENS_MAGNIFY * lift.get() * over }] };
+    const q = collapse.get();
+    const travel = focused ? clamp01(q / 0.45) : 0;
+    return {
+      opacity: focused ? 1 : 1 - clamp01(q / 0.35),
+      transform: [{ translateX: minimizedShift * travel }, { translateY: MINIMIZED_GLYPH_DROP * travel }, { scale: 1 + LENS_MAGNIFY * lift.get() * over }],
+    };
   });
   // The two icons differ in stroke and offset, so the rest icon fades out where the active one shows; left under it, its edge rims the accent strokes.
   const activeIconStyle = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - Math.abs(lens.get() - index)) }));
   const restIconStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.abs(lens.get() - index)) }));
-  const labelStyle = useAnimatedStyle(() => ({ color: interpolateColor(Math.max(0, 1 - Math.abs(lens.get() - index)), [0, 1], [restColor, activeColor]) }));
+  const labelStyle = useAnimatedStyle(() => ({ opacity: 1 - clamp01(collapse.get() / 0.3), color: interpolateColor(Math.max(0, 1 - Math.abs(lens.get() - index)), [0, 1], [restColor, activeColor]) }));
   return (
     <View
       accessible
