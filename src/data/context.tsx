@@ -728,9 +728,12 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case "session-release": {
       const current = state.sessionViews[action.sessionId];
+      // Release retires the open token, so a refresh still in flight never dispatches its end; a
+      // non-silent one's `refreshing` would outlive it and the next open's silent refresh never clears it.
       // A window paged away from the tail (a turn jump) must not be what the next open lands on.
-      if (!current?.hasMoreNewer) return state;
+      if (!current?.hasMoreNewer) return current?.refreshing ? updateView(state, action.sessionId, { refreshing: false }) : state;
       return updateView(state, action.sessionId, {
+        refreshing: false,
         messages: [],
         turns: [],
         historyLoaded: false,
