@@ -19,6 +19,62 @@ export function isFailedSend(message: Pick<MessageRecord, "role" | "meta">) {
 	return message.role === "user" && message.meta?.sendFailed === true;
 }
 
+/** A local send the server has not accepted yet: waiting its turn in the send queue, or in flight. */
+export function isLocalSend(message: Pick<MessageRecord, "role" | "meta">) {
+	return message.role === "user" && message.meta?.optimistic === true;
+}
+
+/**
+ * Not yet submitted: it waits for the sends ahead of it or for complete history. Its Turn number is
+ * provisional, so it never claims or yields to a server row by number.
+ */
+export function isAwaitingSubmit(message: Pick<MessageRecord, "role" | "meta">) {
+	return isLocalSend(message) && message.meta?.awaitingSubmit === true;
+}
+
+/** Submitted and not yet accepted; the reply placeholder shows for it unless it waits in the server queue. */
+export function isSubmittingSend(message: Pick<MessageRecord, "role" | "meta">) {
+	return isLocalSend(message) && message.meta?.awaitingSubmit !== true && message.meta?.queuedFollowup !== true;
+}
+
+function sendOrder(message: Pick<MessageRecord, "meta" | "sequence">) {
+	const value = message.meta?.sendOrder;
+	return typeof value === "number" ? value : message.sequence;
+}
+
+function withTurnSequence(message: MessageRecord, turnSequence: number): MessageRecord {
+	if (message.meta?.turnSequence === turnSequence && message.sequence === turnSequence * 2 - 1) return message;
+	return { ...message, sequence: turnSequence * 2 - 1, meta: { ...(message.meta ?? {}), turnSequence } };
+}
+
+/** Unsubmitted sends always follow everything known, in send order, so history arriving late cannot strand one mid-thread. */
+export function placeAwaitingSends(messages: MessageRecord[], turns: Pick<SessionTurnRecord, "sequence">[]) {
+	const awaiting = messages.filter(isAwaitingSubmit).sort((left, right) => sendOrder(left) - sendOrder(right));
+	if (awaiting.length === 0) return messages;
+	let next = nextTurnSequence(turns, messages.filter((message) => !isAwaitingSubmit(message)));
+	const placed = new Map(awaiting.map((message) => [message.id, next++]));
+	let changed = false;
+	const result = messages.map((message) => {
+		const turnSequence = placed.get(message.id);
+		if (turnSequence === undefined) return message;
+		const moved = withTurnSequence(message, turnSequence);
+		if (moved !== message) changed = true;
+		return moved;
+	});
+	return changed ? result.sort((a, b) => a.sequence - b.sequence) : messages;
+}
+
+/** The send leaves the local queue for the server: its Turn number is now final for this history. */
+export function submitAwaitingSend(messages: MessageRecord[], clientMessageId: string, turnSequence: number, queuedFollowup: boolean) {
+	return messages.map((message) => {
+		if (!isAwaitingSubmit(message) || message.meta?.clientMessageId !== clientMessageId) return message;
+		const placed = withTurnSequence(message, turnSequence);
+		const meta: Record<string, unknown> = { ...(placed.meta ?? {}), queuedFollowup };
+		delete meta.awaitingSubmit;
+		return { ...placed, meta };
+	}).sort((a, b) => a.sequence - b.sequence);
+}
+
 export function failedSendDraft(message: Pick<MessageRecord, "meta">): SendDraft | null {
 	const draft = message.meta?.sendDraft as Partial<SendDraft> | undefined;
 	if (!draft || typeof draft !== "object" || typeof draft.text !== "string" || !Array.isArray(draft.attachments)) return null;
@@ -32,6 +88,7 @@ export function failedSendDraft(message: Pick<MessageRecord, "meta">): SendDraft
 export function failedSendMessage(message: MessageRecord, error: string): MessageRecord {
 	const meta = { ...(message.meta ?? {}) };
 	delete meta.optimistic;
+	delete meta.awaitingSubmit;
 	delete meta.queuedFollowup;
 	delete meta.turnSequence;
 	return { ...message, errorMessage: error, meta: { ...meta, sendFailed: true } };
@@ -202,6 +259,7 @@ export function mergeDisplayMessages(
 			if (isFailedSend(message)) return !(typeof clientMessageId === "string" && confirmed.has(`client:${clientMessageId}`));
 			if (message.meta?.optimistic !== true) return true;
 			if (typeof clientMessageId === "string" && confirmed.has(`client:${clientMessageId}`)) return false;
+			if (isAwaitingSubmit(message)) return true;
 			const sequence = turnSequenceForMessage(message);
 			return !(sequence !== null && confirmed.has(`seq:${sequence}:${message.role}`));
 		})
@@ -308,11 +366,14 @@ export function messageRowKey(message: Pick<MessageRecord, "id" | "role" | "meta
 	return `${turnSequenceForMessage(message) ?? message.id}:${message.role}`;
 }
 
-/** A detached window shows only its own Turns, not live records from the running tail. */
-export function messagesInWindow<T extends Pick<MessageRecord, "meta">>(messages: T[], window: Pick<TurnWindow, "turns" | "hasMoreNewer">) {
+/**
+ * A detached window shows only its own Turns, not live records from the running tail. A send still
+ * waiting to be submitted stays at its end: the newest page loads before it goes out.
+ */
+export function messagesInWindow<T extends Pick<MessageRecord, "meta" | "role">>(messages: T[], window: Pick<TurnWindow, "turns" | "hasMoreNewer">) {
 	const newest = window.turns.at(-1)?.sequence;
 	if (!window.hasMoreNewer || newest === undefined) return messages;
-	return messages.filter((message) => (turnSequenceForMessage(message) ?? Number.POSITIVE_INFINITY) <= newest);
+	return messages.filter((message) => isAwaitingSubmit(message) || (turnSequenceForMessage(message) ?? Number.POSITIVE_INFINITY) <= newest);
 }
 
 /** Render live records in the same turn/role order as projected history, never by the independent DB message counter. */

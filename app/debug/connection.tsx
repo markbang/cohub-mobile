@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useAppActions, useAppSelector } from "@/src/data/context";
+import { isSubmittingSend } from "@/src/data/session-history";
 import type { ConnectionState } from "@/src/data/types";
 import { AppIcon, PrimaryButton, Screen, SectionHeader, StatusPill } from "@/src/ui";
 import type { IconName } from "@/src/icons";
@@ -40,7 +41,7 @@ export default function DebugConnectionScreen() {
   const views = Object.entries(state.sessionViews);
   const streams = views.filter(([, view]) => view.stream);
   const runningTurns = Object.values(state.sessionLatestTurns).filter((turn) => turn?.status === "running").length;
-  const sending = views.filter(([, view]) => view.sending).length;
+  const sending = views.filter(([, view]) => view.messages.some(isSubmittingSend)).length;
   const optimistic = views.reduce(
     (total, [, view]) => total + view.messages.filter((message) => message.meta?.optimistic === true).length,
     0,

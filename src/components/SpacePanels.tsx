@@ -87,6 +87,10 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
   const [pagerSwipeEnabled, setPagerSwipeEnabled] = useState(true);
   const [visiblePanel, setVisiblePanel] = useState<PanelName | null>(activePanel);
   const [interactive, setInteractive] = useState(Boolean(activePanel));
+  // The side panels mount on first use, not with the Chat: their queries and rows were measured
+  // stalling the JS thread 0.5–1.2 s while a Chat opened. Once mounted they stay warm.
+  const [panelsMounted, setPanelsMounted] = useState(Boolean(activePanel));
+  if (!panelsMounted && (activePanel || visiblePanel)) setPanelsMounted(true);
   const visiblePanelRef = useRef<PanelName | null>(activePanel);
   const activePanelRef = useRef<PanelName | null>(activePanel);
   const pagerHeaderTouchHeight = (edgeToEdge ? insets.top : 0) + edgeChrome.headerMinHeight;
@@ -178,6 +182,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
   }));
   const pagerPaintStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -pagerOffset.value }] }));
   const handleSwipeBegin = useCallback(() => {
+    setPanelsMounted(true);
     recordDebugEvent("navigation.pager.drag_begin", { pagerSwipeEnabled, panel: visiblePanelRef.current });
   }, [pagerSwipeEnabled]);
   const handleSwipeEnd = useCallback(() => {
@@ -253,7 +258,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
             accessibilityElementsHidden={!(interactive && visiblePanel === "chat")}
             importantForAccessibility={interactive && visiblePanel === "chat" ? "yes" : "no-hide-descendants"}
           >
-            <ChatPanel spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={spaceAvatarUrl} sessions={sessions} client={client} onChipsTouchChange={handleChipsTouchChange} onClose={closePanel} onNewChat={() => { closePanel(); onNewChat(); }} onOpenSession={(sessionId, target) => { closePanel(); onOpenSession(sessionId, target); }} />
+            {panelsMounted ? <ChatPanel spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={spaceAvatarUrl} sessions={sessions} client={client} onChipsTouchChange={handleChipsTouchChange} onClose={closePanel} onNewChat={() => { closePanel(); onNewChat(); }} onOpenSession={(sessionId, target) => { closePanel(); onOpenSession(sessionId, target); }} /> : null}
           </View>
           <View className="h-full bg-background" style={{ width }} accessibilityElementsHidden={visiblePanel !== null} importantForAccessibility={visiblePanel ? "no-hide-descendants" : "auto"}>
             {children}
@@ -269,7 +274,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
             accessibilityElementsHidden={!(interactive && visiblePanel === "files")}
             importantForAccessibility={interactive && visiblePanel === "files" ? "yes" : "no-hide-descendants"}
           >
-            <FilesPanel enabled spaceId={spaceId} spaceName={spaceName} client={client} onClose={closePanel} onOpenFile={(path) => { closePanel(); onOpenFile(path); }} onOpenFilesPage={() => { closePanel(); onOpenFilesPage(); }} />
+            {panelsMounted ? <FilesPanel enabled spaceId={spaceId} spaceName={spaceName} client={client} onClose={closePanel} onOpenFile={(path) => { closePanel(); onOpenFile(path); }} onOpenFilesPage={() => { closePanel(); onOpenFilesPage(); }} /> : null}
           </View>
         </Reanimated.View>
       </ScrollView>

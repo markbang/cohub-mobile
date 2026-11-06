@@ -16,7 +16,6 @@ import { timelineRows, timelineTargetKey, visibleTimelineMessages, type Timeline
 import { compactionFromMessage } from "@/src/data/compaction";
 import { useAppSelector, useSessionStream } from "@/src/data/context";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
-import { isOptimisticFollowup } from "@/src/data/followup-queue";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
 import { useRelatedSessions } from "@/src/data/use-related-session";
@@ -59,7 +58,10 @@ type Props = {
   hasMoreNewer: boolean;
   loadingOlder: boolean;
   loadingNewer: boolean;
-  historyLoaded: boolean;
+  /** Until the server history lands, a cached failed row may be a send it already accepted. */
+  retryDisabled: boolean;
+  /** A send is out and its reply has not started yet. */
+  pendingReply: boolean;
   arrivalBaseline: ReadonlySet<string> | null;
   forkingTurnId: string | null;
   /** The just-sent message flies from the composer onto its bubble. */
@@ -143,10 +145,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     const turn = stream?.turnId ? state.sessionViews[sessionId]?.turns.find((item) => item.id === stream.turnId) : undefined;
     return turn ? turn.startedAt ?? turn.createdAt : null;
   });
-  const pendingReply = useAppSelector(({ state }) => {
-    const view = state.sessionViews[sessionId];
-    return Boolean(view?.sending && !view.messages.some(isOptimisticFollowup));
-  });
+  const { pendingReply } = props;
   const [firstSeenAt] = useState(() => new Date().toISOString());
   const liveAnswer = useMemo(() => answerBlocks(stream?.contentBlocks), [stream?.contentBlocks]);
   const liveTextBlock = liveAnswer.findLast((block) => block.type === "text");
@@ -200,7 +199,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
 
   const ctx = useMemo<NodeContext>(() => ({ theme, t, width: rowWidth, fontScale, reducedMotion: props.reducedMotion, expanded }), [expanded, fontScale, props.reducedMotion, rowWidth, t, theme]);
   const cacheRef = useRef(new Map<string, Cached>());
-  const { flight, forkingTurnId, historyLoaded, arrivalBaseline } = props;
+  const { flight, forkingTurnId, retryDisabled, arrivalBaseline } = props;
   const specs = useMemo(() => {
     const cache = cacheRef.current;
     const next = new Map<string, Cached>();
@@ -247,9 +246,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           const sig = expandedIn(expanded, [message.id, row.key]);
           if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;
-            build([message, historyLoaded, sig, flies], () => ({
+            build([message, retryDisabled, sig, flies], () => ({
               type: "user",
-              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled: !historyLoaded, topPadding: 0 }) : null,
+              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0 }) : null,
               flight: flies ? { nodeId: "bubble", ...flies, duration: motion.sendBubble.duration, easing: SEND_FLIGHT_EASING } : undefined,
             }));
           } else {
@@ -319,7 +318,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: rows.map((row) => row.key), rows: out };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, historyLoaded, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
+  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());

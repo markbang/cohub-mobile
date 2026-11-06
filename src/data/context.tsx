@@ -39,6 +39,7 @@ import { createStreamBatch } from "@/src/data/chat-rendering";
 import { createAttachmentUploads, type AttachmentUploadState, type AttachmentUploads, type UploadTarget, type UploadedAttachment } from "@/src/data/attachment-uploads";
 import {
   clearComposerDraft as clearLocalComposerDraft,
+  clearComposerDraftIf as clearLocalComposerDraftIf,
   clearUserCache,
   deleteMessages,
   hydrateHome,
@@ -67,11 +68,11 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { claimedFailedSends, failedSendMessage, isFailedSend, mergeDisplayMessages, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
+import { claimedFailedSends, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, mergeDisplayMessages, placeAwaitingSends, submitAwaitingSend, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
-import { shouldQueueFollowup } from "@/src/data/followup-queue";
+import { createSendQueue, shouldQueueFollowup, type SendQueue } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
 import { getInstallationId } from "@/src/platform/installation";
@@ -173,6 +174,55 @@ async function uploadAttachmentFile(
   return { publicUrl: plan.asset.publicUrl, mimeType };
 }
 
+/** A failed send that was deleted, retried, or claimed by the Turn the server did accept no longer holds the sends behind it. */
+function releaseSettledFailures(queue: SendQueue, state: AppState) {
+  for (const [sessionId, clientMessageId] of queue.blocked()) {
+    const messages = state.sessionViews[sessionId]?.messages ?? [];
+    if (!messages.some((message) => isFailedSend(message) && message.meta?.clientMessageId === clientMessageId)) queue.release(sessionId, clientMessageId);
+  }
+}
+
+/** The local bubble of a send, drawn the moment the user sends; the accepted Turn replaces it by `clientMessageId`. */
+function optimisticSend(input: { sessionId: string; clientMessageId: string; text: string; attachments: AttachmentDraft[]; model: ChatModelSelection | null; harness: HarnessKind | null; authorUuid: string; turnSequence: number; meta?: Record<string, unknown> }): MessageRecord {
+  const { text, attachments, model, harness } = input;
+  return {
+    id: `local-${input.clientMessageId}`,
+    sessionId: input.sessionId,
+    role: "user",
+    content: [
+      ...(text ? [mentionTextBlock(text, text)] : []),
+      ...attachments.filter((item) => item.mimeType.startsWith("image/")).map((item) => ({
+        type: "image" as const,
+        source: { type: "url" as const, url: item.uri },
+        _meta: { filename: item.name, mediaType: item.mimeType, size: item.size },
+      })),
+      ...attachments.filter((item) => !item.mimeType.startsWith("image/")).map((item) => ({ type: "text" as const, text: `Attached file: ${item.name}` })),
+    ],
+    text: text || attachments.map((item) => item.name).join(", "),
+    sequence: input.turnSequence * 2 - 1,
+    provider: model?.provider ?? null,
+    model: model?.id ?? null,
+    stopReason: null,
+    errorMessage: null,
+    usage: null,
+    meta: {
+      optimistic: true,
+      ...input.meta,
+      clientMessageId: input.clientMessageId,
+      turnSequence: input.turnSequence,
+      sendDraft: { text, attachments, model, harness } satisfies SendDraft,
+      ...(harness ? { harness } : {}),
+      ...(model?.thinkingLevel ? { requestedThinkingLevel: model.thinkingLevel } : {}),
+    },
+    authorUuid: input.authorUuid,
+    authorProfile: null,
+    startedAt: null,
+    completedAt: null,
+    durationMs: null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 /** The store exists whenever a client does, and every send already requires one. */
 function claimAttachmentUpload(uploads: AttachmentUploads | null, target: UploadTarget, attachment: AttachmentDraft) {
   if (!uploads) throw new Error(translate("data.stillConnecting"));
@@ -244,7 +294,6 @@ const emptyView = (): SessionView => ({
   loading: false,
   refreshing: false,
   catchingUp: false,
-  sending: false,
   error: null,
   stream: null,
 });
@@ -322,8 +371,8 @@ type Action =
   | { type: "turn-index-end"; sessionId: string }
   | { type: "message-add"; sessionId: string; message: MessageRecord }
   | { type: "message-optimistic"; sessionId: string; message: MessageRecord }
-  | { type: "send-start"; sessionId: string }
-  | { type: "send-end"; sessionId: string }
+  | { type: "send-submit"; sessionId: string; clientMessageId: string; turnSequence: number; queuedFollowup: boolean }
+  | { type: "send-accepted"; sessionId: string; clientMessageId: string }
   | { type: "send-failed"; sessionId: string; clientMessageId: string; message: string }
   | { type: "send-discard"; sessionId: string; messageId: string }
   | { type: "stream-state"; sessionId: string; stream: StreamView }
@@ -392,11 +441,13 @@ function updateLatestTurn(state: AppState, sessionId: string, turn: LatestSessio
 
 function updateView(state: AppState, sessionId: string, update: Partial<SessionView>) {
   const current = state.sessionViews[sessionId] ?? emptyView();
+  const next = { ...current, ...update };
+  if (update.messages || update.turns) next.messages = placeAwaitingSends(next.messages, next.turns);
   return {
     ...state,
     sessionViews: {
       ...state.sessionViews,
-      [sessionId]: { ...current, ...update },
+      [sessionId]: next,
     },
   };
 }
@@ -608,7 +659,13 @@ function reducer(state: AppState, action: Action): AppState {
     case "session-cache":
       // Cached Turn rows carry their clientMessageId, so a send that was accepted before the
       // process died does not show twice beside its settled failed row.
-      return updateView(state, action.sessionId, { messages: mergeDisplayMessages(action.messages, []), loading: false, catchingUp: true });
+      // Sends made since the open began are this process's own; their cached copies are older.
+      {
+        const local = (state.sessionViews[action.sessionId]?.messages ?? []).filter((message) => isLocalSend(message) || isFailedSend(message));
+        const localIds = new Set(local.map((message) => message.meta?.clientMessageId));
+        const cached = action.messages.filter((message) => typeof message.meta?.clientMessageId !== "string" || !localIds.has(message.meta.clientMessageId));
+        return updateView(state, action.sessionId, { messages: mergeDisplayMessages(cached, local), loading: false, catchingUp: true });
+      }
     case "session-success": {
       const session = preferNewerSession(
         state.sessionViews[action.sessionId]?.session,
@@ -734,7 +791,8 @@ function reducer(state: AppState, action: Action): AppState {
       if (!current?.hasMoreNewer) return current?.refreshing ? updateView(state, action.sessionId, { refreshing: false }) : state;
       return updateView(state, action.sessionId, {
         refreshing: false,
-        messages: [],
+        // Only the send flow removes its rows; a queued send outlives the window it was made in.
+        messages: current.messages.filter((message) => isLocalSend(message) || isFailedSend(message)),
         turns: [],
         historyLoaded: false,
         hasMoreOlder: false,
@@ -771,6 +829,7 @@ function reducer(state: AppState, action: Action): AppState {
       const liveMessages = current.messages.filter((message) => {
         if (!isLiveMessage(message)) return false;
         if (clientMessageId && message.meta?.clientMessageId === clientMessageId && hasProjectedUser) return false;
+        if (isAwaitingSubmit(message)) return true;
         return !(hasProjectedUser && message.meta?.optimistic === true && message.role === "user" && turnSequenceForMessage(message) === action.turn.sequence);
       });
       return updateView(updateLatestTurn(updateLatestTurn({ ...state, sessions: sortByRecent(sessions) }, action.sessionId, action.turn), action.sessionId, latestTurn(turns)), action.sessionId, {
@@ -827,19 +886,23 @@ function reducer(state: AppState, action: Action): AppState {
         messages: mergeMessages(view.messages, action.message),
       });
     }
-    case "send-start":
-      recordDebugEvent("chat.send.started");
-      return updateView(state, action.sessionId, { sending: true, error: null });
-    case "send-end": {
-      recordDebugEvent("chat.send.ended");
+    case "send-submit": {
+      recordDebugEvent("chat.send.submitted", { turnSequence: action.turnSequence, queuedFollowup: action.queuedFollowup });
       const current = state.sessionViews[action.sessionId] ?? emptyView();
+      return updateView(state, action.sessionId, { messages: submitAwaitingSend(current.messages, action.clientMessageId, action.turnSequence, action.queuedFollowup) });
+    }
+    case "send-accepted": {
+      recordDebugEvent("chat.send.accepted");
+      const current = state.sessionViews[action.sessionId] ?? emptyView();
+      // Only this send's row, if its Turn did not already replace it (a Turn outside the loaded window).
+      if (!current.messages.some((message) => isLocalSend(message) && message.meta?.clientMessageId === action.clientMessageId)) return state;
       const messages = current.messages.map((message) => {
-        if (message.meta?.optimistic !== true) return message;
+        if (!isLocalSend(message) || message.meta?.clientMessageId !== action.clientMessageId) return message;
         const meta = { ...(message.meta ?? {}) };
         delete meta.optimistic;
         return { ...message, meta };
       });
-      return updateView(state, action.sessionId, { sending: false, messages });
+      return updateView(state, action.sessionId, { messages });
     }
     case "send-failed": {
       recordDebugEvent("chat.send.failed", { clientMessageIdPresent: typeof action.clientMessageId === "string", message: action.message });
@@ -848,7 +911,7 @@ function reducer(state: AppState, action: Action): AppState {
       // Matched by clientMessageId alone, so a send whose in-flight mark was already cleared still
       // fails visibly; a row projected from a server Turn (it has a turnId) was accepted and stays.
       const messages = view.messages.map((message) => message.role === "user" && message.meta?.clientMessageId === action.clientMessageId && typeof message.meta.turnId !== "string" ? failedSendMessage(message, action.message) : message);
-      return updateView(state, action.sessionId, { sending: false, messages });
+      return updateView(state, action.sessionId, { messages });
     }
     case "send-discard": {
       const view = state.sessionViews[action.sessionId] ?? emptyView();
@@ -937,12 +1000,15 @@ export type AppActions = {
   jumpToTurn: (sessionId: string, target: number | { turnId: string }) => Promise<number>;
   /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
-  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind }) => Promise<NewChatMessageResult>;
+  /** Inserts the bubble before returning; resolves once the server accepts the send. */
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  /** `onOptimistic` receives the pending bubble synchronously; it has no Chat until the server answers. */
+  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
   discardFailedSend: (sessionId: string, messageId: string) => void;
   loadComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<string>;
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
-  clearComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<void>;
+  /** With `expected`, clears only while the draft still holds that text. */
+  clearComposerDraft: (spaceId: string, scope: ComposerDraftScope, expected?: string) => Promise<void>;
   abortSession: (sessionId: string) => Promise<void>;
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
@@ -1043,7 +1109,9 @@ export function AppProvider({
     run: (sessionId, reason) => resyncRunRef.current(sessionId, reason),
   }));
   const paginationRequestsRef = useRef(new Map<string, Promise<void>>());
-  const optimisticMessageSequenceRef = useRef(new Map<string, number>());
+  // A ref keeps one queue for the provider; sends outlive the Chat screen that made them.
+  const sendQueueRef = useRef(createSendQueue());
+  const lastSendOrderRef = useRef(0);
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
   const spacePinMutationVersionsRef = useRef(new Map<string, number>());
   const spacePinPendingMutationsRef = useRef(new Map<string, number>());
@@ -2017,10 +2085,12 @@ export function AppProvider({
       }
       dispatch({ type: "session-start", sessionId, session: summary ?? null });
 
-      if (!view?.messages.length) {
+      // Rows of sends still queued in this process are not history to show from the cache.
+      if (!view?.messages.some((message) => !isLocalSend(message) && !isFailedSend(message))) {
         try {
           markChatEntry("cache.start");
-          const cachedMessages = settleInterruptedSends(await loadMessages(userKey, sessionId), translate("data.messageSendFailed"));
+          const live = (message: MessageRecord) => typeof message.meta?.clientMessageId === "string" && sendQueueRef.current.has(sessionId, message.meta.clientMessageId);
+          const cachedMessages = settleInterruptedSends((await loadMessages(userKey, sessionId)).filter((message) => !live(message)), translate("data.messageSendFailed"));
           markChatEntry("cache.end", { count: cachedMessages.length });
           const claimed = claimedFailedSends(cachedMessages, mergeDisplayMessages(cachedMessages, []));
           if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
@@ -2091,7 +2161,6 @@ export function AppProvider({
     subscriptions.current.delete(sessionId);
     sessionSpaces.current.delete(sessionId);
     openTokens.current.set(sessionId, (openTokens.current.get(sessionId) ?? 0) + 1);
-    optimisticMessageSequenceRef.current.delete(sessionId);
     dispatch({ type: "session-release", sessionId });
   }, [dispatch]);
 
@@ -2126,144 +2195,176 @@ export function AppProvider({
         turnId: view?.stream?.turnId ?? null,
       });
       dispatch({ type: "stream-clear", sessionId });
-      dispatch({ type: "send-end", sessionId });
       await refreshSession(sessionId);
       void queryClient.invalidateQueries();
     },
     [client, dispatch, refreshSession, queryClient, stateRef],
   );
 
+  /** Resolves once the Chat's history is loaded; a send's Turn number is only known against it. */
+  const waitForSendHistory = useCallback((sessionId: string) => new Promise<SessionView>((resolve, reject) => {
+    const activeClient = clientRef.current;
+    const check = () => {
+      const view = store.getState().state.sessionViews[sessionId];
+      if (clientRef.current !== activeClient) reject(new Error(translate("data.stillConnecting")));
+      else if (view?.historyLoaded) resolve(view);
+      else if (view && !view.loading && view.error) reject(new Error(view.error));
+      else return false;
+      return true;
+    };
+    if (check()) return;
+    const unsubscribe = store.subscribe(() => { if (check()) unsubscribe(); });
+  }), [store]);
+
+  /** Realtime can deliver a send's accepted Turn before the prompt response does; either one is the server accepting it. */
+  const watchAcceptedTurn = useCallback((sessionId: string, clientMessageId: string) => {
+    let unsubscribe: (() => void) | null = null;
+    const promise = new Promise<void>((resolve) => {
+      const check = () => {
+        const accepted = (store.getState().state.sessionViews[sessionId]?.turns ?? []).some((turn) => turnClientMessageId(turn) === clientMessageId);
+        if (accepted) resolve();
+        return accepted;
+      };
+      if (check()) return;
+      unsubscribe = store.subscribe(() => { if (check()) unsubscribe?.(); });
+    });
+    return { promise, cancel: () => unsubscribe?.() };
+  }, [store]);
+
   const sendMessage = useCallback(
     async (
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
-      const view = stateRef.current.sessionViews[sessionId];
-      const session = view?.session ?? stateRef.current.sessions.find((item) => item.id === sessionId);
-      if (!session?.spaceId) throw new Error(translate("data.chatContextUnavailable"));
       if (!text && attachments.length === 0) return;
-
+      const view = stateRef.current.sessionViews[sessionId];
+      const messages = view?.messages ?? [];
+      // A second tap on a retry that already replaced its row finds nothing left to resend.
+      if (options.retryOf && !messages.some((message) => message.id === options.retryOf?.id && isFailedSend(message))) return;
       const clientMessageId = newId();
-      // The send lands after the newest Turn, so a detached window comes back to it first.
-      let turns = view?.turns ?? [];
-      if (view?.hasMoreNewer) {
-        dispatch({ type: "send-start", sessionId });
+      const retried = options.retryOf ?? null;
+      // A retry takes back its original place in the queue, ahead of the sends it was holding.
+      const order = typeof retried?.meta?.sendOrder === "number" ? retried.meta.sendOrder : Math.max(Date.now(), lastSendOrderRef.current + 1);
+      lastSendOrderRef.current = Math.max(lastSendOrderRef.current, order);
+      const turnSequence = nextTurnSequence(view?.turns ?? [], messages);
+      const optimistic = optimisticSend({
+        sessionId, clientMessageId, text, attachments, model: options.model ?? null, harness: options.harness ?? null, authorUuid: userUuid, turnSequence,
+        // Behind another unaccepted send, this one will find a Turn running.
+        meta: { awaitingSubmit: true, sendOrder: order, queuedFollowup: shouldQueueFollowup(view?.turns ?? [], view?.stream) || messages.some((message) => isLocalSend(message) && message.id !== retried?.id) },
+      });
+      const row = () => stateRef.current.sessionViews[sessionId]?.messages.find((message) => isLocalSend(message) && message.meta?.clientMessageId === clientMessageId) ?? null;
+      recordDebugEvent("chat.send.optimistic_created", { sequence: optimistic.sequence, attachmentCount: attachments.length, hasText: Boolean(text), clientMessageIdPresent: true, retry: Boolean(retried) });
+      dispatch({ type: "message-optimistic", sessionId, message: optimistic });
+
+      const submit = async () => {
+        let uploadTarget: UploadTarget | null = null;
         try {
-          turns = (await loadLatestWindow(sessionId)).turns;
+          // A reader keeps the Chat loading while the send waits, so leaving the screen does not strand it.
+          void sessionLifecycleRef.current.open(sessionId);
+          const ready = await waitForSendHistory(sessionId).finally(() => sessionLifecycleRef.current.close(sessionId));
+          // The send lands after the newest Turn, so a detached window comes back to it first.
+          const latestTurns = ready.hasMoreNewer ? (await loadLatestWindow(sessionId)).turns : [];
+          const current = stateRef.current.sessionViews[sessionId] ?? ready;
+          if (!row()) return;
+          const spaceId = current.session?.spaceId ?? stateRef.current.sessions.find((item) => item.id === sessionId)?.spaceId;
+          if (!spaceId) throw new Error(translate("data.chatContextUnavailable"));
+          dispatch({
+            type: "send-submit",
+            sessionId,
+            clientMessageId,
+            turnSequence: nextTurnSequence([...latestTurns, ...current.turns], current.messages.filter((message) => !isAwaitingSubmit(message))),
+            queuedFollowup: shouldQueueFollowup(current.turns, current.stream),
+          });
+          const submitted = row() ?? optimistic;
+          void saveMessages(userKey, sessionId, [submitted]).catch(() => undefined);
+          uploadTarget = { spaceId, sessionId };
+          const target = uploadTarget;
+          const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, target, attachment));
+          const withContent = { ...(row() ?? submitted), content, text: text || submitted.text };
+          dispatch({ type: "message-optimistic", sessionId, message: withContent });
+          void saveMessages(userKey, sessionId, [withContent]).catch(() => undefined);
+          const request = client.space(spaceId).prompt({
+            mode: "agent",
+            sessionId,
+            content,
+            // First-party app sessions belong to the Web App source bucket; request provenance still reports via=mobile.
+            source: "web",
+            clientMessageId,
+            accessMode: "full_access",
+            intent: "followup",
+            schedule: { mode: "immediate" },
+            ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
+            ...(options.harness ? { harness: options.harness } : {}),
+            ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+          });
+          const upsert = (response: Awaited<typeof request>) => {
+            if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
+            recordDebugEvent("chat.send.server_accepted", { turnSequence: response.turn.sequence, status: response.turn.status });
+            dispatch({ type: "turn-upsert", sessionId, session: response.session, turn: withFallbackUserContent(response.turn, content, text) });
+          };
+          const accepted = watchAcceptedTurn(sessionId, clientMessageId);
+          const first = await Promise.race([request.then((response) => ({ response })), accepted.promise.then(() => null)]).finally(accepted.cancel);
+          if (first) upsert(first.response);
+          // The Turn is in; the late response only repeats it, and its failure no longer means anything.
+          else void request.then(upsert).catch(() => undefined);
+          dispatch({ type: "send-accepted", sessionId, clientMessageId });
+          // The accepted Turn owns this message now; a leftover local row would come back as a failed send.
+          void deleteMessages(userKey, sessionId, [optimistic.id]).catch(() => undefined);
+          attachmentUploads?.forget(target, attachments);
+          void queryClient.invalidateQueries();
         } catch (error) {
-          dispatch({ type: "send-failed", sessionId, clientMessageId, message: errorMessage(error, translate("data.loadNewerFailed")) });
+          const message = error instanceof Error ? error.message : translate("data.messageSendFailed");
+          const pending = row() ?? optimistic;
+          dispatch({ type: "send-failed", sessionId, clientMessageId, message });
+          void saveMessages(userKey, sessionId, [failedSendMessage(pending, message)]).catch(() => undefined);
+          if (uploadTarget) attachmentUploads?.unclaim(uploadTarget, attachments);
           throw error;
         }
-      }
-      const optimisticText = text || attachments.map((item) => item.name).join(", ");
-      const turnSequence = nextTurnSequence(turns, view?.messages ?? []);
-      const currentMax = Math.max(
-        0,
-        ...(view?.messages ?? []).map((message) => message.sequence),
-        (turns.at(-1)?.sequence ?? 0) * 2,
-        optimisticMessageSequenceRef.current.get(sessionId) ?? 0,
-        turnSequence * 2 - 1,
-      );
-      optimisticMessageSequenceRef.current.set(sessionId, currentMax);
-      const optimistic: MessageRecord = {
-        id: `local-${clientMessageId}`,
-        sessionId,
-        role: "user",
-        content: [
-          ...(text ? [mentionTextBlock(text, text)] : []),
-          ...attachments.filter((item) => item.mimeType.startsWith("image/")).map((item) => ({
-            type: "image" as const,
-            source: { type: "url" as const, url: item.uri },
-            _meta: { filename: item.name, mediaType: item.mimeType, size: item.size },
-          })),
-          ...attachments.filter((item) => !item.mimeType.startsWith("image/")).map((item) => ({ type: "text" as const, text: `Attached file: ${item.name}` })),
-        ],
-        text: optimisticText,
-        sequence: turnSequence * 2 - 1,
-        provider: options.model?.provider ?? null,
-        model: options.model?.id ?? null,
-        stopReason: null,
-        errorMessage: null,
-        usage: null,
-        meta: { optimistic: true, queuedFollowup: shouldQueueFollowup(turns, view?.stream), clientMessageId, turnSequence, sendDraft: { text, attachments, model: options.model ?? null, harness: options.harness ?? null } satisfies SendDraft, ...(options.harness ? { harness: options.harness } : {}), ...(options.model?.thinkingLevel ? { requestedThinkingLevel: options.model.thinkingLevel } : {}) },
-        authorUuid: userUuid,
-        authorProfile: null,
-        startedAt: null,
-        completedAt: null,
-        durationMs: null,
-        createdAt: new Date().toISOString(),
       };
-      recordDebugEvent("chat.send.optimistic_created", { sequence: optimistic.sequence, attachmentCount: attachments.length, hasText: Boolean(text), clientMessageIdPresent: true });
-      dispatch({ type: "message-optimistic", sessionId, message: optimistic });
-      options.onOptimistic?.(optimistic);
+      // Queued before the failed row goes: removing it releases the lane, and the retry must already hold its place.
+      const sent = sendQueueRef.current.enqueue(sessionId, { id: clientMessageId, order, run: submit });
+      if (retried) {
+        dispatch({ type: "send-discard", sessionId, messageId: retried.id });
+        void deleteMessages(userKey, sessionId, [retried.id]).catch(() => undefined);
+      }
+      options.onOptimistic?.(row() ?? optimistic);
       // Only the new row: the table upserts, and the view snapshot can still hold rows removed since,
       // such as the failed send a retry just discarded.
-      void saveMessages(userKey, sessionId, [optimistic]).catch(() => undefined);
-      dispatch({ type: "send-start", sessionId });
-
-      let pending = optimistic;
-      const uploadTarget = { spaceId: session.spaceId, sessionId };
-      try {
-        const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, uploadTarget, attachment));
-        const optimisticWithContent = { ...optimistic, content, text: text || optimistic.text };
-        pending = optimisticWithContent;
-        dispatch({ type: "message-optimistic", sessionId, message: optimisticWithContent });
-        void saveMessages(userKey, sessionId, [optimisticWithContent]).catch(() => undefined);
-        const response = await client.space(session.spaceId).prompt({
-          mode: "agent",
-          sessionId,
-          content,
-          // First-party app sessions belong to the Web App source bucket; request provenance still reports via=mobile.
-          source: "web",
-          clientMessageId,
-          accessMode: "full_access",
-          intent: "followup",
-          schedule: { mode: "immediate" },
-          ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
-          ...(options.harness ? { harness: options.harness } : {}),
-          ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
-        });
-        if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
-        recordDebugEvent("chat.send.server_accepted", { turnSequence: response.turn.sequence, status: response.turn.status });
-        dispatch({ type: "turn-upsert", sessionId, session: response.session, turn: withFallbackUserContent(response.turn, content, text) });
-        dispatch({ type: "send-end", sessionId });
-        // The accepted Turn owns this message now; a leftover local row would come back as a failed send.
-        void deleteMessages(userKey, sessionId, [optimistic.id]).catch(() => undefined);
-        attachmentUploads?.forget(uploadTarget, attachments);
-        void queryClient.invalidateQueries();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : translate("data.messageSendFailed");
-        dispatch({ type: "send-failed", sessionId, clientMessageId, message });
-        void saveMessages(userKey, sessionId, [failedSendMessage(pending, message)]).catch(() => undefined);
-        attachmentUploads?.unclaim(uploadTarget, attachments);
-        throw error;
-      }
+      void saveMessages(userKey, sessionId, [row() ?? optimistic]).catch(() => undefined);
+      await sent;
     },
-    [attachmentUploads, client, dispatch, loadLatestWindow, queryClient, userKey, userUuid, stateRef],
+    [attachmentUploads, client, dispatch, loadLatestWindow, queryClient, userKey, userUuid, stateRef, waitForSendHistory, watchAcceptedTurn],
   );
 
+  useEffect(() => store.subscribe(({ state }) => releaseSettledFailures(sendQueueRef.current, state)), [store]);
+
   const discardFailedSend = useCallback((sessionId: string, messageId: string) => {
+    const failed = stateRef.current.sessionViews[sessionId]?.messages.find((message) => message.id === messageId && isFailedSend(message));
     dispatch({ type: "send-discard", sessionId, messageId });
     void deleteMessages(userKey, sessionId, [messageId]).catch(() => undefined);
-  }, [dispatch, userKey]);
+    const clientMessageId = failed?.meta?.clientMessageId;
+    if (typeof clientMessageId === "string") sendQueueRef.current.release(sessionId, clientMessageId);
+  }, [dispatch, userKey, stateRef]);
 
   const sendNewMessage = useCallback(
     async (
       spaceId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
       if (!spaceId) throw new Error(translate("data.spaceRequired"));
       if (!text && attachments.length === 0) throw new Error(translate("data.messageEmpty"));
 
+      // There is no Chat yet: the screen holds this bubble until the accepted Turn takes its place.
       const clientMessageId = newId();
+      options.onOptimistic?.(optimisticSend({ sessionId: "", clientMessageId, text, attachments, model: options.model ?? null, harness: options.harness ?? null, authorUuid: userUuid, turnSequence: 1 }));
       const uploadTarget = { spaceId };
       // A failed send keeps its finished uploads for the retry from the composer.
       const unclaim = (error: unknown): never => {
@@ -2330,7 +2431,7 @@ export function AppProvider({
       void queryClient.invalidateQueries();
       return { session: result.session, turn, message };
     },
-    [attachmentUploads, client, dispatch, queryClient, userKey, stateRef],
+    [attachmentUploads, client, dispatch, queryClient, userKey, userUuid, stateRef],
   );
 
   const loadComposerDraftForUser = useCallback(
@@ -2344,7 +2445,7 @@ export function AppProvider({
   );
 
   const clearComposerDraftForUser = useCallback(
-    (spaceId: string, scope: ComposerDraftScope) => clearLocalComposerDraft(userKey, spaceId, scope),
+    (spaceId: string, scope: ComposerDraftScope, expected?: string) => expected === undefined ? clearLocalComposerDraft(userKey, spaceId, scope) : clearLocalComposerDraftIf(userKey, spaceId, scope, expected),
     [userKey],
   );
 
@@ -2693,6 +2794,8 @@ export function useAppStateGetter() {
 export type SessionViewSummary = Omit<SessionView, "stream"> & { stream: Pick<StreamView, "status" | "turnId"> | null };
 
 const LOADING_VIEW: SessionViewSummary = { ...emptyView(), loading: true };
+/** A new Chat before the server creates it: nothing to load. */
+const NEW_CHAT_VIEW: SessionViewSummary = emptyView();
 
 function summarizeSessionView(view: SessionView | undefined): SessionViewSummary {
   if (!view) return LOADING_VIEW;
@@ -2711,10 +2814,12 @@ export function useSession(sessionId: string) {
   const { openSession, closeSession } = useAppActions();
   // Layout so a press-in prefetch can land in sessionViews before the first paint.
   useLayoutEffect(() => {
+    // "" is a new Chat the server has not created yet.
+    if (!sessionId) return;
     void openSession(sessionId);
     return () => closeSession(sessionId);
   }, [closeSession, openSession, sessionId]);
-  return useAppSelector((app) => summarizeSessionView(app.state.sessionViews[sessionId]), sameSessionViewSummary);
+  return useAppSelector((app) => (sessionId ? summarizeSessionView(app.state.sessionViews[sessionId]) : NEW_CHAT_VIEW), sameSessionViewSummary);
 }
 
 /** The open Chat's live stream; changes on every token batch, so subscribe from the smallest component. */

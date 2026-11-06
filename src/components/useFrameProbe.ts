@@ -3,6 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import { useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { setChatEntryDiagnostics } from "@/src/data/chat-entry-trace";
 import { record } from "@/src/data/debug-session";
 
 const STORAGE_KEY = "debug.frameProbe";
@@ -19,6 +20,7 @@ const listeners = new Set<() => void>();
 function emit(next: boolean) {
   if (enabled === next) return;
   enabled = next;
+  setChatEntryDiagnostics(next);
   for (const listener of listeners) listener();
 }
 
