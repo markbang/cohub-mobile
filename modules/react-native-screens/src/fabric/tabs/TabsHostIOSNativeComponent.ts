@@ -60,6 +60,9 @@ type TabBarControllerMode = 'automatic' | 'tabBar' | 'tabSidebar';
 
 type TabBarSidebarPreferredPlacement = 'automatic' | 'sidebar' | 'tabBar';
 
+// cohub: see `horizontalSizeClass` in TabsHost.ios.types.ts.
+type HorizontalSizeClass = 'inherit' | 'compact' | 'regular';
+
 // #endregion iOS-specific helpers
 
 export interface NativeProps extends ViewProps {
@@ -97,6 +100,7 @@ export interface NativeProps extends ViewProps {
   >;
   bottomAccessoryHidden?: CT.WithDefault<boolean, false>;
   prominentScreenKey?: string | undefined;
+  horizontalSizeClass?: CT.WithDefault<HorizontalSizeClass, 'inherit'>;
 }
 
 export default codegenNativeComponent<NativeProps>('RNSTabsHostIOS', {

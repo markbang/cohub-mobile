@@ -132,6 +132,20 @@ export interface TabsHostPropsIOS {
      */
     tabBarControllerMode?: TabBarControllerMode | undefined;
     /**
+     * @summary cohub: overrides the horizontal size class the tab bar controller and its tabs see.
+     *
+     * @description
+     * In a regular-width window, iPadOS draws the tab bar at the top. A host that sits in a narrow
+     * part of such a window (a split view's list pane) can pass `compact` to get the bottom tab bar
+     * and compact layouts inside its tabs. `inherit` removes the override.
+     *
+     * @default inherit
+     *
+     * @platform ios
+     * @supported iOS 17 or higher
+     */
+    horizontalSizeClass?: 'inherit' | 'compact' | 'regular' | undefined;
+    /**
      * @summary Specifies whether the sidebar or the tab bar is preferred when only
      * one of them can be displayed.
      *

@@ -328,7 +328,7 @@ function pushSteps(lines, platform, steps = []) {
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
-    // The iPad draws its tab bar at the top of the left pane, where Chats can scroll out of view; the root link selects it.
+    // The root link selects Chats on iPad, where a minimized system tab bar can hide the label.
     else if (step.chatsTab && platform === "ios") lines.push("- openLink: \"cohub:///\"", "- extendedWaitUntil:", "    visible: \".*Chats.*\"", "    timeout: 20000");
     else if (step.chatsTab) lines.push("- tapOn:", "    text: \"Chats\"", SETTLE);
     else if (step.open) {

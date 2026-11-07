@@ -11,6 +11,7 @@ Fork of [software-mansion/react-native-screens](https://github.com/software-mans
 
 Search for `cohub:` to find each one. The Android ones are inert until the app sets `ScreenStack.predictiveBackHost`, which `modules/cohub-predictive-back` does only when `android.predictiveBackGestureEnabled` is on.
 
+- iOS tabs host `horizontalSizeClass` prop (`inherit` | `compact` | `regular`; codegen spec, `TabsHost.ios`, its types in `src/` and `lib/`): sets or removes `traitOverrides.horizontalSizeClass` on the tab bar controller (iOS 17+). The tablet split layout passes `compact` to the left pane's tabs, so iPadOS draws the bottom tab bar there instead of the top one.
 - iOS `RNSScreen.registerContentScrollViewIfNeeded`: after layout and on appearing (again 0.3 s and 1 s later, once React has mounted the list), the screen hands UIKit its largest vertically scrolling scroll view with `setContentScrollView:forEdge:`, as the gamma stack does, so the iOS 26 tab bar minimizes on scroll and bars track the list. It logs `cohub-diag:` with what it registered.
 
 - `ScreenStack`: after a push, the screen it was pushed from stays attached, but invisible, instead of being removed, when the host allows the pushed route (`PredictiveBackHost.canPreviewBelow`). Only that one screen, only under an opaque push with the default animation, and only while it is still attached: retaining never adds a fragment. A transparent modal on top (the image viewer) keeps it for when the modal closes.
