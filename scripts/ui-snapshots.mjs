@@ -354,7 +354,7 @@ function pushSteps(lines, platform, steps = []) {
 
 /** The app's own word on its layout: a tablet run must draw the split panes before anything is captured. */
 function checkSplit(lines, platform) {
-  openScreen(lines, platform, "cohub://settings", true, "Appearance");
+  openScreen(lines, platform, "cohub://debug/chat?fixture=conversation", true, "Fix the Android sheet height");
   lines.push("- assertVisible:", "    id: \"split-right-pane\"");
 }
 
@@ -373,10 +373,10 @@ function buildFlow({ platform, screens, target, orientation }) {
 }
 
 /** The split-layout interaction flow, after sign-in, with the rows it taps for this platform. */
-function buildTabletFlow({ platform }) {
+function buildTabletFlow({ platform, maestroOrientation }) {
   const lines = preamble(platform, "portrait");
   checkSplit(lines, platform);
-  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`].join("\n")}\n`;
+  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`, `      PORTRAIT: ${maestroOrientation("portrait")}`, `      LANDSCAPE: ${maestroOrientation("landscape")}`].join("\n")}\n`;
 }
 
 /** One pass of the perf sequence from a fresh launch. */
@@ -508,6 +508,8 @@ const android = {
     // Rotation 0 is the panel's natural orientation, which is landscape on a tablet such as the Pixel Tablet.
     const naturalLandscape = naturalWidth > naturalHeight;
     const rotationFor = (orientation) => (orientation === "landscape") === naturalLandscape ? 0 : 1;
+    // Maestro's PORTRAIT is rotation 0 and LANDSCAPE_LEFT rotation 90, whatever the panel's natural orientation.
+    const maestroOrientation = (orientation) => rotationFor(orientation) === 0 ? "PORTRAIT" : "LANDSCAPE_LEFT";
     // The software-rendered emulator often raises "isn't responding" dialogs over the app under test.
     adb("shell", "settings", "put", "global", "hide_error_dialogs", "1");
     adb("shell", "settings", "put", "global", "sysui_demo_allowed", "1");
@@ -528,6 +530,7 @@ const android = {
         sleepSync(5_000);
       },
       setAnimations,
+      maestroOrientation,
       setOrientation: (orientation) => {
         adb("shell", "settings", "put", "system", "accelerometer_rotation", "0");
         adb("shell", "settings", "put", "system", "user_rotation", String(rotationFor(orientation)));
@@ -582,6 +585,7 @@ const ios = {
       setAnimations: () => undefined,
       // Maestro turns the simulator in each flow's preamble.
       setOrientation: () => undefined,
+      maestroOrientation: (orientation) => MAESTRO_ORIENTATION[orientation],
       logicalSize: (orientation) => orientation === "landscape" ? [portraitHeight, portraitWidth] : [portraitWidth, portraitHeight],
       pullDatabase: (directory) => {
         const container = run("xcrun", ["simctl", "get_app_container", device.udid, PACKAGE_ID, "data"]).trim();
@@ -632,14 +636,15 @@ async function capture(options) {
         }
       }
     }
-    if (options.target === "tablet") {
+    // A `--screens` subset is a screenshot pass; the interaction flow runs with the full set.
+    if (options.target === "tablet" && !options.screens) {
       const directory = join(options.out, "tablet-flow");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
       device.setTheme("light");
       device.setOrientation("portrait");
       const flowPath = join(options.out, "tablet-flow.yaml");
-      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform }));
+      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
       runMaestro({ device: device.device, flowPath, out: options.out, testOutput });

@@ -2,7 +2,8 @@ appId: io.github.markbang.cohubmobile
 name: Tablet split layout
 ---
 # Run by `scripts/ui-snapshots.mjs capture --target tablet` after sign-in, in portrait, on the
-# Chats tab of a split window. FIRST_ROW and SECOND_ROW are left-pane row positions.
+# Chats tab of a split window. FIRST_ROW and SECOND_ROW are left-pane row positions; PORTRAIT and
+# LANDSCAPE are Maestro orientations for this device.
 # It sends one real message from the test account (the New Chat step).
 # The root link selects the Chats tab and empties the right pane.
 - openLink: "cohub:///"
@@ -70,12 +71,12 @@ name: Tablet split layout
     id: "chat-composer-input"
 - inputText: "tablet draft 4821"
 - hideKeyboard
-- setOrientation: LANDSCAPE_LEFT
+- setOrientation: ${LANDSCAPE}
 - waitForAnimationToEnd:
     timeout: 5000
 - assertVisible: ".*tablet draft 4821.*"
 - takeScreenshot: "flow-03-draft-landscape"
-- setOrientation: PORTRAIT
+- setOrientation: ${PORTRAIT}
 - waitForAnimationToEnd:
     timeout: 5000
 - assertVisible: ".*tablet draft 4821.*"
