@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.3.11](https://github.com/markbang/cohub-mobile/compare/v2.3.10...v2.3.11) (2026-11-07)
+
+
+### Features
+
+* **android:** match iOS 26 bar buttons, menus, Large Title swap, and tab bar minimize ([#192](https://github.com/markbang/cohub-mobile/issues/192)) ([0bd047b](https://github.com/markbang/cohub-mobile/commit/0bd047bb3af3c92873000427ee8127b52a6ca082))
+* **android:** match iOS 27 menus, sheets, alerts and controls ([#196](https://github.com/markbang/cohub-mobile/issues/196)) ([66ad058](https://github.com/markbang/cohub-mobile/commit/66ad058e73a8f928cf624a6f92fa198eadd7f3bf))
+* **chat:** respond in the UI first for sends, new Chats, and Space rows ([#194](https://github.com/markbang/cohub-mobile/issues/194)) ([ccb0e90](https://github.com/markbang/cohub-mobile/commit/ccb0e9065c1313f21e595fd16832251b31a56229))
+* **debug:** record UI frame hitches and JS stalls in diagnostics ([#193](https://github.com/markbang/cohub-mobile/issues/193)) ([3894cc0](https://github.com/markbang/cohub-mobile/commit/3894cc0294c2d94bb2162f5d48b0c29632cc61d2))
+
+
+### Fixes
+
+* **android:** draw the Chats and Spaces filters, Me picker and attachment menu as iOS 27 does ([1fd40b3](https://github.com/markbang/cohub-mobile/commit/1fd40b3f17a56807f2aa780d0ab8f047708dfbde))
+* **android:** draw the filter menus, Me picker and attachment menu as iOS 27 does ([#198](https://github.com/markbang/cohub-mobile/issues/198)) ([1fd40b3](https://github.com/markbang/cohub-mobile/commit/1fd40b3f17a56807f2aa780d0ab8f047708dfbde))
+* **chat:** clear the refresh spinner when a released Chat orphans its refresh ([#191](https://github.com/markbang/cohub-mobile/issues/191)) ([4a63412](https://github.com/markbang/cohub-mobile/commit/4a63412ff6a854bf623265ca4ca22bf1a6c60258))
+* **chat:** show the agent's latest output time on the live reply ([a32f43b](https://github.com/markbang/cohub-mobile/commit/a32f43b8ba36dded2356bbdcc213006d298f1600))
+
+
+### Performance
+
+* **realtime:** apply each Turn update once and skip unchanged ones in the Chats list ([#195](https://github.com/markbang/cohub-mobile/issues/195)) ([615a5f3](https://github.com/markbang/cohub-mobile/commit/615a5f3a42a18d75fdba89e199e0a6de60e12d15))
+
+
+### CI
+
+* **ui:** capture the in-app menus and record their motion ([#197](https://github.com/markbang/cohub-mobile/issues/197)) ([82b0591](https://github.com/markbang/cohub-mobile/commit/82b0591170877c7349fe445d2dc33e008b19a856))
+* **ui:** snooze the Android in-app update offer before capturing ([97dd8a2](https://github.com/markbang/cohub-mobile/commit/97dd8a2b474d0434ad8f73dbdd7167d014e61f95))
+
 ## [2.3.10](https://github.com/markbang/cohub-mobile/compare/v2.3.9...v2.3.10) (2026-11-06)
 
 
