@@ -25,8 +25,11 @@ const BAR_PADDING = 4;
 const BAR_SIDE_MARGIN = 21;
 const LENS_WIDTH = 98;
 const LENS_HEIGHT = BAR_HEIGHT - BAR_PADDING * 2;
-/** How far a lifted lens grows past its resting size on each side. */
-const LENS_GROWTH = 8;
+/** How far a lifted lens grows past its resting size on each side: iOS 27's 94 × 53 lens grows to 117 × 73 (liquidglass). */
+const LENS_GROWTH_X = 11.5;
+const LENS_GROWTH_Y = 10;
+/** A quick tap still keeps the lens up this long, as on iOS 27. */
+const LIFT_MIN_MS = 230;
 /** What sits under a lifted lens is drawn this much larger, standing in for the glass's magnification. */
 const LENS_MAGNIFY = 0.16;
 /** A drag past the first or last tab moves the lens this many tabs at most, rubber-banded. */
@@ -41,7 +44,7 @@ const LIFT_RELEASE = 0.04;
 const JELLY_SPEED = 3;
 const JELLY_STRETCH = 0.2;
 const JELLY_ASPECT = 1.4;
-const BAR_SWELL = 0.04;
+const BAR_SWELL = 0.049;
 const PULL_LIMIT = BAR_HEIGHT * 7 / 32;
 const BAR_BOTTOM_MARGIN = 8;
 const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
@@ -176,6 +179,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const lastTime = useSharedValue(0);
   const velocityX = useSharedValue(0);
   const lensTime = useSharedValue(0);
+  const liftStart = useSharedValue(0);
 
   const tick = useCallback(() => {
     haptics.selection();
@@ -242,13 +246,15 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const selectedLabel = typeof selectedTitle === "string" ? selectedTitle : selectedRoute?.name;
 
   // UIKit keeps the lens lifted until it has risen all the way and arrived.
-  useAnimatedReaction(() => [lens.get(), lift.get()] as const, ([position, lifted]) => {
-    if (!dropping.get() || touching.get() || lifted < LIFT_SNAP) return;
-    if (Math.abs(lensTarget.get() - position) > LIFT_RELEASE) return;
+  const dropIfArrived = useCallback(() => {
+    "worklet";
+    if (!dropping.get() || touching.get() || lift.get() < LIFT_SNAP) return;
+    if (Math.abs(lensTarget.get() - lens.get()) > LIFT_RELEASE) return;
     dropping.set(false);
-    lift.set(withSpring(0, springs.dockLift));
+    lift.set(withDelay(Math.max(0, LIFT_MIN_MS - (clock() - liftStart.get())), withSpring(0, springs.dockLift)));
     scheduleOnRN(setLensLifted, false);
-  });
+  }, [dropping, lens, lensTarget, lift, liftStart, touching]);
+  useAnimatedReaction(() => [lens.get(), lift.get()] as const, dropIfArrived);
 
   useAnimatedReaction(() => lens.get(), (position, previous) => {
     const now = clock();
@@ -270,6 +276,8 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     lens.set(withSpring(index, springs.dockTravel));
     swell.set(withSpring(0, springs.dockPress));
     pull.set(withSpring(0, springs.dockPress));
+    // A press held until the lens has risen and arrived leaves nothing moving to wake the reaction above.
+    dropIfArrived();
   }
 
   const gesture = Gesture.Manual()
@@ -287,6 +295,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       lastX.set(touch.x);
       lastTime.set(clock());
       velocityX.set(0);
+      liftStart.set(clock());
       lift.set(withSpring(1, springs.dockLift));
       swell.set(withSpring(1, springs.dockPress));
       scheduleOnRN(setLensLifted, true);
@@ -403,16 +412,16 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
       <GestureDetector gesture={gesture}>
         <Animated.View accessibilityRole="tablist" pointerEvents={minimized ? "none" : "auto"} className="self-center" style={[{ height: BAR_HEIGHT, width: barWidth }, surfaceStyle]}>
           {/* One glass group holds the bar and the lifted lens so the two merge as liquid where they meet. */}
-          <GlassGroup spacing={LENS_GROWTH * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
+          <GlassGroup spacing={LENS_GROWTH_X * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
             {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
             <Animated.View className={`absolute rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={glassFrameStyle}>
-              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} />
+              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} rim />
             </Animated.View>
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
           <Animated.View pointerEvents="none" className="absolute" style={[LENS_FRAME, lensStyle]}>
             {/* iOS selects with a neutral capsule; the accent stays on the glyph and label. */}
-            <Animated.View className="absolute inset-0 rounded-full bg-control-track" style={restingLensStyle} />
+            <Animated.View className="absolute inset-0 rounded-full bg-glass-lens" style={restingLensStyle} />
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
           </Animated.View>
@@ -464,8 +473,7 @@ const LENS_FRAME = { left: BAR_PADDING, top: (BAR_HEIGHT - LENS_HEIGHT) / 2, wid
 /** The lens grows as it lifts, and stretches along its motion while thinning across it. */
 function lensSize(lifted: number, stretch: number) {
   "worklet";
-  const growth = LENS_GROWTH * 2 * lifted;
-  return { width: (LENS_WIDTH + growth) * (1 + stretch), height: (LENS_HEIGHT + growth) * (1 - stretch * JELLY_ASPECT) };
+  return { width: (LENS_WIDTH + LENS_GROWTH_X * 2 * lifted) * (1 + stretch), height: (LENS_HEIGHT + LENS_GROWTH_Y * 2 * lifted) * (1 - stretch * JELLY_ASPECT) };
 }
 
 function positionAt(x: number, lastIndex: number, pitch: number) {

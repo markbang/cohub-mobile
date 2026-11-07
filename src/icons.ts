@@ -72,7 +72,7 @@ import Wrench from "lucide-react-native/icons/wrench";
 import ChevronsUp from "lucide-react-native/icons/chevrons-up";
 import ChevronsDown from "lucide-react-native/icons/chevrons-down";
 import SquarePen from "lucide-react-native/icons/square-pen";
-import Terminal from "lucide-react-native/icons/terminal";
+import SquareTerminal from "lucide-react-native/icons/square-terminal";
 import Type from "lucide-react-native/icons/type";
 import Trash2 from "lucide-react-native/icons/trash";
 import TrendingUp from "lucide-react-native/icons/trending-up";
@@ -165,7 +165,8 @@ export const icons = {
   "chevrons-up": ChevronsUp,
   "chevrons-down": ChevronsDown,
   sync: RefreshCw,
-  terminal: Terminal,
+  // SF Symbols' terminal is boxed; Framework7 has no terminal, so Android draws Lucide's boxed one.
+  terminal: SquareTerminal,
   trash: Trash2,
   "trending-up": TrendingUp,
   type: Type,

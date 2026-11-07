@@ -33,7 +33,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
     </View> : <ScrollView style={styles.list} keyboardShouldPersistTaps="always" keyboardDismissMode="none">
       {menu.items.map((item) => {
         const label = slashCommandLabel(item);
-        return <Pressable key={`${item.kind}:${item.name}`} accessibilityRole="button" accessibilityLabel={t("slash.select", { name: label })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-2 active:bg-surface-pressed">
+        return <Pressable key={`${item.kind}:${item.name}`} accessibilityRole="button" accessibilityLabel={t("slash.select", { name: label })} onPress={() => onSelect(item)} className="min-h-13 flex-row items-center gap-3 px-3 py-2 active:opacity-70">
           <View className="size-9 items-center justify-center rounded-sm bg-surface-raised">
             <Text className="text-body font-semibold text-fg-muted">/</Text>
           </View>

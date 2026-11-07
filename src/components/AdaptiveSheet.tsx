@@ -24,7 +24,7 @@ import { IconButton } from "@/src/ui";
 import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
 import { ToastViewport } from "@/src/components/Toast";
 import { setDialogOpen } from "@/src/data/interaction-trace";
-import { motion, springs } from "@/src/motion";
+import { motion, scrim, springs } from "@/src/motion";
 
 const COMPACT_BREAKPOINT = 720;
 // UIScrollView's fast deceleration rate (0.99 per ms) projects a release to where it would coast: v * r / (1 - r) / 1000.
@@ -49,8 +49,9 @@ export type AdaptiveSheetProps = {
    */
   confirm?: SheetConfirm;
   /**
-   * `fit` sizes a short sheet to its content on iOS, as a medium-height system sheet; the drawn Android
-   * sheet always wraps its content. Owners keep a `fit` sheet mounted and drive it through `visible`.
+   * `fit` sizes a short sheet to its content, floating clear of the screen's edges as iOS 26's does; `large`
+   * (the default) is a page sheet that fills the height below the status bar. Owners keep a `fit` sheet
+   * mounted and drive it through `visible`.
    */
   detent?: "fit" | "large";
   testID?: string;
@@ -70,6 +71,7 @@ export function AdaptiveSheet({
   contentStyle,
   fullHeight = false,
   confirm,
+  detent = "large",
   testID,
 }: AdaptiveSheetProps) {
   const theme = useAppTheme();
@@ -77,10 +79,11 @@ export function AdaptiveSheet({
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const compact = Math.min(width, height) < COMPACT_BREAKPOINT;
-  // Android sheets always wrap their content, up to the full height, so a short form stays short.
-  const hiddenOffset = Math.min(height * 0.56, 520);
-  // design-system: iOS dims the screen under a sheet by a fifth, and by half in dark mode.
-  const scrimOpacity = theme.mode === "dark" ? 0.5 : 0.2;
+  const floating = compact && detent === "fit";
+  const page = fullHeight || (compact && detent === "large");
+  // A page sheet slides in from fully below the screen; a short one only needs to clear the bottom edge.
+  const hiddenOffset = compact && page ? height : Math.min(height * 0.56, 520);
+  const scrimOpacity = theme.mode === "dark" ? scrim.dark : scrim.light;
 
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -172,7 +175,7 @@ export function AdaptiveSheet({
     dragY.set(0);
     dragContext.set(0);
     const frame = requestAnimationFrame(() => {
-      progress.set(withSpring(1, { ...springs.sheet, overshootClamping: true }));
+      progress.set(withSpring(1, { ...springs.sheetPresent, overshootClamping: true }));
     });
 
     return () => cancelAnimationFrame(frame);
@@ -218,10 +221,12 @@ export function AdaptiveSheet({
     };
   }, [compact, dragY, progress, revealDistance]);
   const availableHeight = Math.max(0, height - keyboardHeight);
+  // As iOS 26's: a page sheet starts right under the status bar; a floating one keeps its margin all round.
   const maxHeight = compact
-    ? Math.max(0, availableHeight - insets.top - 12)
+    ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : 0))
     : Math.max(0, Math.min(availableHeight - 48, 760));
-  const bottomPadding = Math.max(insets.bottom, theme.spacing.lg);
+  // A floating sheet ends above the screen's edge but still runs its content clear of the home indicator.
+  const bottomPadding = floating ? theme.spacing.lg + insets.bottom : Math.max(insets.bottom, theme.spacing.lg);
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
   const bodyMaxHeight = Math.max(160, maxHeight - (compact ? 100 : 82) - (footer ? 130 : 20));
   const resolvedContentStyle = [
@@ -255,10 +260,11 @@ export function AdaptiveSheet({
             exiting={visible ? panelExiting : undefined}
             accessibilityViewIsModal
             role="dialog"
-            className={`min-h-0 w-full overflow-hidden bg-surface ${compact ? "rounded-t-lg" : "max-w-125 rounded-lg"}`}
+            className={`min-h-0 overflow-hidden bg-surface ${compact ? "" : "w-full max-w-125 rounded-lg"}`}
             style={[
               { borderCurve: "continuous" },
-              { maxHeight, height: compact && fullHeight ? maxHeight : undefined },
+              compact ? (floating ? FLOATING_PANEL : PAGE_PANEL) : null,
+              { maxHeight, height: compact && page ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
@@ -266,13 +272,12 @@ export function AdaptiveSheet({
             <Freeze frozen={!visible}>
             <SheetDrag gesture={compact ? pan : null}>
               <View>
-                {compact ? (
-                  <View testID={dismissible && testID ? `${testID}-drag-handle` : undefined} className="z-2 -mb-0.5 h-7.5 items-center justify-center">
-                    {dismissible ? <View className="w-8 h-1 rounded-xs bg-border-strong" /> : null}
-                  </View>
-                ) : null}
+                {/* iOS shows a grabber only on a sheet sized to its content; it sits over the header, 5 pt down. */}
+                {floating && dismissible ? <View testID={testID ? `${testID}-drag-handle` : undefined} pointerEvents="none" className="absolute inset-x-0 z-2 items-center" style={GRABBER_SLOT}>
+                  <View className="rounded-xs bg-border-strong" style={GRABBER} />
+                </View> : null}
                 {/* As in UIKit sheets: close leads, the title centers, the confirm (or an empty slot) trails. */}
-                <View className="min-h-14 flex-row items-center px-2 pb-2">
+                <View className={`min-h-14 flex-row items-center px-2 ${compact ? "pt-2" : "pb-2"}`}>
                   <IconButton
                     filled
                     name="x"
@@ -288,7 +293,7 @@ export function AdaptiveSheet({
             {subtitle ? <Text className="px-4 pb-2 text-center text-subhead text-fg-secondary">{subtitle}</Text> : null}
             {scrollable ? (
               <ScrollView
-                style={fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
+                style={page ? { flex: 1, minHeight: 0 } : { maxHeight: bodyMaxHeight }}
                 contentContainerStyle={resolvedContentStyle}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -325,5 +330,13 @@ const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: R
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
+// iOS 27's sheets on a 402 pt iPhone, measured from the UI Snapshots captures: a fitted sheet floats 8 pt in
+// with 36 pt corners; a page sheet starts right under the status bar with 38 pt top corners; the grabber is
+// 57 × 4 pt, 6 pt down.
+const FLOAT_MARGIN = 8;
+const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 36 } as const;
+const PAGE_PANEL = { width: "100%", borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
+const GRABBER = { width: 57, height: 4 } as const;
+const GRABBER_SLOT = { top: 6 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
 const SCRIM = { backgroundColor: "#000000" } as const;

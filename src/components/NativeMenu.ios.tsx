@@ -21,7 +21,9 @@ export function NativeMenuItems({ actions, menu }: { actions: readonly NativeMen
       modifiers={action.disabled ? [disabledModifier(true)] : undefined}
       label={action.detail ? undefined : action.title}
     >
-      {action.detail ? [<Text key="title">{action.title}</Text>, <Text key="detail">{action.detail}</Text>] : undefined}
+      {/* A custom label drops `systemImage`, so a two-line item carries its glyph as an Image: the menu takes the
+          Image as the item's icon and the two Texts as its title and subtitle. */}
+      {action.detail ? [<Image key="icon" systemName={action.checked ? "checkmark" : SF_SYMBOLS[action.icon]} />, <Text key="title">{action.title}</Text>, <Text key="detail">{action.detail}</Text>] : undefined}
     </Button>)}
   </>;
 }

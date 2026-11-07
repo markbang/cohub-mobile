@@ -26,11 +26,12 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
         <View className={`items-center justify-center rounded-xs ${danger ? "bg-danger" : "bg-surface-raised"}`} style={ICON_TILE}>
           <AppIcon name={icon} size={18} tone={danger ? "onAccent" : "secondary"} color={danger ? colors.dangerText : undefined} />
         </View>
-        <View className="min-w-0 flex-1 gap-0.5">
+        {/* As in iOS Settings, the title keeps its words and a trailing detail gives way first, truncating. */}
+        <View className="min-w-0 grow shrink basis-auto gap-0.5">
           <Text className={`text-body ${danger ? "text-danger" : "text-fg"}`}>{title}</Text>
           {value ? <Text className="text-caption text-fg-muted">{value}</Text> : null}
         </View>
-        {detail ? <Text numberOfLines={1} className="shrink text-right text-subhead text-fg-muted" style={{ maxWidth: "45%" }}>{detail}</Text> : null}
+        {detail ? <Text numberOfLines={1} className="min-w-0 text-right text-subhead text-fg-muted" style={DETAIL}>{detail}</Text> : null}
         {children}
         {onPress ? <AppIcon name={external ? "external-link" : "chevron-right"} size={16} tone="faint" /> : null}
       </View>
@@ -47,6 +48,7 @@ function PressableOrView({ onPress, disabled, title, icon, role, children }: { o
 }
 
 const ROW_HEIGHT = 52;
+const DETAIL = { maxWidth: "45%", flexShrink: 100 } as const;
 const ICON_TILE = { width: 30, height: 30, borderCurve: "continuous" } as const;
 /** 16 row padding + 30 icon tile + 12 gap. */
 const SEPARATOR_INSET = 58;

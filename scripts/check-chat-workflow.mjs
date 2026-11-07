@@ -803,7 +803,7 @@ for (const [tab, component, expectedRequests] of [
     ConnectionBanner: "ConnectionBanner", DataError: "DataError", LoadingRows: "LoadingRows", SectionHeader: "SectionHeader",
     EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", Segmented: "Segmented",
-    AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
+    AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor", SettingsGroup: "SettingsGroup", SettingsRow: "SettingsRow", Field: "Field", FIELD_INPUT_CLASS: "",
     nativeMenus: false, NativeMenuButton: "NativeMenuButton",
   });
   const render = () => { cursor = 0; return chromeNodes(renderTab()); };
@@ -973,7 +973,7 @@ for (const [tab, component, expectedRequests] of [
     firstParam: (value) => value ?? "", ...appHooks(() => ({ client })), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
     Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict, isMarkdownFile,
-    MenuPresence: "MenuPresence", AnchoredActionMenu: "AnchoredActionMenu", MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor", AnchoredActionMenu: "AnchoredActionMenu", MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const render = () => chromeNodes(runner.render(renderFile));
   const actions = () => chromeNodes(render().find((node) => node.type === "TopBar").props.actions);
@@ -1576,7 +1576,7 @@ for (const [path, labels, chips] of [
     Screen: "Screen", LegendList: "LegendList", AccountAvatar: "AccountAvatar", DataError: "DataError", LoadingRows: "LoadingRows", Field: "Field", FIELD_INPUT_CLASS: "",
     EmptyState: "EmptyState", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     AdaptiveSheet: "AdaptiveSheet", PrimaryButton: "PrimaryButton", FilterChip: "FilterChip", SpaceRow: "SpaceRow", SpaceSearchRow: "SpaceSearchRow",
-    nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence",
+    nativeMenus: false, NativeMenuButton: "NativeMenuButton", AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
   });
   const render = () => chromeNodes(screen.render(() => renderSpaces()));
   const list = () => render().find((node) => node.type === "LegendList");
@@ -1632,7 +1632,7 @@ try {
     useSessionSourcePreference: () => ({ filter: "all", error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => "all",
     useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
     Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
-    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence",
+    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
   });
   const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
   const order = () => list().props.data.map((item) => item.session.id);

@@ -11,7 +11,7 @@ import { GROUP_TILE, GroupAddRow, GroupRow, GroupSeparator, GroupSlot, GroupTile
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
-import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { cronSummaryText, formatRunTime } from "@/src/components/ScheduleForm";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
 import { useToast } from "@/src/components/Toast";
@@ -549,9 +549,9 @@ function MemberMenu({ name, actions }: { name: string; actions: readonly Anchore
   const label = t("space.settings.memberActions", { name });
   if (nativeMenus) return <NativeMenuButton appearance="plain" icon="more" label={label} actions={actions} />;
   return <>
-    <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}>
+    <MenuAnchor ref={anchorRef} open={open}>
       <IconButton name="more" label={label} onPress={() => setOpen(true)} />
-    </View>
+    </MenuAnchor>
     <MenuPresence open={open}><AnchoredActionMenu anchorRef={anchorRef} title={name} actions={actions} onClose={() => setOpen(false)} testID="space-member-menu" /></MenuPresence>
   </>;
 }

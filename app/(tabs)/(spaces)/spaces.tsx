@@ -4,7 +4,7 @@ import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/
 import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
-import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { FilterChip } from "@/src/components/FilterChip";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
@@ -252,9 +252,9 @@ export default function SpacesScreen() {
   return <Screen edgeToEdge>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
-      <View ref={filterButtonRef} collapsable={false} className={filterMenuOpen ? "opacity-0" : undefined}>
+      <MenuAnchor ref={filterButtonRef} open={filterMenuOpen}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
-      </View>
+      </MenuAnchor>
       <IconButton name="plus" label={t("spaces.action.create")} tone="accent" onPress={openCreate} />
     </>} />
     <ConnectionBanner visible={connectionUnavailable} />

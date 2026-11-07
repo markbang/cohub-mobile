@@ -19,7 +19,7 @@ export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile 
   ];
   return <ComposerMenu anchorRef={anchorRef} title={t("chat.attachment.title")} onClose={onClose} preferredWidth={240} testID="chat-attachment-menu">
     <ScrollView className="shrink" contentContainerClassName="p-1.5" keyboardShouldPersistTaps="handled">
-      {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} className="min-h-13 flex-row items-center gap-3 rounded-sm px-4 py-3 active:bg-surface-pressed">
+      {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} className="min-h-13 flex-row items-center gap-3 rounded-sm px-4 py-3 active:opacity-70">
         <AppIcon name={action.icon} size={22} tone="secondary" />
         <Text className="text-body text-fg flex-1">{action.label}</Text>
       </Pressable>)}

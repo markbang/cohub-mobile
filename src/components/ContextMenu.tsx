@@ -69,7 +69,7 @@ export function ContextMenu({
         onClose();
         action.onPress();
       }}
-      className="min-h-12 flex-row items-center gap-3 px-4 active:bg-surface-pressed"
+      className="min-h-12 flex-row items-center gap-3 px-4 active:opacity-70"
     >
       <AppIcon name={action.icon} size={18} tone="secondary" />
       <Text className="text-body font-semibold text-fg">{action.title}</Text>

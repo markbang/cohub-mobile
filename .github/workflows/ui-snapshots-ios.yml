@@ -21,6 +21,14 @@ on:
         required: false
         default: true
         type: boolean
+      ios:
+        description: The iOS the reference runs on. 27 uses GitHub's xcode-27 image (a preview); 26 the default macOS image.
+        required: false
+        default: "27"
+        type: choice
+        options:
+          - "27"
+          - "26"
 
 permissions:
   contents: read
@@ -43,7 +51,8 @@ env:
 jobs:
   ios:
     name: iOS simulator
-    runs-on: macos-latest
+    # The app is matched to iOS 27; GitHub ships its simulator only on the xcode-27 image.
+    runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -60,7 +69,11 @@ jobs:
 
       - name: Native fingerprint
         id: fingerprint
-        run: echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform ios | jq -r .hash)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform ios | jq -r .hash)" >> "$GITHUB_OUTPUT"
+          echo "xcode=$(xcodebuild -version | awk 'NR==2 {print $3}')" >> "$GITHUB_OUTPUT"
+          xcodebuild -version
+          xcrun simctl list runtimes
 
       - name: Restore simulator app
         id: app
@@ -68,7 +81,8 @@ jobs:
         with:
           path: build/ui-snapshots/Cohub-ios-simulator.zip
           # Bump the version when the simulator build settings change; they are not in the fingerprint.
-          key: ui-snapshots-ios-v2-${{ steps.fingerprint.outputs.hash }}
+          # The Xcode build is in the key: an app built by one Xcode is not reused under another's simulator.
+          key: ui-snapshots-ios-v3-${{ steps.fingerprint.outputs.xcode }}-${{ steps.fingerprint.outputs.hash }}
 
       - name: Build simulator app
         if: steps.app.outputs.cache-hit != 'true'

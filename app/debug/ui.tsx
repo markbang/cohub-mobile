@@ -11,7 +11,7 @@ import { NativeMenuButton, nativeMenus, type NativeMenuSection } from "@/src/com
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
-import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { PLATFORM_FONT_FAMILIES } from "@/src/ui/platform-fonts";
 import {
   AppSwitch,
@@ -246,7 +246,7 @@ function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | 
       <View className="flex-row">
         {nativeMenus
           ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" sections={MENU_SECTIONS} testID="ui-catalog-menu-button" />
-          : <View ref={anchorRef} collapsable={false} className={open ? "opacity-0" : undefined}><IconButton name="more" label="Open menu" onPress={onOpen} testID="ui-catalog-menu-button" /></View>}
+          : <MenuAnchor ref={anchorRef} open={open}><IconButton name="more" label="Open menu" onPress={onOpen} testID="ui-catalog-menu-button" /></MenuAnchor>}
       </View>
     </Block>
   );

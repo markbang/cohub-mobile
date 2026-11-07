@@ -83,7 +83,7 @@ export function HarnessPicker({
               accessibilityState={{ checked: selected, disabled: !enabled }}
               disabled={!enabled}
               onPress={() => { onSelect(harness); onClose(); }}
-              className={`${local ? "min-h-11" : "min-h-13"} flex-row items-center gap-3 rounded-sm px-3 py-2 disabled:opacity-50 ${selected ? "bg-surface-raised" : "active:bg-surface-raised"}`}
+              className={`${local ? "min-h-11" : "min-h-13"} flex-row items-center gap-3 rounded-sm px-3 py-2 disabled:opacity-50 ${selected ? "bg-surface-raised" : "active:opacity-70"}`}
             >
               <HarnessIcon harness={harness} size={20} />
               <View className="flex-1 min-w-0">

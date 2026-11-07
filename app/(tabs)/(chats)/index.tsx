@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { Text, TextInput, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
-import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
 import { SessionSearchRow, SpaceSearchRow } from "@/src/components/SearchResultRow";
@@ -214,9 +214,9 @@ export default function ChatsScreen() {
     <Screen edgeToEdge>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
-        <View ref={sourceButtonRef} collapsable={false} className={sourceMenuOpen ? "opacity-0" : undefined}>
+        <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
           <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
-        </View>
+        </MenuAnchor>
         <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
       </>} />
       <ConnectionBanner visible={connectionUnavailable} />

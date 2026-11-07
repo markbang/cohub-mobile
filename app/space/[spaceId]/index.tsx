@@ -3,7 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
-import { MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { ActivityHeatmap } from "@/src/components/ActivityHeatmap";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -259,7 +259,7 @@ export default function SpaceScreen() {
       drawn
       title={name}
       onBack={() => router.back()}
-      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} sections={spaceSections} testID="space-actions-menu" /> : <View ref={spaceActionsRef} collapsable={false} className={spaceActionsOpen ? "opacity-0" : undefined}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></View>}</>}
+      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} sections={spaceSections} testID="space-actions-menu" /> : <MenuAnchor ref={spaceActionsRef} open={spaceActionsOpen}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></MenuAnchor>}</>}
     />
     {realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{realtimeError}</Text> : null}
     {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}

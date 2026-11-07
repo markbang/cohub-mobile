@@ -18,6 +18,8 @@
   --color-surface-float: #ffffff;
   --color-glass-control: #fdfbf7;
   --color-glass-menu: #faf7f2;
+  --color-glass-lens: #ece9e4;
+  --color-glass-press: rgba(255, 255, 255, 0.36);
   --color-press-overlay: rgba(8, 9, 11, 0.08);
   --color-border: #e8e3da;
   --color-border-strong: #cdc6ba;
@@ -102,6 +104,8 @@
       --color-surface-float: #ffffff;
       --color-glass-control: #fdfbf7;
       --color-glass-menu: #faf7f2;
+      --color-glass-lens: #ece9e4;
+      --color-glass-press: rgba(255, 255, 255, 0.36);
       --color-press-overlay: rgba(8, 9, 11, 0.08);
       --color-border: #e8e3da;
       --color-border-strong: #cdc6ba;
@@ -145,6 +149,8 @@
       --color-surface-float: #2c2c2e;
       --color-glass-control: #171719;
       --color-glass-menu: #171718;
+      --color-glass-lens: #404043;
+      --color-glass-press: rgba(255, 255, 255, 0.14);
       --color-press-overlay: rgba(255, 255, 255, 0.12);
       --color-border: #38383a;
       --color-border-strong: #48484a;
