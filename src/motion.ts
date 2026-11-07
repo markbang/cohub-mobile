@@ -27,6 +27,8 @@ const SHEET_CRITICAL_DAMPING = 2 * Math.sqrt(SHEET_MASS * SHEET_STIFFNESS);
 export const springs = {
   sheet: { mass: SHEET_MASS, stiffness: SHEET_STIFFNESS, damping: SHEET_CRITICAL_DAMPING },
   sheetThrown: { mass: SHEET_MASS, stiffness: SHEET_STIFFNESS, damping: SHEET_CRITICAL_DAMPING * 0.8 },
+  /** iOS 27's sheet presentation, fitted to a recording (liquidglass): a fast launch that settles without overshoot. */
+  sheetPresent: { mass: 1, stiffness: 700, damping: 65 },
   /** A selection capsule sliding between tabs or segments. */
   indicator: { duration: 380, dampingRatio: 0.82 },
   pressIn: { duration: 140, dampingRatio: 1 },
@@ -54,6 +56,18 @@ export const tabBarMinimize = {
   release: { delay: 170, duration: 300, curve: [0.25, 0.1, 0.25, 1] },
 } as const;
 
+/**
+ * iOS 27's glass button under a finger, fitted by liquidglass to recordings: it grows until its longer side is
+ * 16 pt bigger, and on release bounces back about 29% past its resting size.
+ */
+export const glassPress = {
+  grow: 16,
+  press: { mass: 1, stiffness: 795, damping: 38 },
+  release: { mass: 1, stiffness: 342, damping: 13.5 },
+  /** A pressed glass label fades to this in light mode. */
+  inkOpacity: 0.77,
+} as const;
+
 /** Pressed scale for card/row press feedback; 1 means resting. */
 export const press = {
   scale: 0.985,
@@ -79,23 +93,25 @@ export const popover = {
 } as const;
 
 /**
- * A drawn menu grows out of the control that opened it and shrinks back into it, as iOS 26 menus do, fitted
- * frame by frame: the open springs 3% past full size at 140 ms; the close accelerates into the control in 220 ms,
- * the panel fading as it goes (`closeFade`, opacity by progress), and the control fades back in only once the
- * menu is gone (`reveal`).
+ * A drawn menu morphs out of its trigger and back as iOS 27's does; the frame-by-frame shape is in
+ * `src/ui/menu-morph.ts`. Its corner is iOS 27's menu radius.
  */
 export const menuMorph = {
-  open: { mass: 1, stiffness: 1150, damping: 0.75 * 2 * Math.sqrt(1150) },
-  close: { duration: 220, curve: [0.42, 0, 1, 1] },
-  closeFade: { progress: [0, 0.6, 1], opacity: [0, 0.4, 1] },
-  reveal: { duration: 120 },
+  radius: 33,
 } as const;
 
-/** Drawn Android alerts: UIAlertController's entrance, shrinking from 1.2 × while it fades in. */
+/**
+ * Drawn Android alerts: iOS 27's alert, settling from 1.125 × over 240 ms while it fades in. `settle` is its
+ * measured curve (liquidglass), as [time, progress] points.
+ */
 export const dialog = {
-  enter: { duration: 220 },
-  fromScale: 1.2,
+  enter: { duration: 240 },
+  fromScale: 1.125,
+  settle: [[0, 0], [0.07, 0.08], [0.14, 0.176], [0.21, 0.352], [0.28, 0.5], [0.35, 0.6], [0.42, 0.7], [0.49, 0.8], [0.56, 0.848], [0.63, 0.9], [0.77, 0.952], [1, 1]],
 } as const;
+
+/** iOS 27 dims the screen under an alert or sheet by a fifth, and by 48% in dark mode. */
+export const scrim = { light: 0.2, dark: 0.48 } as const;
 
 /** Ambient loops that signal ongoing work; each one stops under Reduce Motion unless noted. */
 export const loops = {

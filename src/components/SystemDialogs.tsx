@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import Reanimated, { Easing, withTiming } from "react-native-reanimated";
+import Reanimated, { withTiming } from "react-native-reanimated";
 import { useTranslation } from "@/src/i18n";
 import type { IconName } from "@/src/icons";
-import { curves, dialog } from "@/src/motion";
+import { dialog, scrim } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
 import { Loader } from "@/src/ui";
 import { ToastViewport } from "@/src/components/Toast";
@@ -27,7 +27,21 @@ export type ConfirmSheetProps = {
   testID?: string;
 };
 
-const ALERT_TIMING = { duration: dialog.enter.duration, easing: Easing.bezier(...curves.easeOut) };
+/** The measured settle, as a piecewise-linear easing. */
+function settle(t: number) {
+  "worklet";
+  const points = dialog.settle;
+  for (let i = 1; i < points.length; i++) {
+    const [t1, v1] = points[i];
+    if (t <= t1) {
+      const [t0, v0] = points[i - 1];
+      return v0 + (v1 - v0) * (t - t0) / (t1 - t0);
+    }
+  }
+  return 1;
+}
+
+const ALERT_TIMING = { duration: dialog.enter.duration, easing: settle };
 
 /** The alert settles in from above full size, as UIKit's does; the modal's own fade carries both its entrance and its exit. */
 function alertEntering() {
@@ -71,8 +85,7 @@ export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSh
 }
 
 /**
- * The iOS 26 alert, measured on a 402 pt iPhone: a 318 pt card 42 pt in from each edge with 34 pt
- * corners; the title's ink 26 pt below the top and its text 29 pt in; 48 pt capsule buttons 82 pt below
+ * The iOS alert, measured on a 402 pt iPhone: a 320 pt card (iOS 27) with 33 pt corners; the title's ink 26 pt below the top and its text 29 pt in; 48 pt capsule buttons 82 pt below
  * the title's ink, 8 apart and 15 pt from the card's edges.
  */
 function AlertCard({ visible, onClose, testID, title, lines, error = null, children }: { visible: boolean; onClose: () => void; testID?: string; title: string; lines: readonly (string | undefined)[]; error?: string | null; children: ReactNode }) {
@@ -99,17 +112,17 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
 function AlertButton({ label, tone = "default", busy = false, disabled = false, onPress }: { label: string; tone?: "default" | "accent" | "danger"; busy?: boolean; disabled?: boolean; onPress: () => void }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ busy, disabled: disabled || busy }} disabled={disabled || busy} onPress={onPress} className="min-h-12 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-dialog-button px-3 active:opacity-70 disabled:opacity-55">
     {busy ? <Loader /> : null}
-    <Text numberOfLines={1} className={`shrink text-body ${tone === "danger" ? "text-danger" : tone === "accent" ? "font-semibold text-accent" : "text-fg"}`}>{label}</Text>
+    <Text numberOfLines={1} className={`shrink text-body font-medium ${tone === "danger" ? "text-danger" : tone === "accent" ? "text-accent" : "text-fg"}`}>{label}</Text>
   </Pressable>;
 }
 
-const CARD_WIDTH = 318;
-const CARD_MARGIN = 42;
-const CARD_RADIUS = 34;
+const CARD_WIDTH = 320;
+const CARD_MARGIN = 41;
+const CARD_RADIUS = 33;
 // Inter's ink starts about 4.5 pt into the headline's line, so 21 puts it 26 pt below the card's top.
 const CONTENT_INSET = { paddingTop: 21, paddingHorizontal: 29 } as const;
 const BUTTON_INSET = { marginTop: 18, paddingHorizontal: 15, paddingBottom: 15 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black at a fixed alpha.
-const SCRIM_LIGHT = { backgroundColor: "rgba(0, 0, 0, 0.2)" } as const;
-// design-system: as above; iOS dims the dark appearance by half.
-const SCRIM_DARK = { backgroundColor: "rgba(0, 0, 0, 0.5)" } as const;
+const SCRIM_LIGHT = { backgroundColor: "#000000", opacity: scrim.light } as const;
+// design-system: as above; iOS 27 dims the dark appearance by 48%.
+const SCRIM_DARK = { backgroundColor: "#000000", opacity: scrim.dark } as const;

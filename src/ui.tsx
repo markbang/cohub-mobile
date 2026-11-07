@@ -40,7 +40,7 @@ import { useTranslation } from "@/src/i18n";
 import { edgeChrome, MAX_FONT_SCALE, useAppTheme, typography } from "@/src/theme";
 import { touchSlop } from "@/src/ui/touch-target";
 import type { ColorKey } from "@/src/design/tokens";
-import { curves, glyphSwap, motion, springs } from "@/src/motion";
+import { curves, glassPress, glyphSwap, motion, springs } from "@/src/motion";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
@@ -51,6 +51,7 @@ import { NativeSegmented, nativeSegmented } from "@/src/ui/NativeSegmented";
 import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSection } from "@/src/components/NativeMenu";
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
+import { MenuAnchor } from "@/src/ui/MorphMenuSurface";
 import type { AttachmentDraft, ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
@@ -119,6 +120,7 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
   const target = Math.max(44, size);
   const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
   const icon = glyph ?? <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
+  const glass = useGlassPress(filled ? GLASS_BUTTON_SIZE : 0, theme.mode === "light");
   return (
     <Pressable
       accessibilityRole="button"
@@ -127,8 +129,8 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
       testID={testID}
       hitSlop={6}
       disabled={disabled}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      onPressIn={(event) => { if (filled) glass.pressIn(); onPressIn?.(event); }}
+      onPressOut={(event) => { if (filled) glass.pressOut(); onPressOut?.(event); }}
       onTouchCancel={onTouchCancel}
       onPress={(event) => { traceAction("icon", { label, id: testID ?? name }); onPress(event); }}
       className={`items-center justify-center rounded-full disabled:opacity-45 ${filled ? "" : tone === "accent" || tone === "active" ? "active:bg-accent-soft" : tone === "danger" ? "active:bg-danger-soft" : "active:bg-surface-pressed"}`}
@@ -136,17 +138,39 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
     >
       {filled
         // A 44 pt glass circle, as iOS 26 draws bar buttons.
-        ? ({ pressed }) => <View className={`size-11 items-center justify-center rounded-full ${SOLID_GLASS_SHADOW}`} style={{ transform: [{ scale: pressed ? 0.9 : 1 }] }}>
+        ? <Animated.View className={`size-11 items-center justify-center rounded-full ${SOLID_GLASS_SHADOW}`} style={glass.style}>
           {/* Glass where the platform draws it; an accent button is glass tinted with the accent. */}
           <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} solidClassName="bg-glass-control" rim />
-          {icon}
-        </View>
+          <Animated.View pointerEvents="none" className="absolute inset-0 rounded-full bg-glass-press" style={glass.lightStyle} />
+          <Animated.View style={glass.inkStyle}>{icon}</Animated.View>
+        </Animated.View>
         : icon}
     </Pressable>
   );
 }
 
 const FILLED_ICON_SIZE = 18;
+const GLASS_BUTTON_SIZE = 44;
+
+/** iOS 27's glass press (`glassPress`): the glass swells, lightens and fades its ink, then bounces past rest. */
+function useGlassPress(size: number, light: boolean) {
+  const grown = 1 + glassPress.grow / Math.max(1, size);
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
+  const pressedness = () => {
+    "worklet";
+    return Math.min(1, Math.max(0, (scale.get() - 1) / (grown - 1)));
+  };
+  const lightStyle = useAnimatedStyle(() => ({ opacity: pressedness() }));
+  const inkStyle = useAnimatedStyle(() => ({ opacity: light ? 1 - (1 - glassPress.inkOpacity) * pressedness() : 1 }));
+  return {
+    style,
+    lightStyle,
+    inkStyle,
+    pressIn: () => scale.set(withSpring(grown, glassPress.press)),
+    pressOut: () => scale.set(withSpring(1, glassPress.release)),
+  };
+}
 // Android draws bar buttons solid, so the glass's soft shadow is drawn with them; iOS glass casts its own.
 const SOLID_GLASS_SHADOW = Platform.OS === "android" ? "shadow-glass" : "";
 /** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
@@ -620,19 +644,19 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-2">
-          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full bg-surface-raised active:bg-surface-pressed ${attachmentMenuOpen ? "opacity-0" : blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable>}
-          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <Pressable ref={harnessButtonRef} testID="chat-composer-harness" hitSlop={HARNESS_CHIP_SLOP} accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 max-w-26 shrink flex-row items-center gap-2 overflow-hidden rounded-sm px-2 bg-surface-raised active:bg-surface-pressed ${harnessMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`}>
+          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <MenuAnchor open={attachmentMenuOpen}><Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable></MenuAnchor>}
+          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <MenuAnchor open={harnessMenuOpen} className="min-w-0 max-w-26 shrink"><Pressable ref={harnessButtonRef} testID="chat-composer-harness" hitSlop={HARNESS_CHIP_SLOP} accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-sm px-2 bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
             <AppIcon name="chevron-down" size={14} tone="muted" />
-          </Pressable> : null}
-          {onModelPress ? <Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 shrink flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${modelMenuOpen ? "opacity-0" : blocked ? "opacity-50" : ""}`} style={{ maxWidth: "58%" }}>
+          </Pressable></MenuAnchor> : null}
+          {onModelPress ? <MenuAnchor open={modelMenuOpen} className="min-w-0 shrink" style={{ maxWidth: "58%" }}><Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-full px-3 bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-50" : ""}`}>
             <AppIcon name="zap" size={18} tone="secondary" />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelDetail ? <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="min-w-0 text-subhead text-fg-muted" style={MODEL_DETAIL_SHRINK}>{modelDetail}</Text> : null}
             {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
             <AppIcon name="chevron-down" size={14} tone="muted" />
-          </Pressable> : null}
+          </Pressable></MenuAnchor> : null}
           <View className="flex-1 min-w-0" />
           {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "bg-surface-raised active:bg-surface-pressed"} ${blocked ? "opacity-45" : ""}`}>{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={22} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : queues ? t("ui.composer.queue") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>

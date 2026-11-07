@@ -24,7 +24,7 @@ import { IconButton } from "@/src/ui";
 import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
 import { ToastViewport } from "@/src/components/Toast";
 import { setDialogOpen } from "@/src/data/interaction-trace";
-import { motion, springs } from "@/src/motion";
+import { motion, scrim, springs } from "@/src/motion";
 
 const COMPACT_BREAKPOINT = 720;
 // UIScrollView's fast deceleration rate (0.99 per ms) projects a release to where it would coast: v * r / (1 - r) / 1000.
@@ -83,8 +83,7 @@ export function AdaptiveSheet({
   const page = fullHeight || (compact && detent === "large");
   // A page sheet slides in from fully below the screen; a short one only needs to clear the bottom edge.
   const hiddenOffset = compact && page ? height : Math.min(height * 0.56, 520);
-  // design-system: iOS dims the screen under a sheet by a fifth, and by half in dark mode.
-  const scrimOpacity = theme.mode === "dark" ? 0.5 : 0.2;
+  const scrimOpacity = theme.mode === "dark" ? scrim.dark : scrim.light;
 
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -176,7 +175,7 @@ export function AdaptiveSheet({
     dragY.set(0);
     dragContext.set(0);
     const frame = requestAnimationFrame(() => {
-      progress.set(withSpring(1, { ...springs.sheet, overshootClamping: true }));
+      progress.set(withSpring(1, { ...springs.sheetPresent, overshootClamping: true }));
     });
 
     return () => cancelAnimationFrame(frame);
@@ -224,7 +223,7 @@ export function AdaptiveSheet({
   const availableHeight = Math.max(0, height - keyboardHeight);
   // As iOS 26's: a page sheet starts right under the status bar; a floating one keeps its margin all round.
   const maxHeight = compact
-    ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : 0))
+    ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : PAGE_GAP))
     : Math.max(0, Math.min(availableHeight - 48, 760));
   // A floating sheet ends above the screen's edge but still runs its content clear of the home indicator.
   const bottomPadding = floating ? theme.spacing.lg + insets.bottom : Math.max(insets.bottom, theme.spacing.lg);
@@ -331,12 +330,13 @@ const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: R
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
-// iOS 26's sheets on a 402 pt iPhone, measured: a fitted sheet floats 8 pt in with 36 pt corners; a page sheet's
-// top corners are 38 pt; the grabber is 36 × 5 pt.
+// iOS 27's sheets, measured (liquidglass): a fitted sheet floats 8 pt in with 38 pt corners; a page sheet
+// starts 5 pt under the status bar with 38 pt top corners; the grabber is 57 × 4 pt.
 const FLOAT_MARGIN = 8;
-const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 36 } as const;
+const PAGE_GAP = 5;
+const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 38 } as const;
 const PAGE_PANEL = { width: "100%", borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
-const GRABBER = { width: 36, height: 5 } as const;
+const GRABBER = { width: 57, height: 4 } as const;
 const GRABBER_SLOT = { top: 5 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
 const SCRIM = { backgroundColor: "#000000" } as const;

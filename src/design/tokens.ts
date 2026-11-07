@@ -6,7 +6,7 @@
  */
 
 export type ColorKey =
-  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassLens" | "pressOverlay"
+  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassLens" | "glassPress" | "pressOverlay"
   | "border" | "borderStrong"
   | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton"
   | "text" | "textSecondary" | "textMuted" | "textFaint"
@@ -29,6 +29,7 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   glassControl: "glass-control",
   glassMenu: "glass-menu",
   glassLens: "glass-lens",
+  glassPress: "glass-press",
   pressOverlay: "press-overlay",
   border: "border",
   borderStrong: "border-strong",
@@ -78,6 +79,8 @@ export const lightPalette: Palette = {
   glassControl: "#fdfbf7",
   glassMenu: "#faf7f2",
   glassLens: "#ece9e4",
+  // iOS 27 lightens pressed glass about a third of the way to white; in dark mode by less, greyer.
+  glassPress: "rgba(255, 255, 255, 0.36)",
   pressOverlay: "rgba(8, 9, 11, 0.08)",
   border: "#e8e3da",
   borderStrong: "#cdc6ba",
@@ -129,6 +132,7 @@ export const darkPalette: Palette = {
   glassControl: "#171719",
   glassMenu: "#171718",
   glassLens: "#404043",
+  glassPress: "rgba(255, 255, 255, 0.14)",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
   border: "#38383a",
   borderStrong: "#48484a",
