@@ -2347,6 +2347,7 @@ assert.equal(reconcileLatestTurn(completedTurn, { ...runningTurn, sequence: 8, u
 assert.equal(reconcileLatestTurn(completedTurn, { ...runningTurn, sequence: 10 })?.status, "running");
 assert.equal(reconcileLatestTurn(undefined, null), null);
 assert.equal(reconcileLatestTurn(completedTurn, null), completedTurn);
+assert.equal(reconcileLatestTurn(completedTurn, { ...completedTurn }), completedTurn, "a restated Turn keeps its identity so the store can skip the update");
 assert.deepEqual(reconcileTurnStatusPatch(runningTurn, { id: "t9", status: "completed", updatedAt: completedTurn.updatedAt }), completedTurn);
 assert.equal(reconcileTurnStatusPatch(completedTurn, { id: "t8", status: "running" }), completedTurn);
 assert.deepEqual(reconcileTurnStatusPatch(null, runningTurn), runningTurn);
@@ -2436,7 +2437,7 @@ function inspectPagination(node) {
   if (ts.isVariableDeclaration(node) && node.name.getText(contextSource) === "refreshChats") refreshChatsCallback = node.initializer.arguments[0].getText(contextSource);
   if (ts.isCallExpression(node) && ["useEffect", "useLayoutEffect"].includes(node.expression.getText(contextSource)) && node.arguments[0]?.getText(contextSource).includes("stateRef.current = state;")) stateSyncHook = node.expression.getText(contextSource);
   // The provider stages its snapshot during render; `stateRef` reads that staged state.
-  if (ts.isFunctionDeclaration(node) && node.name?.text === "AppProvider" && /store\.setState\(\(current\) => \(\{ state: reducer\(current\.state, action\) \}\)\)/.test(node.getText(contextSource)) && /const \[stateRef\] = useState\(\(\) => \(\{ get current\(\) \{ return store\.getState\(\)\.state; \} \}\)\);/.test(node.getText(contextSource))) stateSyncHook = "store";
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "AppProvider" && /const next = reducer\(current, action\);\s*if \(next !== current\) store\.setState\(\{ state: next \}\);/.test(node.getText(contextSource)) && /const \[stateRef\] = useState\(\(\) => \(\{ get current\(\) \{ return store\.getState\(\)\.state; \} \}\)\);/.test(node.getText(contextSource))) stateSyncHook = "store";
   if (ts.isFunctionDeclaration(node) && node.name?.text === "withTimeout") timeoutSource = node.getText(contextSource);
   ts.forEachChild(node, inspectPagination);
 }
@@ -2466,6 +2467,7 @@ assert.equal(reduceListSync(backgroundStatusStart, { type: "session-status-end",
 const newerOutcome = reduceListSync(listSyncState, { type: "session-latest-turn", sessionId: "chat", turn: { ...completedTurn, sequence: 10 } });
 const olderOutcome = reduceListSync(newerOutcome, { type: "session-latest-turn", sessionId: "chat", turn: { ...completedTurn, id: "older", sequence: 9 } });
 assert.equal(olderOutcome.sessionLatestTurns.chat.sequence, 10);
+assert.equal(reduceListSync(newerOutcome, { type: "session-latest-turn", sessionId: "chat", turn: { ...completedTurn, sequence: 10 } }), newerOutcome, "an unchanged status read or repeated realtime Turn leaves the state untouched");
 assert.equal(olderOutcome.sessionTurnStatuses.older.status, "completed", "older active-turn reconciliation records its terminal state without replacing the latest outcome");
 const partialRunningState = reduceListSync(listSyncState, { type: "running-success", source: "all", sessions: [runningFixture], changedSessionIds: [], complete: false });
 assert.equal(partialRunningState.runningSessions.all.loading, true);
