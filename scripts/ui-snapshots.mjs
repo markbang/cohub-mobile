@@ -83,8 +83,9 @@ export const SCREENS = [
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
-// The left pane's first Chat or Space row in a split window.
+// The left pane's first and a later Chat or Space row in a split window.
 const LEFT_FIRST_ROW = { ios: "12%, 35%", android: "12%, 35%" };
+const LEFT_SECOND_ROW = { ios: "12%, 44%", android: "12%, 44%" };
 
 /** Split-window screens: the right pane empty, a Chat, a Space, a settings page, the Chat's panel, and an overlay. */
 export const TABLET_SCREENS = [
@@ -103,10 +104,8 @@ export const TABLET_SCREENS = [
 ];
 
 /** The same operations on every target, timed by the frame probe: a long fixture, a real Chat, and the tabs. */
-const PERF_STEPS = {
-  phone: [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }],
-  tablet: [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }],
-};
+const perfSteps = (row) => [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: row }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }];
+const PERF_STEPS = { phone: perfSteps(FIRST_ROW), tablet: perfSteps(LEFT_FIRST_ROW) };
 
 /**
  * Interactions recorded as video, the same on both platforms. `setup` runs before the recording
@@ -160,6 +159,7 @@ function parseArgs(argv) {
     options.orientations ??= options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"];
     for (const orientation of options.orientations) if (!SIZE_BANDS[`${options.target}-${orientation}`]) throw new Error(`The ${options.target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
     if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
+    if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
     const known = new Set((options.target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name));
     for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
     options.out ??= resolve("dist/ui-snapshots", options.platform);
@@ -371,7 +371,7 @@ function buildFlow({ platform, screens, target, orientation }) {
 function buildTabletFlow({ platform }) {
   const lines = preamble(platform, "portrait");
   checkSplit(lines, platform);
-  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_FIRST_ROW[platform].replace(/\d+%$/, (y) => `${Number.parseInt(y, 10) + 9}%`))}`].join("\n")}\n`;
+  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`].join("\n")}\n`;
 }
 
 /** One pass of the perf sequence from a fresh launch. */

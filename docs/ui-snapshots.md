@@ -42,7 +42,7 @@ Use `--no-metro` when Metro is already running on port 8081. Android phone captu
 
 - Devices: iOS uses an iPad simulator from `IOS_DEVICES.tablet` (the iPad Air 11-inch is 820 × 1180 pt). Android uses the `pixel_tablet` AVD at its own density (800 × 1280 dp). Phone runs keep their fixed 402-wide density.
 - Orientation: `orientations` (default `portrait,landscape`). Android turns from the host with `user_rotation`. iOS turns with Maestro's `setOrientation` at the start of each flow.
-- Before each orientation, capture checks the device's logical size against `SIZE_BANDS`. Each flow then asserts that the app drew `split-right-pane`, so a run that falls back to the phone layout fails instead of producing screenshots.
+- Before each orientation, capture checks the device's logical size against `SIZE_BANDS`: Android measures it from `wm size` and `wm density`, and iOS reads it from the `IOS_DEVICES` table. Each flow then asserts that the app drew `split-right-pane`, so a run that falls back to the phone layout fails instead of producing screenshots.
 - Output: `<target>-<orientation>/<theme>/<screen>.png` from `TABLET_SCREENS`. `compare` pairs these groups as `<screen>.<target>-<orientation>.<theme>.png`.
 - Interaction flow: `e2e/tablet/split.yaml` runs once in the light theme. It covers the unread mark clearing when a Chat opens, the missing back button on the right pane's first screen, a draft surviving a rotation, a second Chat replacing the first, Android back emptying the pane, and New Chat taking over the right pane. Its screenshots are in `tablet-flow/`. The New Chat step sends a real message from the test account.
 

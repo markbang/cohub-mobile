@@ -48,6 +48,15 @@ name: Tablet split layout
 # The right pane's first screen has no back button.
 - assertNotVisible: "Back"
 - takeScreenshot: "flow-02-chat-read"
+# Switching tabs changes only the left pane.
+- tapOn: "Spaces"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: "chat-composer-input"
+- tapOn: "Chats"
+- assertVisible:
+    selected: true
 
 # A draft survives turning the window.
 - tapOn:

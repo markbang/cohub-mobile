@@ -10,7 +10,7 @@ export type SplitLayout = { mode: SplitMode; selectedChatId: string | null; pane
  * The pane a screen draws in: its width, and in the left pane the route keys on view (the selected
  * tab and the screen on top of its stack), which count as visible while the right pane holds focus.
  */
-export type Pane = { side: "left" | "right"; width: number; visibleKeys: ReadonlySet<string> | null };
+export type Pane = { width: number; visibleKeys: ReadonlySet<string> | null };
 
 const COMPACT: SplitLayout = { mode: "compact", selectedChatId: null, paneTopName: undefined };
 
@@ -32,8 +32,7 @@ export function usePaneWidth(): number {
 
 /** Whether the screen's bar draws a back button: the right pane's first screen has nowhere to go back to. */
 export function usePaneBack(): boolean {
-  const { mode } = useSplitLayout();
-  return showsPaneBack(mode, useContext(PaneRouteIndexContext));
+  return showsPaneBack(useContext(PaneRouteIndexContext));
 }
 
 /**
@@ -77,13 +76,15 @@ type ChatTarget = { sessionId: string; turn?: string; turnId?: string; spaceId?:
  */
 export function useOpenChat(): (target: ChatTarget) => void {
   const router = useRouter();
-  const { mode, paneTopName } = useSplitLayout();
+  const { mode, paneTopName, selectedChatId } = useSplitLayout();
   return useCallback((target: ChatTarget) => {
+    // The Chat already open beside the list stays as it is, scroll position included.
+    if (paneTopName === "chat/[sessionId]" && target.sessionId === selectedChatId && !target.turn && !target.turnId) return;
     const action = chatOpenAction(mode, paneTopName);
-    if (!action.animated) unanimatedChat = target.sessionId;
+    if (!action.animated) requestUnanimatedChat(target.sessionId);
     const params = Object.fromEntries(Object.entries(target).filter((entry) => entry[1] !== undefined)) as ChatTarget;
     const href = { pathname: "/chat/[sessionId]" as const, params };
     if (action.kind === "replace") router.replace(href);
     else router.push(href);
-  }, [mode, paneTopName, router]);
+  }, [mode, paneTopName, router, selectedChatId]);
 }

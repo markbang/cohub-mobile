@@ -5,13 +5,13 @@
  */
 export type SplitMode = "compact" | "split";
 
-export const SPLIT_MIN_WIDTH = 700;
-export const SPLIT_MIN_HEIGHT = 500;
+const SPLIT_MIN_WIDTH = 700;
+const SPLIT_MIN_HEIGHT = 500;
 const LEFT_PANE_MIN = 320;
 const LEFT_PANE_MAX = 420;
 
 /** Routes drawn over both panes rather than inside the right one. */
-export const SPLIT_OVERLAY_ROUTES: ReadonlySet<string> = new Set(["new-chat", "image-viewer", "media-viewer"]);
+const SPLIT_OVERLAY_ROUTES: ReadonlySet<string> = new Set(["new-chat", "image-viewer", "media-viewer"]);
 
 export function splitMode(width: number, height: number): SplitMode {
   return width >= SPLIT_MIN_WIDTH && height >= SPLIT_MIN_HEIGHT ? "split" : "compact";
@@ -48,15 +48,16 @@ export function focusedRouteKeys(state: NestedState): string[] {
   return keys;
 }
 
+export function chatSessionId(route: RouteLike): string | undefined {
+  if (route.name !== "chat/[sessionId]") return undefined;
+  const id = (route.params as { sessionId?: unknown } | undefined)?.sessionId;
+  return typeof id === "string" ? id : undefined;
+}
+
 /** The Chat the right pane shows, which the left list marks as selected. */
 export function selectedChatId(pane: readonly RouteLike[]): string | null {
-  for (let index = pane.length - 1; index >= 0; index -= 1) {
-    const route = pane[index];
-    if (route.name !== "chat/[sessionId]") continue;
-    const id = (route.params as { sessionId?: unknown } | undefined)?.sessionId;
-    return typeof id === "string" && id !== "new" ? id : null;
-  }
-  return null;
+  const id = pane.map(chatSessionId).findLast((value) => value !== undefined);
+  return id && id !== "new" ? id : null;
 }
 
 /**
@@ -68,7 +69,7 @@ export function chatOpenAction(mode: SplitMode, topRouteName: string | undefined
   return { kind: topRouteName === "chat/[sessionId]" ? "replace" : "push", animated: false };
 }
 
-/** The right pane's first screen has nothing to go back to inside the pane. */
-export function showsPaneBack(mode: SplitMode, paneIndex: number | null): boolean {
-  return mode === "compact" || paneIndex === null || paneIndex > 0;
+/** The right pane's first screen has nothing to go back to inside the pane; `null` is outside it. */
+export function showsPaneBack(paneIndex: number | null): boolean {
+  return paneIndex !== 0;
 }

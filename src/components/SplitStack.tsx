@@ -1,10 +1,12 @@
-import { createNativeStackProps, createStandardRouterNavigator, IsWithinNativeNavigator, StackRouter, useRouter, type NativeStackNavigationOptions, type NavigatorContentProps } from "expo-router";
+import { createNativeStackProps, createStandardRouterNavigator, IsWithinNativeNavigator, useRouter, type NativeStackNavigationOptions, type NavigatorContentProps } from "expo-router";
 import { createStandardNativeStackNavigator, type NativeStackNavigatorCreateProps, type StandardNativeStackEventMap } from "expo-router/build/fork/native-stack/createNativeStackNavigator";
+// The router `Stack` itself uses: singular routes, the zoom-transition id, and previews on top of React Navigation's.
+import { StackRouter } from "expo-router/build/layouts/stack-router";
 import { useLinkPreviewContext } from "expo-router/build/link/preview/LinkPreviewContext";
 import { INTERNAL_EXPO_ROUTER_NO_ANIMATION_PARAM_NAME } from "expo-router/build/navigationParams";
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
-import { focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
+import { chatSessionId, focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
 import { useTranslation } from "@/src/i18n";
 import { PrimaryButton } from "@/src/ui";
 import { Mascot } from "@/src/ui/Mascot";
@@ -27,7 +29,6 @@ const NativeStackContent = createStandardNativeStackNavigator.NavigatorContent;
  */
 function SplitStackContent(props: ContentProps) {
   const { state, descriptors, emitter, isPreloaded } = props;
-  const { t } = useTranslation();
   const window = useWindowDimensions();
   const mode = splitMode(window.width, window.height);
   const split = mode === "split";
@@ -41,7 +42,7 @@ function SplitStackContent(props: ContentProps) {
   const [unanimated, setUnanimated] = useState<{ top: string | undefined; keys: ReadonlySet<string> }>({ top: undefined, keys: new Set() });
   if (unanimated.top !== paneTop?.key) {
     const keys = new Set([...unanimated.keys].filter((key) => pane.some((route) => route.key === key)));
-    if (paneTop && isUnanimatedChat(chatParam(paneTop))) keys.add(paneTop.key);
+    if (paneTop && isUnanimatedChat(chatSessionId(paneTop))) keys.add(paneTop.key);
     setUnanimated({ top: paneTop?.key, keys });
   }
   useEffect(clearUnanimatedChat, [unanimated.top]);
@@ -55,11 +56,11 @@ function SplitStackContent(props: ContentProps) {
     },
   }), [emitter, setUnanimated]);
 
-  const layout = useMemo<SplitLayout>(() => ({ mode, selectedChatId: split ? selectedChatId(pane) : null, paneTopName: paneTop?.name }), [mode, pane, paneTop?.name, split]);
+  const layout = useMemo<SplitLayout>(() => ({ mode, selectedChatId: selectedChatId(pane), paneTopName: paneTop?.name }), [mode, pane, paneTop?.name]);
   const overlayOnTop = overlays.some((route) => !isPreloaded(route.key));
   const rootState = (root as Route & { state?: RouteState }).state;
-  const leftPane = useMemo<Pane>(() => ({ side: "left", width: leftWidth, visibleKeys: split && !overlayOnTop ? new Set(focusedRouteKeys(rootState)) : null }), [leftWidth, overlayOnTop, rootState, split]);
-  const rightPane = useMemo<Pane>(() => ({ side: "right", width: window.width - leftWidth, visibleKeys: null }), [leftWidth, window.width]);
+  const leftPane = useMemo<Pane>(() => ({ width: leftWidth, visibleKeys: split && !overlayOnTop ? new Set(focusedRouteKeys(rootState)) : null }), [leftWidth, overlayOnTop, rootState, split]);
+  const rightPane = useMemo<Pane>(() => ({ width: window.width - leftWidth, visibleKeys: null }), [leftWidth, window.width]);
 
   const paneDescriptors = useMemo(() => {
     const result: Descriptors = { ...descriptors };
@@ -83,7 +84,7 @@ function SplitStackContent(props: ContentProps) {
     ...descriptors,
     [root.key]: {
       ...rootDescriptor,
-      render: () => <SplitRoot split={split} leftWidth={leftWidth} leftPane={leftPane} rightPane={rightPane} paneStack={paneStack} empty={<EmptyPane label={t("chats.action.newChat")} />}>{rootDescriptor.render()}</SplitRoot>,
+      render: () => <SplitRoot split={split} leftPane={leftPane} rightPane={rightPane} paneStack={paneStack}>{rootDescriptor.render()}</SplitRoot>,
     },
   };
   const outerState = split ? { index: overlays.length, routes: [root, ...overlays] } : state;
@@ -93,29 +94,24 @@ function SplitStackContent(props: ContentProps) {
   </SplitLayoutContext>;
 }
 
-function chatParam(route: Route): string | undefined {
-  if (route.name !== "chat/[sessionId]") return undefined;
-  const id = (route.params as { sessionId?: unknown } | undefined)?.sessionId;
-  return typeof id === "string" ? id : undefined;
-}
-
 /** The tab app's screen. Its children keep one position in both layouts, so switching never remounts the tabs. */
-function SplitRoot({ split, leftWidth, leftPane, rightPane, paneStack, empty, children }: { split: boolean; leftWidth: number; leftPane: Pane; rightPane: Pane; paneStack: ReactNode; empty: ReactNode; children: ReactNode }) {
+function SplitRoot({ split, leftPane, rightPane, paneStack, children }: { split: boolean; leftPane: Pane; rightPane: Pane; paneStack: ReactNode; children: ReactNode }) {
   return <View className="flex-1 flex-row">
     {/* Each pane clips its own push transitions and slide-out panels. */}
-    <View className={split ? "overflow-hidden border-border" : "flex-1"} style={split ? { width: leftWidth, borderRightWidth: StyleSheet.hairlineWidth } : undefined}>
+    <View className={split ? "overflow-hidden border-border" : "flex-1"} style={split ? { width: leftPane.width, borderRightWidth: StyleSheet.hairlineWidth } : undefined}>
       <PaneContext value={split ? leftPane : null}>{children}</PaneContext>
     </View>
-    {split ? <View testID="split-right-pane" className="flex-1 overflow-hidden"><PaneContext value={rightPane}>{paneStack ?? empty}</PaneContext></View> : null}
+    {split ? <View testID="split-right-pane" className="flex-1 overflow-hidden"><PaneContext value={rightPane}>{paneStack ?? <EmptyPane />}</PaneContext></View> : null}
   </View>;
 }
 
 /** No Chat is open. Opening the latest one would mark it read, so the pane waits for a choice. */
-function EmptyPane({ label }: { label: string }) {
+function EmptyPane() {
   const router = useRouter();
+  const { t } = useTranslation();
   return <View className="flex-1 items-center justify-center gap-3 bg-background">
     <Mascot size={92} />
-    <PrimaryButton label={label} icon="square-pen" variant="ghost" onPress={() => router.push("/new-chat")} />
+    <PrimaryButton label={t("chats.action.newChat")} icon="square-pen" variant="ghost" onPress={() => router.push("/new-chat")} />
   </View>;
 }
 

@@ -5104,11 +5104,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(chatOpenAction("split", undefined), { kind: "push", animated: false }, "an empty right pane takes the Chat in place");
   assert.deepEqual(chatOpenAction("split", "chat/[sessionId]"), { kind: "replace", animated: false }, "selecting another Chat replaces the one on top instead of stacking it");
   assert.deepEqual(chatOpenAction("split", "space/[spaceId]"), { kind: "push", animated: false }, "a Chat opened over a Space page keeps the page under it");
-  assert.equal(showsPaneBack("compact", null), true);
-  assert.equal(showsPaneBack("compact", 0), true, "a compact window always draws back");
-  assert.equal(showsPaneBack("split", 0), false, "the right pane's first screen has no back");
-  assert.equal(showsPaneBack("split", 1), true, "deeper right-pane screens go back as usual");
-  assert.equal(showsPaneBack("split", null), true, "screens over both panes keep their back");
+  assert.equal(showsPaneBack(null), true, "a compact window, and screens over both panes, keep their back");
+  assert.equal(showsPaneBack(0), false, "the right pane's first screen has no back");
+  assert.equal(showsPaneBack(1), true, "deeper right-pane screens go back as usual");
   const route = (name, key = name, params) => ({ name, key, params });
   const tabs = route("(tabs)");
   assert.deepEqual(splitRoutes([tabs]), { pane: [], overlays: [] });

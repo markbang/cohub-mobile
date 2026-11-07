@@ -1,4 +1,6 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
+import { NavigationHelpersContext } from "expo-router/build/react-navigation/core/NavigationHelpersContext";
+import { TabActions } from "expo-router/build/react-navigation/routers/TabRouter";
 import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { haptics } from "@/src/platform/haptics";
@@ -143,8 +145,9 @@ function rubberBand(overshoot: number, limit: number) {
   return limit * pull * Math.sign(overshoot);
 }
 
-export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
+export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTabBarProps) {
   const theme = useAppTheme();
+  const tabs = useContext(NavigationHelpersContext);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [lensLifted, setLensLifted] = useState(false);
   const routes = state.routes;
@@ -193,8 +196,10 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
     // A press on the current tab still emits tabPress so its screen can scroll to top.
     if (state.index === index || event.defaultPrevented) return;
-    navigateToTab(route.key);
-  }, [emitter, navigateToTab, routes, state.index]);
+    // JUMP_TO, as the iOS system tab bar sends: a NAVIGATE would also focus the tab app in the root
+    // stack and pop the Chat open beside it in a split window.
+    tabs?.dispatch(TabActions.jumpTo(route.name, route.params));
+  }, [emitter, routes, state.index, tabs]);
 
   useEffect(() => {
     selected.set(state.index);
