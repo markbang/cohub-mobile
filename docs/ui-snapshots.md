@@ -54,7 +54,7 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 `app/debug/ui.tsx` is the UI catalog, a page that shows every shared primitive. `?section=` limits it to one section so each fits in a single screenshot. When you add or restyle a shared component, add it to the catalog.
 
-`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states`), so the Chat layout can be compared without an account's data.
+`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states|media|stream`), so the Chat layout can be compared without an account's data. `&native=0` draws the JS list that binaries without the native timeline fall back to; only that list shows the `stream` fixture's reply in progress.
 
 ## Recordings
 

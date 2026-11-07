@@ -23,9 +23,10 @@ const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
   const router = useRouter();
-  // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it.
+  // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
+  // `?native=0` draws the JS list that binaries without the native timeline fall back to.
   const params = useLocalSearchParams<{ fixture?: string; native?: string }>();
-  const useNative = nativeChatTimeline || (ChatTimelineView !== null && params.native === "1");
+  const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
   const messages = useMemo(() => conversation(fixture), [fixture]);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
