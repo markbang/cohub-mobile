@@ -19,7 +19,8 @@ import { __iconData as images } from "lucide-react-native/icons/images";
 import { __iconData as refresh } from "lucide-react-native/icons/refresh-cw";
 import { __iconData as search } from "lucide-react-native/icons/search";
 import { __iconData as squarePen } from "lucide-react-native/icons/square-pen";
-import { __iconData as terminal } from "lucide-react-native/icons/terminal";
+// SF Symbols' terminal is boxed, so Android draws Lucide's boxed one rather than the bare prompt.
+import { __iconData as terminal } from "lucide-react-native/icons/square-terminal";
 import { __iconData as trash } from "lucide-react-native/icons/trash";
 import type { IconName } from "@/src/icons";
 
