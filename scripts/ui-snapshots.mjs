@@ -290,7 +290,7 @@ function pushSteps(lines, platform, steps = []) {
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint[platform])}`, SETTLE);
-    else if (step.longPressOn) lines.push("- longPressOn:", `    text: ${yamlString(step.longPressOn)}`);
+    else if (step.longPressOn) lines.push("- longPressOn:", `    text: ${yamlString(step.longPressOn)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
