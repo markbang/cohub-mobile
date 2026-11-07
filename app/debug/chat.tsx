@@ -1,19 +1,20 @@
 import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Text, View, useWindowDimensions } from "react-native";
-import { MessageBubble } from "@/src/components/MessageContent";
+import { FlatList, Text, View } from "react-native";
+import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
+import { usePaneWidth } from "@/src/ui/pane";
 
 /**
  * The Chat screen's own chrome and native timeline over fixed conversations, so its layout can be
  * captured on both platforms without an account's data. `?fixture=` picks the conversation.
  */
-const FIXTURES = ["conversation", "tools", "long", "states"] as const;
+const FIXTURES = ["conversation", "tools", "long", "states", "media", "stream"] as const;
 type Fixture = (typeof FIXTURES)[number];
 
 const NO_TURNS: ReadonlyMap<string, SessionTurnRecord> = new Map();
@@ -31,7 +32,7 @@ export default function DebugChatScreen() {
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
   const [draft, setDraft] = useState("");
-  const { width } = useWindowDimensions();
+  const width = usePaneWidth();
   // Printed under the bar so a snapshot shows whether rows were laid out (frame) even when none is painted.
   const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const [probe, setProbe] = useState("probing…");
@@ -115,6 +116,8 @@ export default function DebugChatScreen() {
         keyExtractor={(message) => message.id}
         renderItem={({ item }) => <MessageBubble message={item} availableWidth={width} />}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
+        // A reply still being written; the native timeline reads live replies from a Chat's stream, which a fixture has none of.
+        ListFooterComponent={fixture === "stream" ? <StreamCard content={STREAM_REPLY} status="streaming" availableWidth={width} /> : null}
       />}
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
@@ -124,6 +127,9 @@ export default function DebugChatScreen() {
 }
 
 type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string };
+
+const PNG = (data: string): ContentBlock => ({ type: "image", source: { type: "base64", media_type: "image/png", data } });
+const STREAM_REPLY: ContentBlock[] = [{ type: "text", text: "Three issues are open. The Android sheet height is the oldest; the other two are about the tablet layout and" }];
 
 const SCRIPTS: Record<Fixture, Line[]> = {
   conversation: [
@@ -151,6 +157,13 @@ const SCRIPTS: Record<Fixture, Line[]> = {
   long: Array.from({ length: 24 }, (_, index): Line => index % 2 === 0
     ? { role: "user", text: [`Question ${index / 2 + 1}`, "Can you check this as well?", "A longer question that wraps onto a second line so the bubble grows with its text."][index % 3] }
     : { role: "assistant", text: [`Answer ${Math.ceil(index / 2)}. Done.`, "Here is a paragraph long enough to wrap across several lines, so the reading width and line height show clearly in the snapshot.", "- First point\n- Second point\n- Third point"][index % 3] }),
+  media: [
+    { role: "user", content: [{ type: "text", text: "Two references for the header." }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC"), PNG("iVBORw0KGgoAAAANSUhEUgAAAAwAAAAQCAIAAACtAwlQAAAAFUlEQVR4nGOwqThBEDGMKhpVRJwiADSXHRBuHmapAAAAAElFTkSuQmCC")] },
+    { role: "assistant", content: [{ type: "text", text: "Both are in. The wide one sets the header's height; the tall one crops to it." }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC")] },
+  ],
+  stream: [
+    { role: "user", text: "Summarize the open issues." },
+  ],
   states: [
     { role: "user", text: "A message that sent normally." },
     { role: "assistant", text: "A normal reply." },

@@ -3,7 +3,7 @@
     "name": "Cohub",
     "slug": "cohub-mobile",
     "version": "2.3.10",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "cohub",
     "userInterfaceStyle": "automatic",
@@ -20,7 +20,17 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Cohub uses the camera to attach references to a Chat, and lets Works you approve use it.",
         "NSMicrophoneUsageDescription": "Cohub uses the microphone for voice input, and lets Works you approve use it.",
-        "NSPhotoLibraryUsageDescription": "Cohub uses your photo library to attach references to a Chat."
+        "NSPhotoLibraryUsageDescription": "Cohub uses your photo library to attach references to a Chat.",
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       },
       "icon": "./assets/images/cohub.icon"
     },

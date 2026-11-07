@@ -1,18 +1,24 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 
 /**
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
  * UI can be compared with the iOS system UI without a local simulator.
  *
- *   capture --platform android|ios --app <apk|.app|.zip> [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion]
+ *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
+ *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
  * After the screenshots it records each of MOTIONS as a video (light theme, animations on); compare
  * pairs those too, so motion can be tuned frame by frame.
+ *
+ * `--target tablet` runs on an iPad simulator or a tablet emulator at its own density, in each of
+ * `--orientations`, and writes `<target>-<orientation>/<theme>/`; the phone keeps `<theme>/`. It
+ * then runs the split-layout interaction flow (e2e/tablet/split.yaml). `--perf <runs>` repeats one
+ * operation sequence with the frame probe on and writes its raw stall records to `perf/<group>.json`.
  */
 
 const PACKAGE_ID = "io.github.markbang.cohubmobile";
@@ -20,7 +26,18 @@ const METRO_PORT = 8081;
 const LOGIN_FLOWS = { android: "e2e/auth/login.yaml", ios: "e2e/auth/login.ios.yaml" };
 // iPhone 17 Pro width; the Android emulator's density is set so both lay out at the same width.
 const LOGICAL_WIDTH = 402;
-const IOS_DEVICES = ["iPhone 17 Pro", "iPhone 16 Pro", "iPhone 17", "iPhone 16"];
+// Logical portrait sizes in points; capture asserts the device it got lays out in its target's band.
+const IOS_DEVICES = {
+  phone: { "iPhone 17 Pro": [402, 874], "iPhone 16 Pro": [402, 874], "iPhone 17": [402, 874], "iPhone 16": [393, 852] },
+  tablet: { "iPad Air 11-inch (M3)": [820, 1180], "iPad Air 11-inch (M2)": [820, 1180], "iPad (A16)": [820, 1180], "iPad Pro 11-inch (M4)": [834, 1210] },
+};
+// The split layout starts at 700 × 500 (src/data/split-navigation.ts); each band sits clear of that edge.
+const SIZE_BANDS = {
+  "phone-portrait": { width: [375, 440], height: [800, 960] },
+  "tablet-portrait": { width: [744, 1000], height: [1000, 1400] },
+  "tablet-landscape": { width: [1000, 1400], height: [744, 1000] },
+};
+const TABLET_FLOW = "e2e/tablet/split.yaml";
 const PAIR_HEIGHT = 1400;
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
@@ -66,6 +83,31 @@ export const SCREENS = [
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
 ];
 
+// The left pane's first Chat or Space row in a split window.
+const LEFT_FIRST_ROW = { ios: "12%, 35%", android: "12%, 35%" };
+
+/** Split-window screens: the right pane empty, a Chat, a Space, a settings page, the Chat's panel, and an overlay. */
+export const TABLET_SCREENS = [
+  { name: "split-empty", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { waitFor: "New Chat" }] },
+  { name: "split-chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }] },
+  { name: "split-chat-panel", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { tapOn: "Open Chats" }] },
+  { name: "split-chat-conversation", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
+  { name: "split-chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
+  { name: "split-chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
+  { name: "split-chat-media", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=media" },
+  { name: "split-chat-media-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=media&native=1", steps: [{ waitFor: "setRows" }] },
+  { name: "split-chat-stream", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=stream" },
+  { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
+  { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
+  { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "New Chat" }, { waitFor: "Search" }] },
+];
+
+/** The same operations on every target, timed by the frame probe: a long fixture, a real Chat, and the tabs. */
+const PERF_STEPS = {
+  phone: [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }],
+  tablet: [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }],
+};
+
 /**
  * Interactions recorded as video, the same on both platforms. `setup` runs before the recording
  * starts. `back` is the system back on Android and the edge swipe on iOS, which has no back key.
@@ -87,7 +129,7 @@ export const MOTIONS = [
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, target: "phone", orientations: null, perf: 0 };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -104,6 +146,9 @@ function parseArgs(argv) {
     else if (flag === "--android") options.android = resolve(value());
     else if (flag === "--no-metro") options.metro = false;
     else if (flag === "--no-motion") options.motion = false;
+    else if (flag === "--target") options.target = value();
+    else if (flag === "--orientations") options.orientations = value().split(",").map((name) => name.trim()).filter(Boolean);
+    else if (flag === "--perf") options.perf = Number(value());
     else if (flag === "--dir") options.dir = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
   }
@@ -111,7 +156,11 @@ function parseArgs(argv) {
     if (options.platform !== "android" && options.platform !== "ios") throw new Error("--platform must be android or ios.");
     if (!options.app || !existsSync(options.app)) throw new Error("--app must point to a built debug APK (Android) or simulator .app/.zip (iOS).");
     for (const theme of options.themes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown theme "${theme}". Use light and/or dark.`);
-    const known = new Set(SCREENS.map((screen) => screen.name));
+    if (options.target !== "phone" && options.target !== "tablet") throw new Error("--target must be phone or tablet.");
+    options.orientations ??= options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"];
+    for (const orientation of options.orientations) if (!SIZE_BANDS[`${options.target}-${orientation}`]) throw new Error(`The ${options.target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
+    if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
+    const known = new Set((options.target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name));
     for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
     options.out ??= resolve("dist/ui-snapshots", options.platform);
   } else if (command === "compare") {
@@ -143,9 +192,9 @@ function requireCommand(command, args, hint) {
 const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds));
 const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
-async function startMetro() {
+async function startMetro({ frameProbe }) {
   const metro = spawn("npx", ["expo", "start", "--port", String(METRO_PORT)], {
-    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev" },
+    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}) },
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,
   });
@@ -177,8 +226,13 @@ function yamlString(value) {
   return JSON.stringify(value);
 }
 
-/** Launches fresh, waits out a cold Metro and system dialogs, and signs in if needed. */
-function preamble(platform) {
+const MAESTRO_ORIENTATION = { portrait: "PORTRAIT", landscape: "LANDSCAPE_LEFT" };
+
+/**
+ * Launches fresh, waits out a cold Metro and system dialogs, and signs in if needed. An iPad turns
+ * here, through Maestro; Android turns from the host before the run (`android.setOrientation`).
+ */
+function preamble(platform, orientation = null) {
   const login = resolve(LOGIN_FLOWS[platform]);
   return [
     `appId: ${PACKAGE_ID}`,
@@ -242,6 +296,7 @@ function preamble(platform) {
       "      - waitForAnimationToEnd:",
       "          timeout: 5000",
     ] : []),
+    ...(platform === "ios" && orientation ? [`- setOrientation: ${MAESTRO_ORIENTATION[orientation]}`, "- waitForAnimationToEnd:", "    timeout: 5000"] : []),
   ];
 }
 
@@ -272,6 +327,10 @@ function pushSteps(lines, platform, steps = []) {
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
+    else if (step.open) {
+      openScreen(lines, platform, step.open, false, step.ready);
+      continue;
+    }
     else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint[platform])}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
@@ -288,16 +347,38 @@ function pushSteps(lines, platform, steps = []) {
   }
 }
 
+/** The app's own word on its layout: a tablet run must draw the split panes before anything is captured. */
+function checkSplit(lines, platform) {
+  openScreen(lines, platform, "cohub://settings", true, "Appearance");
+  lines.push("- assertVisible:", "    id: \"split-right-pane\"");
+}
+
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
-function buildFlow({ platform, screens }) {
-  const lines = preamble(platform);
+function buildFlow({ platform, screens, target, orientation }) {
+  const lines = preamble(platform, target === "tablet" ? orientation : null);
+  if (target === "tablet") checkSplit(lines, platform);
   for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
-    openScreen(lines, platform, screen.link, index === 0, screen.ready);
+    openScreen(lines, platform, screen.link, index === 0 && target !== "tablet", screen.ready);
     pushSteps(lines, platform, screen.steps);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
     lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
   }
+  return `${lines.join("\n")}\n`;
+}
+
+/** The split-layout interaction flow, after sign-in, with the rows it taps for this platform. */
+function buildTabletFlow({ platform }) {
+  const lines = preamble(platform, "portrait");
+  checkSplit(lines, platform);
+  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_FIRST_ROW[platform].replace(/\d+%$/, (y) => `${Number.parseInt(y, 10) + 9}%`))}`].join("\n")}\n`;
+}
+
+/** One pass of the perf sequence from a fresh launch. */
+function buildPerfFlow({ platform, target }) {
+  const lines = preamble(platform, target === "tablet" ? "portrait" : null);
+  openScreen(lines, platform, "cohub://settings", target !== "tablet", "Appearance");
+  pushSteps(lines, platform, PERF_STEPS[target]);
   return `${lines.join("\n")}\n`;
 }
 
@@ -394,8 +475,15 @@ function androidDevice() {
   return serials[0];
 }
 
+function assertBand(group, [width, height], source) {
+  const band = SIZE_BANDS[group];
+  const inside = width >= band.width[0] && width <= band.width[1] && height >= band.height[0] && height <= band.height[1];
+  if (!inside) throw new Error(`${source} lays out at ${width}×${height} pt, outside ${group} (${band.width.join("–")} × ${band.height.join("–")}). Pick a device for this target.`);
+  process.stdout.write(`${group}: ${width}×${height} pt (${source})\n`);
+}
+
 const android = {
-  prepare(app) {
+  prepare(app, out, target) {
     requireCommand("adb", ["version"], "Install Android platform-tools.");
     const serial = androidDevice();
     const adb = (...args) => run("adb", ["-s", serial, ...args]);
@@ -407,7 +495,14 @@ const android = {
     setAnimations(false);
     const size = /(\d+)x(\d+)/.exec(adb("shell", "wm", "size"));
     if (!size) throw new Error("Could not read the emulator's screen size from `wm size`.");
-    adb("shell", "wm", "density", String(Math.round((Number(size[1]) / LOGICAL_WIDTH) * 160)));
+    const [naturalWidth, naturalHeight] = [Number(size[1]), Number(size[2])];
+    // A phone is set to the iPhone's width; a tablet keeps its own density.
+    if (target === "phone") adb("shell", "wm", "density", String(Math.round((naturalWidth / LOGICAL_WIDTH) * 160)));
+    const density = Number(/(\d+)\s*$/.exec(adb("shell", "wm", "density").trim())?.[1]);
+    if (!density) throw new Error("Could not read the emulator's density from `wm density`.");
+    // Rotation 0 is the panel's natural orientation, which is landscape on a tablet such as the Pixel Tablet.
+    const naturalLandscape = naturalWidth > naturalHeight;
+    const rotationFor = (orientation) => (orientation === "landscape") === naturalLandscape ? 0 : 1;
     // The software-rendered emulator often raises "isn't responding" dialogs over the app under test.
     adb("shell", "settings", "put", "global", "hide_error_dialogs", "1");
     adb("shell", "settings", "put", "global", "sysui_demo_allowed", "1");
@@ -428,7 +523,25 @@ const android = {
         sleepSync(5_000);
       },
       setAnimations,
+      setOrientation: (orientation) => {
+        adb("shell", "settings", "put", "system", "accelerometer_rotation", "0");
+        adb("shell", "settings", "put", "system", "user_rotation", String(rotationFor(orientation)));
+        sleepSync(2_000);
+      },
+      logicalSize: (orientation) => {
+        const turned = rotationFor(orientation) % 2 === 1;
+        const [width, height] = turned ? [naturalHeight, naturalWidth] : [naturalWidth, naturalHeight];
+        return [Math.round((width * 160) / density), Math.round((height * 160) / density)];
+      },
+      pullDatabase: (directory) => {
+        for (const suffix of ["", "-wal", "-shm"]) {
+          const result = spawnSync("adb", ["-s", serial, "exec-out", "run-as", PACKAGE_ID, "cat", `files/SQLite/cohub-mobile.db${suffix}`], { maxBuffer: 256 * 1024 * 1024 });
+          if (result.status === 0 && result.stdout.length > 0) writeFileSync(join(directory, `cohub-mobile.db${suffix}`), result.stdout);
+          else if (!suffix) throw new Error("Could not read cohub-mobile.db from the debug app with `run-as`.");
+        }
+      },
       restore() {
+        run("adb", ["-s", serial, "shell", "settings", "put", "system", "accelerometer_rotation", "1"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "wm", "density", "reset"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "settings", "put", "global", "hide_error_dialogs", "0"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "exit"], { allowFailure: true });
@@ -438,12 +551,13 @@ const android = {
 };
 
 const ios = {
-  prepare(app, out) {
+  prepare(app, out, target) {
     requireCommand("xcrun", ["--version"], "iOS capture needs macOS with Xcode.");
     const devices = Object.values(JSON.parse(run("xcrun", ["simctl", "list", "devices", "available", "-j"])).devices).flat();
-    const device = IOS_DEVICES.map((name) => devices.find((candidate) => candidate.name === name)).find(Boolean)
-      ?? devices.find((candidate) => candidate.name.startsWith("iPhone"));
-    if (!device) throw new Error("No available iPhone simulator. Install one in Xcode > Settings > Components.");
+    const sizes = IOS_DEVICES[target];
+    const device = Object.keys(sizes).map((name) => devices.find((candidate) => candidate.name === name)).find(Boolean);
+    if (!device) throw new Error(`No ${target} simulator among ${Object.keys(sizes).join(", ")}. Install one in Xcode > Settings > Components, or add its logical size to IOS_DEVICES.`);
+    const [portraitWidth, portraitHeight] = sizes[device.name];
     if (device.state !== "Booted") run("xcrun", ["simctl", "boot", device.udid]);
     run("xcrun", ["simctl", "bootstatus", device.udid, "-b"]);
     let appPath = app;
@@ -461,6 +575,18 @@ const ios = {
       device: device.udid,
       setTheme: (theme) => run("xcrun", ["simctl", "ui", device.udid, "appearance", theme]),
       setAnimations: () => undefined,
+      // Maestro turns the simulator in each flow's preamble.
+      setOrientation: () => undefined,
+      logicalSize: (orientation) => orientation === "landscape" ? [portraitHeight, portraitWidth] : [portraitWidth, portraitHeight],
+      pullDatabase: (directory) => {
+        const container = run("xcrun", ["simctl", "get_app_container", device.udid, PACKAGE_ID, "data"]).trim();
+        const source = join(container, "Documents", "SQLite");
+        for (const suffix of ["", "-wal", "-shm"]) {
+          const path = join(source, `cohub-mobile.db${suffix}`);
+          if (existsSync(path)) writeFileSync(join(directory, `cohub-mobile.db${suffix}`), readFileSync(path));
+          else if (!suffix) throw new Error(`No cohub-mobile.db in ${source}.`);
+        }
+      },
       restore: () => run("xcrun", ["simctl", "status_bar", device.udid, "clear"], { allowFailure: true }),
     };
   },
@@ -468,42 +594,64 @@ const ios = {
 
 async function capture(options) {
   requireCommand("maestro", ["--version"], "Install Maestro: curl -Ls https://get.maestro.mobile.dev | bash");
-  const screens = options.screens ? SCREENS.filter((screen) => options.screens.includes(screen.name)) : SCREENS;
+  const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
+  const screens = options.screens ? catalog.filter((screen) => options.screens.includes(screen.name)) : catalog;
   mkdirSync(options.out, { recursive: true });
-  const target = (options.platform === "android" ? android : ios).prepare(options.app, options.out);
-  const metro = options.metro ? await startMetro() : null;
+  const device = (options.platform === "android" ? android : ios).prepare(options.app, options.out, options.target);
+  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0 }) : null;
   const missing = [];
+  // The phone keeps the original layout (`<theme>/`); other targets are grouped by device and orientation.
+  const groupDirectory = (orientation) => options.target === "phone" ? options.out : join(options.out, `${options.target}-${orientation}`);
   try {
-    for (const theme of options.themes) {
-      const directory = join(options.out, theme);
-      rmSync(directory, { recursive: true, force: true });
-      mkdirSync(directory, { recursive: true });
-      target.setTheme(theme);
-      const flowPath = join(options.out, `${theme}.yaml`);
-      writeFileSync(flowPath, buildFlow({ platform: options.platform, screens }));
-      const testOutput = join(options.out, "maestro-output", theme);
-      rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: target.device, flowPath, out: options.out, testOutput });
-      for (const screen of screens) {
-        const file = `${screen.name}.png`;
-        // Maestro may nest screenshots in a per-run folder under its test output directory.
-        const found = findFile(testOutput, file);
-        if (found) run("mv", [found, join(directory, file)]);
-        else missing.push(`${theme}/${file}`);
+    for (const orientation of options.orientations) {
+      const group = `${options.target}-${orientation}`;
+      device.setOrientation(orientation);
+      assertBand(group, device.logicalSize(orientation), options.platform === "android" ? "the emulator" : "the simulator");
+      for (const theme of options.themes) {
+        const directory = join(groupDirectory(orientation), theme);
+        rmSync(directory, { recursive: true, force: true });
+        mkdirSync(directory, { recursive: true });
+        device.setTheme(theme);
+        const name = options.target === "phone" ? theme : `${group}-${theme}`;
+        const flowPath = join(options.out, `${name}.yaml`);
+        writeFileSync(flowPath, buildFlow({ platform: options.platform, screens, target: options.target, orientation }));
+        const testOutput = join(options.out, "maestro-output", name);
+        rmSync(testOutput, { recursive: true, force: true });
+        runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+        for (const screen of screens) {
+          const file = `${screen.name}.png`;
+          // Maestro may nest screenshots in a per-run folder under its test output directory.
+          const found = findFile(testOutput, file);
+          if (found) run("mv", [found, join(directory, file)]);
+          else missing.push(`${relative(options.out, directory)}/${file}`);
+        }
       }
     }
-    if (options.motion) {
+    if (options.target === "tablet") {
+      const directory = join(options.out, "tablet-flow");
+      rmSync(directory, { recursive: true, force: true });
+      mkdirSync(directory, { recursive: true });
+      device.setTheme("light");
+      device.setOrientation("portrait");
+      const flowPath = join(options.out, "tablet-flow.yaml");
+      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform }));
+      const testOutput = join(options.out, "maestro-output", "tablet-flow");
+      rmSync(testOutput, { recursive: true, force: true });
+      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      for (const file of listFiles(testOutput).filter((path) => path.endsWith(".png"))) run("mv", [file, join(directory, basename(file))]);
+    }
+    if (options.motion && options.target === "phone") {
       const directory = join(options.out, "motion");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
-      target.setTheme("light");
-      target.setAnimations(true);
+      device.setTheme("light");
+      device.setAnimations(true);
       const flowPath = join(options.out, "motion.yaml");
       writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, motions: MOTIONS }));
       const testOutput = join(options.out, "maestro-output", "motion");
       rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: target.device, flowPath, out: options.out, testOutput });
-      target.setAnimations(false);
+      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      device.setAnimations(false);
       for (const motion of MOTIONS) {
         const file = `${motion.name}.mp4`;
         const found = findFile(testOutput, file);
@@ -511,12 +659,66 @@ async function capture(options) {
         else missing.push(`motion/${file}`);
       }
     }
+    if (options.perf > 0) await capturePerf(options, device);
   } finally {
     stopMetro(metro);
-    target.restore();
+    device.restore();
   }
   if (missing.length) throw new Error(`Maestro finished but these captures are missing: ${missing.join(", ")}.`);
-  process.stdout.write(`Captured ${screens.length} screens × ${options.themes.length} themes${options.motion ? ` and ${MOTIONS.length} recordings` : ""} in ${options.out}\n`);
+  process.stdout.write(`Captured ${screens.length} screens × ${options.themes.length} themes × ${options.orientations.length} orientations${options.motion && options.target === "phone" ? ` and ${MOTIONS.length} recordings` : ""} in ${options.out}\n`);
+}
+
+function listFiles(root) {
+  if (!existsSync(root)) return [];
+  return readdirSync(root).flatMap((entry) => {
+    const path = join(root, entry);
+    return statSync(path).isDirectory() ? listFiles(path) : [path];
+  });
+}
+
+/**
+ * Runs the perf sequence `options.perf` times from fresh launches in portrait, animations on, and
+ * keeps every frame-probe record inside each run's window. The probe only records UI frames over
+ * 25 ms and JS stalls over 50 ms, so a quiet run has no rows at all.
+ */
+async function capturePerf(options, device) {
+  const { DatabaseSync } = await import("node:sqlite");
+  const directory = join(options.out, "perf");
+  mkdirSync(directory, { recursive: true });
+  const group = `${options.target}-portrait`;
+  device.setTheme("light");
+  device.setOrientation("portrait");
+  device.setAnimations(true);
+  const flowPath = join(options.out, "perf.yaml");
+  writeFileSync(flowPath, buildPerfFlow({ platform: options.platform, target: options.target }));
+  const runs = [];
+  try {
+    for (let index = 1; index <= options.perf; index += 1) {
+      const testOutput = join(options.out, "maestro-output", `perf-${index}`);
+      rmSync(testOutput, { recursive: true, force: true });
+      const startedAt = new Date().toISOString();
+      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      runs.push({ run: index, startedAt, endedAt: new Date().toISOString() });
+    }
+  } finally {
+    device.setAnimations(false);
+  }
+  // The app flushes its log every 500 ms.
+  sleepSync(2_000);
+  const pulled = join(directory, `${group}-db`);
+  rmSync(pulled, { recursive: true, force: true });
+  mkdirSync(pulled, { recursive: true });
+  device.pullDatabase(pulled);
+  const database = new DatabaseSync(join(pulled, "cohub-mobile.db"), { readOnly: true });
+  const rows = database.prepare("SELECT timestamp, name, payload FROM debug_events WHERE name LIKE 'perf.%' ORDER BY timestamp").all();
+  database.close();
+  rmSync(pulled, { recursive: true, force: true });
+  const result = runs.map((entry) => ({ ...entry, events: rows.filter((row) => row.timestamp >= entry.startedAt && row.timestamp <= entry.endedAt).map((row) => ({ timestamp: row.timestamp, name: row.name, ...JSON.parse(row.payload) })) }));
+  writeFileSync(join(directory, `${group}.json`), `${JSON.stringify({ platform: options.platform, group, steps: PERF_STEPS[options.target], runs: result }, null, 2)}\n`);
+  for (const entry of result) {
+    const count = (name) => entry.events.filter((event) => event.name === name).length;
+    process.stdout.write(`perf ${group} run ${entry.run} (${entry.startedAt} → ${entry.endedAt}): ${count("perf.ui_jank")} ui_jank windows, ${count("perf.js_stall")} js_stall windows\n`);
+  }
 }
 
 function compare(options) {
@@ -525,19 +727,22 @@ function compare(options) {
   mkdirSync(options.out, { recursive: true });
   const paired = [];
   const unmatched = [];
-  for (const theme of ["light", "dark"]) {
-    const iosDirectory = join(options.ios, theme);
-    const androidDirectory = join(options.android, theme);
+  // The phone's screenshots sit at the top level; other targets in `<target>-<orientation>/`.
+  const groups = new Set([""]);
+  for (const root of [options.ios, options.android]) for (const entry of existsSync(root) ? readdirSync(root) : []) if (/^[a-z]+-(?:portrait|landscape)$/.test(entry)) groups.add(entry);
+  for (const group of [...groups].sort()) for (const theme of ["light", "dark"]) {
+    const iosDirectory = join(options.ios, group, theme);
+    const androidDirectory = join(options.android, group, theme);
     if (!existsSync(iosDirectory) && !existsSync(androidDirectory)) continue;
     const names = new Set([...(existsSync(iosDirectory) ? readdirSync(iosDirectory) : []), ...(existsSync(androidDirectory) ? readdirSync(androidDirectory) : [])].filter((name) => name.endsWith(".png")));
     for (const name of [...names].sort()) {
       const left = join(iosDirectory, name);
       const right = join(androidDirectory, name);
       if (!existsSync(left) || !existsSync(right)) {
-        unmatched.push(`${theme}/${name}`);
+        unmatched.push(`${group ? `${group}/` : ""}${theme}/${name}`);
         continue;
       }
-      const output = join(options.out, `${name.replace(/\.png$/, "")}.${theme}.png`);
+      const output = join(options.out, `${name.replace(/\.png$/, "")}${group ? `.${group}` : ""}.${theme}.png`);
       // iOS on the left, Android on the right, both scaled to one height with a gutter between.
       run(magick, [left, "-resize", `x${PAIR_HEIGHT}`, "(", "-size", `24x${PAIR_HEIGHT}`, "xc:#808080", ")", "(", right, "-resize", `x${PAIR_HEIGHT}`, ")", "+append", "+repage", output]);
       paired.push(output);

@@ -32,6 +32,8 @@ type SessionRowProps = {
   tree?: SessionTreePosition | null;
   /** Off inside the Space pager, whose own leading swipe opens the Chats panel. */
   swipeToRead?: boolean;
+  /** The Chat open beside the list in a split window. */
+  selected?: boolean;
 };
 
 const AVATAR_SIZE = LIST_AVATAR_SIZE;
@@ -42,7 +44,7 @@ function railX(level: number, showSpace: boolean) {
   return (showSpace ? AVATAR_SIZE / 2 - 0.5 : 3.5) + (level - 1) * TREE_STEP;
 }
 
-export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null, swipeToRead = true }: SessionRowProps) {
+export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = [], showSpace = true, fork = null, tree = null, swipeToRead = true, selected = false }: SessionRowProps) {
   const { t } = useTranslation();
   // Only this Chat's status inputs; token batches keep the live stream's identity and phase.
   const { status, latestTurn, liveTurnId, liveStatus, spaceName: canonicalName, spaceAvatarUrl } = useAppSelector(({ state }) => {
@@ -135,6 +137,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     // A fork tree reads as one item: its guide lines run unbroken and only its end draws a separator.
     group={!tree ? "single" : tree.depth === 0 ? (tree.lastInGroup ? "single" : "first") : tree.lastInGroup ? "last" : "middle"}
     unread={unread}
+    selected={selected}
     accessibilityLabel={[t("ui.openNamed", { name: title }), unread ? t("session.unread") : null, statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     accessibilityActions={[{ name: "toggleRead", label: readAction.title }]}
     onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "toggleRead") toggleRead(); }}

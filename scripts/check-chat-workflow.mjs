@@ -20,10 +20,11 @@ import { createAttachmentUploads } from "../src/data/attachment-uploads.ts";
 import { launcherShortcuts, launcherShortcutsKey } from "../src/data/launcher-shortcuts.ts";
 import { incomingShareFromItems, isShareIntentPath } from "../src/data/incoming-share.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
+import { chatOpenAction, focusedRouteKeys, leftPaneWidth, selectedChatId, showsPaneBack, splitMode, splitRoutes } from "../src/data/split-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
-import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout } from "../src/ui/message-bubble-layout.ts";
+import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
@@ -398,6 +399,7 @@ const chromeScope = {
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }),
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
+  usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
   BrandRefreshArea: "BrandRefreshArea",
@@ -689,6 +691,8 @@ const formScope = {
   assert.equal(avatar.props.name, "Renamed Space");
   assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
   assert.equal(row.props.unread, false);
+  assert.equal(row.props.selected, false);
+  assert.equal(chromeNodes(renderSessionRow({ session: staleSession, onPress() {}, selected: true })).find((node) => node.type === "ListRow").props.selected, true, "the Chat open in the right pane marks its row");
   const swipe = chromeNodes(renderSessionRow({ session: staleSession, onPress() {} })).find((node) => node.type === "SwipeActions");
   assert.deepEqual(swipe.props.leading.map((action) => action.label), ["session.unread"], "a read Chat swipes to unread from the leading edge");
   assert.equal(chromeNodes(renderSessionRow({ session: staleSession, onPress() {}, swipeToRead: false })).some((node) => node.type === "SwipeActions" && node.props.leading.length > 0), false, "inside the Space pager the leading swipe stays the pager's");
@@ -1325,6 +1329,8 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   assert.equal(backCount, 1);
   assert.deepEqual(backEvents, ["navigation.back.press_in", "navigation.back.press_out", "navigation.back.touch_cancel", "navigation.back.dispatch"]);
   assert.ok(headerNodes.some((node) => node.type === "actions"));
+  const paneRootBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, usePaneBack: () => false, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null, SOLID_GLASS_SHADOW: "" });
+  assert.equal(chromeNodes(paneRootBar({ title: "Chat", onBack: () => {}, transparent: true })).some((node) => node.type === "IconButton"), false, "the right pane's first screen draws no back button");
   const searchHeader = renderTopBar({ title: "Chats", children: { type: "search-input" } });
   assert.ok(chromeNodes(searchHeader).some((node) => node.type === "search-input"));
   assert.ok(!chromeNodes(searchHeader).some((node) => node.props?.accessibilityRole === "header"), "search replaces the title instead of crowding it");
@@ -1423,7 +1429,7 @@ const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu
   useEffect: (effect) => { menuCleanups.push(effect()); },
   useSafeAreaInsets: () => ({ bottom: 34 }),
   useWindowDimensions: () => ({ width: 390, height: 844 }),
-  useIsFocused: () => menuFocused,
+  useScreenVisible: () => menuFocused,
   BackHandler: { addEventListener: (name, callback) => { assert.equal(name, "hardwareBackPress"); menuBackHandler = callback; return { remove: () => { menuBackRemoved = true; } }; } },
   usePredictiveBackBlock: (active) => { menuPredictiveBackBlocked = active; },
   getAnchoredMenuLayout,
@@ -1624,7 +1630,7 @@ try {
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
     useRouter: () => ({}), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
-    useFocusEffect: (callback) => { focusEffect = callback; },
+    useScreenVisibleEffect: (callback) => { focusEffect = callback; },
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, client: {}, connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {} })),
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
@@ -1871,7 +1877,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const ReplyMeta = loadChromeComponent(mc, "ReplyMeta", {
     ...chromeScope, replyDetailParts, fitReplyDetails, estimateTextWidth, formatTokenCount, turnSequenceForMessage, DETAIL_SEPARATOR: " · ", REPLY_META_HEIGHT: 44, Loader: "Loader",
     requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level,
-    getReplyContentWidth: (width) => width - 32, typography: { micro: { fontSize: 11 } }, useWindowDimensions: () => ({ fontScale: 1 }),
+    getReplyContentWidth, getReplyRowWidth, typography: { micro: { fontSize: 11 } }, useWindowDimensions: () => ({ fontScale: 1 }),
     useAppTheme: () => ({ colors: { textFaint: "faint" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
   });
   const line = ReplyMeta({ message: { ...reply, usage: null }, clock: "14:32", copyText: "answer", availableWidth: 390, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
@@ -1886,7 +1892,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(reveal.props.accessibilityLabel, "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached", "screen readers always get every part");
   assert.equal(chromeNodes(reveal).find((node) => node.type === "Text").props.children.join(""), "#2 · deepseek-flash · ↑245K · ↓2.1K");
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
-    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth: (width) => width - 32, formatMessageClock: (value) => value,
+    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth, getReplyRowWidth, formatMessageClock: (value) => value,
     useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
     BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
@@ -1909,7 +1915,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
     ...chromeScope, memo: (component) => component, useMemo: (factory) => factory(), useSyncExternalStore: () => false, useTraceTouches: () => ({}),
     chatScrollTrace: { subscribe: () => () => {}, isRecording: () => false }, useAppTheme: () => ({ mode: "dark", colors: { assistantBubbleText: "text" } }), useTranslation: () => ({ t: replyT }),
     useWindowDimensions: () => ({ width: 390 }), compactionFromMessage: () => null, hasRenderableMessage: () => true, hasRenderableContent: (content) => content.some((block) => block.type !== "shell_command"), formatMessageClock: () => "14:32",
-    getReplyContentWidth: (width) => width - 32, REPLY_INSET_X: 16, answerBlocks, thinkingBlocks, typography: { chatBody: { fontSize: 17 } },
+    getReplyContentWidth, getReplyRowWidth, REPLY_INSET_X: 16, answerBlocks, thinkingBlocks, typography: { chatBody: { fontSize: 17 } },
     contentText: (content) => content.map((block) => block.text ?? block.thinking).join("\n\n"), messageText: (message) => message.text ?? "",
     BubbleContext: { Provider: "BubbleContext" }, BubbleTraceMessage: { Provider: "BubbleTraceMessage" }, BubbleContentWidth: { Provider: "BubbleContentWidth" },
     MessageContent: "MessageContent", TextBlock: "TextBlock", ReplyMeta: "ReplyMeta",
@@ -3241,7 +3247,7 @@ function panelPagerHarness(initialPanel = null) {
       if (!previous || deps.some((value, index) => value !== previous.deps[index])) slots[index] = { value: factory(), deps };
       return slots[index].value;
     },
-    useWindowDimensions: () => ({ width: viewportWidth }), useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useIsFocused: () => true,
+    usePaneWidth: () => viewportWidth, useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useIsFocused: () => true,
     useAnimatedStyle: (style) => ({ animated: style }),
     useAnimatedReaction: (prepare, react) => { const [, reaction] = slot(() => { const created = { previous: undefined }; reactions.push(created); return created; }); reaction.prepare = prepare; reaction.react = react; },
     cancelAnimation: () => {}, withSpring: (target, _config, callback) => { springs.push(callback); return target; }, ReduceMotion: { System: "system" },
@@ -5089,6 +5095,39 @@ assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, t
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: null, turnId: "t9" }), { kind: "setParams", params: { turn: undefined, turnId: "t9" } }, "a turn link to the Chat on screen retargets it in place");
 assert.deepEqual(chatLinkNavigation("/chat/s1", { sessionId: "s1", turn: "4", turnId: null }), { kind: "setParams", params: { turn: "4", turnId: undefined } }, "the previous turn target is cleared");
 assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: null, turnId: null }), { kind: "push" });
+{
+  // Split layout: decided by the window's size, never the device or its orientation.
+  for (const [width, height] of [[402, 874], [874, 402], [699, 1180], [1180, 499]]) assert.equal(splitMode(width, height), "compact", `${width}×${height} keeps the phone layout`);
+  for (const [width, height] of [[700, 500], [820, 1180], [1180, 820], [800, 1280], [1280, 800]]) assert.equal(splitMode(width, height), "split", `${width}×${height} splits`);
+  assert.deepEqual([700, 820, 1024, 1180, 1366].map(leftPaneWidth), [320, 320, 341, 393, 420], "the left pane is a third of the window, held between 320 and 420");
+  assert.deepEqual(chatOpenAction("compact", "chat/[sessionId]"), { kind: "push", animated: true }, "a compact window pushes every Chat as on a phone");
+  assert.deepEqual(chatOpenAction("split", undefined), { kind: "push", animated: false }, "an empty right pane takes the Chat in place");
+  assert.deepEqual(chatOpenAction("split", "chat/[sessionId]"), { kind: "replace", animated: false }, "selecting another Chat replaces the one on top instead of stacking it");
+  assert.deepEqual(chatOpenAction("split", "space/[spaceId]"), { kind: "push", animated: false }, "a Chat opened over a Space page keeps the page under it");
+  assert.equal(showsPaneBack("compact", null), true);
+  assert.equal(showsPaneBack("compact", 0), true, "a compact window always draws back");
+  assert.equal(showsPaneBack("split", 0), false, "the right pane's first screen has no back");
+  assert.equal(showsPaneBack("split", 1), true, "deeper right-pane screens go back as usual");
+  assert.equal(showsPaneBack("split", null), true, "screens over both panes keep their back");
+  const route = (name, key = name, params) => ({ name, key, params });
+  const tabs = route("(tabs)");
+  assert.deepEqual(splitRoutes([tabs]), { pane: [], overlays: [] });
+  assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), route("space/[spaceId]")]).pane.map((item) => item.name), ["chat/[sessionId]", "space/[spaceId]"]);
+  assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), route("image-viewer")]), { pane: [route("chat/[sessionId]")], overlays: [route("image-viewer")] }, "the viewer covers both panes");
+  assert.deepEqual(splitRoutes([tabs, route("new-chat")]), { pane: [], overlays: [route("new-chat")] }, "New Chat covers both panes");
+  assert.deepEqual(splitRoutes([tabs, route("media-viewer"), route("chat/[sessionId]")]).overlays.map((item) => item.name), ["media-viewer", "chat/[sessionId]"], "routes above an overlay stay above it");
+  const tabState = { index: 1, routes: [{ key: "chats", state: { index: 0, routes: [{ key: "chats-index" }] } }, { key: "spaces", state: { index: 1, routes: [{ key: "spaces-index" }, { key: "spaces-top" }] } }] };
+  assert.deepEqual(focusedRouteKeys(tabState), ["spaces", "spaces-top"], "only the selected tab and the top of its stack count as on view");
+  assert.deepEqual(focusedRouteKeys(undefined), []);
+  assert.equal(selectedChatId([route("space/[spaceId]", "a", { spaceId: "x" }), route("chat/[sessionId]", "b", { sessionId: "s2" })]), "s2");
+  assert.equal(selectedChatId([route("chat/[sessionId]", "a", { sessionId: "s1" }), route("space/[spaceId]", "b")]), "s1", "a page over the Chat keeps its row selected");
+  assert.equal(selectedChatId([route("chat/[sessionId]", "a", { sessionId: "new" })]), null, "a draft has no row yet");
+  assert.equal(getBubbleMaxWidth(402), 322, "phone bubbles keep their width");
+  assert.equal(getBubbleMaxWidth(787), 560, "a wide pane caps the bubble");
+  assert.equal(getReplyContentWidth(402), 370, "phone replies fill the row");
+  assert.equal(getReplyContentWidth(787), 680, "a wide pane caps the reading line");
+  assert.equal(getReplyRowWidth(787), 712);
+}
 
 {
   const now = Date.parse("2026-11-03T12:00:00Z");

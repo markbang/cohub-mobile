@@ -21,7 +21,7 @@ import type { IconName } from "@/src/icons";
 import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { curves, loops } from "@/src/motion";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, typography, type AppTheme } from "@/src/theme";
-import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth } from "@/src/ui/message-bubble-layout";
+import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
 import { contentText, hasRenderableContent, messageText } from "@/src/utils";
 
 const MD4C_FLAGS = { underline: false, superscript: false, subscript: false, latexMath: true, highlight: false, hardSoftBreaks: false, preserveBlankLines: false, admonitions: true };
@@ -365,7 +365,7 @@ export function assistantMessageNode(ctx: NodeContext, key: string, message: Mes
     : !thought && message.text?.trim() ? replyMarkdown(ctx, message.text, options.sandboxImages, contentWidth, { color: tint }) : [];
   const meta = replyMeta(ctx, key, message, { ...options, copyText: thought ? contentText(answer).trim() : messageText(message) });
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
+    type: "view", style: { width: "100%", maxWidth: getReplyRowWidth(ctx.width), paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
     children: [
       { type: "view", style: { gap: 4, minWidth: 0 }, children: body },
       ...(message.errorMessage ? [{ type: "view" as const, style: { marginTop: body.length ? 8 : 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.dangerSoft), paddingHorizontal: 12, paddingVertical: 8 }, children: [text(message.errorMessage, textStyle("caption", theme.colors.danger), { selectable: true })] }] : []),
@@ -502,7 +502,7 @@ export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[
         ? [liveDot(ctx), { type: "view", style: { flex: 1 } }]
         : [{ type: "view", style: { flex: 1, flexDirection: "row", alignItems: "center" }, children: [mascotLoader(ctx, 22, t("message.stream.starting"))] }];
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
+    type: "view", style: { width: "100%", maxWidth: getReplyRowWidth(ctx.width), paddingHorizontal: REPLY_INSET_X, paddingTop: 6 },
     children: [
       ...(hasContent ? [{ type: "view" as const, style: { gap: 4, minWidth: 0 }, children: contentNodes(ctx, "live", answer, { width: getReplyContentWidth(ctx.width), active: live, streamingText: input.streamingText, sandboxImages: NO_SANDBOX_IMAGES }) }] : []),
       {

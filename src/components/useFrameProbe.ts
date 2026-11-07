@@ -7,6 +7,8 @@ import { setChatEntryDiagnostics } from "@/src/data/chat-entry-trace";
 import { record } from "@/src/data/debug-session";
 
 const STORAGE_KEY = "debug.frameProbe";
+// `scripts/ui-snapshots.mjs --perf` serves a dev bundle with the probe on from launch.
+const FORCED = __DEV__ && process.env.EXPO_PUBLIC_FRAME_PROBE === "1";
 // Hitches are summed per window so a sustained stutter cannot flood the bounded diagnostics log.
 const WINDOW_MS = 1_000;
 // Over 1.5 frames at 60 Hz, so it reads the same on 60 and 120 Hz screens.
@@ -56,7 +58,8 @@ export function useFrameProbe() {
 
   useEffect(() => {
     let cancelled = false;
-    void AsyncStorage.getItem(STORAGE_KEY).then((value) => { if (!cancelled && value === "1") emit(true); }).catch(() => undefined);
+    if (FORCED) emit(true);
+    else void AsyncStorage.getItem(STORAGE_KEY).then((value) => { if (!cancelled && value === "1") emit(true); }).catch(() => undefined);
     const subscription = AppState.addEventListener("change", (state) => setForeground(state === "active"));
     return () => {
       cancelled = true;

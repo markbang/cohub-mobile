@@ -9,6 +9,7 @@ import { useTranslation } from "@/src/i18n";
 import { LIST_AVATAR_SIZE } from "@/src/design/tokens";
 import { AppIcon, Avatar, DataError, EmptyState, IconButton, LoadingFlatRows, Screen, SearchField, TopBar } from "@/src/ui";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
+import { requestUnanimatedChat, useSplitLayout } from "@/src/ui/pane";
 import { displaySpaceName } from "@/src/utils";
 
 type Params = { spaceId?: string | string[]; shared?: string | string[] };
@@ -20,6 +21,7 @@ export default function NewChatScreen() {
   // Opened by a share from another app: the chosen Space's draft takes the shared content.
   const shared = (Array.isArray(params.shared) ? params.shared[0] : params.shared) === "1";
   const insets = useSafeAreaInsets();
+  const split = useSplitLayout().mode === "split";
   const { t } = useTranslation();
   const { refreshHome } = useAppActions();
   const visits = useAppSelector((app) => app.spaceVisits);
@@ -38,6 +40,8 @@ export default function NewChatScreen() {
 
   const openSpaceDraft = (spaceId: string) => {
     setSelectedSpaceId(spaceId);
+    // In a split window the draft lands in the right pane while this sheet closes over it.
+    if (split) requestUnanimatedChat("new");
     router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId, ...(shared ? { shared: "1" } : {}) } });
   };
 

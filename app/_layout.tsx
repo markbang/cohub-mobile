@@ -3,7 +3,7 @@ import { translate } from "@/src/i18n/core";
 import { LogtoProvider, useLogto } from "@logto/rn";
 import type { UnauthorizedContext } from "@neta-art/cohub";
 import { useFonts } from "expo-font";
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +25,8 @@ import { useUniwindThemeSync } from "@/src/design/uniwind-theme";
 import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { clearLauncherShortcuts } from "@/src/platform/quick-actions";
 import { LauncherShortcuts } from "@/src/components/LauncherShortcuts";
+import { SplitStack } from "@/src/components/SplitStack";
+import { rootScreenOrientation } from "@/src/platform/orientation";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 // Configures Android's back gesture before the first screen mounts.
 import "@/src/platform/predictive-back";
@@ -268,42 +270,43 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
           {/* Deeper screens use the platform transition: the iOS push (with its interactive back
               swipe) and Android's own forward animation. Overriding it replaces a platform behavior
               with an imitation. */}
+          {/* A wide window draws the tab app and the routes above it side by side (`SplitStack`). */}
           {/* design-system: navigator contentStyle is a native prop */}
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.colors.background } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="chat/[sessionId]" />
-            <Stack.Screen name="space/[spaceId]" />
-            <Stack.Screen name="space/[spaceId]/files" />
-            <Stack.Screen name="space/[spaceId]/file" />
-            <Stack.Screen name="work/[appId]" />
+          <SplitStack screenOptions={{ headerShown: false, orientation: rootScreenOrientation, contentStyle: { backgroundColor: theme.colors.background } }}>
+            <SplitStack.Screen name="(tabs)" />
+            <SplitStack.Screen name="chat/[sessionId]" />
+            <SplitStack.Screen name="space/[spaceId]" />
+            <SplitStack.Screen name="space/[spaceId]/files" />
+            <SplitStack.Screen name="space/[spaceId]/file" />
+            <SplitStack.Screen name="work/[appId]" />
             {/* Android has no zoom transition, so the viewer floats over the Chat and its own backdrop fades as it is dragged away. */}
             {/* design-system: the photo viewer is black in every theme so images read true. */}
-          <Stack.Screen name="image-viewer" options={Platform.OS === "android" ? { presentation: "transparentModal", animation: "fade", contentStyle: { backgroundColor: "transparent" } } : { contentStyle: { backgroundColor: "#000000" } }} />
-            <Stack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: Platform.OS === "ios" ? "default" : "slide_from_bottom" }} />
-            <Stack.Screen name="appearance" options={{ title: t("route.appearance") }} />
-            <Stack.Screen name="language" options={{ title: t("route.language") }} />
-            <Stack.Screen name="about" options={{ title: t("route.about") }} />
-            <Stack.Screen name="licenses/index" options={{ title: t("route.licenses") }} />
-            <Stack.Screen name="licenses/[name]" options={{ title: t("route.licenses") }} />
-            <Stack.Screen name="trending" options={{ title: t("activity.trending") }} />
-            <Stack.Screen name="debug/index" options={{ title: t("route.debug") }} />
-            <Stack.Screen name="debug/chat-scroll" options={{ title: "Scroll Diagnostics" }} />
-            <Stack.Screen name="debug/bubble-layout" options={{ title: "Bubble Layout" }} />
-            <Stack.Screen name="debug/streaming" options={{ title: t("route.streaming") }} />
-            <Stack.Screen name="debug/bubbles" options={{ title: t("route.bubbles") }} />
-            <Stack.Screen name="debug/updates" options={{ title: t("route.updates") }} />
-            <Stack.Screen name="debug/cache" options={{ title: t("route.cache") }} />
-            <Stack.Screen name="debug/composer" options={{ title: t("route.composer") }} />
-          <Stack.Screen name="debug/connection" options={{ title: t("route.connection") }} />
-          <Stack.Screen name="debug/links" options={{ title: t("route.links") }} />
-          <Stack.Screen name="debug/i18n" options={{ title: t("route.i18n") }} />
-          <Stack.Screen name="debug/identity" options={{ title: t("route.identity") }} />
-            <Stack.Screen name="debug/tools" options={{ title: t("route.tools") }} />
-            <Stack.Screen name="debug/markdown" options={{ title: t("route.markdown") }} />
-            <Stack.Screen name="debug/list" options={{ title: t("route.longList") }} />
-            <Stack.Screen name="debug/ui" options={{ title: "UI Catalog" }} />
-            <Stack.Screen name="debug/chat" options={{ title: "Chat Fixtures" }} />
-          </Stack>
+          <SplitStack.Screen name="image-viewer" options={Platform.OS === "android" ? { presentation: "transparentModal", animation: "fade", contentStyle: { backgroundColor: "transparent" } } : { contentStyle: { backgroundColor: "#000000" } }} />
+            <SplitStack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: Platform.OS === "ios" ? "default" : "slide_from_bottom" }} />
+            <SplitStack.Screen name="appearance" options={{ title: t("route.appearance") }} />
+            <SplitStack.Screen name="language" options={{ title: t("route.language") }} />
+            <SplitStack.Screen name="about" options={{ title: t("route.about") }} />
+            <SplitStack.Screen name="licenses/index" options={{ title: t("route.licenses") }} />
+            <SplitStack.Screen name="licenses/[name]" options={{ title: t("route.licenses") }} />
+            <SplitStack.Screen name="trending" options={{ title: t("activity.trending") }} />
+            <SplitStack.Screen name="debug/index" options={{ title: t("route.debug") }} />
+            <SplitStack.Screen name="debug/chat-scroll" options={{ title: "Scroll Diagnostics" }} />
+            <SplitStack.Screen name="debug/bubble-layout" options={{ title: "Bubble Layout" }} />
+            <SplitStack.Screen name="debug/streaming" options={{ title: t("route.streaming") }} />
+            <SplitStack.Screen name="debug/bubbles" options={{ title: t("route.bubbles") }} />
+            <SplitStack.Screen name="debug/updates" options={{ title: t("route.updates") }} />
+            <SplitStack.Screen name="debug/cache" options={{ title: t("route.cache") }} />
+            <SplitStack.Screen name="debug/composer" options={{ title: t("route.composer") }} />
+          <SplitStack.Screen name="debug/connection" options={{ title: t("route.connection") }} />
+          <SplitStack.Screen name="debug/links" options={{ title: t("route.links") }} />
+          <SplitStack.Screen name="debug/i18n" options={{ title: t("route.i18n") }} />
+          <SplitStack.Screen name="debug/identity" options={{ title: t("route.identity") }} />
+            <SplitStack.Screen name="debug/tools" options={{ title: t("route.tools") }} />
+            <SplitStack.Screen name="debug/markdown" options={{ title: t("route.markdown") }} />
+            <SplitStack.Screen name="debug/list" options={{ title: t("route.longList") }} />
+            <SplitStack.Screen name="debug/ui" options={{ title: "UI Catalog" }} />
+            <SplitStack.Screen name="debug/chat" options={{ title: "Chat Fixtures" }} />
+          </SplitStack>
           <AppUpdateBanner />
         </View>
       </ToastProvider>
