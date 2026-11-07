@@ -24,6 +24,7 @@ import { useTranslation } from "@/src/i18n";
 import { ChatTimelineView } from "@/src/platform/chat-timeline";
 import { motion } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
+import { usePaneWidth } from "@/src/ui/pane";
 import { contentText, displaySessionTitle, hasRenderableMessage, messageText } from "@/src/utils";
 
 const COPIED_MS = 1600;
@@ -126,10 +127,11 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   const { t } = useTranslation();
   const router = useRouter();
   const openLink = useOpenMessageLink(spaceId || null);
-  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const { fontScale } = useWindowDimensions();
+  const paneWidth = usePaneWidth();
   const [width, setWidth] = useState(0);
-  // Whole points: the measured width differs from the window width by a fraction, which would rebuild every row once.
-  const rowWidth = Math.round(width || windowWidth);
+  // Whole points: the measured width differs from the pane width by a fraction, which would rebuild every row once.
+  const rowWidth = Math.round(width || paneWidth);
   const nativeRef = useRef<ChatTimelineViewRef>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);

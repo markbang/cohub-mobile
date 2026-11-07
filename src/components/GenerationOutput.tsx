@@ -1,11 +1,12 @@
 import type { GenerationContentBlock } from "@neta-art/cohub";
 import { useRouter } from "expo-router";
-import { Image, PixelRatio, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Image, PixelRatio, Pressable, Text, View } from "react-native";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { imageThumbnailUrl, modelFormat, videoPosterUrl } from "@/src/data/media";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { AppIcon, type IconName } from "@/src/ui";
+import { usePaneWidth } from "@/src/ui/pane";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
 
@@ -17,7 +18,7 @@ function sourceUrl(block: Exclude<GenerationContentBlock, { type: "text" }>): st
 export function GenerationBlock({ block }: { block: GenerationContentBlock }) {
   const router = useRouter();
   const { t } = useTranslation();
-  const { width } = useWindowDimensions();
+  const width = usePaneWidth();
   if (block.type === "text") return <Text selectable className="text-chat text-fg">{block.text}</Text>;
   const url = sourceUrl(block);
   const tileWidth = width - 32;

@@ -42,13 +42,21 @@ name: Sign in on the dev tenant
 # The tenant requires the terms consent. Its checkbox shares one element with the Terms of Use link,
 # so a tap can open the link; submitting without it raises a modal with an Agree button instead.
 - extendedWaitUntil:
-    visible: "(Agree|Password)"
+    visible: "(Agree|Password|Reminder.*Agree.*)"
     timeout: 45000
 - runFlow:
     when:
       visible: "^Agree$"
     commands:
       - tapOn: "^Agree$"
+# Chrome on the Pixel Tablet exposes the modal as one element, so its Agree button is tapped by
+# position (bottom right of the centered modal, portrait).
+- runFlow:
+    when:
+      visible: "Reminder.*Agree.*"
+    commands:
+      - tapOn:
+          point: "79%, 56%"
 # The password step only appears after the identifier is submitted.
 - extendedWaitUntil:
     visible: "Password"

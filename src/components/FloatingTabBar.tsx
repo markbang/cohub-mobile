@@ -1,9 +1,11 @@
 import type { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
+import { NavigationHelpersContext } from "expo-router/build/react-navigation/core/NavigationHelpersContext";
+import { TabActions } from "expo-router/build/react-navigation/routers/TabRouter";
 import { BlurTargetView } from "expo-blur";
 import { GlassView } from "expo-glass-effect";
 import { haptics } from "@/src/platform/haptics";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactElement, type ReactNode, type RefObject } from "react";
-import { Keyboard, Platform, Pressable, View, useWindowDimensions } from "react-native";
+import { Keyboard, Platform, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardEvents } from "react-native-keyboard-controller";
 import Animated, { Easing, interpolateColor, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
@@ -14,6 +16,7 @@ import { edgeChrome, MAX_FONT_SCALE, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 import { useTabBarMinimized } from "@/src/ui/tab-bar-minimize";
+import { usePaneWidth } from "@/src/ui/pane";
 
 // Geometry and feel follow UIKit's iOS 26 tab bar: a lens rests under the selected tab, lifts and
 // grows under a press, follows a drag across the bar, and settles on the tab it is let go over.
@@ -142,16 +145,18 @@ function rubberBand(overshoot: number, limit: number) {
   return limit * pull * Math.sign(overshoot);
 }
 
-export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, insets }: BottomTabBarProps) {
+export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTabBarProps) {
   const theme = useAppTheme();
+  const tabs = useContext(NavigationHelpersContext);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [lensLifted, setLensLifted] = useState(false);
   const routes = state.routes;
   const blurTarget = useContext(TabBlurTargets)?.targets[routes[state.index]?.key ?? ""] ?? null;
   const material = useGlassMaterial({ blurTarget });
   const lastIndex = routes.length - 1;
-  const { width: windowWidth } = useWindowDimensions();
-  const barWidth = windowWidth - BAR_SIDE_MARGIN * 2;
+  // The tab app's pane: in a split window the bar stays at the bottom of the left pane.
+  const paneWidth = usePaneWidth();
+  const barWidth = paneWidth - BAR_SIDE_MARGIN * 2;
   const pitch = itemPitch(barWidth, routes.length);
   const itemWidth = pitch > 0 ? pitch : LENS_WIDTH;
 
@@ -191,8 +196,10 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
     // A press on the current tab still emits tabPress so its screen can scroll to top.
     if (state.index === index || event.defaultPrevented) return;
-    navigateToTab(route.key);
-  }, [emitter, navigateToTab, routes, state.index]);
+    // JUMP_TO, as the iOS system tab bar sends: a NAVIGATE would also focus the tab app in the root
+    // stack and pop the Chat open beside it in a split window.
+    tabs?.dispatch(TabActions.jumpTo(route.name, route.params));
+  }, [emitter, routes, state.index, tabs]);
 
   useEffect(() => {
     selected.set(state.index);
@@ -460,7 +467,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
         accessibilityRole="button"
         accessibilityLabel={selectedLabel}
         onPress={expand}
-        style={{ position: "absolute", left: (windowWidth - barWidth) / 2 + MINIMIZED_INSET, bottom: barBottomOffset(insets.bottom) + (BAR_HEIGHT - MINIMIZED_SIZE) / 2, width: MINIMIZED_SIZE, height: MINIMIZED_SIZE }}
+        style={{ position: "absolute", left: (paneWidth - barWidth) / 2 + MINIMIZED_INSET, bottom: barBottomOffset(insets.bottom) + (BAR_HEIGHT - MINIMIZED_SIZE) / 2, width: MINIMIZED_SIZE, height: MINIMIZED_SIZE }}
       /> : null}
     </Animated.View>
   );

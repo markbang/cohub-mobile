@@ -1,4 +1,4 @@
-import { useIsFocused } from "expo-router";
+import { useScreenVisible } from "@/src/ui/pane";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useAnimatedReaction, useSharedValue, type SharedValue } from "react-native-reanimated";
 
@@ -23,7 +23,7 @@ const TRAVEL = 8;
 /** Minimizes the tab bar while the content scrolls down and restores it on the way back up or at the top. */
 export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefined) {
   const minimized = useContext(TabBarMinimize);
-  const focused = useIsFocused();
+  const focused = useScreenVisible();
   const active = useSharedValue(focused);
   // Where the scroll last turned, so the travel counts from there.
   const turn = useSharedValue(0);

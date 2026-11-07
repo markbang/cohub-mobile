@@ -4,7 +4,7 @@ import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/sessi
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LegendList } from "@legendapp/list/react-native";
-import { BackHandler, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { BackHandler, Pressable, ScrollView, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Reanimated, { cancelAnimation, Extrapolation, interpolate, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, ReduceMotion } from "react-native-reanimated";
@@ -38,6 +38,7 @@ import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
 import { AppIcon, Avatar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, SearchField, TopBar } from "@/src/ui";
 import { normalizeSpacePath, parentSpacePath, sortByRecent, spacePathName } from "@/src/utils";
+import { usePaneWidth } from "@/src/ui/pane";
 
 export type SpacePanel = "chat" | "files";
 
@@ -74,7 +75,8 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
   const { t } = useTranslation();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  // The Chat's pane, not the window: in a split window the panels slide within the right pane.
+  const width = usePaneWidth();
   const panelWidth = Math.min(MAX_PANEL_WIDTH, Math.max(280, width * PANEL_WIDTH_RATIO));
   const centerOffset = panelWidth;
   // The right panel aligns to the viewport's right edge, not its left edge.
