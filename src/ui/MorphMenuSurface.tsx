@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
-import Animated, { Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSequence, withTiming } from "react-native-reanimated";
+import Animated, { Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { RADIUS } from "@/src/design/tokens";
 import { menuMorph, motion } from "@/src/motion";
 import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
-import { CLOSE_FRAMES, DROP_FRAMES, DROP_GLASS_FRAMES, MORPH_FRAME_MS, OPEN_FRAMES, dropShape, morphShape, resumeFrame, triggerReturn, type MorphRect } from "@/src/ui/menu-morph";
+import { CLOSE_FRAMES, MORPH_FRAME_MS, OPEN_FRAMES, morphShape, resumeFrame, type MorphRect } from "@/src/ui/menu-morph";
 
 export type { MorphRect } from "@/src/ui/menu-morph";
 
@@ -28,8 +28,8 @@ type MorphMenuSurfaceProps = Omit<ViewProps, "style" | "children"> & {
 
 /**
  * A menu panel that takes the place of its trigger, morphing as iOS 27's does (`menu-morph.ts`): the
- * trigger drops as a ball and swells into the menu, and on close the menu falls back into a ball and runs
- * into the trigger as a drop. The owner hides the trigger through `MenuAnchor`. The backdrop is a childless
+ * trigger drops as a ball and swells into the menu, and on close the menu fades into a ball that runs back
+ * into the trigger. The owner hides the trigger through `MenuAnchor`. The backdrop is a childless
  * absolute layer, so animating its frame re-lays out nothing else; the rows keep their final layout and are
  * only moved, zoomed and clipped by transforms, so hit-testing matches what is drawn once the menu settles.
  */
@@ -60,10 +60,10 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
     }
     const at = frame.get();
     const wasOpening = opening.get();
-    // Turned around part-way, it picks up the other table where the shape is as tall; a drop already under way starts afresh.
-    const from = !started.current ? 0 : wasOpening === open ? at : !wasOpening && at >= CLOSE_FRAMES ? 0 : resumeFrame(open, at, wasOpening);
+    // Turned around part-way, it picks up the other way where the shape is as tall.
+    const from = !started.current ? 0 : wasOpening === open ? at : resumeFrame(open, at, wasOpening);
     started.current = true;
-    const end = open ? OPEN_FRAMES : CLOSE_FRAMES + DROP_GLASS_FRAMES;
+    const end = open ? OPEN_FRAMES : CLOSE_FRAMES;
     opening.set(open);
     frame.set(from);
     frame.set(withTiming(end, { duration: Math.max(0, end - from) * MORPH_FRAME_MS, easing: LINEAR, reduceMotion: ReduceMotion.Never }, done));
@@ -81,13 +81,9 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
     if (!box) return { opacity: 0 };
     const f = frame.get();
     // Reduce Motion keeps the panel in place and only crossfades it.
-    if (reduced) return { opacity: f, left: 0, top: 0, width: box.width, height: box.height, ...corners(radius, radius) };
-    if (!opening.get() && f >= CLOSE_FRAMES) {
-      const drop = dropShape(f - CLOSE_FRAMES, from, box);
-      return { opacity: drop.width > 0 && drop.height > 0 ? 1 : 0, left: drop.x, top: drop.y, width: drop.width, height: drop.height, ...corners(0, drop.width / 2) };
-    }
+    if (reduced) return { opacity: f, left: 0, top: 0, width: box.width, height: box.height, borderRadius: radius };
     const shape = morphShape(opening.get(), f, from, box, radius);
-    return { opacity: 1, left: shape.x, top: shape.y, width: shape.width, height: shape.height, ...corners(shape.corner, shape.corner) };
+    return { opacity: shape.glass, left: shape.x, top: shape.y, width: shape.width, height: shape.height, borderRadius: shape.corner };
   });
 
   // The clip follows the glass by transform alone; the rows inside are scaled back out of it and then zoomed
@@ -95,7 +91,6 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
   const clipStyle = useAnimatedStyle(() => {
     const f = frame.get();
     if (!box || reduced) return { opacity: box ? f : 0, borderRadius: radius, transform: IDENTITY };
-    if (!opening.get() && f >= CLOSE_FRAMES) return { opacity: 0, borderRadius: radius, transform: IDENTITY };
     const shape = morphShape(opening.get(), f, from, box, radius);
     const sx = Math.max(0.01, shape.width / box.width);
     const sy = Math.max(0.01, shape.height / box.height);
@@ -108,7 +103,7 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
   });
   const rowsStyle = useAnimatedStyle(() => {
     const f = frame.get();
-    if (!box || reduced || (!opening.get() && f >= CLOSE_FRAMES)) return { transform: IDENTITY };
+    if (!box || reduced) return { transform: IDENTITY };
     const shape = morphShape(opening.get(), f, from, box, radius);
     const sx = Math.max(0.01, shape.width / box.width);
     const sy = Math.max(0.01, shape.height / box.height);
@@ -139,11 +134,6 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
 const IDENTITY = [{ translateX: 0 }, { translateY: 0 }, { scaleX: 1 }, { scaleY: 1 }];
 const CONTENT_ORIGIN = { transformOrigin: "left top" } as const;
 
-function corners(top: number, bottom: number) {
-  "worklet";
-  return { borderTopLeftRadius: top, borderTopRightRadius: top, borderBottomLeftRadius: bottom, borderBottomRightRadius: bottom };
-}
-
 const styles = StyleSheet.create({
   backdrop: { position: "absolute", overflow: "hidden", borderCurve: "continuous" },
   content: { flexGrow: 1, flexShrink: 1, minHeight: 0, overflow: "hidden", borderCurve: "continuous" },
@@ -153,25 +143,17 @@ const styles = StyleSheet.create({
 type MenuAnchorProps = ViewProps & { open: boolean; ref?: Ref<View> };
 
 /**
- * Wraps the control a menu grows out of: hidden while its menu is open and, as iOS 27's is, back the moment
- * the closing menu has fallen into a drop, narrow and raised, settling as the drop runs into it.
+ * Wraps the control a menu grows out of: hidden while its menu is open and, as iOS 27's is, faded back in only
+ * once the menu has run back into it.
  */
 export function MenuAnchor({ open, style, ref, ...props }: MenuAnchorProps) {
   const reduced = useReducedMotion();
-  // -1 hidden; then frames into the trigger's return.
-  const back = useSharedValue(open ? -1 : DROP_FRAMES);
+  const shown = useSharedValue(open ? 0 : 1);
   useEffect(() => {
-    if (open) { back.set(-1); return; }
-    if (back.get() >= 0) return;
-    if (reduced) { back.set(withDelay(motion.fadeOut.duration, withTiming(DROP_FRAMES, { duration: 0 }))); return; }
-    back.set(withDelay(CLOSE_FRAMES * MORPH_FRAME_MS, withSequence(withTiming(0, { duration: 0 }), withTiming(DROP_FRAMES, { duration: DROP_FRAMES * MORPH_FRAME_MS, easing: LINEAR, reduceMotion: ReduceMotion.Never }))));
-  }, [back, open, reduced]);
-  const animatedStyle = useAnimatedStyle(() => {
-    const at = back.get();
-    if (at < 0) return { opacity: 0, transform: [{ translateY: 0 }, { scaleX: 1 }] };
-    const { scaleX, lift } = triggerReturn(at);
-    return { opacity: 1, transform: [{ translateY: lift }, { scaleX }] };
-  });
+    if (open) { shown.set(0); return; }
+    shown.set(withDelay(reduced ? motion.fadeOut.duration : menuMorph.reveal.delay, withTiming(1, { duration: menuMorph.reveal.duration })));
+  }, [open, reduced, shown]);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: shown.get() }));
   return <Animated.View ref={ref} collapsable={false} {...props} style={[style, animatedStyle]} />;
 }
 

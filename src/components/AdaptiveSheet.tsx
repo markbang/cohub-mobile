@@ -223,7 +223,7 @@ export function AdaptiveSheet({
   const availableHeight = Math.max(0, height - keyboardHeight);
   // As iOS 26's: a page sheet starts right under the status bar; a floating one keeps its margin all round.
   const maxHeight = compact
-    ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : PAGE_GAP))
+    ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : 0))
     : Math.max(0, Math.min(availableHeight - 48, 760));
   // A floating sheet ends above the screen's edge but still runs its content clear of the home indicator.
   const bottomPadding = floating ? theme.spacing.lg + insets.bottom : Math.max(insets.bottom, theme.spacing.lg);
@@ -330,13 +330,13 @@ const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: R
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
-// iOS 27's sheets, measured (liquidglass): a fitted sheet floats 8 pt in with 38 pt corners; a page sheet
-// starts 5 pt under the status bar with 38 pt top corners; the grabber is 57 × 4 pt.
+// iOS 27's sheets on a 402 pt iPhone, measured from the UI Snapshots captures: a fitted sheet floats 8 pt in
+// with 36 pt corners; a page sheet starts right under the status bar with 38 pt top corners; the grabber is
+// 57 × 4 pt, 6 pt down.
 const FLOAT_MARGIN = 8;
-const PAGE_GAP = 5;
-const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 38 } as const;
+const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 36 } as const;
 const PAGE_PANEL = { width: "100%", borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
 const GRABBER = { width: 57, height: 4 } as const;
-const GRABBER_SLOT = { top: 5 } as const;
+const GRABBER_SLOT = { top: 6 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.
 const SCRIM = { backgroundColor: "#000000" } as const;

@@ -152,9 +152,6 @@ jobs:
           # The default SwiftShader renderer took the emulator down on the first scroll under the
           # tab bar's blur; ANGLE's SwiftShader backend and more memory keep it up.
           ram-size: 4096M
-          # The emulator renders in software; the runner's four cores, not the default two, roughly double the
-          # frames it draws, which the recordings need to show motion.
-          cores: 4
           emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim
           script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG
 

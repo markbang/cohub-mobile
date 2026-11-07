@@ -94,10 +94,12 @@ export const popover = {
 
 /**
  * A drawn menu morphs out of its trigger and back as iOS 27's does; the frame-by-frame shape is in
- * `src/ui/menu-morph.ts`. Its corner is iOS 27's menu radius.
+ * `src/ui/menu-morph.ts`. Its corner is iOS 27's menu radius, measured.
  */
 export const menuMorph = {
   radius: 33,
+  /** The trigger fades back in once the closing menu has run into it, at about 250 ms on iOS 27. */
+  reveal: { delay: 250, duration: 100 },
 } as const;
 
 /**

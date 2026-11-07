@@ -85,7 +85,7 @@ export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSh
 }
 
 /**
- * The iOS alert, measured on a 402 pt iPhone: a 320 pt card (iOS 27) with 33 pt corners; the title's ink 26 pt below the top and its text 29 pt in; 48 pt capsule buttons 82 pt below
+ * The iOS 27 alert, measured on a 402 pt iPhone: a 318 pt card 42 pt in from each edge with 34 pt corners; the title's ink 26 pt below the top and its text 29 pt in; 48 pt capsule buttons 82 pt below
  * the title's ink, 8 apart and 15 pt from the card's edges.
  */
 function AlertCard({ visible, onClose, testID, title, lines, error = null, children }: { visible: boolean; onClose: () => void; testID?: string; title: string; lines: readonly (string | undefined)[]; error?: string | null; children: ReactNode }) {
@@ -116,9 +116,9 @@ function AlertButton({ label, tone = "default", busy = false, disabled = false, 
   </Pressable>;
 }
 
-const CARD_WIDTH = 320;
-const CARD_MARGIN = 41;
-const CARD_RADIUS = 33;
+const CARD_WIDTH = 318;
+const CARD_MARGIN = 42;
+const CARD_RADIUS = 34;
 // Inter's ink starts about 4.5 pt into the headline's line, so 21 puts it 26 pt below the card's top.
 const CONTENT_INSET = { paddingTop: 21, paddingHorizontal: 29 } as const;
 const BUTTON_INSET = { marginTop: 18, paddingHorizontal: 15, paddingBottom: 15 } as const;
