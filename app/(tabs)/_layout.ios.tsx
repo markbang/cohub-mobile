@@ -1,7 +1,8 @@
 import { NativeTabs } from "expo-router/native-tabs";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
-import { useSplitLayout } from "@/src/ui/pane";
+import { useWindowDimensions } from "react-native";
+import { splitMode } from "@/src/data/split-navigation";
 
 /**
  * iOS uses the system tab bar: Liquid Glass, its lens, drag between tabs, and minimizing on scroll
@@ -15,7 +16,9 @@ import { useSplitLayout } from "@/src/ui/pane";
 export default function TabLayout() {
   const { t } = useTranslation();
   const theme = useAppTheme();
-  const split = useSplitLayout().mode === "split";
+  // The window size, not the split context, so a Chat selection does not re-render the tabs.
+  const { width, height } = useWindowDimensions();
+  const split = splitMode(width, height) === "split";
   return (
     <NativeTabs tintColor={theme.colors.accent} minimizeBehavior="onScrollDown" unstable_nativeProps={{ ios: { horizontalSizeClass: split ? "compact" : "inherit" } }}>
       <NativeTabs.Trigger name="(chats)" disableAutomaticContentInsets>
