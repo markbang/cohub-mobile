@@ -4,14 +4,15 @@ name: Tablet split layout
 # Run by `scripts/ui-snapshots.mjs capture --target tablet` after sign-in, in portrait, on the
 # Chats tab of a split window. FIRST_ROW and SECOND_ROW are left-pane row positions.
 # It sends one real message from the test account (the New Chat step).
-- openLink: "cohub://settings"
+# The root link selects the Chats tab and empties the right pane.
+- openLink: "cohub:///"
 - extendedWaitUntil:
-    visible: ".*Appearance.*"
+    visible: ".*Chats.*"
     timeout: 20000
-- tapOn: "Chats"
 - waitForAnimationToEnd:
     timeout: 5000
 - assertNotVisible:
+    text: "Open .*"
     selected: true
 - takeScreenshot: "flow-01-empty"
 
@@ -39,24 +40,30 @@ name: Tablet split layout
     notVisible: ".*Opening Chat.*"
     timeout: 60000
 - assertVisible:
+    text: "Open .*"
     selected: true
 - extendedWaitUntil:
     notVisible:
       selected: true
-      text: ".*Unread.*"
+      text: "Open .*Unread.*"
     timeout: 15000
 # The right pane's first screen has no back button.
 - assertNotVisible: "Back"
 - takeScreenshot: "flow-02-chat-read"
-# Switching tabs changes only the left pane.
-- tapOn: "Spaces"
-- waitForAnimationToEnd:
-    timeout: 5000
-- assertVisible:
-    id: "chat-composer-input"
-- tapOn: "Chats"
-- assertVisible:
-    selected: true
+# Switching tabs changes only the left pane (the drawn tab bar; the iPad's is UIKit's).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Spaces"
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - assertVisible:
+          id: "chat-composer-input"
+      - tapOn: "Chats"
+      - assertVisible:
+          text: "Open .*"
+          selected: true
 
 # A draft survives turning the window.
 - tapOn:
@@ -84,6 +91,7 @@ name: Tablet split layout
     notVisible: ".*Opening Chat.*"
     timeout: 60000
 - assertVisible:
+    text: "Open .*"
     selected: true
 - assertNotVisible: "Back"
 - takeScreenshot: "flow-04-second-chat"
@@ -96,17 +104,17 @@ name: Tablet split layout
       - waitForAnimationToEnd:
           timeout: 5000
       - assertNotVisible:
+          text: "Open .*"
           selected: true
       - assertVisible:
           id: "split-right-pane"
       - takeScreenshot: "flow-05-back-empty"
 
 # New Chat opens over both panes, then the draft it creates takes over the right pane once sent.
-- openLink: "cohub://settings"
+- openLink: "cohub:///"
 - extendedWaitUntil:
-    visible: ".*Appearance.*"
+    visible: ".*Chats.*"
     timeout: 20000
-- tapOn: "Chats"
 - tapOn: "New Chat"
 - extendedWaitUntil:
     visible: ".*Find a Space.*"
@@ -124,6 +132,7 @@ name: Tablet split layout
 - tapOn: "Send message"
 - extendedWaitUntil:
     visible:
+      text: "Open .*"
       selected: true
     timeout: 30000
 - assertVisible:

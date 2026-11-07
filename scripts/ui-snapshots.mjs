@@ -89,9 +89,9 @@ const LEFT_SECOND_ROW = { ios: "12%, 44%", android: "12%, 44%" };
 
 /** Split-window screens: the right pane empty, a Chat, a Space, a settings page, the Chat's panel, and an overlay. */
 export const TABLET_SCREENS = [
-  { name: "split-empty", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { waitFor: "New Chat" }] },
-  { name: "split-chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }] },
-  { name: "split-chat-panel", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "right" }] },
+  { name: "split-empty", ready: "Appearance", link: "cohub://settings", steps: [{ chatsTab: true }, { waitFor: "New Chat" }] },
+  { name: "split-chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ chatsTab: true }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }] },
+  { name: "split-chat-panel", ready: "Appearance", link: "cohub://settings", steps: [{ chatsTab: true }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "right" }] },
   { name: "split-chat-conversation", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
   { name: "split-chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
   { name: "split-chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
@@ -100,11 +100,11 @@ export const TABLET_SCREENS = [
   { name: "split-chat-stream", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=stream" },
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
-  { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "New Chat" }, { waitFor: "Find a Space" }] },
+  { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ chatsTab: true }, { tapOn: "New Chat" }, { waitFor: "Find a Space" }] },
 ];
 
 /** The same operations on every target, timed by the frame probe: a long fixture, a real Chat, and the tabs. */
-const perfSteps = (row) => [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Chats" }, { tapPoint: row }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Chats" }];
+const perfSteps = (row) => [{ open: "cohub://debug/chat?fixture=long", ready: "Fix the Android sheet height" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }, { open: "cohub://settings", ready: "Appearance" }, { chatsTab: true }, { tapPoint: row }, { waitGone: "Opening Chat" }, { swipe: "down" }, { swipe: "up" }, { swipe: "down" }, { swipe: "up" }];
 const PERF_STEPS = { phone: perfSteps(FIRST_ROW), tablet: perfSteps(LEFT_FIRST_ROW) };
 
 /**
@@ -327,6 +327,9 @@ function pushSteps(lines, platform, steps = []) {
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
+    // The iPad draws its tab bar at the top of the left pane, where Chats can scroll out of view; the root link selects it.
+    else if (step.chatsTab && platform === "ios") lines.push("- openLink: \"cohub:///\"", "- extendedWaitUntil:", "    visible: \".*Chats.*\"", "    timeout: 20000");
+    else if (step.chatsTab) lines.push("- tapOn:", "    text: \"Chats\"", SETTLE);
     else if (step.open) {
       openScreen(lines, platform, step.open, false, step.ready);
       continue;
