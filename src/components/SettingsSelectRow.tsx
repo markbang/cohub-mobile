@@ -8,7 +8,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { traceAction } from "@/src/data/interaction-trace";
 import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
-import { MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
@@ -185,10 +185,10 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         testID={testID}
       >
         <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
-          <View ref={setAnchor} collapsable={false} className={`shrink flex-row items-center gap-1 ${menuOpen ? "opacity-0" : ""}`} style={{ maxWidth: "50%" }}>
+          <MenuAnchor ref={setAnchor} open={menuOpen} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
             <Text numberOfLines={1} className="shrink text-body text-fg-muted">{current?.label}</Text>
             <AppIcon name="chevrons-up-down" size={16} tone="muted" />
-          </View>
+          </MenuAnchor>
         </SettingsRow>
       </View>
     </GestureDetector>
@@ -233,7 +233,7 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
             accessibilityLabel={option.label}
             accessibilityState={{ checked: selected }}
             onPress={() => onChoose(option.value)}
-            className={`flex-row items-center gap-3 px-4 active:bg-surface-pressed ${highlight === index ? "bg-surface-pressed" : ""}`}
+            className={`flex-row items-center gap-3 px-4 active:opacity-70 ${highlight === index ? "opacity-70" : ""}`}
             style={{ height: ROW_HEIGHT }}
           >
             <Text numberOfLines={1} className={`min-w-0 flex-1 text-body text-fg ${selected ? "font-semibold" : ""}`}>{option.label}</Text>

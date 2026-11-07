@@ -72,8 +72,8 @@ export function NoticeSheet({ notice, fallbackTitle, onClose, testID }: NoticeSh
 
 /**
  * The iOS 26 alert, measured on a 402 pt iPhone: a 318 pt card 42 pt in from each edge with 34 pt
- * corners; the title's cap height 14 pt below the top and its text 29 pt in; 48 pt capsule buttons
- * 8 apart and 15 pt from the card's edges.
+ * corners; the title's ink 26 pt below the top and its text 29 pt in; 48 pt capsule buttons 82 pt below
+ * the title's ink, 8 apart and 15 pt from the card's edges.
  */
 function AlertCard({ visible, onClose, testID, title, lines, error = null, children }: { visible: boolean; onClose: () => void; testID?: string; title: string; lines: readonly (string | undefined)[]; error?: string | null; children: ReactNode }) {
   const theme = useAppTheme();
@@ -89,7 +89,7 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
           {lines.filter(Boolean).map((line) => <Text key={line} className="mt-1.5 text-subhead text-fg-muted">{line}</Text>)}
           {error ? <Text accessibilityRole="alert" className="mt-1.5 text-caption text-danger">{error}</Text> : null}
         </View>
-        <View className="mt-5 flex-row gap-2" style={BUTTON_INSET}>{children}</View>
+        <View className="flex-row gap-2" style={BUTTON_INSET}>{children}</View>
       </Reanimated.View>
       <ToastViewport />
     </View>
@@ -106,9 +106,9 @@ function AlertButton({ label, tone = "default", busy = false, disabled = false, 
 const CARD_WIDTH = 318;
 const CARD_MARGIN = 42;
 const CARD_RADIUS = 34;
-// Roboto's cap height sits 4.7 pt into a 22 pt line, so 10 puts it 14 pt below the card's top as SF's does.
-const CONTENT_INSET = { paddingTop: 10, paddingHorizontal: 29 } as const;
-const BUTTON_INSET = { paddingHorizontal: 15, paddingBottom: 15 } as const;
+// Inter's ink starts about 4.5 pt into the headline's line, so 21 puts it 26 pt below the card's top.
+const CONTENT_INSET = { paddingTop: 21, paddingHorizontal: 29 } as const;
+const BUTTON_INSET = { marginTop: 18, paddingHorizontal: 15, paddingBottom: 15 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black at a fixed alpha.
 const SCRIM_LIGHT = { backgroundColor: "rgba(0, 0, 0, 0.2)" } as const;
 // design-system: as above; iOS dims the dark appearance by half.

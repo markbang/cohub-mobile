@@ -6,7 +6,7 @@
  */
 
 export type ColorKey =
-  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "pressOverlay"
+  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassLens" | "pressOverlay"
   | "border" | "borderStrong"
   | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton"
   | "text" | "textSecondary" | "textMuted" | "textFaint"
@@ -28,6 +28,7 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   surfaceFloat: "surface-float",
   glassControl: "glass-control",
   glassMenu: "glass-menu",
+  glassLens: "glass-lens",
   pressOverlay: "press-overlay",
   border: "border",
   borderStrong: "border-strong",
@@ -72,9 +73,11 @@ export const lightPalette: Palette = {
   surfaceRaised: "#efebe4",
   surfacePressed: "#e6e1d8",
   surfaceFloat: "#ffffff",
-  // iOS 26 Liquid Glass over `background`, as measured: a bar button and a pull-down menu.
+  // iOS 26 Liquid Glass over `background`, as measured: a bar button, a pull-down menu, and the tab bar's
+  // selected lens over the bar.
   glassControl: "#fdfbf7",
   glassMenu: "#faf7f2",
+  glassLens: "#ece9e4",
   pressOverlay: "rgba(8, 9, 11, 0.08)",
   border: "#e8e3da",
   borderStrong: "#cdc6ba",
@@ -125,6 +128,7 @@ export const darkPalette: Palette = {
   surfaceFloat: "#2c2c2e",
   glassControl: "#171719",
   glassMenu: "#171718",
+  glassLens: "#404043",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
   border: "#38383a",
   borderStrong: "#48484a",

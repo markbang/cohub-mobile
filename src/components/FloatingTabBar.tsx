@@ -242,13 +242,15 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
   const selectedLabel = typeof selectedTitle === "string" ? selectedTitle : selectedRoute?.name;
 
   // UIKit keeps the lens lifted until it has risen all the way and arrived.
-  useAnimatedReaction(() => [lens.get(), lift.get()] as const, ([position, lifted]) => {
-    if (!dropping.get() || touching.get() || lifted < LIFT_SNAP) return;
-    if (Math.abs(lensTarget.get() - position) > LIFT_RELEASE) return;
+  const dropIfArrived = useCallback(() => {
+    "worklet";
+    if (!dropping.get() || touching.get() || lift.get() < LIFT_SNAP) return;
+    if (Math.abs(lensTarget.get() - lens.get()) > LIFT_RELEASE) return;
     dropping.set(false);
     lift.set(withSpring(0, springs.dockLift));
     scheduleOnRN(setLensLifted, false);
-  });
+  }, [dropping, lens, lensTarget, lift, touching]);
+  useAnimatedReaction(() => [lens.get(), lift.get()] as const, dropIfArrived);
 
   useAnimatedReaction(() => lens.get(), (position, previous) => {
     const now = clock();
@@ -270,6 +272,8 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
     lens.set(withSpring(index, springs.dockTravel));
     swell.set(withSpring(0, springs.dockPress));
     pull.set(withSpring(0, springs.dockPress));
+    // A press held until the lens has risen and arrived leaves nothing moving to wake the reaction above.
+    dropIfArrived();
   }
 
   const gesture = Gesture.Manual()
@@ -406,13 +410,13 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
           <GlassGroup spacing={LENS_GROWTH * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
             {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
             <Animated.View className={`absolute rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={glassFrameStyle}>
-              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} />
+              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} rim />
             </Animated.View>
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
           <Animated.View pointerEvents="none" className="absolute" style={[LENS_FRAME, lensStyle]}>
             {/* iOS selects with a neutral capsule; the accent stays on the glyph and label. */}
-            <Animated.View className="absolute inset-0 rounded-full bg-control-track" style={restingLensStyle} />
+            <Animated.View className="absolute inset-0 rounded-full bg-glass-lens" style={restingLensStyle} />
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
           </Animated.View>

@@ -80,11 +80,15 @@ export const popover = {
 
 /**
  * A drawn menu grows out of the control that opened it and shrinks back into it, as iOS 26 menus do, fitted
- * frame by frame: the open springs 3% past full size at 140 ms; the close accelerates into the control in 220 ms.
+ * frame by frame: the open springs 3% past full size at 140 ms; the close accelerates into the control in 220 ms,
+ * the panel fading as it goes (`closeFade`, opacity by progress), and the control fades back in only once the
+ * menu is gone (`reveal`).
  */
 export const menuMorph = {
   open: { mass: 1, stiffness: 1150, damping: 0.75 * 2 * Math.sqrt(1150) },
   close: { duration: 220, curve: [0.42, 0, 1, 1] },
+  closeFade: { progress: [0, 0.6, 1], opacity: [0, 0.4, 1] },
+  reveal: { duration: 120 },
 } as const;
 
 /** Drawn Android alerts: UIAlertController's entrance, shrinking from 1.2 × while it fades in. */

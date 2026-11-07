@@ -31,6 +31,8 @@ export function AppSwitch({ value = false, onValueChange, disabled = false, acce
       accessibilityState={{ checked: value, disabled }}
       testID={testID}
       disabled={disabled}
+      // Dimmed as one layer, as UISwitch is, so the thumb stays opaque over the track.
+      needsOffscreenAlphaCompositing={disabled}
       hitSlop={8}
       onPress={() => { haptics.selection(); onValueChange?.(!value); }}
       className="disabled:opacity-50"

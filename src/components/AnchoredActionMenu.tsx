@@ -94,7 +94,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
             accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
             disabled={action.disabled}
             onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-            className="flex-row items-center active:bg-surface-pressed disabled:opacity-45"
+            className="flex-row items-center active:opacity-70 disabled:opacity-45"
             style={action.detail ? styles.detailRow : styles.row}
           >
             <View style={styles.glyph}><AppIcon name={action.checked ? "check" : action.icon} size={action.checked ? 17 : 22} tone="fg" /></View>

@@ -373,7 +373,8 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   // The danger fill is a token pair; its foreground is not one of the icon tones.
   const iconColor = variant === "danger" ? theme.colors.dangerText : undefined;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 py-2 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
+    // Dimmed as one layer, as iOS does: without it Android fades the label into the fill beneath it.
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} needsOffscreenAlphaCompositing={disabled || loading} onPress={() => { traceAction("button", { label, variant }); onPress(); }} className={`min-h-13 flex-row items-center justify-center gap-2 rounded-full px-5 py-2 disabled:opacity-55 ${classes.box} ${className}`} style={style}>
       {loading ? <Loader color={iconColor ?? theme.colors[ICON_TONES[classes.tone]]} /> : icon ? <AppIcon name={icon} size={18} tone={classes.tone} color={iconColor} /> : null}
       {/* Uncapped: at large text sizes the label wraps and the button grows with it. */}
       <Text className={`shrink text-center text-body font-semibold ${classes.text}`}>{label}</Text>
@@ -545,8 +546,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
     <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
       {/* Glyphs pop only when they change, not when the composer first appears. */}
       <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-float"}`} style={styles.composerSurface}>
-        <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-surface" />
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerSurface}>
+        {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
+        <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-glass-menu" rim />
         <View className="flex-row items-start">
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
