@@ -1411,8 +1411,12 @@ let menuBackRemoved = false;
 let menuFocused = true;
 let menuPredictiveBackBlocked = null;
 const menuCleanups = [];
+// The rows live in their own component; it is expanded in place so the assertions below still reach them.
+const renderMenuContent = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredMenuContent", { ...chromeScope, ScrollView: "ScrollView" });
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
+  React: { ...chromeScope.React, createElement: (type, props, ...children) => type === "AnchoredMenuContent" ? renderMenuContent(props) : chromeScope.React.createElement(type, props, ...children) },
+  AnchoredMenuContent: "AnchoredMenuContent",
   ScrollView: "ScrollView",
   MorphMenuSurface: "MorphMenuSurface",
   useRef: () => ({ current: null }),
@@ -1455,6 +1459,9 @@ assert.equal(menuPredictiveBackBlocked, true, "an open menu keeps the back gestu
 assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, menuExited, "the menu unmounts once it has shrunk back into its trigger");
 assert.equal(menuNodes.find((node) => node.type === "ScrollView").props.keyboardShouldPersistTaps, "always");
 assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native share sheet must not compete with another Modal");
+const barMenuNodes = chromeNodes(renderChatMenu({ ...chatMenuProps, heading: "All", actions: [{ icon: "messages", title: "All", checked: true, onPress: () => undefined }] }));
+assert.deepEqual(barMenuNodes.find((node) => node.props?.accessibilityRole === "header").props.children, ["All"], "a navigation-bar menu shows its heading, as UIKit's does");
+assert.deepEqual(barMenuNodes.filter((node) => node.type === "AppIcon").map((node) => node.props.name), ["check", "messages"], "a navigation-bar menu keeps the glyph and checks in its own column");
 menuCleanups[0]();
 assert.equal(menuBackRemoved, true);
 menuFocused = false;

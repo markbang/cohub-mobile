@@ -296,7 +296,7 @@ export default function SpacesScreen() {
     />
     </BrandRefreshArea>
     </EdgeBlurTarget>
-    <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
+    <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} heading={filterLabel} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
     {/* A short form: sized to its fields on both platforms rather than a full-height page. */}
     <AdaptiveSheet
       visible={createOpen}
