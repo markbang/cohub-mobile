@@ -14,10 +14,12 @@ export type ComposerMenuProps = {
   children: ReactNode;
   preferredWidth: number;
   fillHeight?: boolean;
+  /** `panel` for the model selector; `glass` for a menu that iOS shows as its system menu. */
+  material?: "glass" | "panel";
   testID: string;
 };
 
-export function ComposerMenu({ anchorRef, title, onClose, children, preferredWidth, fillHeight = false, testID }: ComposerMenuProps) {
+export function ComposerMenu({ anchorRef, title, onClose, children, preferredWidth, fillHeight = false, material = "panel", testID }: ComposerMenuProps) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -50,7 +52,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
       <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
       {layout && anchor ? <MorphMenuSurface
         testID={testID}
-        material="panel"
+        material={material}
         anchor={anchor}
         open={presence.open}
         onClosed={presence.onExited}

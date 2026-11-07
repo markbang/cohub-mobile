@@ -272,6 +272,7 @@ export default function ChatsScreen() {
       <MenuPresence open={sourceMenuOpen}><AnchoredActionMenu
         anchorRef={sourceButtonRef}
         title={t("chats.source.title")}
+        heading={sourceLabel}
         testID="chats-source-menu"
         onClose={() => setSourceMenuOpen(false)}
         actions={sourceActions}

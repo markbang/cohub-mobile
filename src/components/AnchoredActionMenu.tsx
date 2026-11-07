@@ -27,11 +27,16 @@ type AnchoredActionMenuProps = {
   /** One group; or pass `sections` for groups split by separators, as in an iOS menu. */
   actions?: readonly AnchoredMenuAction[];
   sections?: readonly AnchoredMenuSection[];
+  /**
+   * Draws the menu as UIKit's navigation-bar menus are drawn on iOS (`NativeHeader`): this heading in grey above
+   * the rows, and the check in its own column before each row's glyph rather than in its place.
+   */
+  heading?: string;
   onClose: () => void;
   testID: string;
 };
 
-export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: sectionsProp, onClose, testID }: AnchoredActionMenuProps) {
+export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: sectionsProp, heading, onClose, testID }: AnchoredActionMenuProps) {
   const sections = (sectionsProp ?? [{ actions }]).filter((section) => section.actions.length > 0);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -83,30 +88,38 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
       open={open}
       onClosed={onExited}
     >
-      <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
-        {sections.map((section, index) => <View key={section.title ?? index}>
-          {index > 0 ? <View className="bg-border" style={styles.separator} /> : null}
-          {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-faint" style={styles.header}>{section.title}</Text> : null}
-          {section.actions.map((action) => <Pressable
-            key={action.title}
-            accessibilityRole="menuitem"
-            accessibilityLabel={action.detail ? `${action.title}, ${action.detail}` : action.title}
-            accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
-            disabled={action.disabled}
-            onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-            className="flex-row items-center active:opacity-70 disabled:opacity-45"
-            style={action.detail ? styles.detailRow : styles.row}
-          >
-            <View style={styles.glyph}><AppIcon name={action.checked ? "check" : action.icon} size={action.checked ? 17 : 22} tone="fg" /></View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-body text-fg">{action.title}</Text>
-              {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-faint" style={styles.detail}>{action.detail}</Text> : null}
-            </View>
-          </Pressable>)}
-        </View>)}
-      </ScrollView>
+      <AnchoredMenuContent sections={sections} heading={heading} onClose={onClose} testID={testID} />
     </MorphMenuSurface> : null}
   </View>;
+}
+
+/** A menu's rows as iOS draws them, for the drawn menus that hold them. */
+export function AnchoredMenuContent({ sections, heading, onClose, testID }: { sections: readonly AnchoredMenuSection[]; heading?: string; onClose: () => void; testID: string }) {
+  const bar = heading !== undefined;
+  return <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
+    {bar ? <Text accessibilityRole="header" numberOfLines={1} className="text-caption font-normal text-fg-faint" style={styles.heading}>{heading}</Text> : null}
+    {sections.map((section, index) => <View key={section.title ?? index}>
+      {index > 0 ? <View className="bg-border" style={styles.separator} /> : null}
+      {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-faint" style={styles.header}>{section.title}</Text> : null}
+      {section.actions.map((action) => <Pressable
+        key={action.title}
+        accessibilityRole="menuitem"
+        accessibilityLabel={action.detail ? `${action.title}, ${action.detail}` : action.title}
+        accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
+        disabled={action.disabled}
+        onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
+        className="flex-row items-center active:opacity-70 disabled:opacity-45"
+        style={[action.detail ? styles.detailRow : styles.row, bar ? styles.barRow : null]}
+      >
+        {bar ? <View style={styles.check}>{action.checked ? <AppIcon name="check" size={17} tone="fg" /> : null}</View> : null}
+        <View style={styles.glyph}><AppIcon name={action.checked && !bar ? "check" : action.icon} size={action.checked && !bar ? 17 : 22} tone="fg" /></View>
+        <View className="min-w-0 flex-1">
+          <Text className="text-body text-fg">{action.title}</Text>
+          {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-faint" style={styles.detail}>{action.detail}</Text> : null}
+        </View>
+      </Pressable>)}
+    </View>)}
+  </ScrollView>;
 }
 
 // iOS 26's pull-down menu, measured at 402 pt and refitted to Inter's metrics so cap heights land where SF's
@@ -119,5 +132,10 @@ const styles = StyleSheet.create({
   detail: { marginTop: -2, lineHeight: 18 },
   separator: { height: 1, marginHorizontal: 24, marginVertical: 10 },
   header: { paddingLeft: 28, paddingRight: 16, paddingTop: 3.5, paddingBottom: 7.5 },
+  // UIKit's navigation-bar menu (iOS 27): the heading's text 44 pt in, the check centred 27 pt in, the glyph 55 and
+  // the title 80.
+  heading: { paddingLeft: 44, paddingRight: 16, paddingTop: 9, paddingBottom: 14 },
+  barRow: { paddingLeft: 19 },
+  check: { width: 17, marginRight: 5, alignItems: "center" },
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 20, elevation: 20 },
 });
