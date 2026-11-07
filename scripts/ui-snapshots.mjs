@@ -31,6 +31,10 @@ const OPEN_IN_APP = "Open in .*Cohub.*\\?";
 // The first list row under a tab root's search field at 402 pt wide; iOS's native Large Title and
 // search field sit lower than Android's drawn ones.
 const FIRST_ROW = { ios: "50%, 40%", android: "50%, 26%" };
+// Above every menu and under the status bar: a tap here closes what is open without choosing.
+const OUTSIDE = { ios: "50%, 9%", android: "50%, 9%" };
+// The Web browsing row's value, whichever the test account has; the picker opens from it on both platforms.
+const BROWSER_VALUE = "(System|In-app) browser";
 
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
@@ -61,6 +65,12 @@ export const SCREENS = [
   // The first row, by position: the test account's newest Chat changes from run to run.
   { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }] },
   { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
+  // Menus in the app, each left open; `fresh` relaunches first, so the previous one is gone. iOS shows the
+  // system menu, picker and attachment menu here, Android the drawn ones; the model selector is drawn on both.
+  { name: "chats-filter", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "Filter Chats by source.*" }, { waitFor: "Web app" }] },
+  { name: "settings-select", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }] },
+  { name: "composer-attach", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }] },
+  { name: "composer-model", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }] },
   { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
@@ -75,6 +85,13 @@ export const MOTIONS = [
   { name: "motion-push", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
   { name: "motion-controls", ready: "Buttons", link: "cohub://debug/ui?section=controls", steps: [{ tapOn: "Switch on" }, { tapOn: "Mine" }, { tapOn: "Shared" }, { tapOn: "Pinned" }] },
   { name: "motion-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
+  { name: "motion-filter", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ tapOn: "Filter Chats by source.*" }, { waitFor: "Web app" }, { tapOn: "All" }] },
+  // Opens the Web browsing picker and closes it from outside, so the account's setting is left alone.
+  { name: "motion-select", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }, { tapPoint: OUTSIDE }] },
+  { name: "motion-attach", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }, { tapPoint: OUTSIDE }] },
+  { name: "motion-model", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }, { tapOnId: "model-option-automatic" }] },
+  // A glass button held and let go: it swells under the finger and bounces past rest.
+  { name: "motion-press", ready: "Buttons", link: "cohub://debug/ui?section=controls", steps: [{ longPressOn: "Copy" }] },
   { name: "motion-sheet", ready: "Open sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },
   { name: "motion-confirm", ready: "Open confirm", link: "cohub://debug/ui?section=confirm&open=0", steps: [{ tapOn: "Open confirm" }, { tapOn: "Cancel" }] },
   { name: "motion-scroll-chats", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ swipe: "up" }, { swipe: "down" }] },
@@ -273,6 +290,7 @@ function pushSteps(lines, platform, steps = []) {
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint[platform])}`, SETTLE);
+    else if (step.longPressOn) lines.push("- longPressOn:", `    text: ${yamlString(step.longPressOn)}`);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
     // A deliberate drag, slow enough that the content follows the finger and then coasts.
