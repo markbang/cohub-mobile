@@ -50,7 +50,9 @@ export default function ChatsScreen() {
   const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
-  const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks, sessionLatestTurns: state.sessionLatestTurns, sessionTurnStatuses: state.sessionTurnStatuses }), shallowEqual);
+  const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks }), shallowEqual);
+  // Rows read their own status; the list only needs which Chats run, so a Turn update re-renders one row, not every row.
+  const runningIds = useAppSelector(({ state }) => state.sessions.filter((session) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running").map((session) => session.id), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const searchRef = useRef<TextInput>(null);
   const listRef = useRef<LegendListRef>(null);
@@ -104,7 +106,8 @@ export default function ChatsScreen() {
   const listItems = useMemo<ChatListItem[]>(() => {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
     if (!trimmedQuery && sourceFilter === "all") {
-      const keep = (session: (typeof localSessions)[number]) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running";
+      const running = new Set(runningIds);
+      const keep = (session: (typeof localSessions)[number]) => running.has(session.id);
       return buildSessionForkTree(localSessions, sessionForks, { expanded: expandedForks, keep }).map((entry): ChatListItem => entry.type === "toggle"
         ? { kind: "fork-toggle", rootId: entry.rootId, hidden: entry.hidden, expanded: entry.expanded }
         : { kind: "local-session", session: entry.session, fork: entry.fork, tree: entry.tree });
@@ -121,7 +124,7 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [expandedForks, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, sessionForks, sourceFilter, state.sessionLatestTurns, state.sessionTurnStatuses, trimmedQuery]);
+  }, [expandedForks, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, sourceFilter, trimmedQuery]);
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.

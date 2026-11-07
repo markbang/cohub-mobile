@@ -95,7 +95,9 @@ export function reconcileLatestTurn(current: LatestSessionTurn | null | undefine
       if (delta === 0 && terminal.includes(current.status) && !terminal.includes(incoming.status)) return current;
     }
   }
-  return { id: incoming.id, sequence: incoming.sequence, status: incoming.status, updatedAt: incoming.updatedAt, ...latestTurnFields(incoming) };
+  const next: LatestSessionTurn = { id: incoming.id, sequence: incoming.sequence, status: incoming.status, updatedAt: incoming.updatedAt, ...latestTurnFields(incoming) };
+  // Status reads and realtime repeats mostly restate the stored Turn; keeping it lets the store skip the update.
+  return current && LATEST_TURN_FIELDS.every((key) => current[key] === next[key]) ? current : next;
 }
 
 export function reconcileTurnStatusPatch(current: LatestSessionTurn | null | undefined, patch: Partial<LatestSessionTurn>): LatestSessionTurn | null {

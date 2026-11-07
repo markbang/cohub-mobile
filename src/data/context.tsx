@@ -432,10 +432,16 @@ function patchTurnRecords(existing: SessionTurnRecord[], patch: Partial<SessionT
 }
 
 function updateLatestTurn(state: AppState, sessionId: string, turn: LatestSessionTurn | null): AppState {
+  const latest = reconcileLatestTurn(state.sessionLatestTurns[sessionId], turn);
+  const status = turn ? reconcileLatestTurn(state.sessionTurnStatuses[turn.id], turn) : null;
+  const latestKept = state.sessionLatestTurns[sessionId] === latest;
+  const statusKept = !turn || state.sessionTurnStatuses[turn.id] === status;
+  // An unchanged Turn returns the same state, so the Chats list does not re-render for it.
+  if (latestKept && statusKept) return state;
   return {
     ...state,
-    sessionLatestTurns: { ...state.sessionLatestTurns, [sessionId]: reconcileLatestTurn(state.sessionLatestTurns[sessionId], turn) },
-    sessionTurnStatuses: turn ? { ...state.sessionTurnStatuses, [turn.id]: reconcileLatestTurn(state.sessionTurnStatuses[turn.id], turn) } : state.sessionTurnStatuses,
+    sessionLatestTurns: latestKept ? state.sessionLatestTurns : { ...state.sessionLatestTurns, [sessionId]: latest },
+    sessionTurnStatuses: statusKept || !turn ? state.sessionTurnStatuses : { ...state.sessionTurnStatuses, [turn.id]: status },
   };
 }
 
@@ -1126,7 +1132,9 @@ export function AppProvider({
       const id = action.type === "session-upsert" ? action.session.id : action.sessionId;
       sessionEventRevisions.current.set(id, ++sessionEventRevision.current);
     }
-    store.setState((current) => ({ state: reducer(current.state, action) }));
+    const current = store.getState().state;
+    const next = reducer(current, action);
+    if (next !== current) store.setState({ state: next });
   }, [store]);
 
   const ensureInstallation = useCallback(async () => {
@@ -1651,13 +1659,13 @@ export function AppProvider({
       session: typeof event.sessionId === "string" ? debugAlias("session", event.sessionId) : null,
     });
     try {
-      applyRealtimeChange(spaceRealtimeChange(event));
+      scopeInvalidator.add(spaceRealtimeChange(event));
     } catch (error) {
       dispatch({ type: "realtime-error", message: errorMessage(error, "Unable to synchronize Space events") });
     }
-  }, [applyRealtimeChange, dispatch]);
+  }, [dispatch, scopeInvalidator]);
 
-  // The socket also delivers watched Space rooms here; reapplying their Turn state is idempotent.
+  // The socket also delivers watched Space rooms here; this is the one place their Session and Turn state is applied.
   useEffect(() => {
     if (!client) return;
     let disposed = false;
