@@ -11,6 +11,7 @@ import { useAppActions, useModelCatalog } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
 import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
 import { useAppTheme } from "@/src/theme";
+import { useTranslation } from "@/src/i18n";
 import { ComposerInput, Screen, SectionHeader } from "@/src/ui";
 
 function buildMatrix() {
@@ -33,6 +34,7 @@ function buildMatrix() {
 
 export default function DebugComposerScreen() {
   const theme = useAppTheme();
+  const { t } = useTranslation();
   const matrix = useMemo(() => buildMatrix(), []);
   const { loadModels, loadModelStatus } = useAppActions();
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
@@ -103,6 +105,12 @@ export default function DebugComposerScreen() {
         </View>
       </ScrollView>
       <ComposerInput menuSourceRef={composerMenuSourceRef}
+        // The Chat screen's attachment actions, so iOS shows its system menu here as it does there.
+        attachmentActions={[
+          { icon: "camera", title: t("chat.attachment.camera"), onPress: () => setAttach(true) },
+          { icon: "images", title: t("chat.attachment.photos"), onPress: () => setAttach(true) },
+          { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => setAttach(true) },
+        ]}
         anchorRef={composerRef}
         attachmentMenuOpen={attachmentOpen}
         modelMenuOpen={modelOpen}
