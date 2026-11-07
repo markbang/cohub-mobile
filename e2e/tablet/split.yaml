@@ -109,7 +109,7 @@ name: Tablet split layout
 - tapOn: "Chats"
 - tapOn: "New Chat"
 - extendedWaitUntil:
-    visible: ".*Search.*"
+    visible: ".*Find a Space.*"
     timeout: 20000
 - takeScreenshot: "flow-06-new-chat-sheet"
 - tapOn:

@@ -100,7 +100,7 @@ export const TABLET_SCREENS = [
   { name: "split-chat-stream", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=stream" },
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
-  { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "New Chat" }, { waitFor: "Search" }] },
+  { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "New Chat" }, { waitFor: "Find a Space" }] },
 ];
 
 /** The same operations on every target, timed by the frame probe: a long fixture, a real Chat, and the tabs. */
