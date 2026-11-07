@@ -24,13 +24,17 @@ export function leftPaneWidth(windowWidth: number): number {
 type RouteLike = { name: string; key: string; params?: object };
 
 /**
- * Splits the root routes into the right pane's stack and the overlays above both panes. Everything
- * from the first overlay up stays in the full-window stack, so route order never changes.
+ * Splits the root routes into the tab app on the left, the right pane's stack, and the overlays
+ * above both panes. Expo Router pushes a second tab app for a link to a tab (`cohub://settings`);
+ * the topmost one is drawn, and the routes under it wait in history as they do on a phone.
+ * Everything from the first overlay up stays in the full-window stack, so route order never changes.
  */
-export function splitRoutes<T extends RouteLike>(routes: readonly T[]): { pane: T[]; overlays: T[] } {
-  const end = routes.findIndex((route, index) => index > 0 && SPLIT_OVERLAY_ROUTES.has(route.name));
-  const paneEnd = end === -1 ? routes.length : end;
-  return { pane: routes.slice(1, paneEnd), overlays: routes.slice(paneEnd) };
+export function splitRoutes<T extends RouteLike>(routes: readonly T[]): { root: T; pane: T[]; overlays: T[] } {
+  const rootIndex = routes.findLastIndex((route) => route.name === routes[0].name);
+  const above = routes.slice(rootIndex + 1);
+  const end = above.findIndex((route) => SPLIT_OVERLAY_ROUTES.has(route.name));
+  const paneEnd = end === -1 ? above.length : end;
+  return { root: routes[rootIndex], pane: above.slice(0, paneEnd), overlays: above.slice(paneEnd) };
 }
 
 type NestedState = { index?: number; routes: readonly (Partial<RouteLike> & { state?: NestedState })[] } | undefined;

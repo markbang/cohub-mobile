@@ -5109,10 +5109,12 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(showsPaneBack(1), true, "deeper right-pane screens go back as usual");
   const route = (name, key = name, params) => ({ name, key, params });
   const tabs = route("(tabs)");
-  assert.deepEqual(splitRoutes([tabs]), { pane: [], overlays: [] });
+  assert.deepEqual(splitRoutes([tabs]), { root: tabs, pane: [], overlays: [] });
   assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), route("space/[spaceId]")]).pane.map((item) => item.name), ["chat/[sessionId]", "space/[spaceId]"]);
-  assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), route("image-viewer")]), { pane: [route("chat/[sessionId]")], overlays: [route("image-viewer")] }, "the viewer covers both panes");
-  assert.deepEqual(splitRoutes([tabs, route("new-chat")]), { pane: [], overlays: [route("new-chat")] }, "New Chat covers both panes");
+  assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), route("image-viewer")]), { root: tabs, pane: [route("chat/[sessionId]")], overlays: [route("image-viewer")] }, "the viewer covers both panes");
+  assert.deepEqual(splitRoutes([tabs, route("new-chat")]), { root: tabs, pane: [], overlays: [route("new-chat")] }, "New Chat covers both panes");
+  const linkedTabs = route("(tabs)", "(tabs)-2");
+  assert.deepEqual(splitRoutes([tabs, route("chat/[sessionId]"), linkedTabs, route("appearance")]), { root: linkedTabs, pane: [route("appearance")], overlays: [] }, "a link to a tab draws the newest tab app; the routes under it stay in history");
   assert.deepEqual(splitRoutes([tabs, route("media-viewer"), route("chat/[sessionId]")]).overlays.map((item) => item.name), ["media-viewer", "chat/[sessionId]"], "routes above an overlay stay above it");
   const tabState = { index: 1, routes: [{ key: "chats", state: { index: 0, routes: [{ key: "chats-index" }] } }, { key: "spaces", state: { index: 1, routes: [{ key: "spaces-index" }, { key: "spaces-top" }] } }] };
   assert.deepEqual(focusedRouteKeys(tabState), ["spaces", "spaces-top"], "only the selected tab and the top of its stack count as on view");

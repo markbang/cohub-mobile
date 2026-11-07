@@ -91,7 +91,7 @@ const LEFT_SECOND_ROW = { ios: "12%, 44%", android: "12%, 44%" };
 export const TABLET_SCREENS = [
   { name: "split-empty", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { waitFor: "New Chat" }] },
   { name: "split-chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }] },
-  { name: "split-chat-panel", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { tapOn: "Open Chats" }] },
+  { name: "split-chat-panel", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: LEFT_FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "right" }] },
   { name: "split-chat-conversation", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
   { name: "split-chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
   { name: "split-chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
@@ -338,6 +338,8 @@ function pushSteps(lines, platform, steps = []) {
     else if (step.swipe === "up") lines.push("- swipe:", "    start: 50%, 72%", "    end: 50%, 32%", "    duration: 700");
     else if (step.swipe === "nudge") lines.push("- swipe:", "    start: 50%, 60%", "    end: 50%, 55%", "    duration: 900");
     else if (step.swipe === "down") lines.push("- swipe:", "    start: 50%, 32%", "    end: 50%, 72%", "    duration: 700");
+    // Across the right pane, which opens the Chat's Space panel.
+    else if (step.swipe === "right") lines.push("- swipe:", "    start: 55%, 50%", "    end: 95%, 50%", "    duration: 400");
     else {
       // Tapping the minimized bar (the current tab's bubble, bottom leading) expands it again.
       if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - tapOn:", "          point: 13%, 94%", "      - waitForAnimationToEnd:", "          timeout: 5000");

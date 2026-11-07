@@ -33,8 +33,7 @@ function SplitStackContent(props: ContentProps) {
   const mode = splitMode(window.width, window.height);
   const split = mode === "split";
   const leftWidth = leftPaneWidth(window.width);
-  const root = state.routes[0];
-  const { pane, overlays } = useMemo(() => split ? splitRoutes(state.routes) : { pane: [], overlays: [] }, [split, state.routes]);
+  const { root, pane, overlays } = useMemo(() => split ? splitRoutes(state.routes) : { root: state.routes[0], pane: [], overlays: [] }, [split, state.routes]);
   const paneTop = pane.at(-1);
 
   // A Chat opened from the left list appears in place; the flag lifts once it has appeared, so its
