@@ -129,7 +129,8 @@ export default function DebugChatScreen() {
   </Screen>;
 }
 
-const PROBE_LABEL = { position: "absolute", left: 0, top: 0, width: 1, height: 1 } as const;
+// Full width: Android's accessibility dump leaves out a view too small to see.
+const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height: 8 } as const;
 
 type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string };
 

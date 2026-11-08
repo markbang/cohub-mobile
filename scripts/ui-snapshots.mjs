@@ -301,7 +301,8 @@ function pushSteps(lines, platform, steps = []) {
       // Tapping the minimized bar (the current tab's bubble, bottom leading) expands it again. Android's drawn bar
       // keeps the hidden tabs' labels, so it is found by the bubble's id instead.
       if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - tapOn:", "          point: 13%, 94%", "      - waitForAnimationToEnd:", "          timeout: 5000");
-      if (platform === "android" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", "      visible:", "        id: \"tab-bar-expand\"", "    commands:", "      - tapOn:", "          id: \"tab-bar-expand\"", "      - waitForAnimationToEnd:", "          timeout: 5000");
+      // A link that switched tabs expands the bar itself, so the bubble may be gone by the time it is tapped.
+      if (platform === "android" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", "      visible:", "        id: \"tab-bar-expand\"", "    commands:", "      - tapOn:", "          id: \"tab-bar-expand\"", "          optional: true", "      - waitForAnimationToEnd:", "          timeout: 5000");
       lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
     }
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
