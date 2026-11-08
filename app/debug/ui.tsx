@@ -246,6 +246,8 @@ const MENU_SECTIONS: NativeMenuSection[] = [
   ] },
 ];
 
+const MENU_BACKDROP = ["bg-accent", "bg-success", "bg-warning", "bg-danger", "bg-info", "bg-accent", "bg-success"];
+
 function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | null>; open: boolean; onOpen: () => void }) {
   return (
     <Block label="Menu">
@@ -253,6 +255,10 @@ function MenuSection({ anchorRef, open, onOpen }: { anchorRef: RefObject<View | 
         {nativeMenus
           ? <NativeMenuButton appearance="plain" icon="more" label="Open menu" sections={MENU_SECTIONS} testID="ui-catalog-menu-button" />
           : <MenuAnchor ref={anchorRef} open={open}><IconButton name="more" label="Open menu" onPress={onOpen} testID="ui-catalog-menu-button" /></MenuAnchor>}
+      </View>
+      {/* Busy content under the open menu, so its glass has something to blur and refract. */}
+      <View accessible={false} importantForAccessibility="no-hide-descendants" className="gap-2">
+        {MENU_BACKDROP.map((tone) => <View key={tone} className={`h-9 justify-center rounded-sm px-3 ${tone}`}><Text className="text-headline font-semibold text-white">Glass backdrop</Text></View>)}
       </View>
     </Block>
   );
