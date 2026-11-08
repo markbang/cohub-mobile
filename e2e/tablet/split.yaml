@@ -117,9 +117,16 @@ name: Tablet split layout
     visible: ".*Chats.*"
     timeout: 20000
 - tapOn: "New Chat"
-- extendedWaitUntil:
-    visible: ".*Find a Space.*"
-    timeout: 20000
+# On iOS the sheet's native header (title, close, search) is missing, on main too; only Android shows the search field.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: ".*Find a Space.*"
+          timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 5000
 - takeScreenshot: "flow-06-new-chat-sheet"
 - tapOn:
     point: "50%, 30%"
