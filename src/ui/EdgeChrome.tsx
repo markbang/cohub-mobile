@@ -1,13 +1,13 @@
 import { BlurTargetView, BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useRef, useState, type ReactNode, type RefObject } from "react";
-import { PixelRatio, Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type ScrollView, type StyleProp, type ViewStyle } from "react-native";
 import { KeyboardStickyView, useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
 import Animated, { interpolate, useAnimatedRef, useAnimatedStyle, useScrollOffset, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
 import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
-import { useReduceTransparency } from "@/src/ui/Glass";
+import { androidBlur, blurReduction, GlassBackdropContent, useReduceTransparency } from "@/src/ui/Glass";
 
 /**
  * With `trackScroll`, the scroll view given `scrollRef` drives `scrollY` on the UI thread, so the header's
@@ -19,24 +19,29 @@ export function useEdgeChrome(options?: { reserveComposer?: boolean; trackScroll
   const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom) : 0);
   const scrollY = useSharedValue(0);
   const scrollRef = useAnimatedRef<ScrollView>();
-  // expo-blur resolves its target when it mounts, so the header gets the target only once it is attached.
-  const blurTarget = useRef<View | null>(null);
-  const [blurTargetAttached, setBlurTargetAttached] = useState(false);
-  const attachBlurTarget = useCallback((node: View | null) => {
-    blurTarget.current = node;
-    setBlurTargetAttached(node !== null);
-  }, []);
+  const { blurTarget, attachBlurTarget } = useBlurTarget();
   useScrollOffset(options?.trackScroll ? scrollRef : null, scrollY);
   return {
     headerHeight,
     footerHeight,
     scrollY,
     scrollRef,
-    blurTarget: blurTargetAttached ? blurTarget : undefined,
+    blurTarget,
     attachBlurTarget,
     onHeaderLayout: (event: LayoutChangeEvent) => setHeaderHeight(event.nativeEvent.layout.height),
     onFooterLayout: (event: LayoutChangeEvent) => setFooterHeight(event.nativeEvent.layout.height),
   };
+}
+
+/** The ref for an `EdgeBlurTarget`; expo-blur resolves its target when it mounts, so glass gets it only once attached. */
+export function useBlurTarget() {
+  const blurTarget = useRef<View | null>(null);
+  const [attached, setAttached] = useState(false);
+  const attachBlurTarget = useCallback((node: View | null) => {
+    blurTarget.current = node;
+    setAttached(node !== null);
+  }, []);
+  return { blurTarget: attached ? blurTarget : undefined, attachBlurTarget };
 }
 
 // Opacity eases out with a flat start and end, so neither end of the fade reads as a line across
@@ -69,66 +74,41 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
   </View>;
 }
 
-// Android blurs only a view it is pointed at, through RenderEffect from Android 12.
-const softEdgeSupported = Platform.OS === "android" && typeof Platform.Version === "number" && Platform.Version >= 31;
-
-/** The content an `EdgeHeader` given `blurTarget` blurs: on Android, a blur target of its own, opaque. */
+/**
+ * The content an `EdgeHeader` given `blurTarget`, and the screen's floating glass (`Screen`'s `blurTarget`), blur:
+ * on Android 12+, a blur target of its own, opaque.
+ */
 export function EdgeBlurTarget({ attach, children }: { attach: (node: View | null) => void; children: ReactNode }) {
-  if (!softEdgeSupported) return children;
-  return <BlurTargetView ref={attach} style={BLUR_TARGET_STYLE}><View className="flex-1 bg-background">{children}</View></BlurTargetView>;
+  if (!androidBlur) return children;
+  return <BlurTargetView ref={attach} style={BLUR_TARGET_STYLE}><View className="flex-1 bg-background"><GlassBackdropContent>{children}</GlassBackdropContent></View></BlurTargetView>;
 }
 
 /**
- * iOS 26's soft scroll edge, fitted on its tab roots in both themes: content under the status bar and the
- * bar fades about 80% into the background behind a light blur (σ ≈ 2 pt), and comes back into focus from
- * the bar's lower third to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the
- * bar's bottom edge); later layers blur more and cover less, so the radius steps down the edge. Dimezis
- * blurs the whole target before cropping it to a layer, so the layers meet without seams.
- *
- * Dimezis also draws a 15% grain over each layer, which iOS does not; the blur therefore stops where the
- * veil is still 0.8 and hides it. Below that iOS blurs by under 1.3 pt, which the veil alone stands in for.
+ * iOS 27's navigation bar once content scrolls under it, as captured on its tab roots: a material a little
+ * lighter than the page covers the status bar and the bar, letting only a heavy blur of the content through,
+ * and fades out over `BAR_EDGE_TAIL` pt below the bar. Dimezis draws a 15% grain over its blur, which iOS
+ * does not; the material over it hides that, so the blur stops where the material is still full.
  */
-const SOFT_EDGE_TAIL = 36;
-const SOFT_EDGE_LAYERS = [
-  { bottom: -21, sigma: 1.5 },
-  { bottom: -33, sigma: 2 },
-] as const;
-// Veil opacity down the edge, from 21 pt above the bar's bottom edge to the end of the tail.
-const SOFT_EDGE_VEIL_TOP = 21;
-const SOFT_EDGE_VEIL = [
-  { at: -21, alpha: 0.8 },
-  { at: -9, alpha: 0.5 },
-  { at: 0, alpha: 0.45 },
-  { at: 21, alpha: 0.12 },
-  { at: SOFT_EDGE_TAIL, alpha: 0 },
-] as const;
-
-// expo-blur hands Dimezis `intensity / blurReductionFactor`, which it multiplies by 4 into RenderEffect's
-// radius, and HWUI turns that radius into σ = 0.57735 r + 0.5 px. Intensity 1 keeps the tint overlay,
-// which scales with intensity, near zero, so the veil is drawn here in the theme's own background.
-function blurReduction(sigma: number) {
-  const radius = Math.max(0.01, (PixelRatio.getPixelSizeForLayoutSize(sigma) - 0.5) / 0.57735 / 4);
-  return 1 / radius;
-}
+const BAR_EDGE_TAIL = 10;
+const BAR_EDGE_SIGMA = 10;
+const BAR_EDGE_OPACITY = 0.9;
 
 function SoftEdge({ target }: { target: RefObject<View | null> }) {
   const { colors } = useAppTheme();
-  const span = SOFT_EDGE_VEIL_TOP + SOFT_EDGE_TAIL;
+  const material = colorWithOpacity(colors.barMaterial, BAR_EDGE_OPACITY);
   return <>
-    {SOFT_EDGE_LAYERS.map(({ bottom, sigma }) => <BlurView
-      key={bottom}
+    <BlurView
       blurTarget={target}
       blurMethod="dimezisBlurViewSdk31Plus"
       intensity={1}
-      blurReductionFactor={blurReduction(sigma)}
-      style={[StyleSheet.absoluteFill, { bottom: SOFT_EDGE_TAIL - bottom }]}
-    />)}
-    <View style={[StyleSheet.absoluteFill, { bottom: span, backgroundColor: colorWithOpacity(colors.background, SOFT_EDGE_VEIL[0].alpha) }]} />
+      blurReductionFactor={blurReduction(BAR_EDGE_SIGMA)}
+      style={[StyleSheet.absoluteFill, { bottom: BAR_EDGE_TAIL }]}
+    />
+    <View style={[StyleSheet.absoluteFill, { bottom: BAR_EDGE_TAIL, backgroundColor: material }]} />
     <LinearGradient
       pointerEvents="none"
-      colors={SOFT_EDGE_VEIL.map(({ alpha }) => colorWithOpacity(colors.background, alpha)) as unknown as readonly [string, string, ...string[]]}
-      locations={SOFT_EDGE_VEIL.map(({ at }) => (at + SOFT_EDGE_VEIL_TOP) / span) as unknown as readonly [number, number, ...number[]]}
-      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: span }}
+      colors={[material, colorWithOpacity(colors.barMaterial, 0)]}
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: BAR_EDGE_TAIL }}
     />
   </>;
 }
@@ -136,7 +116,7 @@ function SoftEdge({ target }: { target: RefObject<View | null> }) {
 /**
  * With `scrollY`, the edge shows only once content has scrolled under the header (over `edgeRange`), so
  * nothing is veiled at rest; without it the edge is always on, for screens whose content starts beneath it.
- * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's soft blurred edge; elsewhere,
+ * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's blurred bar material; elsewhere,
  * and under Reduce Transparency, content stays solid-veiled under the whole bar and a strip below it fades.
  */
 export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange = DEFAULT_EDGE_RANGE }: {
@@ -148,10 +128,10 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
 }) {
   const insets = useSafeAreaInsets();
   const reduce = useReduceTransparency();
-  const soft = softEdgeSupported && !reduce && blurTarget;
+  const soft = androidBlur && !reduce && blurTarget;
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), edgeRange, [0, 1], "clamp") : 1 }));
   return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? SOFT_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? BAR_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
       {soft
         ? <SoftEdge target={blurTarget} />
         : Platform.OS === "android"

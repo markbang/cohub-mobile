@@ -72,6 +72,7 @@ jobs:
         run: |
           echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform ios | jq -r .hash)" >> "$GITHUB_OUTPUT"
           echo "xcode=$(xcodebuild -version | awk 'NR==2 {print $3}')" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
           xcodebuild -version
           xcrun simctl list runtimes
 
@@ -82,7 +83,8 @@ jobs:
           path: build/ui-snapshots/Cohub-ios-simulator.zip
           # Bump the version when the simulator build settings change; they are not in the fingerprint.
           # The Xcode build is in the key: an app built by one Xcode is not reused under another's simulator.
-          key: ui-snapshots-ios-v3-${{ steps.fingerprint.outputs.xcode }}-${{ steps.fingerprint.outputs.hash }}
+          # The app version is too: the fingerprint leaves it out, and Me shows the binary's version.
+          key: ui-snapshots-ios-v3-${{ steps.fingerprint.outputs.xcode }}-${{ steps.fingerprint.outputs.hash }}-${{ steps.fingerprint.outputs.version }}
 
       - name: Build simulator app
         if: steps.app.outputs.cache-hit != 'true'

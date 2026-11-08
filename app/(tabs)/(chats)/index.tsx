@@ -19,6 +19,7 @@ import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSou
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
+import { uiSnapshots } from "@/src/config";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
@@ -138,6 +139,18 @@ export default function ChatsScreen() {
   const draggingRef = useRef(false);
   const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
   const emptyFill = useEmptyListFill(shownItems.length === 0);
+  // iOS 27 opens Chats with its search field tucked under the Large Title, to be pulled down; the drawn bar
+  // does the same once the first rows are in, unless the list has already been scrolled.
+  const searchTucked = useRef(nativeHeaders);
+  const hasRows = shownItems.length > 0;
+  useEffect(() => {
+    if (searchTucked.current || !hasRows) return;
+    const frame = requestAnimationFrame(() => {
+      searchTucked.current = true;
+      if (scrollY.get() === 0) scrollRef.current?.scrollTo({ y: titleScroll.hold, animated: false });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hasRows, scrollRef, scrollY, titleScroll.hold]);
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
   const clearOrderTimers = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
@@ -211,7 +224,7 @@ export default function ChatsScreen() {
     : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
-    <Screen edgeToEdge>
+    <Screen edgeToEdge blurTarget={blurTarget}>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
@@ -248,6 +261,8 @@ export default function ChatsScreen() {
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
+        // UI captures hide the scroll bar, which Android leaves up after a tab switch.
+        showsVerticalScrollIndicator={!uiSnapshots}
         {...pullRefresh.listProps}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}

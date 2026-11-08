@@ -9,6 +9,7 @@ import { traceAction } from "@/src/data/interaction-trace";
 import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
 import { MenuAnchor, MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
+import { GlassWindow } from "@/src/ui/Glass";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
@@ -216,6 +217,7 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
+    <GlassWindow>
     <View ref={rootRef} collapsable={false} pointerEvents={open ? "auto" : "none"} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} style={StyleSheet.absoluteFill} onPress={onClose} />
       <MorphMenuSurface
@@ -249,5 +251,6 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
       </MorphMenuSurface>
     </View>
     <ToastViewport />
+    </GlassWindow>
   </Modal>;
 }

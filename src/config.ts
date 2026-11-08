@@ -34,6 +34,9 @@ const buildEnvironment = readEnvironment(
 /** Environment resolved at build time; the sign-in screen can override it and remembers the choice. */
 export const defaultEnvironment = buildEnvironment;
 
+/** A debug build captured by `scripts/ui-snapshots.mjs`, which sets this when it starts Metro. */
+export const uiSnapshots = process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1";
+
 const environmentDefaults: Record<
   CohubEnvironment,
   { apiOrigin: string; gatewayOrigin: string; authEndpoint: string; logtoAppId: string }

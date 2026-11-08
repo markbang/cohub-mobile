@@ -15,6 +15,7 @@ import { useAppActions } from "@/src/data/context";
 import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation, type LocalePreference } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
+import { uiSnapshots } from "@/src/config";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useThemePreference } from "@/src/theme";
 import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
@@ -74,10 +75,10 @@ export function SettingsHomeScreen() {
     return undefined;
   };
 
-  return <Screen edgeToEdge>
+  return <Screen edgeToEdge blurTarget={blurTarget}>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}><LargeTitleBar title={t("tabs.me")} scrollY={scrollY} /></EdgeHeader>}
     <EdgeBlurTarget attach={attachBlurTarget}>
-    <ScrollView ref={scrollRef} {...titleSnap} scrollEnabled={!selecting} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} {...titleSnap} scrollEnabled={!selecting} {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })} contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={!uiSnapshots}>
       {nativeHeaders ? null : <LargeTitle title={t("tabs.me")} scrollY={scrollY} />}
       {/* The profile is a row like any other setting, not a hero; it drills into profile editing. */}
       <View className="mb-6 mt-4 px-4">

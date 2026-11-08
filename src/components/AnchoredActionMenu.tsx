@@ -97,10 +97,10 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
 export function AnchoredMenuContent({ sections, heading, onClose, testID }: { sections: readonly AnchoredMenuSection[]; heading?: string; onClose: () => void; testID: string }) {
   const bar = heading !== undefined;
   return <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
-    {bar ? <Text accessibilityRole="header" numberOfLines={1} className="text-caption font-normal text-fg-faint" style={styles.heading}>{heading}</Text> : null}
+    {bar ? <Text accessibilityRole="header" numberOfLines={1} className="text-caption font-normal text-fg-tertiary" style={styles.heading}>{heading}</Text> : null}
     {sections.map((section, index) => <View key={section.title ?? index}>
       {index > 0 ? <View className="bg-border" style={styles.separator} /> : null}
-      {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-faint" style={styles.header}>{section.title}</Text> : null}
+      {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-tertiary" style={styles.header}>{section.title}</Text> : null}
       {section.actions.map((action) => <Pressable
         key={action.title}
         accessibilityRole="menuitem"
@@ -112,10 +112,11 @@ export function AnchoredMenuContent({ sections, heading, onClose, testID }: { se
         style={[action.detail ? styles.detailRow : styles.row, bar ? styles.barRow : null]}
       >
         {bar ? <View style={styles.check}>{action.checked ? <AppIcon name="check" size={17} tone="fg" /> : null}</View> : null}
-        <View style={styles.glyph}><AppIcon name={action.checked && !bar ? "check" : action.icon} size={action.checked && !bar ? 17 : 22} tone="fg" /></View>
+        {/* iOS 27's menu symbols run about 5% larger and heavier than the drawn glyphs at 22. */}
+        <View style={styles.glyph}><AppIcon name={action.checked && !bar ? "check" : action.icon} size={action.checked && !bar ? 17 : 23} bold={action.checked && !bar ? 0 : 0.15} tone="fg" /></View>
         <View className="min-w-0 flex-1">
           <Text className="text-body text-fg">{action.title}</Text>
-          {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-faint" style={styles.detail}>{action.detail}</Text> : null}
+          {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-tertiary" style={styles.detail}>{action.detail}</Text> : null}
         </View>
       </Pressable>)}
     </View>)}

@@ -1,7 +1,8 @@
 import { BlurView } from "expo-blur";
 import { GlassContainer, GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable, type GlassStyle } from "expo-glass-effect";
-import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import { AccessibilityInfo, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { converter, formatHex8 } from "culori";
+import { AccessibilityInfo, PixelRatio, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { colorWithOpacity, useAppTheme } from "@/src/theme";
 
 /**
@@ -27,67 +28,130 @@ export function useReduceTransparency() {
 
 export type GlassMaterial = "liquid" | "frosted" | "solid";
 
+// Android blurs only a view it is pointed at, through RenderEffect from Android 12.
+export const androidBlur = Platform.OS === "android" && typeof Platform.Version === "number" && Platform.Version >= 31;
+
 /**
  * Which glass a surface can draw here: Liquid Glass on iOS 26; a system blur on older iOS, or on
- * Android when the surface has a blur target (Android blurs only a view it is pointed at); else solid.
+ * Android 12+ when the surface has a blur target (Android blurs only a view it is pointed at); else solid.
  */
 export function useGlassMaterial(options?: { blurTarget?: RefObject<View | null> | null }): GlassMaterial {
   const reduce = useReduceTransparency();
   if (reduce) return "solid";
   if (liquidGlass) return "liquid";
-  if (Platform.OS === "ios" || options?.blurTarget) return "frosted";
+  if (Platform.OS === "ios" || (androidBlur && options?.blurTarget)) return "frosted";
   return "solid";
+}
+
+/**
+ * The content a screen's floating glass blurs on Android (`GlassBackdrop`), and whether the glass reading it
+ * is drawn inside that content: a view cannot blur a target that contains it, so glass there stays solid.
+ */
+const GlassBackdropContext = createContext<{ target: RefObject<View | null> | null; inside: boolean }>({ target: null, inside: false });
+
+/**
+ * Gives the glass drawn over a screen's content (bars, menus, the composer, alerts) that content to blur; `null`
+ * keeps glass solid, as over a surface of its own. `undefined` passes the outer backdrop through.
+ */
+export function GlassBackdrop({ target, children }: { target: RefObject<View | null> | null | undefined; children: ReactNode }) {
+  const outer = useContext(GlassBackdropContext);
+  const value = useMemo(() => target === undefined ? outer : { target, inside: false }, [outer, target]);
+  return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
+}
+
+/** Wraps the blur target's own content: glass inside it is part of what gets blurred. */
+export function GlassBackdropContent({ children }: { children: ReactNode }) {
+  const { target } = useContext(GlassBackdropContext);
+  const value = useMemo(() => ({ target, inside: true }), [target]);
+  return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
+}
+
+/** A native Modal is its own window, outside the screen's blur target, so glass in it may blur the screen again. */
+export function GlassWindow({ children }: { children: ReactNode }) {
+  const { target } = useContext(GlassBackdropContext);
+  const value = useMemo(() => ({ target, inside: false }), [target]);
+  return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
+}
+
+/**
+ * expo-blur hands Dimezis `intensity / blurReductionFactor`, which it multiplies by 4 into RenderEffect's
+ * radius, and HWUI turns that radius into σ = 0.57735 r + 0.5 px. At intensity 1 expo-blur's own tint, which
+ * scales with intensity, is near zero, so callers draw the tint themselves.
+ */
+export function blurReduction(sigma: number) {
+  const radius = Math.max(0.01, (PixelRatio.getPixelSizeForLayoutSize(sigma) - 0.5) / 0.57735 / 4);
+  return 1 / radius;
+}
+
+export type GlassSurface = "glassControl" | "glassMenu" | "dialogSurface";
+
+const SOLID_CLASS: Record<GlassSurface, string> = { glassControl: "bg-glass-control", glassMenu: "bg-glass-menu", dialogSurface: "bg-dialog-surface" };
+// How much of the blurred backdrop a frosted surface lets through, as iOS 27's glass does: bars and buttons
+// show more of what passes under them than menus and alerts. It also hides Dimezis's 15% grain, which iOS lacks.
+const FROST_OPACITY: Record<GlassSurface, number> = { glassControl: 0.72, glassMenu: 0.86, dialogSurface: 0.86 };
+const FROST_SIGMA = 12;
+
+/**
+ * The tint that, drawn at `opacity` over the page background, gives `color`: what iOS's glass measures over
+ * an empty page. Over content the backdrop shows through by `1 - opacity`.
+ */
+function frostTint(color: string, background: string, opacity: number) {
+  const target = converter("rgb")(color);
+  const page = converter("rgb")(background);
+  if (!target || !page) throw new Error(`Invalid glass color "${color}" or page "${background}". Fix the token in src/design/tokens.ts.`);
+  const channel = (value: number, under: number) => Math.min(1, Math.max(0, (value - (1 - opacity) * under) / opacity));
+  return formatHex8({ mode: "rgb", r: channel(target.r, page.r), g: channel(target.g, page.g), b: channel(target.b, page.b), alpha: opacity });
 }
 
 type GlassBackgroundProps = {
   /** Corner radius of the surface; the glass is clipped to it. */
   radius: number;
   glass?: Exclude<GlassStyle, "none">;
-  /** Tints Liquid Glass; the solid fallback takes `solidClassName` instead. */
+  /** Tints Liquid Glass; elsewhere the surface is drawn solid in this color. */
   tint?: string;
-  /** Background class used when glass is unavailable, so solid surfaces keep their level. */
-  solidClassName?: string;
+  /** The color the glass reads as over an empty page; solid surfaces fill with it. */
+  surface?: GlassSurface;
+  /** Overrides the screen's backdrop (`GlassBackdrop`), for chrome outside any screen such as the tab bar. */
   blurTarget?: RefObject<View | null> | null;
-  /** The solid stand-in draws Liquid Glass's 1 pt rim, which only shows on a dark page. */
-  rim?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
 /**
  * The material behind a floating control, drawn as an absolutely filled layer so the control keeps
  * its own view (refs, measurement, layout) and only its backdrop changes with the platform. Touches
- * belong to the control above it, so Liquid Glass's own touch response is not used.
+ * belong to the control above it, so Liquid Glass's own touch response is not used. Elsewhere it is iOS
+ * 27's glass as measured: in light mode a hairline rim, in dark mode none.
  */
-export function GlassBackground({ radius, glass = "regular", tint, solidClassName = "bg-surface-float", blurTarget = null, rim = false, style }: GlassBackgroundProps) {
+export function GlassBackground({ radius, glass = "regular", tint, surface = "glassControl", blurTarget, style }: GlassBackgroundProps) {
   const theme = useAppTheme();
-  const material = useGlassMaterial({ blurTarget });
+  const backdrop = useContext(GlassBackdropContext);
+  const target = blurTarget !== undefined ? blurTarget : backdrop.inside ? null : backdrop.target;
+  const material = useGlassMaterial({ blurTarget: tint ? null : target });
   const shape = { borderRadius: radius, borderCurve: "continuous" as const };
   if (material === "liquid") {
     return <GlassView pointerEvents="none" glassEffectStyle={glass} tintColor={tint} colorScheme={theme.mode} style={[StyleSheet.absoluteFill, shape, style]} />;
   }
-  if (material === "frosted") {
+  // design-system-begin: the rim and the frosted tint derive from theme tokens at runtime, so they follow Config themes.
+  const rim = theme.mode === "light" && !tint ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colorWithOpacity(theme.colors.shadow, 0.14) } : null;
+  if (material === "frosted" && Platform.OS === "ios") {
     const dark = theme.mode === "dark";
     return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { overflow: "hidden" }, style]}>
-      <BlurView
-        intensity={Platform.OS === "ios" ? 80 : 60}
-        tint={Platform.OS === "ios" ? dark ? "systemChromeMaterialDark" : "systemChromeMaterialLight" : dark ? "dark" : "light"}
-        blurMethod="dimezisBlurViewSdk31Plus"
-        blurTarget={blurTarget ?? undefined}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* design-system-begin: glass tint and rim derive from the theme at runtime, so they follow Config themes. */}
+      <BlurView intensity={80} tint={dark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"} style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, shape, {
         backgroundColor: colorWithOpacity(tint ?? theme.colors.surfaceFloat, tint ? 0.85 : dark ? 0.45 : 0.55),
         borderWidth: StyleSheet.hairlineWidth,
         borderColor: colorWithOpacity(dark ? theme.colors.text : theme.colors.surfaceFloat, dark ? 0.14 : 0.8),
       }]} />
-      {/* design-system-end */}
     </View>;
   }
-  // design-system-begin: the rim derives from the theme's text color at runtime, as the frosted one does.
-  const rimStyle = rim && theme.mode === "dark" ? { borderWidth: 1, borderColor: colorWithOpacity(theme.colors.text, 0.13) } : null;
+  if (material === "frosted" && target) {
+    return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { overflow: "hidden" }, style]}>
+      <BlurView intensity={1} blurReductionFactor={blurReduction(FROST_SIGMA)} blurMethod="dimezisBlurViewSdk31Plus" blurTarget={target} style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, shape, { backgroundColor: frostTint(theme.colors[surface], theme.colors.background, FROST_OPACITY[surface]) }, rim]} />
+    </View>;
+  }
+  return <View pointerEvents="none" className={tint ? undefined : SOLID_CLASS[surface]} style={[StyleSheet.absoluteFill, shape, tint ? { backgroundColor: tint } : null, rim, style]} />;
   // design-system-end
-  return <View pointerEvents="none" className={tint ? undefined : solidClassName} style={[StyleSheet.absoluteFill, shape, tint ? { backgroundColor: tint } : null, rimStyle, style]} />;
 }
 
 /** Lets neighbouring Liquid Glass shapes merge as they near each other; a plain view elsewhere. */

@@ -121,7 +121,7 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
     {material === "panel"
       ? <Animated.View pointerEvents="none" className="border-border bg-surface shadow-float" style={[styles.backdrop, { borderWidth: StyleSheet.hairlineWidth }, backdropStyle]} />
       : <Animated.View pointerEvents="none" className={glass === "liquid" ? undefined : "shadow-glass"} style={[styles.backdrop, backdropStyle]}>
-        <GlassBackground radius={radius} solidClassName="bg-glass-menu" rim />
+        <GlassBackground radius={radius} surface="glassMenu" />
       </Animated.View>}
     <Animated.View style={[styles.content, CONTENT_ORIGIN, clipStyle]}>
       <Animated.View style={[styles.rows, CONTENT_ORIGIN, rowsStyle]}>

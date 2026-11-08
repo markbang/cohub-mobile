@@ -22,6 +22,8 @@ import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { IconButton } from "@/src/ui";
 import { SheetConfirmButton, type SheetConfirm } from "@/src/components/SheetConfirmButton";
+import { CompactSettingsRows } from "@/src/components/SettingsRow";
+import { GlassBackdrop } from "@/src/ui/Glass";
 import { ToastViewport } from "@/src/components/Toast";
 import { setDialogOpen } from "@/src/data/interaction-trace";
 import { motion, scrim, springs } from "@/src/motion";
@@ -245,6 +247,8 @@ export function AdaptiveSheet({
       hardwareAccelerated
       onRequestClose={requestClose}
     >
+      {/* A sheet is opaque: glass on it has nothing of the screen beneath to blur. */}
+      <GlassBackdrop target={null}>
       <GestureHandlerRootView style={{ flex: 1 }} testID={testID} pointerEvents={visible ? "auto" : "none"}>
         <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]} exiting={visible ? backdropExiting : undefined}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
@@ -263,7 +267,7 @@ export function AdaptiveSheet({
             className={`min-h-0 overflow-hidden bg-surface ${compact ? "" : "w-full max-w-125 rounded-lg"}`}
             style={[
               { borderCurve: "continuous" },
-              compact ? (floating ? FLOATING_PANEL : PAGE_PANEL) : null,
+              compact ? (floating ? FLOATING_PANEL : keyboardHeight > 0 ? PAGE_PANEL : [PAGE_PANEL, PAGE_PANEL_BOTTOM]) : null,
               { maxHeight, height: compact && page ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
@@ -298,10 +302,10 @@ export function AdaptiveSheet({
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {children}
+                <CompactSettingsRows.Provider value={floating}>{children}</CompactSettingsRows.Provider>
               </ScrollView>
             ) : (
-              <View collapsable={false} style={resolvedContentStyle}>{children}</View>
+              <View collapsable={false} style={resolvedContentStyle}><CompactSettingsRows.Provider value={floating}>{children}</CompactSettingsRows.Provider></View>
             )}
             {footer ? (
               <View
@@ -316,6 +320,7 @@ export function AdaptiveSheet({
         </KeyboardAvoidingView>
         <ToastViewport />
       </GestureHandlerRootView>
+      </GlassBackdrop>
     </Modal>
   );
 }
@@ -336,6 +341,8 @@ const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
 const FLOAT_MARGIN = 8;
 const FLOATING_PANEL = { marginHorizontal: FLOAT_MARGIN, marginBottom: FLOAT_MARGIN, borderRadius: 36 } as const;
 const PAGE_PANEL = { width: "100%", borderTopLeftRadius: 38, borderTopRightRadius: 38 } as const;
+// Its bottom follows the screen's corners (62 pt on the reference iPhone); above the keyboard it stays square.
+const PAGE_PANEL_BOTTOM = { borderBottomLeftRadius: 62, borderBottomRightRadius: 62 } as const;
 const GRABBER = { width: 57, height: 4 } as const;
 const GRABBER_SLOT = { top: 6 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black; its opacity is animated.

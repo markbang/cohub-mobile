@@ -8,8 +8,8 @@
 export type ColorKey =
   | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassLens" | "glassPress" | "pressOverlay"
   | "border" | "borderStrong"
-  | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton"
-  | "text" | "textSecondary" | "textMuted" | "textFaint"
+  | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton" | "dialogMessage" | "barMaterial"
+  | "text" | "textSecondary" | "textMuted" | "textFaint" | "textTertiary" | "textPlaceholder"
   | "accent" | "accentPressed" | "accentSoft" | "accentBorder" | "accentText"
   | "userBubble" | "userBubbleText" | "userBubbleLink" | "userBubbleCodeBackground" | "userBubbleMeta"
   | "assistantBubble" | "assistantBubbleText"
@@ -38,10 +38,14 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   switchOff: "switch-off",
   dialogSurface: "dialog-surface",
   dialogButton: "dialog-button",
+  dialogMessage: "dialog-message",
+  barMaterial: "bar-material",
   text: "fg",
   textSecondary: "fg-secondary",
   textMuted: "fg-muted",
   textFaint: "fg-faint",
+  textTertiary: "fg-tertiary",
+  textPlaceholder: "fg-placeholder",
   accent: "accent",
   accentPressed: "accent-pressed",
   accentSoft: "accent-soft",
@@ -74,10 +78,10 @@ export const lightPalette: Palette = {
   surfaceRaised: "#efebe4",
   surfacePressed: "#e6e1d8",
   surfaceFloat: "#ffffff",
-  // iOS 26 Liquid Glass over `background`, as measured: a bar button, a pull-down menu, and the tab bar's
-  // selected lens over the bar.
-  glassControl: "#fdfbf7",
-  glassMenu: "#faf7f2",
+  // iOS 27 Liquid Glass over `background`, as measured: a bar button (and the tab bar), a pull-down menu, and
+  // the tab bar's selected lens over the bar. Android draws them as frosted glass or, without a blur, solid.
+  glassControl: "#f8f4f0",
+  glassMenu: "#fefaf4",
   glassLens: "#ece9e4",
   // iOS 27 lightens pressed glass about a third of the way to white; in dark mode by less, greyer.
   glassPress: "rgba(255, 255, 255, 0.36)",
@@ -88,13 +92,19 @@ export const lightPalette: Palette = {
   controlTrack: "#e6e3e0",
   controlThumb: "#ffffff",
   switchOff: "#bfbcbb",
-  // The iOS 26 alert card and its capsule buttons, as measured over the dimmed screen.
-  dialogSurface: "#efece9",
-  dialogButton: "#d2d0cd",
+  // The iOS 27 alert card, its capsule buttons and its message, as measured over the dimmed screen.
+  dialogSurface: "#dfddd9",
+  dialogButton: "#c1bfbb",
+  dialogMessage: "#6f6c68",
+  // iOS 27's navigation bar material once content scrolls under it.
+  barMaterial: "#fefaf2",
   text: "#16130f",
   textSecondary: "#4a453e",
   textMuted: "#5c564e",
   textFaint: "#6b645a",
+  // Secondary text on glass (menu details and section titles) and a text field's placeholder, as iOS 27 draws them.
+  textTertiary: "#8d8a84",
+  textPlaceholder: "#aba7a2",
   accent: "#bf3f00",
   accentPressed: "#a03400",
   accentSoft: "#fff0e4",
@@ -129,8 +139,8 @@ export const darkPalette: Palette = {
   surfacePressed: "#3a3a3c",
   // A shadow barely shows on a dark page, so floating chrome steps up a level instead of drawing a border.
   surfaceFloat: "#2c2c2e",
-  glassControl: "#171719",
-  glassMenu: "#171718",
+  glassControl: "#313133",
+  glassMenu: "#2d2d2f",
   glassLens: "#404043",
   glassPress: "rgba(255, 255, 255, 0.14)",
   pressOverlay: "rgba(255, 255, 255, 0.12)",
@@ -139,13 +149,17 @@ export const darkPalette: Palette = {
   controlTrack: "#2a2a2e",
   controlThumb: "#64646a",
   switchOff: "#535357",
-  dialogSurface: "#131314",
-  dialogButton: "#2d2d2e",
+  dialogSurface: "#2b2b2b",
+  dialogButton: "#525152",
+  dialogMessage: "#8a8a8a",
+  barMaterial: "#1b1a1d",
   text: "#f2f2f7",
   textSecondary: "#d1d1d6",
   textMuted: "#bcbcc1",
   // Faint 11–12px text must keep 4.5:1 on raised and pressed dark surfaces.
   textFaint: "#a4a4a9",
+  textTertiary: "#838385",
+  textPlaceholder: "#737375",
   accent: "#ff8a3d",
   accentPressed: "#ec7428",
   accentSoft: "#38231a",
