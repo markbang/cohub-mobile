@@ -69,8 +69,9 @@ assert.equal(ota.env.OTA_CLI_REVISION, OTA_CLI_REVISION);
 assert.match(JSON.stringify(ota.jobs.prepare.steps[0]), /GITHUB_REF.*refs\/heads\/main.*exit 1/, "A dispatch from another ref fails instead of being skipped");
 const publishAndroid = ota.jobs["publish-android"];
 const publishIos = ota.jobs["publish-ios"];
-assert.deepEqual(publishAndroid.needs, ["prepare", "android"]);
-assert.deepEqual(publishIos.needs, ["prepare", "ios"]);
+assert.deepEqual(publishAndroid.needs, ["prepare", "check", "android"]);
+assert.deepEqual(publishIos.needs, ["prepare", "check", "ios"]);
+assert.ok(ota.jobs.check.steps.some((step) => step.run === "npm run check"), "a failed quality check must block both uploads");
 for (const publish of [publishAndroid, publishIos]) {
   assert.equal(Object.hasOwn(publish, "environment"), false);
   assert.equal(JSON.stringify(publish.steps).includes("apps/easc/bin/easc.js"), false);
@@ -219,7 +220,11 @@ const ci = parse(".github/workflows/ci.yml");
 assert.deepEqual(ci.jobs.bundle.strategy.matrix.platform, ["android", "ios"], "CI must still export both platform bundles");
 assert.equal(Object.hasOwn(ci.jobs.bundle, "needs"), false, "CI exports must not serialize behind Quality: they are independent and serializing them doubled every run's wall clock");
 
-const testFlightUpload = nativeRelease.jobs.ios.steps.find((step) => step.name === "Submit iOS to TestFlight");
+assert.ok(nativeRelease.jobs.check.steps.some((step) => step.run === "npm run check"));
+for (const job of ["submit-android", "submit-ios"]) {
+  assert.ok(nativeRelease.jobs[job].needs.includes("check"), `${job} must wait for the quality checks`);
+}
+const testFlightUpload = nativeRelease.jobs["submit-ios"].steps.find((step) => step.name === "Submit iOS to TestFlight");
 assert.equal(testFlightUpload.with["wait-for-processing"], "true", "TestFlight uploads must confirm Apple processed the build");
 assert.equal(Object.hasOwn(testFlightUpload.with, "uses-non-exempt-encryption"), false, "TestFlight uploads must not patch build metadata with a limited API key");
 const appJson = JSON.parse(readFileSync("app.json", "utf8"));
@@ -230,7 +235,7 @@ assert.ok(JSON.stringify(nativeRelease.jobs.ios.steps).includes(IOS_NATIVE_FINGE
 const iosArtifact = nativeRelease.jobs.ios.steps.find((step) => step.uses === "actions/upload-artifact@v7");
 assert.ok(iosArtifact.with.path.includes(IOS_NATIVE_FINGERPRINT_ASSET));
 const attachIosFingerprint = nativeRelease.jobs["attach-ios-fingerprint"];
-assert.equal(attachIosFingerprint.needs, "ios");
+assert.equal(attachIosFingerprint.needs, "submit-ios");
 assert.match(JSON.stringify(attachIosFingerprint.if), /inputs\.submit == true/);
 assert.equal(attachIosFingerprint.permissions.contents, "write");
 assert.match(JSON.stringify(attachIosFingerprint.steps), /gh release upload/);

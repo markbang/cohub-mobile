@@ -79,14 +79,64 @@ jobs:
             echo "SUBJECT_EOF"
           } >> "$GITHUB_OUTPUT"
 
+  # Gates both uploads without delaying the exports: the publish jobs need this job too.
+  check:
+    name: Quality checks
+    needs: prepare
+    if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout selected commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
+      # only the links; their package.json files are in the key for the dependencies they declare.
+      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
+      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        run: npm ci
+        id: npm-ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: |
+          npm ci
+          vendor=modules/react-native-enriched-markdown
+          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only a production target (a main commit) may write caches main-scope runs restore;
+      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
+      - name: Save node_modules
+        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
 
       - name: Run quality checks
         run: npm run check
@@ -97,6 +147,8 @@ jobs:
     if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
     outputs:
       runtime: ${{ steps.fingerprint.outputs.runtime }}
       fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
@@ -107,13 +159,50 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
+      # only the links; their package.json files are in the key for the dependencies they declare.
+      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
+      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        run: npm ci
+        id: npm-ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: |
+          npm ci
+          vendor=modules/react-native-enriched-markdown
+          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only a production target (a main commit) may write caches main-scope runs restore;
+      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
+      - name: Save node_modules
+        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
 
       - name: Resolve installed APK runtime
         id: fingerprint
@@ -148,16 +237,36 @@ jobs:
             echo "fingerprint=$native_fingerprint"
           } >> "$GITHUB_OUTPUT"
 
+      # Metro keys transforms by content and the inlined EXPO_PUBLIC_* values; the key also carries
+      # them so this export only restores caches built with the same public configuration.
+      - name: Locate Metro cache
+        id: metro
+        run: |
+          echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
+          echo "env=$({ env | grep '^EXPO_PUBLIC_' || true; } | sort | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Metro cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          restore-keys: |
+            metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-
+
       - name: Export Android bundle
-        env:
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
         run: npx expo export --platform android --output-dir dist/android
+
+      - name: Save Metro cache
+        if: needs.prepare.outputs.channel == 'production'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
 
       # The selected commit's code (app config, fingerprint inputs) only runs in this job,
       # which holds no publishing secret. The upload job consumes these files as data.
       - name: Record publish inputs
         env:
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
           COHUB_OTA_RUNTIME_VERSION: ${{ steps.fingerprint.outputs.runtime }}
         run: |
           set -euo pipefail
@@ -208,6 +317,8 @@ jobs:
     if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
     outputs:
       runtime: ${{ steps.fingerprint.outputs.runtime }}
       fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
@@ -218,13 +329,50 @@ jobs:
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
+      # only the links; their package.json files are in the key for the dependencies they declare.
+      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
+      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        run: npm ci
+        id: npm-ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: |
+          npm ci
+          vendor=modules/react-native-enriched-markdown
+          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Only a production target (a main commit) may write caches main-scope runs restore;
+      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
+      - name: Save node_modules
+        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
 
       # Native Release extracts this asset from the built IPA and attaches it only for submitted TestFlight builds.
       - name: Resolve installed iOS runtime
@@ -255,16 +403,36 @@ jobs:
             echo "fingerprint=$runtime"
           } >> "$GITHUB_OUTPUT"
 
+      # Metro keys transforms by content and the inlined EXPO_PUBLIC_* values; the key also carries
+      # them so this export only restores caches built with the same public configuration.
+      - name: Locate Metro cache
+        id: metro
+        run: |
+          echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
+          echo "env=$({ env | grep '^EXPO_PUBLIC_' || true; } | sort | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Metro cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          restore-keys: |
+            metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-
+
       - name: Export iOS bundle
-        env:
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
         run: npx expo export --platform ios --output-dir dist/ios
+
+      - name: Save Metro cache
+        if: needs.prepare.outputs.channel == 'production'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
 
       # The selected commit's code (app config, fingerprint inputs) only runs in this job,
       # which holds no publishing secret. The upload job consumes these files as data.
       - name: Record publish inputs
         env:
-          EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
           COHUB_OTA_RUNTIME_VERSION: ${{ steps.fingerprint.outputs.runtime }}
         run: |
           set -euo pipefail
@@ -311,7 +479,7 @@ jobs:
 
   publish-android:
     name: Upload Android ${{ needs.prepare.outputs.channel }}
-    needs: [prepare, android]
+    needs: [prepare, check, android]
     if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 35  # three publish attempts, each bounded by a 5-minute response timeout
@@ -324,6 +492,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -340,7 +509,16 @@ jobs:
           name: cohub-ota-inputs-android-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
           path: ${{ runner.temp }}/cohub-ota-inputs
 
+      # Only this job saves the entry, and only after installing the pinned revision itself.
+      - name: Restore pinned OTA CLI
+        id: ota-cli
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ota-cli
+          key: ota-cli-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ env.OTA_CLI_REVISION }}
+
       - name: Install pinned OTA CLI
+        if: steps.ota-cli.outputs.cache-hit != 'true'
         env:
           OTA_CLI_REPOSITORY: ${{ env.OTA_CLI_REPOSITORY }}
           OTA_CLI_REVISION: ${{ env.OTA_CLI_REVISION }}
@@ -351,6 +529,18 @@ jobs:
           git -C "$RUNNER_TEMP/ota-cli" checkout --force "$OTA_CLI_REVISION"
           test "$(git -C "$RUNNER_TEMP/ota-cli" rev-parse HEAD)" = "$OTA_CLI_REVISION"
           npm ci --prefix "$RUNNER_TEMP/ota-cli"
+
+      - name: Save pinned OTA CLI
+        if: steps.ota-cli.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ota-cli
+          key: ${{ steps.ota-cli.outputs.cache-primary-key }}
+
+      - name: Verify pinned OTA CLI
+        run: |
+          head=$(git -C "$RUNNER_TEMP/ota-cli" rev-parse HEAD)
+          test "$head" = "$OTA_CLI_REVISION" || { echo "::error title=OTA CLI revision::Restored OTA CLI is at $head, expected $OTA_CLI_REVISION."; exit 1; }
 
       - name: Publish exported bundle
         env:
@@ -418,7 +608,7 @@ jobs:
 
   publish-ios:
     name: Upload iOS ${{ needs.prepare.outputs.channel }}
-    needs: [prepare, ios]
+    needs: [prepare, check, ios]
     if: github.repository == 'markbang/cohub-mobile' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 35  # three publish attempts, each bounded by a 5-minute response timeout
@@ -431,6 +621,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -447,7 +638,16 @@ jobs:
           name: cohub-ota-inputs-ios-${{ needs.prepare.outputs.channel }}-${{ needs.prepare.outputs.sha }}
           path: ${{ runner.temp }}/cohub-ota-inputs
 
+      # Only this job saves the entry, and only after installing the pinned revision itself.
+      - name: Restore pinned OTA CLI
+        id: ota-cli
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/ota-cli
+          key: ota-cli-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ env.OTA_CLI_REVISION }}
+
       - name: Install pinned OTA CLI
+        if: steps.ota-cli.outputs.cache-hit != 'true'
         env:
           OTA_CLI_REPOSITORY: ${{ env.OTA_CLI_REPOSITORY }}
           OTA_CLI_REVISION: ${{ env.OTA_CLI_REVISION }}
@@ -458,6 +658,18 @@ jobs:
           git -C "$RUNNER_TEMP/ota-cli" checkout --force "$OTA_CLI_REVISION"
           test "$(git -C "$RUNNER_TEMP/ota-cli" rev-parse HEAD)" = "$OTA_CLI_REVISION"
           npm ci --prefix "$RUNNER_TEMP/ota-cli"
+
+      - name: Save pinned OTA CLI
+        if: steps.ota-cli.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/ota-cli
+          key: ${{ steps.ota-cli.outputs.cache-primary-key }}
+
+      - name: Verify pinned OTA CLI
+        run: |
+          head=$(git -C "$RUNNER_TEMP/ota-cli" rev-parse HEAD)
+          test "$head" = "$OTA_CLI_REVISION" || { echo "::error title=OTA CLI revision::Restored OTA CLI is at $head, expected $OTA_CLI_REVISION."; exit 1; }
 
       - name: Publish exported bundle
         env:
