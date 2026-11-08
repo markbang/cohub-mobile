@@ -62,13 +62,13 @@ export function PopoverSurface({ origin, fromScale, className, style, panel = fa
     };
   }, [fromX, fromY, progress]);
 
-  const glass = panel && Platform.OS === "android";
-  const panelClass = !panel ? "" : glass ? "overflow-hidden rounded-lg shadow-glass" : "overflow-hidden rounded-lg border-border bg-surface shadow-float";
-  return <Animated.View {...viewProps} exiting={exiting} className={`${panelClass} ${className ?? ""}`} style={[panel ? glass ? PANEL_SHAPE : BORDERED_PANEL : null, style, { transformOrigin: origin }, revealStyle]}>
-    {glass ? <GlassBackground radius={RADIUS.lg} surface="glassMenu" /> : null}
+  const look = panel ? PANEL : null;
+  return <Animated.View {...viewProps} exiting={exiting} className={`${look?.className ?? ""} ${className ?? ""}`} style={[look?.style, style, { transformOrigin: origin }, revealStyle]}>
+    {look?.glass ? <GlassBackground radius={RADIUS.lg} surface="glassMenu" /> : null}
     {children}
   </Animated.View>;
 }
 
-const PANEL_SHAPE = { borderCurve: "continuous" } as const;
-const BORDERED_PANEL = { borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" } as const;
+const PANEL = Platform.OS === "android"
+  ? { className: "overflow-hidden rounded-lg shadow-glass", style: { borderCurve: "continuous" } as const, glass: true }
+  : { className: "overflow-hidden rounded-lg border-border bg-surface shadow-float", style: { borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" } as const, glass: false };
