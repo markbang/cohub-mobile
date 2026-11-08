@@ -156,6 +156,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
 
       <AdaptiveSheet
         visible={feedbackOpen}
+        detent="fit"
         title={t("about.feedback.title")}
         onClose={() => { if (!feedbackSubmitting) setFeedbackOpen(false); }}
         dismissible={!feedbackSubmitting}
