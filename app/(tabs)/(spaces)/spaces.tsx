@@ -250,7 +250,7 @@ export default function SpacesScreen() {
       { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
     ],
   });
-  return <Screen edgeToEdge>
+  return <Screen edgeToEdge blurTarget={blurTarget}>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
       <MenuAnchor ref={filterButtonRef} open={filterMenuOpen}>
@@ -297,7 +297,7 @@ export default function SpacesScreen() {
     />
     </BrandRefreshArea>
     </EdgeBlurTarget>
-    <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
+    <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} heading={filterLabel} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
     {/* A short form: sized to its fields on both platforms rather than a full-height page. */}
     <AdaptiveSheet
       visible={createOpen}

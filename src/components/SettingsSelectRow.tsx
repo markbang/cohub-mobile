@@ -9,14 +9,20 @@ import { traceAction } from "@/src/data/interaction-trace";
 import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
 import { MenuAnchor, MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
+import { GlassBackdropScope } from "@/src/ui/Glass";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
 export type SelectOption<T extends string> = { value: T; label: string };
 
-const ROW_HEIGHT = 48;
-const MENU_PADDING = 6;
-const MIN_WIDTH = 180;
-const MAX_WIDTH = 260;
+// iOS 27's pop-up menu, measured at 402 pt: at least 250 pt wide, 42 pt rows inside 10 pt of padding, the check
+// centred 27 pt in and the labels 44 pt in, its top 6 pt above the value it opens from.
+const ROW_HEIGHT = 42;
+const MENU_PADDING = 10;
+const MIN_WIDTH = 250;
+const MAX_WIDTH = 300;
+const RAISE = 6;
+const ROW = { height: ROW_HEIGHT, paddingLeft: 19, paddingRight: 16 } as const;
+const CHECK = { width: 17, marginRight: 8, alignItems: "center" } as const;
 const MARGIN = 12;
 /** A touch held this long without moving opens the menu under the finger; a quicker one is a tap or a scroll. */
 const PRESS_DELAY_MS = 120;
@@ -30,7 +36,7 @@ function menuLayout(anchor: MorphRect, window: { width: number; height: number }
   const height = count * ROW_HEIGHT + MENU_PADDING * 2;
   const left = Math.min(Math.max(MARGIN, anchor.x + anchor.width - width), window.width - MARGIN - width);
   const upward = anchor.y + height > window.height - insets.bottom - MARGIN;
-  const top = upward ? Math.max(insets.top + MARGIN, anchor.y + anchor.height - height) : anchor.y;
+  const top = upward ? Math.max(insets.top + MARGIN, anchor.y + anchor.height + RAISE - height) : anchor.y - RAISE;
   return { left, top, width, height, anchor };
 }
 
@@ -68,7 +74,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   const highlightRef = useSharedValue<number | null>(null);
   const press = useSharedValue<PressState>({ timer: null, x: 0, y: 0, sliding: false, held: false });
   const current = options.find((option) => option.value === value);
-  const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, ...options.map((option) => Array.from(option.label).length * 10 + 64)));
+  const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, ...options.map((option) => Array.from(option.label).length * 10 + 60)));
 
   useEffect(() => () => { const timer = press.get().timer; if (timer) clearTimeout(timer); }, [press]);
 
@@ -211,6 +217,7 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
+    <GlassBackdropScope inside={false}>
     <View ref={rootRef} collapsable={false} pointerEvents={open ? "auto" : "none"} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} style={StyleSheet.absoluteFill} onPress={onClose} />
       <MorphMenuSurface
@@ -233,16 +240,17 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
             accessibilityLabel={option.label}
             accessibilityState={{ checked: selected }}
             onPress={() => onChoose(option.value)}
-            className={`flex-row items-center gap-3 px-4 active:opacity-70 ${highlight === index ? "opacity-70" : ""}`}
-            style={{ height: ROW_HEIGHT }}
+            className={`flex-row items-center active:opacity-70 ${highlight === index ? "opacity-70" : ""}`}
+            style={ROW}
           >
-            <Text numberOfLines={1} className={`min-w-0 flex-1 text-body text-fg ${selected ? "font-semibold" : ""}`}>{option.label}</Text>
-            {selected ? <AppIcon name="check" size={18} tone="fg" strokeWidth={2.1} /> : null}
+            <View style={CHECK}>{selected ? <AppIcon name="check" size={17} tone="fg" /> : null}</View>
+            <Text numberOfLines={1} className="min-w-0 flex-1 text-body text-fg">{option.label}</Text>
           </Pressable>;
         })}
         </View>
       </MorphMenuSurface>
     </View>
     <ToastViewport />
+    </GlassBackdropScope>
   </Modal>;
 }

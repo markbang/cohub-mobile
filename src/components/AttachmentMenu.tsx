@@ -1,9 +1,11 @@
 import type { RefObject } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import type { View } from "react-native";
+import { AnchoredMenuContent, type AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { ComposerMenu } from "@/src/components/ComposerMenu";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, type IconName } from "@/src/ui";
+import { MENU_WIDTH } from "@/src/ui/anchored-menu-layout";
 
+/** The composer's attachment menu, drawn as the system menu iOS shows from the same button. */
 export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile }: {
   anchorRef: RefObject<View | null>;
   onClose: () => void;
@@ -12,17 +14,14 @@ export function AttachmentMenu({ anchorRef, onClose, onCamera, onPhotos, onFile 
   onFile: () => void;
 }) {
   const { t } = useTranslation();
-  const actions: { icon: IconName; label: string; onPress: () => void }[] = [
-    { icon: "camera", label: t("chat.attachment.camera"), onPress: onCamera },
-    { icon: "images", label: t("chat.attachment.photos"), onPress: onPhotos },
-    { icon: "paperclip", label: t("chat.attachment.file"), onPress: onFile },
+  // The menu opens up from the composer, and UIKit lists an upward menu from the bottom: the first item sits
+  // nearest the button.
+  const actions: AnchoredMenuAction[] = [
+    { icon: "paperclip", title: t("chat.attachment.file"), onPress: onFile },
+    { icon: "images", title: t("chat.attachment.photos"), onPress: onPhotos },
+    { icon: "camera", title: t("chat.attachment.camera"), onPress: onCamera },
   ];
-  return <ComposerMenu anchorRef={anchorRef} title={t("chat.attachment.title")} onClose={onClose} preferredWidth={240} testID="chat-attachment-menu">
-    <ScrollView className="shrink" contentContainerClassName="p-1.5" keyboardShouldPersistTaps="handled">
-      {actions.map((action) => <Pressable key={action.icon} accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} className="min-h-13 flex-row items-center gap-3 rounded-sm px-4 py-3 active:opacity-70">
-        <AppIcon name={action.icon} size={22} tone="secondary" />
-        <Text className="text-body text-fg flex-1">{action.label}</Text>
-      </Pressable>)}
-    </ScrollView>
+  return <ComposerMenu anchorRef={anchorRef} title={t("chat.attachment.title")} onClose={onClose} preferredWidth={MENU_WIDTH} material="glass" testID="chat-attachment-menu">
+    <AnchoredMenuContent sections={[{ actions }]} onClose={onClose} testID="chat-attachment-menu" />
   </ComposerMenu>;
 }

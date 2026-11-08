@@ -397,7 +397,7 @@ const chromeScope = {
   traceAction: () => {},
   setDialogOpen: () => {},
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
-  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }),
+  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }), uiSnapshots: false,
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
@@ -1294,7 +1294,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null, SOLID_GLASS_SHADOW: "" });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", GlassBackdrop: "GlassBackdrop", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1329,7 +1329,7 @@ for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   assert.equal(backCount, 1);
   assert.deepEqual(backEvents, ["navigation.back.press_in", "navigation.back.press_out", "navigation.back.touch_cancel", "navigation.back.dispatch"]);
   assert.ok(headerNodes.some((node) => node.type === "actions"));
-  const paneRootBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, usePaneBack: () => false, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null, SOLID_GLASS_SHADOW: "" });
+  const paneRootBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, usePaneBack: () => false, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), GlassBackground: "GlassBackground", GlassBackdrop: "GlassBackdrop", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null });
   assert.equal(chromeNodes(paneRootBar({ title: "Chat", onBack: () => {}, transparent: true })).some((node) => node.type === "IconButton"), false, "the right pane's first screen draws no back button");
   const searchHeader = renderTopBar({ title: "Chats", children: { type: "search-input" } });
   assert.ok(chromeNodes(searchHeader).some((node) => node.type === "search-input"));
@@ -1417,8 +1417,12 @@ let menuBackRemoved = false;
 let menuFocused = true;
 let menuPredictiveBackBlocked = null;
 const menuCleanups = [];
+// The rows live in their own component; it is expanded in place so the assertions below still reach them.
+const renderMenuContent = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredMenuContent", { ...chromeScope, ScrollView: "ScrollView" });
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
+  React: { ...chromeScope.React, createElement: (type, props, ...children) => type === "AnchoredMenuContent" ? renderMenuContent(props) : chromeScope.React.createElement(type, props, ...children) },
+  AnchoredMenuContent: "AnchoredMenuContent",
   ScrollView: "ScrollView",
   MorphMenuSurface: "MorphMenuSurface",
   useRef: () => ({ current: null }),
@@ -1461,6 +1465,9 @@ assert.equal(menuPredictiveBackBlocked, true, "an open menu keeps the back gestu
 assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onClosed, menuExited, "the menu unmounts once it has shrunk back into its trigger");
 assert.equal(menuNodes.find((node) => node.type === "ScrollView").props.keyboardShouldPersistTaps, "always");
 assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native share sheet must not compete with another Modal");
+const barMenuNodes = chromeNodes(renderChatMenu({ ...chatMenuProps, heading: "All", actions: [{ icon: "messages", title: "All", checked: true, onPress: () => undefined }] }));
+assert.deepEqual(barMenuNodes.find((node) => node.props?.accessibilityRole === "header").props.children, ["All"], "a navigation-bar menu shows its heading, as UIKit's does");
+assert.deepEqual(barMenuNodes.filter((node) => node.type === "AppIcon").map((node) => node.props.name), ["check", "messages"], "a navigation-bar menu keeps the glyph and checks in its own column");
 menuCleanups[0]();
 assert.equal(menuBackRemoved, true);
 menuFocused = false;

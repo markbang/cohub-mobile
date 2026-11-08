@@ -42,7 +42,7 @@ import { touchSlop } from "@/src/ui/touch-target";
 import type { ColorKey } from "@/src/design/tokens";
 import { curves, glassPress, glyphSwap, motion, springs } from "@/src/motion";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
-import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { GlassBackdrop, GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
 import { usePaneBack } from "@/src/ui/pane";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
@@ -73,9 +73,9 @@ const ICON_TONES: Record<IconTone, ColorKey> = {
 };
 
 /** Glyphs need a JS color, so icons take a token `tone`; `color` is for computed values only. */
-export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; style?: object }) {
+export function AppIcon({ name, size = 20, color, tone = "secondary", strokeWidth = 1.9, fill, bold, style }: { name: IconName; size?: number; color?: ColorValue; tone?: IconTone; strokeWidth?: number; fill?: string; bold?: number; style?: object }) {
   const theme = useAppTheme();
-  return <Glyph name={name} size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} fill={fill} style={style} />;
+  return <Glyph name={name} size={size} color={color ?? theme.colors[ICON_TONES[tone]]} strokeWidth={strokeWidth} fill={fill} bold={bold} style={style} />;
 }
 
 const LOCAL_HARNESS_ICONS: Record<LocalHarness, ComponentType<{ size?: number; color?: string }>> = {
@@ -116,11 +116,11 @@ export function Avatar({ name, uri, size = 40, online = false }: { name: string;
 export function IconButton({ name, onPress, label, testID, size = 44, tone = "default", filled: filledProp, disabled = false, glyph, onPressIn, onPressOut, onTouchCancel }: { name: IconName; onPress: (event: GestureResponderEvent) => void; label: string; testID?: string; size?: number; tone?: "default" | "accent" | "active" | "danger"; filled?: boolean; disabled?: boolean; /** Replaces the drawn glyph, as for Android's back chevron. */ glyph?: ReactNode; onPressIn?: (event: GestureResponderEvent) => void; onPressOut?: (event: GestureResponderEvent) => void; onTouchCancel?: (event: GestureResponderEvent) => void }) {
   const theme = useAppTheme();
   const bar = useContext(BarButtonContext);
-  const filled = bar === "native" ? false : filledProp ?? bar === "drawn";
+  const filled = bar === "native" ? false : filledProp ?? (bar === "drawn" || bar === "system");
   // The visual circle can be smaller than 44, but the touch target never is.
   const target = Math.max(44, size);
   const iconTone: IconTone = filled && tone === "accent" ? "onAccent" : tone === "accent" || tone === "active" ? "accent" : tone === "danger" ? "danger" : filled || bar === "native" ? "fg" : "secondary";
-  const icon = glyph ?? <AppIcon name={name} size={filled ? FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
+  const icon = glyph ?? <AppIcon name={name} size={filled ? bar === "system" ? SYSTEM_BAR_ICON_SIZE : FILLED_ICON_SIZE : Math.round(Math.min(size, 44) * 0.5)} tone={iconTone} strokeWidth={filled ? 2.1 : undefined} />;
   const glass = useGlassPress(filled ? GLASS_BUTTON_SIZE : 0, theme.mode === "light");
   return (
     <Pressable
@@ -139,9 +139,9 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
     >
       {filled
         // A 44 pt glass circle, as iOS 26 draws bar buttons.
-        ? <Animated.View className={`size-11 items-center justify-center rounded-full ${SOLID_GLASS_SHADOW}`} style={glass.style}>
+        ? <Animated.View className="size-11 items-center justify-center rounded-full" style={glass.style}>
           {/* Glass where the platform draws it; an accent button is glass tinted with the accent. */}
-          <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} solidClassName="bg-glass-control" rim />
+          <GlassBackground radius={22} tint={tone === "accent" ? theme.colors.accent : undefined} />
           <Animated.View pointerEvents="none" className="absolute inset-0 rounded-full bg-glass-press" style={glass.lightStyle} />
           <Animated.View style={glass.inkStyle}>{icon}</Animated.View>
         </Animated.View>
@@ -151,6 +151,8 @@ export function IconButton({ name, onPress, label, testID, size = 44, tone = "de
 }
 
 const FILLED_ICON_SIZE = 18;
+// Android's bars that iOS draws as its system bar (tab roots, pushed screens) carry UIKit's larger symbols.
+const SYSTEM_BAR_ICON_SIZE = 26;
 const GLASS_BUTTON_SIZE = 44;
 
 /** iOS 27's glass press (`glassPress`): the glass swells, lightens and fades its ink, then bounces past rest. */
@@ -172,12 +174,12 @@ function useGlassPress(size: number, light: boolean) {
     pressOut: () => scale.set(withSpring(1, glassPress.release)),
   };
 }
-// Android draws bar buttons solid, so the glass's soft shadow is drawn with them; iOS glass casts its own.
-const SOLID_GLASS_SHADOW = Platform.OS === "android" ? "shadow-glass" : "";
 /** The detail shrinks far faster than the model name, so a narrow chip cuts the level first. */
 const MODEL_DETAIL_SHRINK = { flexShrink: 100 } as const;
 
-export function Screen({ children, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean }) {
+/** `blurTarget` (an `EdgeBlurTarget`'s) is what the screen's floating glass blurs on Android. */
+export function Screen({ children: content, scroll = false, refreshing = false, onRefresh, contentStyle, keyboard = false, scrollRef, edgeToEdge = false, blurTarget }: { children: ReactNode; scroll?: boolean; refreshing?: boolean; onRefresh?: () => void; contentStyle?: ViewStyle; keyboard?: boolean; scrollRef?: React.RefObject<ScrollView | null>; edgeToEdge?: boolean; blurTarget?: RefObject<View | null> }) {
+  const children = <GlassBackdrop target={blurTarget ?? null}>{content}</GlassBackdrop>;
   const insets = useSafeAreaInsets();
   // The native bar's height, status bar included; 0 when this screen's navigator shows no header.
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
@@ -229,14 +231,18 @@ const TOP_EDGE = ["top"] as const;
 // iOS 26's back chevron, fitted to its pixels in the 44 pt button: a 2.5 pt round stroke, 8.4 × 16.2 pt
 // between its stroke centres, its point 5.8 pt left of and 0.33 pt below the button's centre.
 const BACK_CHEVRON_PATH = "M24.6 14.23 L16.2 22.33 L24.6 30.43";
-function BackChevron() {
+// The chevron iOS draws in its own drawn bars (the Chat screen's) is an 18 pt symbol, about three quarters the size.
+const DRAWN_BACK_SCALE = 0.76;
+function BackChevron({ scale = 1 }: { scale?: number }) {
   const theme = useAppTheme();
-  return <Svg pointerEvents="none" width={44} height={44} viewBox="0 0 44 44">
+  const side = 44 / scale;
+  return <Svg pointerEvents="none" width={44} height={44} viewBox={`${22 - side / 2} ${22 - side / 2} ${side} ${side}`}>
     <Path d={BACK_CHEVRON_PATH} stroke={theme.colors.text} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
   </Svg>;
 }
 // iOS drawn bars keep their symbol.
 const BACK_GLYPH = Platform.OS === "android" ? <BackChevron /> : undefined;
+const DRAWN_BACK_GLYPH = Platform.OS === "android" ? <BackChevron scale={DRAWN_BACK_SCALE} /> : undefined;
 // iOS 26's navigation bar keeps its buttons in the top 44 pt and ends 10 pt below them, so content starts there.
 const DRAWN_BAR_TAIL = Platform.OS === "android" ? { paddingBottom: 10 } : null;
 /** Two lines (headline + caption) and the 2 pt inset make 44, so one radius keeps it a capsule with or without a subtitle. */
@@ -272,10 +278,14 @@ export function TopBar({ title, subtitle, onBack: requestedBack, backLabel, lead
   const { t } = useTranslation();
   // A pushed screen's plain bar is the iOS navigation bar. Its back button pops the route itself, so
   // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
-  const system = nativeHeaders && !drawn && Boolean(requestedBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
+  const systemBar = !drawn && Boolean(requestedBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
+  const system = nativeHeaders && systemBar;
   // The right pane's first screen has nothing under it in its pane; the native bar already knows.
   const onBack = usePaneBack() ? requestedBack : undefined;
   useNativeHeader(system ? { title, subtitle, right: actions } : null);
+  // Android draws iOS's system bar with its symbols' sizes; the bars iOS draws itself keep the drawn ones.
+  const barButtons = systemBar ? "system" : "drawn";
+  const backGlyph = systemBar ? BACK_GLYPH : DRAWN_BACK_GLYPH;
   // A drawn bar centers its title as UIKit does, balancing whichever side is wider. Until the trailing
   // buttons are measured the title is not drawn, so it never lands off-center for a frame and jumps.
   const [trailingWidth, setTrailingWidth] = useState<number | null>(null);
@@ -288,7 +298,7 @@ export function TopBar({ title, subtitle, onBack: requestedBack, backLabel, lead
     {subtitle ? <Text numberOfLines={1} className="text-center text-caption text-fg-muted">{subtitle}</Text> : null}
   </>;
   const titleContent = children ?? (capsule
-    ? <View className={`max-w-full self-center justify-center px-4 py-0.5 ${SOLID_GLASS_SHADOW}`} style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} solidClassName="bg-glass-control" rim />{titleText}</View>
+    ? <View className="max-w-full self-center justify-center px-4 py-0.5" style={TITLE_CAPSULE}><GlassBackground radius={TITLE_CAPSULE.borderRadius} />{titleText}</View>
     : titleText);
   // Each bar slot is a 44 pt glass circle; slots sit 12 apart, as in an iOS 26 bar.
   const leadingWidth = onBack || leading ? 44 + 12 : 0;
@@ -297,25 +307,30 @@ export function TopBar({ title, subtitle, onBack: requestedBack, backLabel, lead
   // The capsule drops only the leading balance, so a long title takes the slack beside the back button;
   // with wider actions a short one sits slightly left of the screen's center.
   const balance = children ? undefined : { marginLeft: capsule ? 0 : side - leadingWidth, marginRight: side - trailing, opacity: actions && trailingWidth === null ? 0 : 1 };
+  // A bar with its own background has nothing scrolling beneath it for its glass to blur.
+  const backdrop = transparent ? undefined : null;
   if ((large || titleHidden) && !children) return (
     <View testID="app-top-bar" className={`shrink-0 ${transparent ? "" : "bg-background"}`}>
+      <GlassBackdrop target={backdrop}>
       <View className="flex-row items-center gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
-        {onBack ? <IconButton filled name="chevron-left" glyph={BACK_GLYPH} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
+        {onBack ? <IconButton filled name="chevron-left" glyph={backGlyph} label={backLabel ?? t("ui.detail.back")} onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }} /> : leading ? <View className="size-11 items-center justify-center">{leading}</View> : null}
         {titleHidden ? <View accessible accessibilityRole="header" accessibilityLabel={title} className="flex-1 self-stretch" /> : <View className="flex-1" />}
-        {actions ? <View className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+        {actions ? <View className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value={barButtons}>{actions}</BarButtonContext.Provider></View> : null}
       </View>
       {titleHidden ? null : <View ref={titleRef} collapsable={false} className="px-4 pb-2">
         <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="text-display font-semibold text-fg">{title}</Text>
         {subtitle ? <Text numberOfLines={1} className="text-subhead text-fg-muted">{subtitle}</Text> : null}
       </View>}
+      </GlassBackdrop>
     </View>
   );
   return (
     <View testID="app-top-bar" className={`shrink-0 flex-row items-center gap-3 px-4 ${transparent ? "" : "bg-background"}`} style={[{ minHeight: edgeChrome.headerMinHeight }, transparent || children ? null : DRAWN_BAR_TAIL]}>
+      <GlassBackdrop target={backdrop}>
       {onBack ? <IconButton
         filled
         name="chevron-left"
-        glyph={BACK_GLYPH}
+        glyph={backGlyph}
         label={backLabel ?? t("ui.detail.back")}
         onPress={() => { traceAction("back"); recordDebugEvent("navigation.back.dispatch"); onBack(); }}
         onPressIn={() => recordDebugEvent("navigation.back.press_in")}
@@ -325,7 +340,8 @@ export function TopBar({ title, subtitle, onBack: requestedBack, backLabel, lead
       <View ref={titleRef} collapsable={false} className="min-w-0 flex-1 justify-center px-1" style={balance}>
         {nativeContextMenus && titleMenu ? <NativeContextMenu menu={titleMenu.menu} actions={titleMenu.actions}><View accessible accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} className="min-w-0 justify-center">{titleContent}</View></NativeContextMenu> : onTitleLongPress ? <Pressable accessibilityRole="header" accessibilityLabel={titleLongPressLabel ?? title} onLongPress={onTitleLongPress} className={capsule ? "max-w-full self-center active:opacity-70" : "min-w-0 flex-1 justify-center rounded-sm active:bg-surface-pressed"} style={CONTINUOUS}>{titleContent}</Pressable> : titleContent}
       </View>
-      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider></View> : null}
+      {actions ? <View onLayout={(event) => setTrailingWidth(event.nativeEvent.layout.width)} className="shrink-0 flex-row items-center gap-3"><BarButtonContext.Provider value={barButtons}>{actions}</BarButtonContext.Provider></View> : null}
+      </GlassBackdrop>
     </View>
   );
 }
@@ -575,7 +591,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
       <LayoutAnimationConfig skipEntering skipExiting>
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerSurface}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
-        <GlassBackground radius={styles.composerSurface.borderRadius} solidClassName="bg-glass-menu" rim />
+        <GlassBackground radius={styles.composerSurface.borderRadius} surface="glassComposer" />
         <View className="flex-row items-start">
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
@@ -647,7 +663,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           </View>
         </View>
         <View className="h-11 flex-row items-center gap-2">
-          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <MenuAnchor open={attachmentMenuOpen}><Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-45" : ""}`}><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable></MenuAnchor>}
+          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <MenuAnchor open={attachmentMenuOpen}><Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full active:opacity-70 ${blocked ? "opacity-45" : ""}`}><GlassBackground radius={22} surface="glassButton" blurTarget={null} /><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable></MenuAnchor>}
           {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <MenuAnchor open={harnessMenuOpen} className="min-w-0 max-w-26 shrink"><Pressable ref={harnessButtonRef} testID="chat-composer-harness" hitSlop={HARNESS_CHIP_SLOP} accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-sm px-2 bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>

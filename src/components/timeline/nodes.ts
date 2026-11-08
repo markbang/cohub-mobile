@@ -153,7 +153,7 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
   const caption = preview ? `${block.name}: "${preview}"` : block.name;
   const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
   const label = (value: string, tint: string) => text(value, textStyle("micro", tint, { fontWeight: "600" }));
-  const lineStyle: TimelineTextStyle = { fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18), color: color(theme.colors.textMuted) };
+  const lineStyle: TimelineTextStyle = { fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18), color: color(theme.colors.textMuted), ...(TEXT_FAMILY ? { fontFamily: TEXT_FAMILY } : null) };
   const children: TimelineNode[] = [
     pressable({
       id: `${id}:row`, action: "toggle", payload: { id }, accessibilityLabel: `${caption}: ${status}`, accessibilityState: { expanded }, pressedOpacity: 1,

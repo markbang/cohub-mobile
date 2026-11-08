@@ -11,7 +11,10 @@ import { useAppActions, useModelCatalog } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
 import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
 import { useAppTheme } from "@/src/theme";
+import { useTranslation } from "@/src/i18n";
 import { ComposerInput, Screen, SectionHeader } from "@/src/ui";
+import { EdgeBlurTarget, useBlurTarget } from "@/src/ui/EdgeChrome";
+import { GlassBackdrop } from "@/src/ui/Glass";
 
 function buildMatrix() {
   const rows: ComposerActionStateInput[] = [];
@@ -33,6 +36,7 @@ function buildMatrix() {
 
 export default function DebugComposerScreen() {
   const theme = useAppTheme();
+  const { t } = useTranslation();
   const matrix = useMemo(() => buildMatrix(), []);
   const { loadModels, loadModelStatus } = useAppActions();
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
@@ -50,10 +54,12 @@ export default function DebugComposerScreen() {
   const [hasStop, setHasStop] = useState(true);
   const modelLabel = selectedModel?.name ?? selectedModel?.id;
   const modelTriggerDetail = selectedModel?.thinkingLevel ? formatThinkingLevel(selectedModel.thinkingLevel) : undefined;
+  const { blurTarget, attachBlurTarget } = useBlurTarget();
   const live = getComposerActionState({ text, hasAttachment: attach, disabled, sending, running, hasStopHandler: hasStop });
 
   return (
-    <Screen keyboard>
+    <Screen keyboard blurTarget={blurTarget}>
+      <EdgeBlurTarget attach={attachBlurTarget}>
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <SectionHeader title="交互预览" />
         <View className="px-4 pb-1.5 flex-row flex-wrap gap-2">
@@ -102,7 +108,16 @@ export default function DebugComposerScreen() {
           })}
         </View>
       </ScrollView>
+      </EdgeBlurTarget>
+      {/* Here the composer sits below the matrix rather than over it, so its glass has nothing beneath to blur. */}
+      <GlassBackdrop target={null}>
       <ComposerInput menuSourceRef={composerMenuSourceRef}
+        // The Chat screen's attachment actions, so iOS shows its system menu here as it does there.
+        attachmentActions={[
+          { icon: "camera", title: t("chat.attachment.camera"), onPress: () => setAttach(true) },
+          { icon: "images", title: t("chat.attachment.photos"), onPress: () => setAttach(true) },
+          { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => setAttach(true) },
+        ]}
         anchorRef={composerRef}
         attachmentMenuOpen={attachmentOpen}
         modelMenuOpen={modelOpen}
@@ -122,6 +137,7 @@ export default function DebugComposerScreen() {
         disabled={disabled}
         hasAttachment={attach}
       />
+      </GlassBackdrop>
       <MenuPresence open={attachmentOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /></MenuPresence>
       <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
     </Screen>

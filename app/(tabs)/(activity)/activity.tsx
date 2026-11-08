@@ -43,7 +43,7 @@ export default function ActivityScreen() {
     }
   };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
-  return <Screen edgeToEdge>
+  return <Screen edgeToEdge blurTarget={blurTarget}>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.activity")} scrollY={scrollY} />
       <ConnectionBanner visible={connectionUnavailable} />

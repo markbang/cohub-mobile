@@ -159,7 +159,9 @@ export function enrichedMarkdownStyle(theme: AppTheme, color: string, linkColor 
       rowEvenBackgroundColor: "transparent",
       rowOddBackgroundColor: "transparent",
       cellPaddingHorizontal: 12,
-      cellPaddingVertical: 9,
+      // iOS lays a cell's text at the font's own height, not `lineHeight`, so its rows come out 34 pt; Android
+      // honours `lineHeight` and takes a point less padding to match.
+      cellPaddingVertical: Platform.OS === "android" ? 8 : 9,
       columnDividers: false,
       maxColumnWidth: 220,
     },

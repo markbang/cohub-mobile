@@ -112,8 +112,8 @@ export const dialog = {
   settle: [[0, 0], [0.07, 0.08], [0.14, 0.176], [0.21, 0.352], [0.28, 0.5], [0.35, 0.6], [0.42, 0.7], [0.49, 0.8], [0.56, 0.848], [0.63, 0.9], [0.77, 0.952], [1, 1]],
 } as const;
 
-/** iOS 27 dims the screen under an alert or sheet by a fifth, and by 48% in dark mode. */
-export const scrim = { light: 0.2, dark: 0.48 } as const;
+/** iOS 27 dims the screen under a sheet by a fifth, and by 48% in dark mode; under an alert by 36%, and 74% in dark mode. */
+export const scrim = { light: 0.2, dark: 0.48, alertLight: 0.36, alertDark: 0.74 } as const;
 
 /** Ambient loops that signal ongoing work; each one stops under Reduce Motion unless noted. */
 export const loops = {

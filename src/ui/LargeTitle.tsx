@@ -58,7 +58,7 @@ export function LargeTitleBar({ title, actions, scrollY, hold = 0 }: { title: st
     <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="absolute inset-x-0 inset-y-0 items-center justify-center" style={titleStyle}>
       <Text numberOfLines={1} className="text-headline font-semibold text-fg">{title}</Text>
     </Animated.View>
-    {actions ? <BarButtonContext.Provider value="drawn">{actions}</BarButtonContext.Provider> : null}
+    {actions ? <BarButtonContext.Provider value="system">{actions}</BarButtonContext.Provider> : null}
   </View>;
 }
 
@@ -100,8 +100,9 @@ export function LargeTitleSearch({ scrollY, children }: { scrollY: SharedValue<n
 }
 
 const SEARCH_ORIGIN = { transformOrigin: "top" } as const;
-// UIKit's bar ends this much further below its search field than the row's own padding, so the list starts lower.
-const SEARCH_TAIL = { height: 7 } as const;
+// UIKit's bar ends this much further below its search field than the row's own padding, so the list starts lower:
+// iOS 27 puts the first row's title 49 px (27 pt) under the field.
+const SEARCH_TAIL = { height: 2 } as const;
 
 /**
  * UIKit never rests a scroll view part-way through collapsing its bar: released there, it settles on the

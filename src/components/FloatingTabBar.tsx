@@ -422,7 +422,7 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
           <GlassGroup spacing={LENS_GROWTH_X * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
             {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
             <Animated.View className={`absolute rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={glassFrameStyle}>
-              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} rim />
+              <GlassBackground radius={BAR_HEIGHT / 2} surface="glassBar" blurTarget={blurTarget} />
             </Animated.View>
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>
@@ -466,6 +466,7 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
       {minimized ? <Pressable
         accessibilityRole="button"
         accessibilityLabel={selectedLabel}
+        testID="tab-bar-expand"
         onPress={expand}
         style={{ position: "absolute", left: (paneWidth - barWidth) / 2 + MINIMIZED_INSET, bottom: barBottomOffset(insets.bottom) + (BAR_HEIGHT - MINIMIZED_SIZE) / 2, width: MINIMIZED_SIZE, height: MINIMIZED_SIZE }}
       /> : null}
@@ -475,6 +476,8 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
 
 // SF tab symbols draw about 26 pt; Lucide draws inside its box with padding.
 const ICON_SIZE = 28;
+// iOS 27's tab labels: 10 pt and semibold, selected or not.
+const TAB_LABEL = { fontSize: 10, lineHeight: 13 } as const;
 const LENS_FRAME = { left: BAR_PADDING, top: (BAR_HEIGHT - LENS_HEIGHT) / 2, width: LENS_WIDTH, height: LENS_HEIGHT } as const;
 
 /** The lens grows as it lifts, and stretches along its motion while thinning across it. */
@@ -553,7 +556,7 @@ function TabItem({ index, label, accessibilityLabel, testID, focused, lens, lift
           <Animated.View className="absolute inset-0 items-center justify-center" style={activeIconStyle}>{activeIcon}</Animated.View>
         </View>
         {/* Labels are the one place icons never stand alone: tabs name destinations. */}
-        <Animated.Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className={`text-micro ${focused ? "font-semibold" : "font-medium"}`} style={labelStyle}>{label}</Animated.Text>
+        <Animated.Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-micro font-semibold" style={[TAB_LABEL, labelStyle]}>{label}</Animated.Text>
       </Animated.View>
     </View>
   );

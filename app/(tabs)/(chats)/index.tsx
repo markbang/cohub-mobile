@@ -19,6 +19,7 @@ import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSou
 import type { SessionSourceFilter } from "@/src/data/session-source";
 import { useSourceSessions } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
+import { uiSnapshots } from "@/src/config";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
 import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
@@ -215,7 +216,7 @@ export default function ChatsScreen() {
     : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
-    <Screen edgeToEdge>
+    <Screen edgeToEdge blurTarget={blurTarget}>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
@@ -252,6 +253,8 @@ export default function ChatsScreen() {
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
         keyboardShouldPersistTaps="handled"
+        // UI captures hide the scroll bar, which Android leaves up after a tab switch.
+        showsVerticalScrollIndicator={!uiSnapshots}
         {...pullRefresh.listProps}
         onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
@@ -276,6 +279,7 @@ export default function ChatsScreen() {
       <MenuPresence open={sourceMenuOpen}><AnchoredActionMenu
         anchorRef={sourceButtonRef}
         title={t("chats.source.title")}
+        heading={sourceLabel}
         testID="chats-source-menu"
         onClose={() => setSourceMenuOpen(false)}
         actions={sourceActions}

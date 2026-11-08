@@ -7,7 +7,7 @@ import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
-import { EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
+import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { usePaneWidth } from "@/src/ui/pane";
 
 /**
@@ -25,16 +25,18 @@ export default function DebugChatScreen() {
   const router = useRouter();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
-  const params = useLocalSearchParams<{ fixture?: string; native?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string }>();
   const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
   const messages = useMemo(() => conversation(fixture), [fixture]);
-  const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout } = useEdgeChrome({ reserveComposer: true });
+  const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
   const [draft, setDraft] = useState("");
   const width = usePaneWidth();
-  // Printed under the bar so a snapshot shows whether rows were laid out (frame) even when none is painted.
+  // With `?probe=1`, printed under the bar so a snapshot shows whether rows were laid out (frame) even when none
+  // is painted. Otherwise it stays an accessibility label only, which captures can wait on without the text
+  // covering the timeline.
   const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const [probe, setProbe] = useState("probing…");
   useEffect(() => {
@@ -56,15 +58,18 @@ export default function DebugChatScreen() {
     return () => clearInterval(timer);
   }, [fixture, useNative]);
 
-  return <Screen edgeToEdge>
+  return <Screen edgeToEdge blurTarget={blurTarget}>
     <EdgeHeader onLayout={onHeaderLayout}>
       <TopBar transparent title="Fix the Android sheet height" subtitle="Home" onBack={() => router.back()} actions={<>
         <IconButton name="list-tree" label="Turns" size={38} onPress={NOOP} />
         <IconButton name="more" label="More" size={38} onPress={NOOP} />
       </>} />
-      <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
+      {params.probe === "1"
+        ? <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
+        : <View testID="debug-chat-probe" accessible accessibilityLabel={probe} pointerEvents="none" style={PROBE_LABEL} />}
     </EdgeHeader>
     <View className="flex-1 min-h-0 bg-background">
+    <EdgeBlurTarget attach={attachBlurTarget}>
       {useNative ? <NativeChatTimeline
         key={fixture}
         ref={timelineRef}
@@ -120,12 +125,16 @@ export default function DebugChatScreen() {
         // A reply still being written; the native timeline reads live replies from a Chat's stream, which a fixture has none of.
         ListFooterComponent={fixture === "stream" ? <StreamCard content={STREAM_REPLY} status="streaming" availableWidth={width} /> : null}
       />}
+    </EdgeBlurTarget>
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
       <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" />
     </EdgeFooter>
   </Screen>;
 }
+
+// Full width: Android's accessibility dump leaves out a view too small to see.
+const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height: 8 } as const;
 
 type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string };
 

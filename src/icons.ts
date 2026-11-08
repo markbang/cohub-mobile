@@ -75,7 +75,8 @@ import SquarePen from "lucide-react-native/icons/square-pen";
 import SquareTerminal from "lucide-react-native/icons/square-terminal";
 import Type from "lucide-react-native/icons/type";
 import Trash2 from "lucide-react-native/icons/trash";
-import TrendingUp from "lucide-react-native/icons/trending-up";
+// SF's chart.line.uptrend.xyaxis draws its axes, as Lucide's chart-line does.
+import ChartLine from "lucide-react-native/icons/chart-line";
 import UserRound from "lucide-react-native/icons/user-round";
 import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import Wifi from "lucide-react-native/icons/wifi";
@@ -168,7 +169,7 @@ export const icons = {
   // SF Symbols' terminal is boxed; Framework7 has no terminal, so Android draws Lucide's boxed one.
   terminal: SquareTerminal,
   trash: Trash2,
-  "trending-up": TrendingUp,
+  "trending-up": ChartLine,
   type: Type,
   user: UserRound,
   "user-circle": CircleUserRound,

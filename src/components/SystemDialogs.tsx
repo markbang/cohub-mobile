@@ -6,6 +6,7 @@ import type { IconName } from "@/src/icons";
 import { dialog, scrim } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
 import { Loader } from "@/src/ui";
+import { GlassBackground, GlassBackdropScope } from "@/src/ui/Glass";
 import { ToastViewport } from "@/src/components/Toast";
 
 export type ConfirmSheetProps = {
@@ -93,19 +94,23 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
   const { width } = useWindowDimensions();
   const cardStyle = { width: Math.min(CARD_WIDTH, width - CARD_MARGIN * 2), borderRadius: CARD_RADIUS, borderCurve: "continuous" } as const;
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
+    <GlassBackdropScope inside={false}>
     <View className="flex-1 items-center justify-center" testID={testID}>
       {/* design-system: the scrim dims whatever sits underneath, so it stays black; iOS dims more in dark mode. */}
       <Pressable accessible={false} style={[StyleSheet.absoluteFill, theme.mode === "dark" ? SCRIM_DARK : SCRIM_LIGHT]} onPress={onClose} />
-      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="overflow-hidden bg-dialog-surface" style={cardStyle}>
+      {/* iOS's alert glass casts a soft shadow over the dimmed screen. */}
+      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="shadow-glass" style={cardStyle}>
+        <GlassBackground radius={CARD_RADIUS} surface="dialogSurface" />
         <View style={CONTENT_INSET}>
           <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
-          {lines.filter(Boolean).map((line) => <Text key={line} className="mt-1.5 text-subhead text-fg-muted">{line}</Text>)}
+          {lines.filter(Boolean).map((line) => <Text key={line} className="mt-1.5 text-subhead text-dialog-message">{line}</Text>)}
           {error ? <Text accessibilityRole="alert" className="mt-1.5 text-caption text-danger">{error}</Text> : null}
         </View>
         <View className="flex-row gap-2" style={BUTTON_INSET}>{children}</View>
       </Reanimated.View>
       <ToastViewport />
     </View>
+    </GlassBackdropScope>
   </Modal>;
 }
 
@@ -123,6 +128,6 @@ const CARD_RADIUS = 34;
 const CONTENT_INSET = { paddingTop: 21, paddingHorizontal: 29 } as const;
 const BUTTON_INSET = { marginTop: 18, paddingHorizontal: 15, paddingBottom: 15 } as const;
 // design-system: the scrim dims whatever theme sits underneath, so it stays black at a fixed alpha.
-const SCRIM_LIGHT = { backgroundColor: "#000000", opacity: scrim.light } as const;
-// design-system: as above; iOS 27 dims the dark appearance by 48%.
-const SCRIM_DARK = { backgroundColor: "#000000", opacity: scrim.dark } as const;
+const SCRIM_LIGHT = { backgroundColor: "#000000", opacity: scrim.alertLight } as const;
+// design-system: as above; iOS 27 dims the dark appearance by 74%.
+const SCRIM_DARK = { backgroundColor: "#000000", opacity: scrim.alertDark } as const;
