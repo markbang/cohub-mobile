@@ -231,6 +231,7 @@ export function AdaptiveSheet({
   const bottomPadding = floating ? theme.spacing.lg + insets.bottom : Math.max(insets.bottom, theme.spacing.lg);
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
   const bodyMaxHeight = Math.max(160, maxHeight - (compact ? 100 : 82) - (footer ? 130 : 20));
+  const content = <CompactSettingsRows.Provider value={floating}>{children}</CompactSettingsRows.Provider>;
   const resolvedContentStyle = [
     CONTENT_PADDING,
     { paddingBottom: footer ? theme.spacing.lg : bottomPadding },
@@ -302,10 +303,10 @@ export function AdaptiveSheet({
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                <CompactSettingsRows.Provider value={floating}>{children}</CompactSettingsRows.Provider>
+                {content}
               </ScrollView>
             ) : (
-              <View collapsable={false} style={resolvedContentStyle}><CompactSettingsRows.Provider value={floating}>{children}</CompactSettingsRows.Provider></View>
+              <View collapsable={false} style={resolvedContentStyle}>{content}</View>
             )}
             {footer ? (
               <View

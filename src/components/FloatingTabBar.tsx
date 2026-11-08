@@ -415,7 +415,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab, ins
           <GlassGroup spacing={LENS_GROWTH_X * 2} style={{ position: "absolute", top: -GLASS_OUTSET, left: -GLASS_OUTSET, right: -GLASS_OUTSET, bottom: -GLASS_OUTSET }} pointerEvents="none">
             {/* Glass carries its own edge; the solid float steps lighter in dark mode, where the shadow barely shows. */}
             <Animated.View className={`absolute rounded-full ${material === "liquid" ? "" : "shadow-float"}`} style={glassFrameStyle}>
-              <GlassBackground radius={BAR_HEIGHT / 2} blurTarget={blurTarget} />
+              <GlassBackground radius={BAR_HEIGHT / 2} surface="glassBar" blurTarget={blurTarget} />
             </Animated.View>
             {material === "liquid" ? <AnimatedGlassView glassEffectStyle={{ style: lensLifted ? "clear" : "none", animate: true, animationDuration: 0.2 }} colorScheme={theme.mode} style={glassLensStyle} /> : null}
           </GlassGroup>

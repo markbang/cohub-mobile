@@ -59,17 +59,13 @@ export function GlassBackdrop({ target, children }: { target: RefObject<View | n
   return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
 }
 
-/** Wraps the blur target's own content: glass inside it is part of what gets blurred. */
-export function GlassBackdropContent({ children }: { children: ReactNode }) {
+/**
+ * Keeps the outer backdrop and says where glass sits: `inside` the blur target's own content (part of what gets
+ * blurred), or not, as in a native Modal, which is its own window and so may blur the screen again.
+ */
+export function GlassBackdropScope({ inside, children }: { inside: boolean; children: ReactNode }) {
   const { target } = useContext(GlassBackdropContext);
-  const value = useMemo(() => ({ target, inside: true }), [target]);
-  return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
-}
-
-/** A native Modal is its own window, outside the screen's blur target, so glass in it may blur the screen again. */
-export function GlassWindow({ children }: { children: ReactNode }) {
-  const { target } = useContext(GlassBackdropContext);
-  const value = useMemo(() => ({ target, inside: false }), [target]);
+  const value = useMemo(() => ({ target, inside }), [inside, target]);
   return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
 }
 
@@ -83,12 +79,11 @@ export function blurReduction(sigma: number) {
   return 1 / radius;
 }
 
-export type GlassSurface = "glassControl" | "glassMenu" | "dialogSurface";
+export type GlassSurface = "glassControl" | "glassMenu" | "glassComposer" | "glassBar" | "dialogSurface";
 
-const SOLID_CLASS: Record<GlassSurface, string> = { glassControl: "bg-glass-control", glassMenu: "bg-glass-menu", dialogSurface: "bg-dialog-surface" };
-// How much of the blurred backdrop a frosted surface lets through, as iOS 27's glass does: bars and buttons
-// show more of what passes under them than menus and alerts. It also hides Dimezis's 15% grain, which iOS lacks.
-const FROST_OPACITY: Record<GlassSurface, number> = { glassControl: 0.72, glassMenu: 0.86, dialogSurface: 0.86 };
+// How much of the blurred backdrop a frosted surface covers, as iOS 27's glass does: bars and buttons show more
+// of what passes under them than menus and alerts. At 0.8 or more it also hides Dimezis's 15% grain, which iOS lacks.
+const FROST_OPACITY: Record<GlassSurface, number> = { glassControl: 0.8, glassMenu: 0.86, glassComposer: 0.86, glassBar: 0.8, dialogSurface: 0.86 };
 const FROST_SIGMA = 12;
 
 /**
@@ -119,8 +114,8 @@ type GlassBackgroundProps = {
 /**
  * The material behind a floating control, drawn as an absolutely filled layer so the control keeps
  * its own view (refs, measurement, layout) and only its backdrop changes with the platform. Touches
- * belong to the control above it, so Liquid Glass's own touch response is not used. Elsewhere it is iOS
- * 27's glass as measured: in light mode a hairline rim, in dark mode none.
+ * belong to the control above it, so Liquid Glass's own touch response is not used. Android draws iOS 27's
+ * glass as measured: in light mode a hairline rim, in dark mode none.
  */
 export function GlassBackground({ radius, glass = "regular", tint, surface = "glassControl", blurTarget, style }: GlassBackgroundProps) {
   const theme = useAppTheme();
@@ -132,7 +127,7 @@ export function GlassBackground({ radius, glass = "regular", tint, surface = "gl
     return <GlassView pointerEvents="none" glassEffectStyle={glass} tintColor={tint} colorScheme={theme.mode} style={[StyleSheet.absoluteFill, shape, style]} />;
   }
   // design-system-begin: the rim and the frosted tint derive from theme tokens at runtime, so they follow Config themes.
-  const rim = theme.mode === "light" && !tint ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colorWithOpacity(theme.colors.shadow, 0.14) } : null;
+  const rim = Platform.OS === "android" && theme.mode === "light" && !tint ? { borderWidth: StyleSheet.hairlineWidth, borderColor: colorWithOpacity(theme.colors.shadow, 0.14) } : null;
   if (material === "frosted" && Platform.OS === "ios") {
     const dark = theme.mode === "dark";
     return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { overflow: "hidden" }, style]}>
@@ -150,7 +145,7 @@ export function GlassBackground({ radius, glass = "regular", tint, surface = "gl
       <View style={[StyleSheet.absoluteFill, shape, { backgroundColor: frostTint(theme.colors[surface], theme.colors.background, FROST_OPACITY[surface]) }, rim]} />
     </View>;
   }
-  return <View pointerEvents="none" className={tint ? undefined : SOLID_CLASS[surface]} style={[StyleSheet.absoluteFill, shape, tint ? { backgroundColor: tint } : null, rim, style]} />;
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { backgroundColor: tint ?? theme.colors[surface] }, rim, style]} />;
   // design-system-end
 }
 

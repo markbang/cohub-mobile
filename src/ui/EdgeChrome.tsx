@@ -7,7 +7,7 @@ import Animated, { interpolate, useAnimatedRef, useAnimatedStyle, useScrollOffse
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { collapsedComposerHeight } from "@/src/ui/composer-layout";
 import { colorWithOpacity, edgeChrome, useAppTheme } from "@/src/theme";
-import { androidBlur, blurReduction, GlassBackdropContent, useReduceTransparency } from "@/src/ui/Glass";
+import { androidBlur, blurReduction, GlassBackdropScope, useReduceTransparency } from "@/src/ui/Glass";
 
 /**
  * With `trackScroll`, the scroll view given `scrollRef` drives `scrollY` on the UI thread, so the header's
@@ -80,7 +80,7 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
  */
 export function EdgeBlurTarget({ attach, children }: { attach: (node: View | null) => void; children: ReactNode }) {
   if (!androidBlur) return children;
-  return <BlurTargetView ref={attach} style={BLUR_TARGET_STYLE}><View className="flex-1 bg-background"><GlassBackdropContent>{children}</GlassBackdropContent></View></BlurTargetView>;
+  return <BlurTargetView ref={attach} style={BLUR_TARGET_STYLE}><View className="flex-1 bg-background"><GlassBackdropScope inside>{children}</GlassBackdropScope></View></BlurTargetView>;
 }
 
 /**

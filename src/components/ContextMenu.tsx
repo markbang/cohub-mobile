@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "r
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppIcon, type IconName } from "@/src/ui";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
-import { GlassBackground, GlassWindow, useGlassMaterial } from "@/src/ui/Glass";
+import { GlassBackground, GlassBackdropScope, useGlassMaterial } from "@/src/ui/Glass";
 import { RADIUS } from "@/src/design/tokens";
 import type { ContextMenuPreview } from "@/src/components/NativeContextMenu";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
@@ -78,7 +78,7 @@ export function ContextMenu({
 
 
   return <Modal visible={visible} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
-    <GlassWindow>
+    <GlassBackdropScope inside={false}>
     <View className="flex-1" testID={testID}>
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
       {preview && measured === null
@@ -90,6 +90,6 @@ export function ContextMenu({
         </PopoverSurface>}
       <ToastViewport />
     </View>
-    </GlassWindow>
+    </GlassBackdropScope>
   </Modal>;
 }

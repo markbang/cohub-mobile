@@ -103,9 +103,10 @@ const GLYPHS = {
 // SF Symbols' measure at a given point size, from iOS 26 screenshots: a glyph's longer side spans
 // about 0.85 of it; chevrons are drawn smaller. iOS 27's disclosure chevron spans 0.8 of it.
 const EXTENT = 0.85;
-const EXTENT_OVERRIDES = { "chevron-left": 0.7, "chevron-right": 0.8, "chevron-down": 0.7, "chevrons-up-down": 0.8 };
+const EXTENT_OVERRIDES = { "chevron-left": 0.7, "chevron-right": 0.8, "chevron-down": 0.8, "chevrons-up-down": 0.8 };
 // Where Framework7 draws thinner than SF: an outline stroke, as a fraction of the glyph's size, thickens it.
-const WEIGHT_OVERRIDES = { "chevron-right": 0.045 };
+// A disclosure turns chevron-right into chevron-down, so the two match.
+const WEIGHT_OVERRIDES = { "chevron-right": 0.045, "chevron-down": 0.045 };
 
 /** The bounds of a path's points, control points included, so a glyph can be centred and sized. */
 function bounds(d, box) {

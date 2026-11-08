@@ -6,7 +6,7 @@
  */
 
 export type ColorKey =
-  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassLens" | "glassPress" | "pressOverlay"
+  | "background" | "surface" | "surfaceRaised" | "surfacePressed" | "surfaceFloat" | "glassControl" | "glassMenu" | "glassComposer" | "glassBar" | "glassLens" | "glassPress" | "pressOverlay"
   | "border" | "borderStrong"
   | "controlTrack" | "controlThumb" | "switchOff" | "dialogSurface" | "dialogButton" | "dialogMessage" | "barMaterial"
   | "text" | "textSecondary" | "textMuted" | "textFaint" | "textTertiary" | "textPlaceholder"
@@ -28,6 +28,8 @@ export const COLOR_CSS_NAMES: Record<ColorKey, string> = {
   surfaceFloat: "surface-float",
   glassControl: "glass-control",
   glassMenu: "glass-menu",
+  glassComposer: "glass-composer",
+  glassBar: "glass-bar",
   glassLens: "glass-lens",
   glassPress: "glass-press",
   pressOverlay: "press-overlay",
@@ -78,10 +80,12 @@ export const lightPalette: Palette = {
   surfaceRaised: "#efebe4",
   surfacePressed: "#e6e1d8",
   surfaceFloat: "#ffffff",
-  // iOS 27 Liquid Glass over `background`, as measured: a bar button (and the tab bar), a pull-down menu, and
-  // the tab bar's selected lens over the bar. Android draws them as frosted glass or, without a blur, solid.
+  // iOS 27 Liquid Glass over `background`, as measured: a bar button, a pull-down menu, the composer, the tab
+  // bar, and the tab bar's selected lens over the bar. Android draws them as frosted glass or, without a blur, solid.
   glassControl: "#f8f4f0",
   glassMenu: "#fefaf4",
+  glassComposer: "#fff7f1",
+  glassBar: "#f7f3ef",
   glassLens: "#ece9e4",
   // iOS 27 lightens pressed glass about a third of the way to white; in dark mode by less, greyer.
   glassPress: "rgba(255, 255, 255, 0.36)",
@@ -141,6 +145,8 @@ export const darkPalette: Palette = {
   surfaceFloat: "#2c2c2e",
   glassControl: "#313133",
   glassMenu: "#2d2d2f",
+  glassComposer: "#312f30",
+  glassBar: "#363538",
   glassLens: "#404043",
   glassPress: "rgba(255, 255, 255, 0.14)",
   pressOverlay: "rgba(255, 255, 255, 0.12)",

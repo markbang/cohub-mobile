@@ -6,7 +6,7 @@ import type { IconName } from "@/src/icons";
 import { dialog, scrim } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
 import { Loader } from "@/src/ui";
-import { GlassBackground, GlassWindow } from "@/src/ui/Glass";
+import { GlassBackground, GlassBackdropScope } from "@/src/ui/Glass";
 import { ToastViewport } from "@/src/components/Toast";
 
 export type ConfirmSheetProps = {
@@ -94,7 +94,7 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
   const { width } = useWindowDimensions();
   const cardStyle = { width: Math.min(CARD_WIDTH, width - CARD_MARGIN * 2), borderRadius: CARD_RADIUS, borderCurve: "continuous" } as const;
   return <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-    <GlassWindow>
+    <GlassBackdropScope inside={false}>
     <View className="flex-1 items-center justify-center" testID={testID}>
       {/* design-system: the scrim dims whatever sits underneath, so it stays black; iOS dims more in dark mode. */}
       <Pressable accessible={false} style={[StyleSheet.absoluteFill, theme.mode === "dark" ? SCRIM_DARK : SCRIM_LIGHT]} onPress={onClose} />
@@ -110,7 +110,7 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
       </Reanimated.View>
       <ToastViewport />
     </View>
-    </GlassWindow>
+    </GlassBackdropScope>
   </Modal>;
 }
 

@@ -588,7 +588,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
       <LayoutAnimationConfig skipEntering skipExiting>
       <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerSurface}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
-        <GlassBackground radius={styles.composerSurface.borderRadius} surface="glassMenu" />
+        <GlassBackground radius={styles.composerSurface.borderRadius} surface="glassComposer" />
         <View className="flex-row items-start">
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
