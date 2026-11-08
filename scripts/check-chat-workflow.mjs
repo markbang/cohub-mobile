@@ -1640,7 +1640,6 @@ try {
     useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
     Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
-    requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
   });
   const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
   const order = () => list().props.data.map((item) => item.session.id);

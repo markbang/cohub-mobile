@@ -139,18 +139,6 @@ export default function ChatsScreen() {
   const draggingRef = useRef(false);
   const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
   const emptyFill = useEmptyListFill(shownItems.length === 0);
-  // iOS 27 opens Chats with its search field tucked under the Large Title, to be pulled down; the drawn bar
-  // does the same once the first rows are in, unless the list has already been scrolled.
-  const searchTucked = useRef(nativeHeaders);
-  const hasRows = shownItems.length > 0;
-  useEffect(() => {
-    if (searchTucked.current || !hasRows) return;
-    const frame = requestAnimationFrame(() => {
-      searchTucked.current = true;
-      if (scrollY.get() === 0) scrollRef.current?.scrollTo({ y: titleScroll.hold, animated: false });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [hasRows, scrollRef, scrollY, titleScroll.hold]);
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
   const clearOrderTimers = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
