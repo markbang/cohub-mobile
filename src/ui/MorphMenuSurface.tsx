@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { RADIUS } from "@/src/design/tokens";
@@ -21,7 +21,7 @@ type MorphMenuSurfaceProps = Omit<ViewProps, "style" | "children"> & {
   onClosed: () => void;
   /** Places the settled panel in its parent; the surface is absolutely positioned. */
   style: StyleProp<ViewStyle>;
-  /** `glass`: a floating menu; `panel`: the composer's solid, bordered sheet. */
+  /** `glass`: a floating menu; `panel`: the composer's larger sheet, solid and bordered on iOS, glass on Android. */
   material?: "glass" | "panel";
   children: ReactNode;
 };
@@ -118,7 +118,7 @@ export function MorphMenuSurface({ anchor, open, onClosed, style, material = "gl
   });
 
   return <View {...viewProps} pointerEvents={open ? "auto" : "none"} onLayout={onLayout} style={[{ position: "absolute" }, style]}>
-    {material === "panel"
+    {material === "panel" && Platform.OS === "ios"
       ? <Animated.View pointerEvents="none" className="border-border bg-surface shadow-float" style={[styles.backdrop, { borderWidth: StyleSheet.hairlineWidth }, backdropStyle]} />
       : <Animated.View pointerEvents="none" className={glass === "liquid" ? undefined : "shadow-glass"} style={[styles.backdrop, backdropStyle]}>
         <GlassBackground radius={radius} surface="glassMenu" />

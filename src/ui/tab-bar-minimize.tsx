@@ -20,11 +20,8 @@ export function useTabBarMinimized() {
 // Scrolling this far in one direction minimizes or restores the bar, so a finger's jitter does neither.
 const TRAVEL = 8;
 
-/**
- * Minimizes the tab bar while the content scrolls down and restores it on the way back up or at the top.
- * Offsets up to `top` count as the top: a search field tucked under the Large Title rests there.
- */
-export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefined, top = 0) {
+/** Minimizes the tab bar while the content scrolls down and restores it on the way back up or at the top. */
+export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefined) {
   const minimized = useContext(TabBarMinimize);
   const focused = useIsFocused();
   const active = useSharedValue(focused);
@@ -33,7 +30,7 @@ export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefin
   useEffect(() => { active.set(focused); }, [active, focused]);
   useAnimatedReaction(() => (scrollY ? scrollY.get() : 0), (y) => {
     if (!minimized || !active.get()) { turn.set(y); return; }
-    if (y <= top) {
+    if (y <= 0) {
       if (minimized.get() !== 0) minimized.set(0);
       turn.set(y);
       return;

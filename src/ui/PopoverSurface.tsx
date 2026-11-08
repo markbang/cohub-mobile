@@ -1,7 +1,9 @@
 import { useEffect, useMemo, type ReactNode } from "react";
-import type { StyleProp, ViewProps, ViewStyle } from "react-native";
+import { Platform, StyleSheet, type StyleProp, type ViewProps, type ViewStyle } from "react-native";
 import Animated, { Easing, Extrapolation, interpolate, useAnimatedStyle, useSharedValue, withTiming, type EntryExitAnimationFunction } from "react-native-reanimated";
+import { RADIUS } from "@/src/design/tokens";
 import { curves, popover } from "@/src/motion";
+import { GlassBackground } from "@/src/ui/Glass";
 
 const EASE_OUT = Easing.bezier(...curves.easeOut);
 
@@ -14,6 +16,8 @@ type PopoverSurfaceProps = Omit<ViewProps, "style"> & {
   fromScale?: number;
   className?: string;
   style?: StyleProp<ViewStyle>;
+  /** The composer's typing menus (slash commands, mentions): a sheet, solid and bordered on iOS, glass on Android. */
+  panel?: boolean;
   children: ReactNode;
 };
 
@@ -21,7 +25,7 @@ type PopoverSurfaceProps = Omit<ViewProps, "style"> & {
  * A menu or popover surface that unfolds out of its anchor on mount. It unmounts with its owner immediately;
  * the exit is a native layout animation, so React state never waits on it.
  */
-export function PopoverSurface({ origin, fromScale, className, style, children, ...viewProps }: PopoverSurfaceProps) {
+export function PopoverSurface({ origin, fromScale, className, style, panel = false, children, ...viewProps }: PopoverSurfaceProps) {
   const fromX = fromScale ?? popover.from.x;
   const fromY = fromScale ?? popover.from.y;
   const progress = useSharedValue(0);
@@ -58,5 +62,13 @@ export function PopoverSurface({ origin, fromScale, className, style, children, 
     };
   }, [fromX, fromY, progress]);
 
-  return <Animated.View {...viewProps} exiting={exiting} className={className} style={[style, { transformOrigin: origin }, revealStyle]}>{children}</Animated.View>;
+  const look = panel ? PANEL : null;
+  return <Animated.View {...viewProps} exiting={exiting} className={`${look?.className ?? ""} ${className ?? ""}`} style={[look?.style, style, { transformOrigin: origin }, revealStyle]}>
+    {look?.glass ? <GlassBackground radius={RADIUS.lg} surface="glassMenu" /> : null}
+    {children}
+  </Animated.View>;
 }
+
+const PANEL = Platform.OS === "android"
+  ? { className: "overflow-hidden rounded-lg shadow-glass", style: { borderCurve: "continuous" } as const, glass: true }
+  : { className: "overflow-hidden rounded-lg border-border bg-surface shadow-float", style: { borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" } as const, glass: false };

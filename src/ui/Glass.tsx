@@ -79,12 +79,12 @@ export function blurReduction(sigma: number) {
   return 1 / radius;
 }
 
-export type GlassSurface = "glassControl" | "glassMenu" | "glassComposer" | "glassBar" | "dialogSurface";
+export type GlassSurface = "glassControl" | "glassMenu" | "glassComposer" | "glassBar" | "glassButton" | "dialogSurface";
 
-// How much of the blurred backdrop a frosted surface covers, as iOS 27's glass does: bars and buttons show more
-// of what passes under them than menus and alerts. At 0.8 or more it also hides Dimezis's 15% grain, which iOS lacks.
-const FROST_OPACITY: Record<GlassSurface, number> = { glassControl: 0.8, glassMenu: 0.86, glassComposer: 0.86, glassBar: 0.8, dialogSurface: 0.86 };
-const FROST_SIGMA = 12;
+// How much of the blurred backdrop a frosted surface covers. iOS 27's menus and composer let what passes under
+// them show as soft streaks; near 0.8 the tint also keeps Dimezis's 15% grain, which iOS lacks, out of sight.
+const FROST_OPACITY: Record<GlassSurface, number> = { glassControl: 0.8, glassMenu: 0.78, glassComposer: 0.78, glassBar: 0.8, glassButton: 0.8, dialogSurface: 0.86 };
+const FROST_SIGMA = 6;
 
 /**
  * The tint that, drawn at `opacity` over the page background, gives `color`: what iOS's glass measures over

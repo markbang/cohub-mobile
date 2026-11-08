@@ -17,7 +17,7 @@ export function SlashCommandMenu({ menu, onSelect, onDismiss, style }: { menu: S
         ? t("slash.loading")
         : t("slash.hint");
   // Grows up out of the composer it sits on.
-  return <PopoverSurface origin={["50%", "100%", 0]} fromScale={popover.typingFromScale} testID="slash-command-menu" accessibilityLabel={t("slash.title")} className="overflow-hidden rounded-lg border-border bg-surface shadow-float" style={[{ borderWidth: StyleSheet.hairlineWidth, borderCurve: "continuous" }, style]}>
+  return <PopoverSurface origin={["50%", "100%", 0]} fromScale={popover.typingFromScale} testID="slash-command-menu" accessibilityLabel={t("slash.title")} panel style={style}>
     <View className="flex-row items-center gap-2 pl-4 pr-1 py-1">
       <View className="flex-1 min-w-0">
         <Text className="text-body font-semibold text-fg">{t("slash.title")}</Text>
