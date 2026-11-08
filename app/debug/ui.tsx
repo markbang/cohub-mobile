@@ -12,6 +12,8 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
+import { EdgeBlurTarget, useBlurTarget } from "@/src/ui/EdgeChrome";
+import { useAppTheme } from "@/src/theme";
 import { PLATFORM_FONT_FAMILIES } from "@/src/ui/platform-fonts";
 import {
   AppSwitch,
@@ -54,11 +56,14 @@ export default function DebugUiCatalogScreen() {
   // The menu overlays the whole screen, as on real screens, so it lives outside the scroll view.
   const menuAnchorRef = useRef<View>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The menu and the alert blur the catalog beneath them, as on real screens.
+  const { blurTarget, attachBlurTarget } = useBlurTarget();
   const show = (section: Section) => only === null || only === section;
 
   return (
-    <Screen>
+    <Screen blurTarget={blurTarget}>
       <TopBar title="UI Catalog" onBack={() => router.back()} />
+      <EdgeBlurTarget attach={attachBlurTarget}>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 32 }}>
         {show("type") ? <TypeSection /> : null}
         {show("rows") ? <RowsSection /> : null}
@@ -69,6 +74,7 @@ export default function DebugUiCatalogScreen() {
         {show("page") ? <PageSheetSection initiallyOpen={autoOpen && only === "page"} /> : null}
         {show("confirm") ? <ConfirmSection initiallyOpen={autoOpen && only === "confirm"} /> : null}
       </ScrollView>
+      </EdgeBlurTarget>
       <MenuPresence open={menuOpen}><AnchoredActionMenu anchorRef={menuAnchorRef} title="Actions" testID="ui-catalog-menu" sections={MENU_SECTIONS} onClose={() => setMenuOpen(false)} /></MenuPresence>
     </Screen>
   );
@@ -270,6 +276,7 @@ function SheetSection({ initiallyOpen }: { initiallyOpen: boolean }) {
 
 /** A form, as the app's create and edit sheets are: the full-height page sheet. */
 function PageSheetSection({ initiallyOpen }: { initiallyOpen: boolean }) {
+  const theme = useAppTheme();
   const [open, setOpen] = useState(initiallyOpen);
   const [name, setName] = useState("");
   return (
@@ -278,7 +285,7 @@ function PageSheetSection({ initiallyOpen }: { initiallyOpen: boolean }) {
       <AdaptiveSheet visible={open} title="New Space" onClose={() => setOpen(false)} confirm={{ label: "Create", disabled: !name.trim(), onPress: () => setOpen(false) }}>
         <View className="gap-4">
           <Field label="Name">
-            <TextInput value={name} onChangeText={setName} placeholder="Design review" className={FIELD_INPUT_CLASS} />
+            <TextInput value={name} onChangeText={setName} placeholder="Design review" placeholderTextColor={theme.colors.textPlaceholder} className={FIELD_INPUT_CLASS} />
           </Field>
           <SettingsGroup label="Placement">
             <SettingsRow icon="cloud" title="Cloud" value="Default" onPress={NOOP} />

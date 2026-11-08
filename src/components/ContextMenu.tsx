@@ -3,7 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "r
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppIcon, type IconName } from "@/src/ui";
 import { PopoverSurface } from "@/src/ui/PopoverSurface";
-import { GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
+import { GlassBackground, GlassBackdropScope, useGlassMaterial } from "@/src/ui/Glass";
 import { RADIUS } from "@/src/design/tokens";
 import type { ContextMenuPreview } from "@/src/components/NativeContextMenu";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
@@ -78,16 +78,18 @@ export function ContextMenu({
 
 
   return <Modal visible={visible} transparent animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
+    <GlassBackdropScope inside={false}>
     <View className="flex-1" testID={testID}>
       <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
       {preview && measured === null
         ? <View pointerEvents="none" className="absolute py-1 opacity-0" style={{ left, width: menuWidth }} onLayout={(event) => setMeasured(event.nativeEvent.layout.height)}>{previewBlock}{items}</View>
         : <PopoverSurface key={`${x}:${y}`} accessibilityRole="menu" origin={[originX, originY, 0]} className={`absolute overflow-hidden rounded-md py-1 ${material === "liquid" ? "" : "shadow-float"}`} style={{ top, left, width: menuWidth, borderCurve: "continuous" }}>
-          <GlassBackground radius={RADIUS.md} />
+          <GlassBackground radius={RADIUS.md} surface="glassMenu" />
           {previewBlock}
           {items}
         </PopoverSurface>}
       <ToastViewport />
     </View>
+    </GlassBackdropScope>
   </Modal>;
 }

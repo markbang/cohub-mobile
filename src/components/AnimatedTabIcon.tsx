@@ -22,6 +22,11 @@ const iconNames: Record<AnimatedTabIconName, IconName> = {
 };
 
 
+// iOS 27's tab symbols are drawn heavier than Framework7's regular weight, and its Chats symbol (two bubbles)
+// wider: it spans 32 × 26 pt where Framework7's spans 24 × 19.5 pt at the same size.
+const TAB_GLYPH_BOLD = 0.3;
+const GLYPH_SCALE: Partial<Record<AnimatedTabIconName, number>> = { messages: 1.33 };
+
 /** Tabs switch a hundred times a day, so selection only settles the icon's weight; it never pops. */
 export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconProps) {
   const progress = useSharedValue(focused ? 1 : 0);
@@ -38,7 +43,7 @@ export function AnimatedTabIcon({ name, color, size, focused }: AnimatedTabIconP
   return (
     <Animated.View style={style}>
       {/* iOS selects a tab with the filled symbol; the glyph set's filled shape stands in, where it has one. */}
-      <Glyph name={iconNames[name]} size={size} color={color} strokeWidth={focused ? 2 : 1.8} fill={focused ? String(color) : undefined} />
+      <Glyph name={iconNames[name]} size={size * (GLYPH_SCALE[name] ?? 1)} color={color} strokeWidth={focused ? 2 : 1.8} fill={focused ? String(color) : undefined} bold={TAB_GLYPH_BOLD} />
     </Animated.View>
   );
 }

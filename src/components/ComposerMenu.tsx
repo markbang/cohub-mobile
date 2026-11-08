@@ -5,6 +5,7 @@ import { useTranslation } from "@/src/i18n";
 import { getComposerMenuLayout, type ComposerMenuAnchor } from "@/src/ui/composer-menu-layout";
 import { MorphMenuSurface, useMenuPresence } from "@/src/ui/MorphMenuSurface";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
+import { GlassBackdropScope } from "@/src/ui/Glass";
 
 export type ComposerMenuProps = {
   /** The composer button that opened the menu; the menu grows out of it and shrinks back into it. */
@@ -48,6 +49,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
 
   const layout = anchor ? getComposerMenuLayout({ anchor, windowWidth: viewport.width, windowHeight: viewport.height, topInset: insets.top, bottomInset: keyboardTop === null ? insets.bottom : 0, keyboardTop, preferredWidth }) : null;
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent hardwareAccelerated onShow={() => { measureAnchor(); raiseToastOverlay(); }} onRequestClose={onClose}>
+    <GlassBackdropScope inside={false}>
     <View className="flex-1" pointerEvents={presence.open ? "auto" : "none"} onLayout={(event) => setViewport({ width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height })}>
       <Pressable accessibilityRole="button" accessibilityLabel={t("ui.sheet.close", { title })} style={StyleSheet.absoluteFill} onPress={onClose} />
       {layout && anchor ? <MorphMenuSurface
@@ -64,5 +66,6 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
       >{children}</MorphMenuSurface> : null}
       <ToastViewport />
     </View>
+    </GlassBackdropScope>
   </Modal>;
 }

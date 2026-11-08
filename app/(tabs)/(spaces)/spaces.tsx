@@ -249,7 +249,7 @@ export default function SpacesScreen() {
       { kind: "button", label: t("spaces.action.create"), icon: "plus", prominent: true, onPress: openCreate },
     ],
   });
-  return <Screen edgeToEdge>
+  return <Screen edgeToEdge blurTarget={blurTarget}>
     {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
       <MenuAnchor ref={filterButtonRef} open={filterMenuOpen}>

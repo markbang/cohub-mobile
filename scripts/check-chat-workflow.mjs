@@ -396,7 +396,7 @@ const chromeScope = {
   traceAction: () => {},
   setDialogOpen: () => {},
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
-  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }),
+  nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }), uiSnapshots: false,
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
@@ -1290,7 +1290,7 @@ for (const success of ["#238552", "#62c994"]) {
 }
 for (const background of ["#f7f7f5", "#0f1114", "#000000", "#12345680"]) {
   const backEvents = [];
-  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null, SOLID_GLASS_SHADOW: "" });
+  const renderTopBar = loadChromeComponent("../src/ui.tsx", "TopBar", { ...chromeScope, useState: (initial) => [initial, () => {}], BarButtonContext: { Provider: "BarButtonContext.Provider" }, useAppTheme: () => ({ colors: { background } }), recordDebugEvent: (name) => backEvents.push(name), GlassBackground: "GlassBackground", GlassBackdrop: "GlassBackdrop", TITLE_CAPSULE: { minHeight: 44, borderRadius: 22 }, BACK_GLYPH: undefined, DRAWN_BACK_GLYPH: undefined, DRAWN_BAR_TAIL: null });
   let backCount = 0;
   const header = renderTopBar({ title: "A long inline title", subtitle: "Space / file.ts", onBack: () => backCount++, actions: { type: "actions" } });
   const headerClasses = classes(header);
@@ -1640,6 +1640,7 @@ try {
     useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
     Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
     nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
+    requestAnimationFrame: () => 0, cancelAnimationFrame: () => {},
   });
   const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
   const order = () => list().props.data.map((item) => item.session.id);

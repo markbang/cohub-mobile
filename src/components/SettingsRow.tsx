@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, type IconName } from "@/src/ui";
 import { traceAction } from "@/src/data/interaction-trace";
@@ -19,9 +19,10 @@ export function SettingsRow({ icon, title, value, detail, children, onPress, dis
   external?: boolean;
 }) {
   const { colors } = useAppTheme();
+  const compact = useContext(CompactSettingsRows);
   return (
     <PressableOrView onPress={onPress} disabled={disabled} title={title} icon={icon} role={external ? "link" : "button"}>
-      <View className="min-w-0 flex-1 flex-row items-center gap-3 py-2" style={{ minHeight: ROW_HEIGHT }}>
+      <View className="min-w-0 flex-1 flex-row items-center gap-3" style={compact ? COMPACT_ROW : ROW}>
         {/* A neutral tile keeps the accent for actions and selection; only a destructive row takes a color. */}
         <View className={`items-center justify-center rounded-xs ${danger ? "bg-danger" : "bg-surface-raised"}`} style={ICON_TILE}>
           <AppIcon name={icon} size={18} tone={danger ? "onAccent" : "secondary"} color={danger ? colors.dangerText : undefined} />
@@ -47,7 +48,11 @@ function PressableOrView({ onPress, disabled, title, icon, role, children }: { o
     : <View className={className}>{children}</View>;
 }
 
-const ROW_HEIGHT = 52;
+/** iOS 27's sheet sized to its content draws its rows 2 pt shorter: a row with a value is 56 pt, not 58. */
+export const CompactSettingsRows = createContext(false);
+
+const ROW = { minHeight: 52, paddingVertical: 8 } as const;
+const COMPACT_ROW = { minHeight: 50, paddingVertical: 7 } as const;
 const DETAIL = { maxWidth: "45%", flexShrink: 100 } as const;
 const ICON_TILE = { width: 30, height: 30, borderCurve: "continuous" } as const;
 /** 16 row padding + 30 icon tile + 12 gap. */

@@ -61,7 +61,9 @@ jobs:
 
       - name: Native fingerprint
         id: fingerprint
-        run: echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform android | jq -r .hash)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "hash=$(npx --no-install @expo/fingerprint fingerprint:generate --platform android | jq -r .hash)" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       # Restore and save are split so a built binary is cached even when the capture fails.
       - name: Restore debug APK
@@ -69,7 +71,8 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: build/ui-snapshots/cohub.apk
-          key: ui-snapshots-android-${{ steps.fingerprint.outputs.hash }}
+          # The app version is in the key: the fingerprint leaves it out, and Me shows the binary's version.
+          key: ui-snapshots-android-${{ steps.fingerprint.outputs.hash }}-${{ steps.fingerprint.outputs.version }}
 
       - name: Set up Go
         if: steps.apk.outputs.cache-hit != 'true'
