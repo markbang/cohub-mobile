@@ -22,7 +22,8 @@ import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
-import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth } from "@/src/ui/message-bubble-layout";
+import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
+import { usePaneWidth } from "@/src/ui/pane";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
@@ -300,7 +301,7 @@ function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; in
 }
 
 function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number }) {
-  const { width } = useWindowDimensions();
+  const width = usePaneWidth();
   const galleryWidth = maxWidth ?? width;
   const thumbnailWidth = Math.max(0, Math.min(164, width * 0.42, galleryWidth));
 
@@ -621,7 +622,7 @@ function LiveDot() {
 export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { width } = useWindowDimensions();
+  const width = usePaneWidth();
   const tracing = useSyncExternalStore(chatScrollTrace.subscribe, chatScrollTrace.isRecording, chatScrollTrace.isRecording);
   const traceIdentity = () => ({
     session: chatScrollTrace.alias("session", message.sessionId),
@@ -651,7 +652,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
     const answer = answerBlocks(message.content);
     const thought = thinkingBlocks(message.content).length > 0;
     const body = hasRenderableContent(answer) ? <MessageContent content={answer} color={textColor} imageMaxWidth={contentWidth} sandboxImages /> : !thought && message.text?.trim() ? <TextBlock value={message.text} color={textColor} sandboxImages /> : null;
-    return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: "100%", opacity: hidden ? 0 : 1, paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
+    return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: "100%", maxWidth: getReplyRowWidth(rowWidth), opacity: hidden ? 0 : 1, paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
       <BubbleTraceMessage.Provider value={message}><BubbleContentWidth.Provider value={contentWidth}>
         {body}
         {message.errorMessage ? <View className={`${body ? "mt-2 " : ""}rounded-md bg-danger-soft px-3 py-2`} style={{ borderCurve: "continuous" }}><Text selectable className="text-caption text-danger">{message.errorMessage}</Text></View> : null}
@@ -678,7 +679,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
 
 /** Its status line matches the finished reply's meta line, so the swap at the end of a Turn moves nothing. */
 export function StreamCard({ content, status, runtimePhase = null, runtimeModel = null, startedAt = null, availableWidth }: { content: ContentBlock[]; status: string; runtimePhase?: StreamView["runtimePhase"]; runtimeModel?: string | null; startedAt?: string | null; availableWidth?: number }) {
-  const { width } = useWindowDimensions();
+  const width = usePaneWidth();
   // A clock read during render changed on every batch; the reply's start does not.
   const [firstSeenAt] = useState(() => new Date().toISOString());
   const contentWidth = getReplyContentWidth(availableWidth ?? width);
@@ -703,7 +704,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
   const statusLabel = status === "failed" ? t("message.stream.failed") : status === "interrupted" ? t("message.stream.stopped") : null;
   const live = status === "pending" || status === "streaming";
   const hasContent = hasLivePreview || hasRenderableLive;
-  return <View style={{ width: "100%", paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
+  return <View style={{ width: "100%", maxWidth: getReplyRowWidth(availableWidth ?? width), paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
     {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} sandboxImages /></BubbleContentWidth.Provider> : null}
     <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
       {statusLabel ? <Text className={`min-w-0 flex-1 text-caption ${status === "failed" ? "text-danger" : "text-fg-muted"}`}>{statusLabel}</Text>

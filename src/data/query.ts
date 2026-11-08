@@ -1,5 +1,5 @@
 import { focusManager, QueryClient, useQuery, useQueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
-import { useIsFocused } from "expo-router";
+import { useScreenVisible } from "@/src/ui/pane";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { subscribeAppActive } from "@/src/platform/app-lifecycle";
 
@@ -31,11 +31,12 @@ export function createAppQueryClient() {
 }
 
 /**
- * A screen query that polls and reacts to invalidation only while its route is focused.
+ * A screen query that polls and reacts to invalidation only while its route is visible (focused, or
+ * on view in the left pane of a split window).
  * Access failures stop polling until an explicit invalidation or refetch.
  */
 export function useScreenQuery<TData, TKey extends QueryKey = QueryKey>(options: UseQueryOptions<TData, Error, TData, TKey> & { intervalMs?: number }) {
-  const focused = useIsFocused();
+  const focused = useScreenVisible();
   const { intervalMs, ...rest } = options;
   const interval = intervalMs ?? rest.refetchInterval;
   return useQuery({

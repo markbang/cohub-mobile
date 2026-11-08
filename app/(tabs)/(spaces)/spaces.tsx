@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -27,6 +27,7 @@ import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
+import { useScreenVisibleEffect } from "@/src/ui/pane";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
@@ -63,7 +64,7 @@ export default function SpacesScreen() {
       setPullRefreshing(false);
     }
   };
-  useFocusEffect(useCallback(() => {
+  useScreenVisibleEffect(useCallback(() => {
     setNow(Date.now());
     void refreshSpaceList();
   }, [refreshSpaceList]));

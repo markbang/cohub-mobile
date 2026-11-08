@@ -44,6 +44,7 @@ import { curves, glassPress, glyphSwap, motion, springs } from "@/src/motion";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
 import { GlassBackdrop, GlassBackground, useGlassMaterial } from "@/src/ui/Glass";
 import { nativeHeaders, useNativeHeader } from "@/src/ui/NativeHeader";
+import { usePaneBack } from "@/src/ui/pane";
 import { AppRefreshControl } from "@/src/ui/AppRefreshControl";
 import { Loader } from "@/src/ui/Loader";
 import { CohubLogo, Mascot } from "@/src/ui/Mascot";
@@ -273,12 +274,14 @@ type TopBarProps = {
   drawn?: boolean;
 };
 
-export function TopBar({ title, subtitle, onBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false, drawn = false }: TopBarProps) {
+export function TopBar({ title, subtitle, onBack: requestedBack, backLabel, leading, actions, children, transparent = false, titleRef, onTitleLongPress, titleLongPressLabel, titleMenu, large = false, titleHidden = false, drawn = false }: TopBarProps) {
   const { t } = useTranslation();
   // A pushed screen's plain bar is the iOS navigation bar. Its back button pops the route itself, so
   // `onBack` there is only ever `router.back()`; screens that guard leaving use `usePreventRemove`.
-  const systemBar = !drawn && Boolean(onBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
+  const systemBar = !drawn && Boolean(requestedBack) && !leading && !children && !transparent && !titleRef && !titleMenu && !onTitleLongPress && !large && !titleHidden;
   const system = nativeHeaders && systemBar;
+  // The right pane's first screen has nothing under it in its pane; the native bar already knows.
+  const onBack = usePaneBack() ? requestedBack : undefined;
   useNativeHeader(system ? { title, subtitle, right: actions } : null);
   // Android draws iOS's system bar with its symbols' sizes; the bars iOS draws itself keep the drawn ones.
   const barButtons = systemBar ? "system" : "drawn";

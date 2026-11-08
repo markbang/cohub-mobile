@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useIsFocused } from "expo-router";
+import { useScreenVisible } from "@/src/ui/pane";
 import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
@@ -41,7 +41,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const focused = useIsFocused();
+  const focused = useScreenVisible();
   const overlayRef = useRef<View>(null);
   const [layout, setLayout] = useState<ReturnType<typeof getAnchoredMenuLayout> | null>(null);
   const [anchor, setAnchor] = useState<MorphRect | null>(null);

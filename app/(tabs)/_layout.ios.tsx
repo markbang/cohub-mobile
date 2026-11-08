@@ -1,18 +1,26 @@
 import { NativeTabs } from "expo-router/native-tabs";
 import { useTranslation } from "@/src/i18n";
 import { useAppTheme } from "@/src/theme";
+import { useWindowDimensions } from "react-native";
+import { splitMode } from "@/src/data/split-navigation";
 
 /**
  * iOS uses the system tab bar: Liquid Glass, its lens, drag between tabs, and minimizing on scroll
  * are UIKit's. Android draws its own (`_layout.tsx`, `FloatingTabBar`). Each tab is a `TabStack` whose
  * root list sets its own inset adjustment under the navigation bar, so the tabs' automatic insets stay
  * off; bottom padding comes from `useFloatingTabBarInset`, which reads each tab's safe area.
+ *
+ * In a split window the tabs fill only the left pane of a regular-width window, where iPadOS would
+ * draw its tab bar at the top; a compact size class keeps the bottom bar, as on a phone.
  */
 export default function TabLayout() {
   const { t } = useTranslation();
   const theme = useAppTheme();
+  // The window size, not the split context, so a Chat selection does not re-render the tabs.
+  const { width, height } = useWindowDimensions();
+  const split = splitMode(width, height) === "split";
   return (
-    <NativeTabs tintColor={theme.colors.accent} minimizeBehavior="onScrollDown">
+    <NativeTabs tintColor={theme.colors.accent} minimizeBehavior="onScrollDown" unstable_nativeProps={{ ios: { horizontalSizeClass: split ? "compact" : "inherit" } }}>
       <NativeTabs.Trigger name="(chats)" disableAutomaticContentInsets>
         <NativeTabs.Trigger.Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} />
         <NativeTabs.Trigger.Label>{t("tabs.chats")}</NativeTabs.Trigger.Label>

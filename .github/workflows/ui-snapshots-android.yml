@@ -18,16 +18,33 @@ on:
         default: light,dark
         type: string
       motion:
-        description: Also record the interactions in MOTIONS as videos.
+        description: Also record the interactions in MOTIONS as videos (phone only).
         required: false
         default: true
         type: boolean
+      target:
+        description: The device class. tablet runs the split layout in both orientations, then the e2e/tablet flow.
+        required: false
+        default: phone
+        type: choice
+        options:
+          - phone
+          - tablet
+      orientations:
+        description: Orientations to capture, comma-separated. Defaults to portrait on a phone and portrait,landscape on a tablet.
+        required: false
+        type: string
+      perf:
+        description: Frame-probe runs of the perf sequence (0 skips it).
+        required: false
+        default: "0"
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ui-snapshots-android-${{ github.ref }}
+  group: ui-snapshots-android-${{ inputs.target }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -38,6 +55,8 @@ env:
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
   MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
+  ORIENTATIONS_ARG: ${{ inputs.orientations && format('--orientations {0}', inputs.orientations) || '' }}
+  ARTIFACT: ui-snapshots-android${{ inputs.target == 'tablet' && '-tablet' || '' }}
 
 jobs:
   android:
@@ -149,14 +168,15 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
-          profile: pixel_7
+          # The tablet keeps its own density (1280 × 800 dp); capture sets the phone's to 402 dp wide.
+          profile: ${{ inputs.target == 'tablet' && 'pixel_tablet' || 'pixel_7' }}
           emulator-boot-timeout: 900
           disable-animations: true
           # The default SwiftShader renderer took the emulator down on the first scroll under the
           # tab bar's blur; ANGLE's SwiftShader backend and more memory keep it up.
           ram-size: 4096M
           emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim
-          script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG
+          script: node scripts/ui-snapshots.mjs capture --platform android --app build/ui-snapshots/cohub.apk --out dist/ui-snapshots/android --target "${{ inputs.target }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -168,7 +188,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ui-snapshots-android
+          name: ${{ env.ARTIFACT }}
           # Maestro's command log and the device logs carry typed credentials; this repository is public.
           path: |
             dist/ui-snapshots/android

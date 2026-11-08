@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter, useScrollToTop } from "expo-router";
+import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
 import { Text, TextInput, View } from "react-native";
@@ -28,6 +28,7 @@ import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
+import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
@@ -43,6 +44,9 @@ const ORDER_HOLD_MAX_MS = 5000;
 
 export default function ChatsScreen() {
   const router = useRouter();
+  const openChat = useOpenChat();
+  // The right pane's Chat, highlighted in the list; null in a compact window.
+  const { selectedChatId } = useSplitLayout();
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
@@ -163,15 +167,15 @@ export default function ChatsScreen() {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
     releaseTimerRef.current = setTimeout(dropHeldOrder, ORDER_SETTLE_MS);
   }, [dropHeldOrder]);
-  useFocusEffect(useCallback(() => dropHeldOrder, [dropHeldOrder]));
+  useScreenVisibleEffect(useCallback(() => dropHeldOrder, [dropHeldOrder]));
   useEffect(() => clearOrderTimers, [clearOrderTimers]);
   const emptyError = Boolean(dataError) && shownItems.length === 0;
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(
-    () => ({ spaceSessionCounts, t, theme, prefetchSession }),
-    [spaceSessionCounts, t, theme, prefetchSession],
+    () => ({ spaceSessionCounts, t, theme, prefetchSession, selectedChatId }),
+    [spaceSessionCounts, t, theme, prefetchSession, selectedChatId],
   );
 
   const refresh = () => { if (sourceFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
@@ -185,7 +189,7 @@ export default function ChatsScreen() {
   };
 
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
-    router.push({ pathname: "/chat/[sessionId]", params: { sessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } });
+    openChat({ sessionId, turn: target?.turn != null ? String(target.turn) : undefined, turnId: target?.turnId || undefined });
   };
 
   const sourceOptions = [
@@ -243,7 +247,7 @@ export default function ChatsScreen() {
         keyExtractor={chatItemKey}
         renderItem={({ item }) => {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
-          if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
+          if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
           if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;

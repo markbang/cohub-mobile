@@ -335,6 +335,28 @@ namespace react = facebook::react;
       }
   }
 
+  // cohub: a host in a narrow pane of a regular-width window asks for the compact (bottom) tab bar.
+  if (newComponentProps.horizontalSizeClass != oldComponentProps.horizontalSizeClass) {
+#if RNS_IPHONE_OS_VERSION_AVAILABLE(17_0)
+    if (@available(iOS 17.0, *)) {
+      switch (newComponentProps.horizontalSizeClass) {
+        case react::RNSTabsHostIOSHorizontalSizeClass::Compact:
+          _controller.traitOverrides.horizontalSizeClass = UIUserInterfaceSizeClassCompact;
+          break;
+        case react::RNSTabsHostIOSHorizontalSizeClass::Regular:
+          _controller.traitOverrides.horizontalSizeClass = UIUserInterfaceSizeClassRegular;
+          break;
+        case react::RNSTabsHostIOSHorizontalSizeClass::Inherit:
+          [_controller.traitOverrides removeTrait:UITraitHorizontalSizeClass.class];
+          break;
+      }
+    } else
+#endif // Check for iOS >= 17
+      if (newComponentProps.horizontalSizeClass != react::RNSTabsHostIOSHorizontalSizeClass::Inherit) {
+        RCTLogWarn(@"[RNScreens] horizontalSizeClass is supported for iOS >= 17");
+      }
+  }
+
   if (newComponentProps.layoutDirection != oldComponentProps.layoutDirection) {
     [self setLayoutDirection:rnscreens::conversion::UITraitEnvironmentLayoutDirectionFromTabsHostCppEquivalent(
                                  newComponentProps.layoutDirection)];

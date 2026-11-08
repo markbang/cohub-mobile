@@ -1,0 +1,161 @@
+appId: io.github.markbang.cohubmobile
+name: Tablet split layout
+---
+# Run by `scripts/ui-snapshots.mjs capture --target tablet` after sign-in, in portrait, on the
+# Chats tab of a split window. FIRST_ROW and SECOND_ROW are left-pane row positions; PORTRAIT and
+# LANDSCAPE are Maestro orientations for this device.
+# It sends one real message from the test account (the New Chat step).
+# The root link selects the Chats tab and empties the right pane.
+- openLink: "cohub:///"
+- extendedWaitUntil:
+    visible: ".*Chats.*"
+    timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertNotVisible:
+    text: "Open .*"
+    selected: true
+- takeScreenshot: "flow-01-empty"
+
+# Opening a Chat clears its unread mark in the left pane.
+- longPressOn:
+    point: ${FIRST_ROW}
+- runFlow:
+    when:
+      visible: "Mark as unread"
+    commands:
+      - tapOn: "Mark as unread"
+- runFlow:
+    when:
+      visible: "Mark as read"
+    commands:
+      - tapOn: "Mark as read"
+      - longPressOn:
+          point: ${FIRST_ROW}
+      - tapOn: "Mark as unread"
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    point: ${FIRST_ROW}
+- extendedWaitUntil:
+    notVisible: ".*Opening Chat.*"
+    timeout: 60000
+- assertVisible:
+    text: "Open .*"
+    selected: true
+- extendedWaitUntil:
+    notVisible:
+      selected: true
+      text: "Open .*Unread.*"
+    timeout: 15000
+# The right pane's first screen has no back button.
+- assertNotVisible: "Back"
+- takeScreenshot: "flow-02-chat-read"
+# Switching tabs changes only the left pane (the drawn tab bar; the iPad's is UIKit's).
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Spaces"
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - assertVisible:
+          id: "chat-composer-input"
+      - tapOn: "Chats"
+      - assertVisible:
+          text: "Open .*"
+          selected: true
+
+# A draft survives turning the window.
+- tapOn:
+    id: "chat-composer-input"
+# A retried run finds the previous attempt's draft, which is persisted.
+- eraseText: 60
+- inputText: "tablet draft 4821"
+# Maestro's hideKeyboard fails on the iPad simulator; there the keyboard stays up, which the steps allow.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- setOrientation: ${LANDSCAPE}
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: ".*tablet draft 4821.*"
+- takeScreenshot: "flow-03-draft-landscape"
+- setOrientation: ${PORTRAIT}
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: ".*tablet draft 4821.*"
+- tapOn:
+    id: "chat-composer-input"
+- eraseText: 30
+# Maestro's hideKeyboard fails on the iPad simulator; there the keyboard stays up, which the steps allow.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+
+# Selecting another Chat replaces the first instead of stacking on it.
+- tapOn:
+    point: ${SECOND_ROW}
+- extendedWaitUntil:
+    notVisible: ".*Opening Chat.*"
+    timeout: 60000
+- assertVisible:
+    text: "Open .*"
+    selected: true
+- assertNotVisible: "Back"
+- takeScreenshot: "flow-04-second-chat"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # Back from the right pane's first screen empties the pane; it does not reveal the first Chat.
+      - back
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - assertNotVisible:
+          text: "Open .*"
+          selected: true
+      - assertVisible:
+          id: "split-right-pane"
+      - takeScreenshot: "flow-05-back-empty"
+
+# New Chat opens over both panes, then the draft it creates takes over the right pane once sent.
+- openLink: "cohub:///"
+- extendedWaitUntil:
+    visible: ".*Chats.*"
+    timeout: 20000
+- tapOn: "New Chat"
+# On iOS the sheet's native header (title, close, search) is missing, on main too; only Android shows the search field.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: ".*Find a Space.*"
+          timeout: 20000
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: "flow-06-new-chat-sheet"
+- tapOn:
+    point: "50%, 30%"
+- extendedWaitUntil:
+    visible:
+      id: "chat-composer-input"
+    timeout: 30000
+- tapOn:
+    id: "chat-composer-input"
+- inputText: "Tablet split check. Reply with OK."
+- tapOn: "Send message"
+- extendedWaitUntil:
+    visible:
+      text: "Open .*"
+      selected: true
+    timeout: 30000
+- assertVisible:
+    id: "split-right-pane"
+- assertVisible: ".*Tablet split check.*"
+- takeScreenshot: "flow-07-sent-streaming"

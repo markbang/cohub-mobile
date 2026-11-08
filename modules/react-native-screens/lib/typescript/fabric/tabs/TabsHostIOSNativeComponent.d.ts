@@ -49,6 +49,7 @@ export interface NativeProps extends ViewProps {
     tabBarSidebarPreferredPlacement?: CT.WithDefault<TabBarSidebarPreferredPlacement, 'automatic'>;
     bottomAccessoryHidden?: CT.WithDefault<boolean, false>;
     prominentScreenKey?: string | undefined;
+    horizontalSizeClass?: CT.WithDefault<'inherit' | 'compact' | 'regular', 'inherit'>;
 }
 declare const _default: HostComponent<NativeProps>;
 export default _default;

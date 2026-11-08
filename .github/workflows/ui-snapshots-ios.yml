@@ -17,10 +17,27 @@ on:
         default: light,dark
         type: string
       motion:
-        description: Also record the interactions in MOTIONS as videos.
+        description: Also record the interactions in MOTIONS as videos (phone only).
         required: false
         default: true
         type: boolean
+      target:
+        description: The device class. tablet runs the split layout in both orientations, then the e2e/tablet flow.
+        required: false
+        default: phone
+        type: choice
+        options:
+          - phone
+          - tablet
+      orientations:
+        description: Orientations to capture, comma-separated. Defaults to portrait on a phone and portrait,landscape on a tablet.
+        required: false
+        type: string
+      perf:
+        description: Frame-probe runs of the perf sequence (0 skips it).
+        required: false
+        default: "0"
+        type: string
       ios:
         description: The iOS the reference runs on. 27 uses GitHub's xcode-27 image (a preview); 26 the default macOS image.
         required: false
@@ -34,7 +51,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ui-snapshots-ios-${{ github.ref }}
+  group: ui-snapshots-ios-${{ inputs.target }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -45,6 +62,8 @@ env:
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
   MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
+  ORIENTATIONS_ARG: ${{ inputs.orientations && format('--orientations {0}', inputs.orientations) || '' }}
+  ARTIFACT: ui-snapshots-ios${{ inputs.target == 'tablet' && '-tablet' || '' }}
   # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
 
@@ -122,7 +141,7 @@ jobs:
             metro-${{ runner.os }}-
 
       - name: Capture
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ inputs.target }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -134,7 +153,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ui-snapshots-ios
+          name: ${{ env.ARTIFACT }}
           path: |
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
