@@ -78,13 +78,49 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
+      # only the links; their package.json files are in the key for the dependencies they declare.
+      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
+      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        run: npm ci
+        id: npm-ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: |
+          npm ci
+          vendor=modules/react-native-enriched-markdown
+          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Saved before anything else runs: later steps write build output into node_modules.
+      - name: Save node_modules
+        if: steps.npm-ci.outputs.complete == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
 
       - name: Native fingerprint
         id: fingerprint
@@ -104,6 +140,17 @@ jobs:
           # The Xcode build is in the key: an app built by one Xcode is not reused under another's simulator.
           # The app version is too: the fingerprint leaves it out, and Me shows the binary's version.
           key: ui-snapshots-ios-v3-${{ steps.fingerprint.outputs.xcode }}-${{ steps.fingerprint.outputs.hash }}-${{ steps.fingerprint.outputs.version }}
+
+      # CocoaPods' download cache, mostly React Native's prebuilt frameworks. pod install still
+      # resolves and generates the Pods project from node_modules on every run.
+      - name: Restore CocoaPods cache
+        if: steps.app.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: cocoapods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            cocoapods-${{ runner.os }}-
 
       - name: Build simulator app
         if: steps.app.outputs.cache-hit != 'true'

@@ -70,13 +70,49 @@ jobs:
           submodules: true
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
+      # only the links; their package.json files are in the key for the dependencies they declare.
+      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
+      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        run: npm ci
+        id: npm-ci
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: |
+          npm ci
+          vendor=modules/react-native-enriched-markdown
+          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+            echo "complete=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Saved before anything else runs: later steps write build output into node_modules.
+      - name: Save node_modules
+        if: steps.npm-ci.outputs.complete == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+            modules/react-native-enriched-markdown/ios/vendor
+          key: ${{ steps.node-modules.outputs.cache-primary-key }}
 
       - name: Native fingerprint
         id: fingerprint
@@ -113,9 +149,42 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            !~/.gradle/caches/build-cache-1
           key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             gradle-${{ runner.os }}-
+
+      # ccache serves the NDK/CMake compiles that dominate the build (React Native's own CMake
+      # also finds it; the doubled launcher is harmless). Gradle installs the NDK on every run, so
+      # ccache identifies the compiler by content, not mtime. Gradle's build cache serves the Kotlin
+      # and Java tasks. Both restore the newest entry for this build variant and save every run.
+      - name: Set up native build caches
+        if: steps.apk.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ccache
+          mkdir -p ~/.gradle
+          echo "org.gradle.caching=true" >> ~/.gradle/gradle.properties
+          {
+            echo "CCACHE_DIR=$HOME/.ccache"
+            echo "CCACHE_MAXSIZE=1G"
+            echo "CCACHE_COMPILERCHECK=content"
+            echo "CCACHE_SLOPPINESS=include_file_ctime,include_file_mtime,time_macros"
+            echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore native build caches
+        if: steps.apk.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.ccache
+            ~/.gradle/caches/build-cache-1
+          key: android-build-${{ runner.os }}-debug-${{ github.run_id }}
+          restore-keys: |
+            android-build-${{ runner.os }}-debug-
 
       - name: Build debug APK
         if: steps.apk.outputs.cache-hit != 'true'
@@ -127,6 +196,19 @@ jobs:
           npm run native:android:build
           mkdir -p build/ui-snapshots
           cp android/app/build/outputs/apk/debug/app-x86_64-debug.apk build/ui-snapshots/cohub.apk
+
+      - name: Show ccache stats
+        if: steps.apk.outputs.cache-hit != 'true' && (success() || failure())
+        run: ccache --show-stats
+
+      - name: Save native build caches
+        if: steps.apk.outputs.cache-hit != 'true' && (success() || failure())
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.ccache
+            ~/.gradle/caches/build-cache-1
+          key: android-build-${{ runner.os }}-debug-${{ github.run_id }}
 
       - name: Save debug APK
         if: steps.apk.outputs.cache-hit != 'true'
