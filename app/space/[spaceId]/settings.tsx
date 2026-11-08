@@ -53,8 +53,9 @@ export default function SpaceSettingsScreen() {
   const [visibleEnv, setVisibleEnv] = useState<Set<string>>(new Set());
   const [addModOpen, setAddModOpen] = useState(false);
   const [modSpaceId, setModSpaceId] = useState("");
-  const [addingMod, setAddingMod] = useState(false);
-  const [modError, setModError] = useState<string | null>(null);
+  const [modAdd, setModAdd] = useState<{ status: "idle" | "adding" } | { status: "failed"; message: string }>({ status: "idle" });
+  const addingMod = modAdd.status === "adding";
+  const modError = modAdd.status === "failed" ? modAdd.message : null;
   const modSubmitLock = useRef(false);
   const [customTtlOpen, setCustomTtlOpen] = useState(false);
   const [customTtlValue, setCustomTtlValue] = useState("");
@@ -198,8 +199,7 @@ export default function SpaceSettingsScreen() {
   const addMod = async () => {
     if (!client || !spaceId || !modSpaceId.trim() || modSubmitLock.current) return;
     modSubmitLock.current = true;
-    setAddingMod(true);
-    setModError(null);
+    setModAdd({ status: "adding" });
     try {
       const result = await installSpaceMod(client, spaceId, modSpaceId);
       // The create response is authoritative; a subsequent list failure must not invite a duplicate install.
@@ -207,11 +207,11 @@ export default function SpaceSettingsScreen() {
       setAddModOpen(false);
       setModSpaceId("");
       toast({ title: t("space.settings.modAdded"), message: t(result.sandboxRestarting ? "space.settings.modRestarting" : "space.settings.modAddedRestart"), tone: "success" });
+      setModAdd({ status: "idle" });
     } catch (error) {
-      setModError(error instanceof Error ? error.message : t("space.settings.modAddFailed"));
+      setModAdd({ status: "failed", message: error instanceof Error ? error.message : t("space.settings.modAddFailed") });
     } finally {
       modSubmitLock.current = false;
-      setAddingMod(false);
     }
   };
 
@@ -396,7 +396,7 @@ export default function SpaceSettingsScreen() {
           <GroupAddRow
             label={t("space.settings.addMod")}
             disabled={!client || !spaceId || resources.mods.loading}
-            onPress={() => { setModError(null); setAddModOpen(true); }}
+            onPress={() => { setModAdd({ status: "idle" }); setAddModOpen(true); }}
             last
           />
         </SettingsGroup>
@@ -707,24 +707,23 @@ function DeviceCliLine() {
 function PhoneControlBlock({ state }: { state: PhoneControlState }) {
   const { t } = useTranslation();
   const theme = useAppTheme();
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [action, setAction] = useState<"idle" | "busy" | "failed">("idle");
+  const busy = action === "busy";
+  const failed = action === "failed";
   const [code, setCode] = useState("");
   const steps = phoneControlSteps(state);
   const errorKey = phoneControlErrorKey(state);
   const canSetup = state.stage !== "starting" && state.stage !== "ready";
   const codeInput = state.stage === "code" && state.codeInput;
 
-  const run = async (action: () => Promise<null>) => {
+  const run = async (perform: () => Promise<null>) => {
     if (busy) return;
-    setBusy(true);
-    setFailed(false);
+    setAction("busy");
     try {
-      await action();
+      await perform();
+      setAction("idle");
     } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
+      setAction("failed");
     }
   };
   const pair = (value: string) => {

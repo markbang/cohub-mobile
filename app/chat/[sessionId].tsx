@@ -202,16 +202,23 @@ function useBackPressTrace(source: string, root: ReturnType<typeof useNavigation
 
 type ChatDraft = { spaceId: string; fromShare: boolean };
 
+type ScrollGesture = "idle" | "dragging" | "momentum";
+
+type ChatOverlay = "attachments" | "rename" | "more" | "titleMenu" | "labels" | "model" | "harness" | "turns";
+
+type NewChatStart = { pending: MessageRecord | null } | { sessionId: string };
+
 /**
  * One Chat surface. With `draft` it starts as a new Chat in that Space: the first send shows its
  * bubble here at once, and when the server creates the Chat this same component carries on with it.
  */
 function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initialTurnSequence, initialTurnId }: { sessionId: string | null; draft?: ChatDraft | null; onCreated?: (sessionId: string) => void; initialTurnSequence: number | null; initialTurnId: string | null }) {
-  const [createdSessionId, setCreatedSessionId] = useState<string | null>(null);
+  // A new Chat's first message (sending, or failed with retry) is held until the server creates it.
+  const [newChat, setNewChat] = useState<NewChatStart>({ pending: null });
+  const createdSessionId = "sessionId" in newChat ? newChat.sessionId : null;
   // "" until a new Chat exists; every session-scoped effect below is a no-op for it.
   const sessionId = routeSessionId ?? createdSessionId ?? "";
-  // The first message of a new Chat, held here while the server creates it (or after it failed to).
-  const [pendingNew, setPendingNew] = useState<MessageRecord | null>(null);
+  const pendingNew = "pending" in newChat ? newChat.pending : null;
   // A late answer must not set the route params of whatever screen is focused after this one closed.
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -371,15 +378,21 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   useEffect(() => () => {
     if (draftLoadedRef.current) persistDraft(draftScope, inputRef.current);
   }, [draftScope, persistDraft]);
-  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [titleMenuOpen, setTitleMenuOpen] = useState(false);
+  // Menus and sheets open one at a time; a close only clears its own, so a late onClose cannot shut the next.
+  const [overlay, setOverlay] = useState<ChatOverlay | null>(null);
+  const closeOverlay = useCallback((kind: ChatOverlay) => setOverlay((current) => (current === kind ? null : current)), []);
+  const attachmentMenuOpen = overlay === "attachments";
+  const renameOpen = overlay === "rename";
+  const moreOpen = overlay === "more";
+  const titleMenuOpen = overlay === "titleMenu";
+  const labelSheetOpen = overlay === "labels";
+  const modelSelectorOpen = overlay === "model";
+  const harnessMenuOpen = overlay === "harness";
+  const turnNavigatorOpen = overlay === "turns";
   const moreButtonRef = useRef<View>(null);
   const titleRef = useRef<View>(null);
-  const closeMore = useCallback(() => setMoreOpen(false), []);
-  const closeTitleMenu = useCallback(() => setTitleMenuOpen(false), []);
-  const [labelSheetOpen, setLabelSheetOpen] = useState(false);
+  const closeMore = useCallback(() => closeOverlay("more"), [closeOverlay]);
+  const closeTitleMenu = useCallback(() => closeOverlay("titleMenu"), [closeOverlay]);
   const [chatLabels, setChatLabels] = useState<SessionLabel[]>([]);
   const [chatLabelsError, setChatLabelsError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -388,27 +401,24 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const [stopping, setStopping] = useState(false);
   const [pendingFollowupAction, setPendingFollowupAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
-  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
-  const [harnessMenuOpen, setHarnessMenuOpen] = useState(false);
   const [selectedHarness, setSelectedHarness] = useState<RuntimeHarness | null>(null);
   const [localModelsByHarness, setLocalModelsByHarness] = useState<Partial<Record<LocalHarness, ChatModelSelection | null>>>({});
   const [selectedModel, setSelectedModel] = useState<ChatModelSelection | null>(null);
   const [modelOverride, setModelOverride] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
   const [forkingTurnId, setForkingTurnId] = useState<string | null>(null);
-  const [turnNavigatorOpen, setTurnNavigatorOpen] = useState(false);
   const [loadingSequence, setLoadingSequence] = useState<number | null>(null);
-  const [listLoaded, setListLoaded] = useState(false);
   // Tail pins snap until opening has settled; animating them was the visible chase to the tail.
-  const [openSettled, setOpenSettled] = useState(false);
+  const [openPhase, setOpenPhase] = useState<"placing" | "placed" | "settled">("placing");
+  const listLoaded = openPhase !== "placing";
+  const openSettled = openPhase === "settled";
   const [openingDelayElapsed, setOpeningDelayElapsed] = useState(false);
   // The newest page replacing the loaded turns mounts a fresh list that places itself like an open.
   const [mountGeneration] = useState(view.windowGeneration);
   const [listGeneration, setListGeneration] = useState(view.windowGeneration);
   if (listGeneration !== view.windowGeneration) {
     setListGeneration(view.windowGeneration);
-    setListLoaded(false);
-    setOpenSettled(false);
+    setOpenPhase("placing");
     setOpeningDelayElapsed(false);
   }
   const listPlacedRef = useRef(false);
@@ -433,8 +443,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const [followingTail, setFollowingTailState] = useState(true);
   const followPinAnimatedRef = useRef(true);
   const [followPinAnimated, setFollowPinAnimatedState] = useState(true);
-  const userDraggingRef = useRef(false);
-  const momentumScrollingRef = useRef(false);
+  const scrollGestureRef = useRef<ScrollGesture>("idle");
   const followTailFrameRef = useRef<number | null>(null);
   const turnScrollTargetRef = useRef<number | null>(null);
   const turnScrollRetriesRef = useRef(new Map<number, number>());
@@ -481,7 +490,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     pendingSequence: pendingScrollSequence.current, targetSequence: turnScrollTargetRef.current,
     retryTimerPending: turnScrollRetryTimerRef.current !== null,
     retries: turnScrollTargetRef.current === null ? null : turnScrollRetriesRef.current.get(turnScrollTargetRef.current) ?? 0,
-    following: followingTailRef.current, dragging: userDraggingRef.current, momentum: momentumScrollingRef.current,
+    following: followingTailRef.current, dragging: scrollGestureRef.current !== "idle", momentum: scrollGestureRef.current === "momentum",
     initialDone: initialScrollDone.current, followFramePending: followTailFrameRef.current !== null,
     cancelGeneration: traceCancelGeneration.current,
     inverted: false,
@@ -539,15 +548,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       return;
     }
     // A list still placing itself owns the scroll; a command would race it.
-    if (!listPlacedRef.current || !followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
+    if (!listPlacedRef.current || !followingTailRef.current || scrollGestureRef.current !== "idle" || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
     if (followTailFrameRef.current !== null) cancelAnimationFrame(followTailFrameRef.current);
     followTailFrameRef.current = requestAnimationFrame(() => {
       followTailFrameRef.current = null;
-      if (!listPlacedRef.current || !followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
+      if (!listPlacedRef.current || !followingTailRef.current || scrollGestureRef.current !== "idle" || pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null) return;
       traceEnd("tail.frame", animated);
       if (animated) return;
       requestAnimationFrame(() => {
-        if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current) return;
+        if (!followingTailRef.current || scrollGestureRef.current !== "idle") return;
         traceEnd("tail.secondFrame", false);
       });
     });
@@ -713,7 +722,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
 
   const handleListLoad = useCallback(() => {
     listPlacedRef.current = true;
-    setListLoaded(true);
+    setOpenPhase((current) => current === "placing" ? "placed" : current);
   }, []);
 
   useEffect(() => {
@@ -745,7 +754,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const openQuiet = listLoaded && view.historyLoaded && !view.catchingUp;
   useEffect(() => {
     if (openSettled || !openQuiet) return;
-    const timer = setTimeout(() => setOpenSettled(true), OPEN_SETTLE_MS);
+    const timer = setTimeout(() => setOpenPhase((current) => current === "placed" ? "settled" : current), OPEN_SETTLE_MS);
     return () => clearTimeout(timer);
   }, [openQuiet, openSettled]);
 
@@ -866,7 +875,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       const resolvedSequence = await jumpToTurn(sessionId, sequence);
       trace("turn.jumpResolved", { sequence, resolvedSequence, origin: "navigator", requestId, cancelledWhileWaiting: cancelGeneration !== traceCancelGeneration.current });
       scrollToTurn(resolvedSequence);
-      setTurnNavigatorOpen(false);
+      closeOverlay("turns");
     } catch (error) {
       trace("turn.jumpFailed", { origin: "navigator", requestId });
       setNotice({ title: t("chat.turnUnavailable.title"), message: error instanceof Error ? error.message : t("chat.turnUnavailable.body") });
@@ -880,8 +889,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     initialUnreadIndexRef.current = null;
     initialUnreadRetriesRef.current = 0;
     pendingScrollSequence.current = null;
-    userDraggingRef.current = false;
-    momentumScrollingRef.current = false;
+    scrollGestureRef.current = "idle";
     turnScrollTargetRef.current = null;
     turnScrollRetriesRef.current.clear();
     if (turnScrollRetryTimerRef.current !== null) {
@@ -945,7 +953,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.fromShare]);
   const pickAttachments = async () => {
-    setAttachmentMenuOpen(false);
+    closeOverlay("attachments");
     try {
       const result = await withForegroundHandoff(() => DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true }));
       if (result.canceled) return;
@@ -953,7 +961,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     } catch (error) { showToast({ title: t("chat.attachmentUnavailable.title"), message: error instanceof Error ? error.message : t("chat.attachmentUnavailable.body"), tone: "danger" }); }
   };
   const pickPhotos = async () => {
-    setAttachmentMenuOpen(false);
+    closeOverlay("attachments");
     try {
       const permission = await withForegroundHandoff(() => ImagePicker.requestMediaLibraryPermissionsAsync());
       if (!permission.granted) { showToast({ title: t("chat.photoOff.title"), message: t("chat.photoOff.body"), tone: "danger" }); return; }
@@ -963,7 +971,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     } catch (error) { showToast({ title: t("chat.photoPickerUnavailable.title"), message: error instanceof Error ? error.message : t("chat.photoPickerUnavailable.body"), tone: "danger" }); }
   };
   const takePhoto = async () => {
-    setAttachmentMenuOpen(false);
+    closeOverlay("attachments");
     try {
       const permission = await withForegroundHandoff(() => ImagePicker.requestCameraPermissionsAsync());
       if (!permission.granted) { showToast({ title: t("chat.cameraOff.title"), message: t("chat.cameraOff.body"), tone: "danger" }); return; }
@@ -1028,8 +1036,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }
   }, [session, showToast, t]);
   const openTitleMenu = useCallback(() => {
-    setMoreOpen(false);
-    setTitleMenuOpen(true);
+    setOverlay("titleMenu");
     haptics.longPress();
   }, []);
   // Edit the stored title, not its `@Label` display, so saving unchanged keeps mention markup.
@@ -1044,7 +1051,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       return;
     }
     setRenameValue(current);
-    setRenameOpen(true);
+    setOverlay("rename");
   };
   const reloadChatLabels = useCallback(() => {
     if (!client || !spaceId) return;
@@ -1055,14 +1062,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       .catch((error: unknown) => setChatLabelsError(error instanceof Error ? error.message : t("labels.loadFailed")));
   }, [client, spaceId, t]);
   const openLabelSheet = () => {
-    setLabelSheetOpen(true);
+    setOverlay("labels");
     reloadChatLabels();
   };
   const saveRename = async (title = renameValue) => {
     if (renameSavingRef.current) return;
     renameSavingRef.current = true;
     setRenameSaving(true);
-    try { await renameSession(sessionId, title); setRenameOpen(false); } catch (error) { showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }); } finally {
+    try { await renameSession(sessionId, title); closeOverlay("rename"); } catch (error) { showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }); } finally {
       renameSavingRef.current = false;
       setRenameSaving(false);
     }
@@ -1110,13 +1117,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     setFollowingTail(nextChatTailFollowing({
       currentlyFollowing: followingTailRef.current,
       distanceToBottom: distanceToLatest,
-      userInteracting: chatTailScrolledAway({ dragging: userDraggingRef.current, momentum: momentumScrollingRef.current, contentGrew: grew, offsetDelta }),
+      userInteracting: chatTailScrolledAway({ dragging: scrollGestureRef.current === "dragging", momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta }),
       pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()),
       detached: view.hasMoreNewer,
     }));
     // Native animated scrollTo cannot retarget; snap once a burst opens a gap the pin would chase.
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
-    if (initialScrollDone.current && followingTailRef.current && chatTailDisplaced({ dragging: userDraggingRef.current, momentum: momentumScrollingRef.current, contentGrew: grew, offsetDelta, distanceToLatest })) {
+    if (initialScrollDone.current && followingTailRef.current && chatTailDisplaced({ dragging: scrollGestureRef.current === "dragging", momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta, distanceToLatest })) {
       recordDebugEvent("chat.tail.displaced", { session: debugAlias("session", sessionId), offsetY: Math.round(contentOffset.y), distanceToLatest: Math.round(distanceToLatest) });
       requestFollowTail(false);
       return;
@@ -1145,12 +1152,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // opened: its maintain request stays pending while the tail keeps growing out of view, and
     // only a user drag recovers it. Re-check one frame later; a healthy pin is producing scroll
     // events while it catches up, so an unchanged offset next to an oversized gap is a real stall.
-    if (initialScrollDone.current && followingTailRef.current && !userDraggingRef.current && !momentumScrollingRef.current && turnScrollTargetRef.current === null) {
+    if (initialScrollDone.current && followingTailRef.current && scrollGestureRef.current === "idle" && turnScrollTargetRef.current === null) {
       if (followTailFrameRef.current !== null) cancelAnimationFrame(followTailFrameRef.current);
       const yAtSchedule = lastScrollRef.current.y;
       followTailFrameRef.current = requestAnimationFrame(() => {
         followTailFrameRef.current = null;
-        if (!followingTailRef.current || userDraggingRef.current || momentumScrollingRef.current) return;
+        if (!followingTailRef.current || scrollGestureRef.current !== "idle") return;
         const { distanceToLatest } = chatListDistances(lastScrollRef.current.y, height, lastScrollRef.current.viewport, keyboardInsetRef.current);
         if (!chatTailStalled(distanceToLatest, lastScrollRef.current.y === yAtSchedule)) return;
         trace("tail.stalled", { distanceToLatest });
@@ -1165,8 +1172,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     setSendTransition(null);
     traceAction("chat_list_drag_begin");
     trace("list.dragBegin");
-    userDraggingRef.current = true;
-    momentumScrollingRef.current = false;
+    scrollGestureRef.current = "dragging";
     if (followTailFrameRef.current !== null) {
       cancelAnimationFrame(followTailFrameRef.current);
       followTailFrameRef.current = null;
@@ -1179,10 +1185,10 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     trace("list.dragEnd", { velocityY: event.nativeEvent.velocity?.y, offsetY: event.nativeEvent.contentOffset.y });
     const velocityY = event.nativeEvent.velocity?.y ?? 0;
     if (Math.abs(velocityY) >= 0.05) {
-      momentumScrollingRef.current = true;
+      scrollGestureRef.current = "momentum";
       return;
     }
-    userDraggingRef.current = false;
+    scrollGestureRef.current = "idle";
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
     setFollowingTail(nextChatTailFollowing({ currentlyFollowing: followingTailRef.current, distanceToBottom: distanceToLatest, userInteracting: false, pendingTarget: pendingScrollSequence.current !== null || turnScrollTargetRef.current !== null, detached: view.hasMoreNewer }));
@@ -1193,14 +1199,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const handleMomentumScrollBegin = useCallback(() => {
     traceAction("chat_list_momentum_begin");
     trace("list.momentumBegin");
-    if (userDraggingRef.current) momentumScrollingRef.current = true;
+    if (scrollGestureRef.current === "dragging") scrollGestureRef.current = "momentum";
   }, [trace]);
 
   const handleMomentumScrollEnd = useCallback((event: ChatScrollEvent) => {
     traceAction("chat_list_momentum_end", { offsetY: Math.round(event.nativeEvent.contentOffset.y) });
     trace("list.momentumEnd", { offsetY: event.nativeEvent.contentOffset.y });
-    userDraggingRef.current = false;
-    momentumScrollingRef.current = false;
+    scrollGestureRef.current = "idle";
     if (pendingScrollSequence.current !== null) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const { distanceToLatest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
@@ -1334,22 +1339,21 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       harness,
       onOptimistic: (message) => {
         pending = message;
-        setPendingNew(message);
+        setNewChat({ pending: message });
         flight?.inserted(message);
       },
     }).then((result) => {
       newChatDraft.accepted(!mountedRef.current);
       if (!mountedRef.current) return;
       takeoverRef.current = true;
-      setCreatedSessionId(result.session.id);
-      setPendingNew(null);
+      setNewChat({ sessionId: result.session.id });
       onCreated?.(result.session.id);
       showSent();
     }, (error: unknown) => {
       const message = error instanceof Error ? error.message : t("chat.startFailed.body");
       if (!mountedRef.current) return;
       if (pending) {
-        setPendingNew(failedSendMessage(pending, message));
+        setNewChat({ pending: failedSendMessage(pending, message) });
         return;
       }
       restoreComposer(text, files);
@@ -1442,7 +1446,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       discardFailedSend(sessionId, message.id);
       return;
     }
-    setPendingNew((current) => (current?.id === message.id ? null : current));
+    setNewChat((current) => ("pending" in current && current.pending?.id === message.id ? { pending: null } : current));
     newChatDraft.discard(inputRef.current);
   }, [discardFailedSend, newChatDraft, sessionId]);
 
@@ -1530,7 +1534,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     <SpacePanels edgeToEdge key={spaceId || sessionId} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <ScreenBlurTarget attach={attachScreenBlurTarget}><Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        {!sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setTurnNavigatorOpen(true)} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { setTitleMenuOpen(false); setMoreOpen(true); }} /></MenuAnchor>}</>} />}
+        {!sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
         </EdgeHeader>
@@ -1645,32 +1649,32 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         </Animated.View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(true); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); setModelSelectorOpen(false); setHarnessMenuOpen(false); setAttachmentMenuOpen(true); }} attachmentActions={[
+        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); setAttachmentMenuOpen(false); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setModelSelectorOpen(true); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={FOOTER_MENU} /> : null}
         </EdgeFooterOverlay> : null}
         {sendTransition && transitionMessage && ((sendTransition.destination === "bubble" && !nativeChatTimeline) || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || paneWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
-        {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => setLabelSheetOpen(false)} onChanged={() => undefined} /> : null}
-        <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentMenuOpen(false)} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
-        <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => setTurnNavigatorOpen(false)} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
-        <GlassBackdrop target={screenBlurTarget}>{runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => setHarnessMenuOpen(false)} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); setHarnessMenuOpen(false); }} /> : null}
-        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); setModelSelectorOpen(false); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => setModelSelectorOpen(false)} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); setModelSelectorOpen(false); }} />}</MenuPresence></GlassBackdrop>
+        {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => closeOverlay("labels")} onChanged={() => undefined} /> : null}
+        <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => closeOverlay("attachments")} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
+        <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => closeOverlay("turns")} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
+        <GlassBackdrop target={screenBlurTarget}>{runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => closeOverlay("harness")} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); closeOverlay("harness"); }} /> : null}
+        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); closeOverlay("model"); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
         <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="chat-notice-sheet" />
-        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => setRenameOpen(false)}>
+        <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => closeOverlay("rename")}>
           {/* A Modal is its own window, so the core avoider (keyboard events) rather than the app-level one. */}
           <RNKeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
-            <Pressable accessible={false} onPress={() => setRenameOpen(false)} className="flex-1 justify-center p-6" style={SCRIM}>
+            <Pressable accessible={false} onPress={() => closeOverlay("rename")} className="flex-1 justify-center p-6" style={SCRIM}>
               {/* Claims the touch so a tap inside the dialog does not reach the scrim. */}
               <View onStartShouldSetResponder={() => true} className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}>
                 <Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text>
                 <TextInput autoFocus value={renameValue} onChangeText={setRenameValue} editable={!renameSaving} maxLength={RENAME_MAX_LENGTH} returnKeyType="done" onSubmitEditing={() => void saveRename()} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} />
-                <View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => setRenameOpen(false)} /><PrimaryButton label={t("common.save")} loading={renameSaving} onPress={() => void saveRename()} /></View>
+                <View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => closeOverlay("rename")} /><PrimaryButton label={t("common.save")} loading={renameSaving} onPress={() => void saveRename()} /></View>
               </View>
             </Pressable>
           </RNKeyboardAvoidingView>

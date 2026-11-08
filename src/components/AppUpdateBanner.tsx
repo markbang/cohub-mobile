@@ -122,8 +122,9 @@ export function AppUpdateDetailsSheet({
   onLater?: () => void;
 }) {
   const { t } = useTranslation();
-  const [opening, setOpening] = useState(false);
-  const [progress, setProgress] = useState<ApkUpdateProgress | null>(null);
+  const [run, setRun] = useState<{ progress: ApkUpdateProgress | null } | null>(null);
+  const opening = run !== null;
+  const progress = run?.progress ?? null;
   const [error, setError] = useState<string | null>(null);
   const [installerReturned, setInstallerReturned] = useState(false);
   const operation = useRef<AbortController | null>(null);
@@ -137,7 +138,7 @@ export function AppUpdateDetailsSheet({
     if (operation.current) return;
     const controller = new AbortController();
     operation.current = controller;
-    setOpening(true);
+    setRun({ progress: null });
     setError(null);
     try {
       await action(controller.signal);
@@ -145,15 +146,14 @@ export function AppUpdateDetailsSheet({
       if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : t("update.failed"));
     } finally {
       if (operation.current === controller) operation.current = null;
-      setOpening(false);
-      setProgress(null);
+      setRun(null);
     }
   };
 
   const installUpdate = () => runOperation(async (signal) => {
     setInstallerReturned(false);
-    setProgress({ phase: "downloading", fraction: 0 });
-    await downloadAndInstallAndroidUpdate(release, { signal, onProgress: setProgress });
+    setRun({ progress: { phase: "downloading", fraction: 0 } });
+    await downloadAndInstallAndroidUpdate(release, { signal, onProgress: (next) => setRun((current) => current && { progress: next }) });
     if (!signal.aborted) setInstallerReturned(true);
   });
   const downloading = progress?.phase === "downloading";
@@ -252,39 +252,38 @@ export function AppUpdateDetailsSheet({
   );
 }
 
+type UpdateCheck =
+  | { status: "unchecked" | "checking" | "current" | "error" }
+  | { status: "available"; release: AppRelease };
+
 export function AppUpdateRow() {
   const { t } = useTranslation();
-  const [checking, setChecking] = useState(false);
-  const [release, setRelease] = useState<AppRelease | null>(null);
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheck>({ status: "unchecked" });
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [status, setStatus] = useState<"idle" | "current" | "error">("idle");
+  const checking = updateCheck.status === "checking";
+  const release = updateCheck.status === "available" ? updateCheck.release : null;
 
   if (Platform.OS !== "android") return null;
 
   const check = async () => {
     if (checking) return;
-    setChecking(true);
-    setRelease(null);
+    setUpdateCheck({ status: "checking" });
     setDetailsOpen(false);
-    setStatus("idle");
     try {
       const latest = await checkForAppUpdate({ force: true });
-      setRelease(latest);
-      setStatus(latest ? "idle" : "current");
+      setUpdateCheck(latest ? { status: "available", release: latest } : { status: "current" });
       if (latest) setDetailsOpen(true);
     } catch {
-      setStatus("error");
-    } finally {
-      setChecking(false);
+      setUpdateCheck({ status: "error" });
     }
   };
 
   const title = release ? t("update.available", { version: release.version }) : t("update.row.check");
   const detail = checking
     ? t("update.row.checking")
-    : status === "current"
+    : updateCheck.status === "current"
       ? t("update.row.upToDate", { version: getInstalledAppVersion() })
-      : status === "error"
+      : updateCheck.status === "error"
         ? t("update.row.githubError")
         : release?.downloadUrl
           ? t("update.row.apkReady")
