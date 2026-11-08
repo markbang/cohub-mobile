@@ -5421,25 +5421,49 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   });
   const render = (props) => chromeNodes(hooks.render(() => renderSheet({ visible: true, title: "Turns", onClose() {}, children: "list", ...props })));
   const panel = (props) => Object.assign({}, ...render(props).find((node) => node.props.role === "dialog").props.style.flat(Infinity).filter(Boolean));
-  const avoider = (props) => render(props).find((node) => node.type === "KeyboardAvoidingView").props;
+  const container = (props) => {
+    const nodes = render(props);
+    const dialog = nodes.find((node) => node.props.role === "dialog");
+    return nodes.find((node) => [node.props.children].flat().includes(dialog));
+  };
   const turns = { fullHeight: true, scrollable: false, contentStyle: { flex: 1, minHeight: 0 } };
 
   assert.equal(panel(turns).height, 720 - 48, "a full-height tablet card has a height, so the turn list's flex:1 body is not collapsed to 0");
   assert.equal(panel({}).height, undefined, "a regular tablet card still sizes to its content");
-  assert.equal(avoider({}).enabled, false, "RN's KeyboardAvoidingView does not move a tablet card");
-  assert.equal(avoider({}).style.paddingBottom, 24);
+  assert.equal(container({}).props.style.paddingBottom, 24);
   keyboard.keyboardWillShow({ height: 21 });
-  assert.equal(avoider({}).style.paddingBottom, 24, "a floating keyboard's few-dp inset leaves the card where it is");
+  assert.equal(container({}).props.style.paddingBottom, 24, "a floating keyboard's few-dp inset leaves the card where it is");
   keyboard.keyboardWillShow({ height: 340 });
-  assert.equal(avoider({}).style.paddingBottom, 340, "a docked keyboard lifts the card above it");
+  assert.equal(container({}).props.style.paddingBottom, 340, "a docked keyboard lifts the card above it");
   assert.equal(panel(turns).height, 720 - 24 - 340, "the full-height card fits between the top margin and the keyboard");
   keyboard.keyboardWillHide();
 
-  window = { width: 402, height: 874 };
-  assert.equal(avoider({}).enabled, true, "phone sheets keep the KeyboardAvoidingView");
-  assert.equal(avoider({}).style, undefined);
-  assert.equal(panel(turns).height, 874 - 24, "a phone page sheet fills the height below the status bar");
+  assert.match(readFileSync(new URL("../src/components/AboutScreen.tsx", import.meta.url), "utf8"), /<AdaptiveSheet\s+visible=\{feedbackOpen\}\s+detent="fit"/, "the feedback sheet sizes to its content");
+  // The reporter's phone (cfeed 01M6XJX36YG2JGSDND178C86N0): an 817 dp window whose keyboard top sits at 514.
+  window = { width: 375, height: 817 };
+  const keyboardTop = 514;
+  assert.ok(!render({}).some((node) => node.type === "KeyboardAvoidingView"), "keyboardHeight is the only signal that moves a sheet");
+  assert.equal(panel(turns).height, 817 - 24, "a phone page sheet fills the height below the status bar");
   assert.equal(panel({ detent: "fit" }).height, undefined, "a phone fit sheet sizes to its content");
+  const edges = (props) => {
+    const style = panel(props);
+    const bottom = 817 - container(props).props.style.paddingBottom - (style.marginBottom ?? 0);
+    return { top: bottom - (style.height ?? style.maxHeight), bottom };
+  };
+  const scroller = (props) => render(props).find((node) => node.type === "ScrollView");
+  const fit = { detent: "fit", confirm: { label: "Submit", onPress() {} } };
+  assert.deepEqual(edges(fit), { top: 24 + 8, bottom: 817 - 8 }, "a tall fit sheet floats clear of the status bar and the screen's bottom");
+  assert.equal(scroller(fit).props.style.maxHeight, 817 - 24 - 16 - 100 - 20, "attachments past the fit sheet's height scroll inside its body");
+  const scrolled = chromeNodes(scroller(fit));
+  assert.ok(!scrolled.some((node) => ["IconButton", "SheetConfirmButton"].includes(node.type)), "close and submit stay in the header, outside the scroller");
+
+  keyboard.keyboardWillShow({ height: 817 - keyboardTop });
+  assert.ok(edges(fit).bottom <= keyboardTop && edges(fit).top >= 24, "the fit sheet sits between the status bar and the keyboard");
+  assert.ok(scroller(fit).props.style.maxHeight >= 12 + 120, "the feedback input still fits in the scroller above the keyboard");
+  assert.deepEqual(edges(turns), { top: 24, bottom: keyboardTop }, "a page sheet keeps its top edge and ends at the keyboard");
+  assert.equal(panel(turns).borderBottomLeftRadius, undefined, "above the keyboard a page sheet's bottom is square");
+  keyboard.keyboardWillHide();
+  assert.deepEqual(edges(turns), { top: 24, bottom: 817 }, "a page sheet returns to the full height below the status bar");
   hooks.unmount();
 }
 

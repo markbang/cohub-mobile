@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import {
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -152,6 +151,7 @@ export function AdaptiveSheet({
   useEffect(() => {
     if (!visible) return;
     // Android's own events wait for the keyboard to finish moving; keyboard-controller's start with it, as iOS's do.
+    // Its height runs from the window's bottom edge (the provider is navigationBarTranslucent), as the modal does.
     const showSubscription = Platform.OS === "ios"
       ? Keyboard.addListener("keyboardWillShow", (event) => setKeyboardHeight(event.endCoordinates.height))
       : KeyboardEvents.addListener("keyboardWillShow", (event) => setKeyboardHeight(event.height));
@@ -257,14 +257,12 @@ export function AdaptiveSheet({
         <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]} exiting={visible ? backdropExiting : undefined}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
         </Reanimated.View>
-        {/* The card follows keyboardHeight alone. RN's height mode keeps the modal's first, pre-inset height, so a
-            keyboard whose top sits below it flips the card between two positions. */}
-        <KeyboardAvoidingView
+        {/* Sheets follow keyboardHeight alone; RN's KeyboardAvoidingView reacts only on keyboardDidShow and would
+            move them a second time. */}
+        <View
           pointerEvents="box-none"
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          enabled={compact}
           className={`flex-1 ${compact ? "justify-end" : "items-center justify-center px-3"}`}
-          style={compact ? undefined : { paddingTop: CARD_MARGIN, paddingBottom: cardBottom }}
+          style={compact ? { paddingBottom: keyboardHeight } : { paddingTop: CARD_MARGIN, paddingBottom: cardBottom }}
         >
           <Reanimated.View
             collapsable={false}
@@ -325,7 +323,7 @@ export function AdaptiveSheet({
             ) : null}
             </Freeze>
           </Reanimated.View>
-        </KeyboardAvoidingView>
+        </View>
         <ToastViewport />
       </GestureHandlerRootView>
       </GlassBackdrop>
