@@ -405,15 +405,18 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
 
   const trimmedQuery = normalizeSearchQuery(query);
   const needle = trimmedQuery.toLowerCase();
-  const matchesListFilter = (session: UserSessionListItem) => {
-    if (listFilter.kind === "all") return true;
-    if (listFilter.kind === "source") return sessionSourceGroup(session) === listFilter.source;
-    return labelSessionIds.has(session.id);
-  };
-  const filteredSessions = displaySessions.filter((session) =>
-    (!needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false)) &&
-    matchesListFilter(session),
-  );
+  // Stable across input-free re-renders (focus, the page's menu) so LegendList, which memoizes rows on the item, redraws none.
+  const filteredSessions = useMemo(() => {
+    const matchesListFilter = (session: UserSessionListItem) => {
+      if (listFilter.kind === "all") return true;
+      if (listFilter.kind === "source") return sessionSourceGroup(session) === listFilter.source;
+      return labelSessionIds.has(session.id);
+    };
+    return displaySessions.filter((session) =>
+      (!needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false)) &&
+      matchesListFilter(session),
+    );
+  }, [displaySessions, labelSessionIds, listFilter, needle]);
   const sessionsById = useMemo(() => new Map(displaySessions.map((session) => [session.id, session])), [displaySessions]);
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatPanelItem[]>(() => {

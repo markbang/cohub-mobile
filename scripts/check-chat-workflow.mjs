@@ -1246,11 +1246,14 @@ for (const [tab, component, expectedRequests] of [
     },
     sessions: { list: async () => ({ sessions: [], pageInfo: { hasMore: false, nextCursor: null } }) },
   }) };
+  // Held, as the store and search hooks hold them, so re-renders see the same references.
+  const panelApp = { state: { sessionForks: {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} };
+  const panelSearch = { query: "", sessions: [], loading: false };
   const renderPanel = loadChromeComponent("../src/components/SpacePanels.tsx", "ChatPanel", {
     ...chromeScope, ...runner.hooks,
     invalidateScopes, EMPTY_LABELS: [], EMPTY_IDS: new Set(), EMPTY_SESSIONS: [], reconcileSessionHead,
-    ...appHooks(() => ({ state: { sessionForks: {} }, prefetchSession() {}, refreshSessionStatuses: async () => {}, rememberSessionForks() {} })),
-    useRemoteSearch: () => ({ query: "", sessions: [], loading: false }),
+    ...appHooks(() => panelApp),
+    useRemoteSearch: () => panelSearch,
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader", KeyboardAvoidingView: "KeyboardAvoidingView", PANEL_FILL: {},
@@ -1260,6 +1263,10 @@ for (const [tab, component, expectedRequests] of [
   const interval = (key) => runner.queryClient.getQueryCache().find({ queryKey: [key] })?.observers[0]?.options._interval;
   const realtime = async (event) => { invalidateScopes(runner.queryClient, spaceRealtimeChange(event)); await flushSync(); };
   render(); await flushSync();
+  // cfeed 01M6XJVJD42A3BJ9KGBMPJMQE3: focus changes and the page's menu re-render the mounted panel; with new
+  // items every time, LegendList redrew every row and Space pushes stalled twice as long once the panel had opened.
+  const listData = () => render().find((node) => node.type === "LegendList").props.data;
+  assert.equal(listData(), listData(), "a re-render with unchanged inputs keeps the Chats panel's list items");
   assert.equal(interval("space:space:labels"), 15000, "label definitions participate in foreground polling");
   remoteLabels = [{ id: "web-label", name: "Created on web", source: "user", systemKey: null }];
   await realtime({ type: "label.assignments.updated", spaceId: "space", payload: {} });
@@ -1535,6 +1542,74 @@ for (const isPinned of [false, true]) {
       assert.deepEqual(events.splice(0), ["close", "togglePin"]);
     } else assert.equal(items[3].props.disabled, true);
   }
+}
+
+// cfeed 01M6XJVJD42A3BJ9KGBMPJMQE3: the drawn Space menu's open state lived in the screen, so opening and closing
+// it re-rendered the whole page and its mounted panels. Only the menu's own host may change.
+{
+  const spaceRoute = "../app/space/[spaceId]/index.tsx";
+  const elementNodes = (node) => {
+    if (Array.isArray(node)) return node.flatMap(elementNodes);
+    if (!node || typeof node !== "object" || !("type" in node)) return [];
+    return [node, ...Object.values(node.props ?? {}).flatMap(elementNodes)];
+  };
+  const hookRunner = () => {
+    const writes = [];
+    const base = createScreenHooks();
+    const useState = (initial) => { const [value, set] = base.hooks.useState(initial); return [value, (next) => { writes.push(next); set(next); }]; };
+    return { writes, hooks: { ...base.hooks, useState }, render: base.render };
+  };
+  const query = { data: undefined, error: null, isFetching: false, isPending: false, isError: false, refetch() {} };
+  const space = { id: "space", name: "Space", slug: "space", isPinned: false, status: "running" };
+  const screen = hookRunner();
+  const renderScreen = loadChromeComponent(spaceRoute, "SpaceScreen", {
+    ...chromeScope, ...screen.hooks,
+    useRouter: () => ({ back() {}, push() {} }), useLocalSearchParams: () => ({ spaceId: "space" }), useSpaceRealtime: () => {}, useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useToast: () => () => {},
+    useAppActions: () => ({ client: {}, refreshHome: async () => {}, refreshSessionStatuses: async () => {}, refreshSpacePin: async () => false, toggleSpacePin: async () => {}, upsertSpace() {}, prefetchSession() {}, recordSpaceVisit() {} }),
+    useAppSelector: (select) => select({ state: { booting: false, refreshing: false, realtimeError: null, spaces: [space], sessions: [] } }),
+    shallowEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right), useFocusEffect: () => {}, useQueryClient: () => ({}),
+    useScreenQuery: () => query, useSyncQuery: () => {}, usePagedQuery: () => ({ query, items: null, hasMore: false, loadingMore: false, loadMore: async () => {} }),
+    SPACE_REFRESH_INTERVAL_MS: 60_000, SPACE_SESSION_COUNT_PAGE_SIZE: 20, NO_SESSIONS: [], NO_CHECKPOINTS: [], NO_APPS: [], NO_TASKS: [],
+    sortByRecent: (items) => items, displaySpaceName: (item) => item.name, preferRecentSession: (_current, incoming) => incoming,
+    Screen: "Screen", ScrollView: "ScrollView", SpacePanels: "SpacePanels", SessionRow: "SessionRow", Avatar: "Avatar", ActivityHeatmap: "ActivityHeatmap", SectionHeader: "SectionHeader", PrimaryButton: "PrimaryButton", LoadingState: "LoadingState", ResourceRow: "ResourceRow", ResourceEmpty: "ResourceEmpty",
+    NativeMenuButton: "NativeMenuButton", nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
+    SpaceActionsHost: "SpaceActionsHost", SpaceActionsTrigger: "SpaceActionsTrigger",
+  });
+  const page = screen.render(renderScreen);
+  const host = elementNodes(page).find((node) => node.type === "SpaceActionsHost");
+  const hostRunner = hookRunner();
+  let provided = null;
+  const SpaceActionsContext = { Provider: "SpaceActionsContext.Provider" };
+  const hostScope = { ...chromeScope, ...hostRunner.hooks, SpaceActionsContext, MenuPresence: "MenuPresence" };
+  const renderHost = host ? loadChromeComponent(spaceRoute, "SpaceActionsHost", hostScope) : null;
+  const drawHost = () => {
+    const tree = hostRunner.render(() => renderHost(host.props));
+    provided = tree.props.value;
+    return tree;
+  };
+  if (host) drawHost();
+  const renderTrigger = host ? loadChromeComponent(spaceRoute, "SpaceActionsTrigger", { ...chromeScope, SpaceActionsContext, useContext: () => provided, MenuAnchor: "MenuAnchor" }) : null;
+  // The trigger sits in the bar inside the page; on a screen without the host it is an inline button.
+  const triggerNodes = () => {
+    const trigger = elementNodes(page).find((node) => node.type === "SpaceActionsTrigger");
+    return trigger ? elementNodes(renderTrigger(trigger.props)) : elementNodes(page);
+  };
+  triggerNodes().find((node) => node.type === "IconButton" && node.props.label === "space.actions").props.onPress();
+  assert.deepEqual(screen.writes, [], "opening the Space menu must not re-render the Space page");
+  assert.ok(host, "the Space menu's state lives in its own host");
+  const opened = drawHost();
+  const [content, presence] = opened.props.children;
+  assert.equal(content.props.children[0], host.props.children, "the open menu reuses the page element the screen built, so React skips the page");
+  assert.equal(content.props.accessibilityElementsHidden, true, "the page under the open menu is hidden from assistive technology");
+  assert.equal(presence.props.open, true);
+  const menu = presence.props.children[0];
+  assert.deepEqual([menu.type, menu.props.testID, menu.props.sections.flatMap((section) => section.actions).length], ["AnchoredActionMenu", "space-actions-menu", 5]);
+  assert.equal(triggerNodes().find((node) => node.type === "MenuAnchor").props.open, true, "the trigger hides while the menu stands in its place");
+  menu.props.onClose();
+  const closed = drawHost();
+  assert.deepEqual(screen.writes, [], "closing the Space menu must not re-render the Space page");
+  assert.equal(closed.props.children[1].props.open, false, "closing hands the menu to its presence to shrink away");
+  assert.equal(drawHost().props.children[1].props.children[0].props.onClose, menu.props.onClose, "the menu's close handler stays stable, so its back-handler effect does not resubscribe");
 }
 
 // Spaces uses the capsule for the create sheet's Cloud / This device choice.
