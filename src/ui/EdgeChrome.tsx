@@ -84,6 +84,15 @@ export function EdgeBlurTarget({ attach, children }: { attach: (node: View | nul
 }
 
 /**
+ * The whole screen, chrome included, for glass in a Modal over that chrome (`GlassBackdrop`): a composer menu then
+ * blurs the composer under it, as iOS's does. Chrome inside keeps blurring its `EdgeBlurTarget`.
+ */
+export function ScreenBlurTarget({ attach, children }: { attach: (node: View | null) => void; children: ReactNode }) {
+  if (!androidBlur) return children;
+  return <BlurTargetView ref={attach} style={BLUR_TARGET_STYLE}><View className="flex-1 bg-background">{children}</View></BlurTargetView>;
+}
+
+/**
  * iOS 27's navigation bar once content scrolls under it, as captured on its tab roots: a material a little
  * lighter than the page covers the status bar and the bar, letting only a heavy blur of the content through,
  * and fades out over `BAR_EDGE_TAIL` pt below the bar. Dimezis draws a 15% grain over its blur, which iOS
