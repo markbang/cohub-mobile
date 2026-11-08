@@ -71,6 +71,8 @@ export const SCREENS = [
   { name: "settings-select", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }] },
   { name: "composer-attach", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }] },
   { name: "composer-model", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }] },
+  // The model selector in a real Chat, scrolled back so messages run under the composer and the menu.
+  { name: "chat-real-model", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }, { swipe: "down" }, { tapOnId: "chat-composer-model" }, { waitFor: "Search models" }] },
   { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
