@@ -5135,6 +5135,33 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(getReplyContentWidth(787), 680, "a wide pane caps the reading line");
   assert.equal(getReplyRowWidth(787), 712);
 }
+{
+  // The right pane draws inside the tab app's screen, which is never focused while a pane route is on
+  // top; the pane's routes must take focus from the root navigator, or their screen queries never run.
+  const require = createRequire(import.meta.url);
+  const React = require("react");
+  const { renderToString } = require("react-dom/server");
+  const { FocusedRouteKeyContext, IsFocusedContext, useIsFocused } = require("expo-router/build/react-navigation/core/useIsFocused.js");
+  const { NavigationProvider, NavigationRouteContext } = require("expo-router/build/react-navigation/core/NavigationProvider.js");
+  const PaneContext = React.createContext(null);
+  const useScreenVisible = loadChromeComponent("../src/ui/pane.tsx", "useScreenVisible", { useIsFocused, useContext: React.useContext, PaneContext, useRoute: () => React.useContext(NavigationRouteContext) });
+  const SplitRoot = loadChromeComponent("../src/components/SplitStack.tsx", "SplitRoot", { React, View: ({ children }) => children, StyleSheet: { hairlineWidth: 1 }, PaneContext, IsFocusedContext, EmptyPane: () => null });
+  const visibleScreens = (routes, split) => {
+    const seen = {};
+    const Probe = ({ name }) => { seen[name] = useScreenVisible(); return null; };
+    const screen = (key) => React.createElement(NavigationProvider, { key, route: { key, name: key }, navigation: {} }, React.createElement(Probe, { name: key }));
+    const { root, pane, overlays } = splitRoutes(routes.map((name) => ({ name, key: name })));
+    const leftPane = { width: 320, visibleKeys: overlays.length === 0 ? new Set(["spaces"]) : null };
+    const tabApp = React.createElement(SplitRoot, { split, leftPane, rightPane: { width: 860, visibleKeys: null }, paneStack: pane.map((route) => screen(route.key)), navigatorFocused: undefined }, screen("spaces"), screen("chats"));
+    renderToString(React.createElement(FocusedRouteKeyContext, { value: routes.at(-1) }, React.createElement(NavigationProvider, { route: root, navigation: {} }, tabApp), ...overlays.map((route) => screen(route.key))));
+    return seen;
+  };
+  assert.deepEqual(visibleScreens(["(tabs)", "space/[spaceId]"], true), { spaces: true, chats: false, "space/[spaceId]": true }, "the right pane's only screen is focused beside the left pane's tab on view");
+  assert.deepEqual(visibleScreens(["(tabs)", "space/[spaceId]", "space/[spaceId]/settings"], true), { spaces: true, chats: false, "space/[spaceId]": false, "space/[spaceId]/settings": true });
+  assert.deepEqual(visibleScreens(["(tabs)", "space/[spaceId]", "space/[spaceId]/settings", "space/[spaceId]/wallet"], true), { spaces: true, chats: false, "space/[spaceId]": false, "space/[spaceId]/settings": false, "space/[spaceId]/wallet": true }, "only the top of the right pane is focused; covered screens wait as on a phone");
+  assert.deepEqual(visibleScreens(["(tabs)", "space/[spaceId]", "new-chat"], true), { spaces: false, chats: false, "space/[spaceId]": false, "new-chat": true }, "a screen over both panes takes focus from both");
+  assert.deepEqual(visibleScreens(["(tabs)", "space/[spaceId]"], false), { spaces: false, chats: false }, "a compact window draws no right pane");
+}
 
 {
   const now = Date.parse("2026-11-03T12:00:00Z");
