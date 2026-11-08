@@ -224,9 +224,12 @@ export function AdaptiveSheet({
   }, [compact, dragY, progress, revealDistance]);
   const availableHeight = Math.max(0, height - keyboardHeight);
   // As iOS 26's: a page sheet starts right under the status bar; a floating one keeps its margin all round.
+  // A centered card keeps its margin from the screen's bottom or the keyboard's top, whichever is higher, so a
+  // floating keyboard that insets only a few dp leaves it where it is.
+  const cardBottom = Math.max(CARD_MARGIN, keyboardHeight);
   const maxHeight = compact
     ? Math.max(0, availableHeight - insets.top - (floating ? FLOAT_MARGIN * 2 : 0))
-    : Math.max(0, Math.min(availableHeight - 48, 760));
+    : Math.max(0, Math.min(height - CARD_MARGIN - cardBottom, 760));
   // A floating sheet ends above the screen's edge but still runs its content clear of the home indicator.
   const bottomPadding = floating ? theme.spacing.lg + insets.bottom : Math.max(insets.bottom, theme.spacing.lg);
   // Wrap-content sheets only have maxHeight. A flex:1 scroller then collapses to 0 and hides the body.
@@ -254,10 +257,14 @@ export function AdaptiveSheet({
         <Reanimated.View className="absolute inset-0" style={[SCRIM, backdropStyle]} exiting={visible ? backdropExiting : undefined}>
           <Pressable accessible={false} aria-hidden tabIndex={-1} className="absolute inset-0" onPress={requestClose} />
         </Reanimated.View>
+        {/* The card follows keyboardHeight alone. RN's height mode keeps the modal's first, pre-inset height, so a
+            keyboard whose top sits below it flips the card between two positions. */}
         <KeyboardAvoidingView
           pointerEvents="box-none"
           behavior={Platform.OS === "ios" ? "padding" : "height"}
-          className={`flex-1 ${compact ? "justify-end" : "items-center justify-center px-3 py-6"}`}
+          enabled={compact}
+          className={`flex-1 ${compact ? "justify-end" : "items-center justify-center px-3"}`}
+          style={compact ? undefined : { paddingTop: CARD_MARGIN, paddingBottom: cardBottom }}
         >
           <Reanimated.View
             collapsable={false}
@@ -269,7 +276,7 @@ export function AdaptiveSheet({
             style={[
               { borderCurve: "continuous" },
               compact ? (floating ? FLOATING_PANEL : keyboardHeight > 0 ? PAGE_PANEL : [PAGE_PANEL, PAGE_PANEL_BOTTOM]) : null,
-              { maxHeight, height: compact && page ? maxHeight : undefined },
+              { maxHeight, height: page ? maxHeight : undefined },
               compact ? compactPanelStyle : desktopPanelStyle,
             ]}
           >
@@ -336,6 +343,7 @@ const Freeze = memo(function Freeze({ children }: { frozen: boolean; children: R
 }, (_previous, next) => next.frozen);
 
 const CONTENT_PADDING = { paddingHorizontal: 16, paddingTop: 12 } as const;
+const CARD_MARGIN = 24;
 // iOS 27's sheets on a 402 pt iPhone, measured from the UI Snapshots captures: a fitted sheet floats 8 pt in
 // with 36 pt corners; a page sheet starts right under the status bar with 38 pt top corners; the grabber is
 // 57 × 4 pt, 6 pt down.

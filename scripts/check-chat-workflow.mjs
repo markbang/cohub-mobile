@@ -5396,4 +5396,51 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual([described.subtitle, described.trailing], ["About", null], "a description owns the second line");
 }
 
+{
+  const path = "../src/components/AdaptiveSheet.tsx";
+  const constants = {};
+  for (const name of ["COMPACT_BREAKPOINT", "CARD_MARGIN", "CONTENT_PADDING", "FLOAT_MARGIN", "FLOATING_PANEL", "PAGE_PANEL", "PAGE_PANEL_BOTTOM", "GRABBER", "GRABBER_SLOT", "SCRIM"]) constants[name] = loadChromeComponent(path, name, constants);
+  const keyboard = {};
+  let window = { width: 1152, height: 720 };
+  const hooks = createScreenHooks();
+  const renderSheet = loadChromeComponent(path, "AdaptiveSheet", {
+    ...chromeScope, ...hooks.hooks,
+    ...constants,
+    RELEASE_PROJECTION_S: 0.1, CLOSE_TIMING: {}, motion, scrim: { dark: 0.5, light: 0.3 }, springs: {},
+    useAppTheme: () => ({ mode: "light", spacing: { lg: 16 } }),
+    useSafeAreaInsets: () => ({ top: 24, bottom: 16, left: 0, right: 0 }),
+    useWindowDimensions: () => window,
+    useSharedValue: (value) => ({ get: () => value, set() {} }), useAnimatedStyle: () => ({}),
+    cancelAnimation() {}, withSpring: () => 0, withTiming: () => 0, withDelay: () => 0, interpolate: () => 0, Extrapolation: {}, scheduleOnRN() {},
+    requestAnimationFrame: () => 0, cancelAnimationFrame() {},
+    Gesture: { Pan: () => new Proxy({}, { get: (target, key, proxy) => () => proxy }) },
+    KeyboardEvents: { addListener: (name, listener) => { keyboard[name] = listener; return { remove() {} }; } },
+    Modal: "Modal", GlassBackdrop: "GlassBackdrop", GestureHandlerRootView: "GestureHandlerRootView", KeyboardAvoidingView: "KeyboardAvoidingView",
+    Reanimated: { View: "ReanimatedView" }, ScrollView: "ScrollView", Freeze: "Freeze", SheetDrag: "SheetDrag", ToastViewport: "ToastViewport", SheetConfirmButton: "SheetConfirmButton",
+    CompactSettingsRows: { Provider: "CompactSettingsRowsProvider" },
+  });
+  const render = (props) => chromeNodes(hooks.render(() => renderSheet({ visible: true, title: "Turns", onClose() {}, children: "list", ...props })));
+  const panel = (props) => Object.assign({}, ...render(props).find((node) => node.props.role === "dialog").props.style.flat(Infinity).filter(Boolean));
+  const avoider = (props) => render(props).find((node) => node.type === "KeyboardAvoidingView").props;
+  const turns = { fullHeight: true, scrollable: false, contentStyle: { flex: 1, minHeight: 0 } };
+
+  assert.equal(panel(turns).height, 720 - 48, "a full-height tablet card has a height, so the turn list's flex:1 body is not collapsed to 0");
+  assert.equal(panel({}).height, undefined, "a regular tablet card still sizes to its content");
+  assert.equal(avoider({}).enabled, false, "RN's KeyboardAvoidingView does not move a tablet card");
+  assert.equal(avoider({}).style.paddingBottom, 24);
+  keyboard.keyboardWillShow({ height: 21 });
+  assert.equal(avoider({}).style.paddingBottom, 24, "a floating keyboard's few-dp inset leaves the card where it is");
+  keyboard.keyboardWillShow({ height: 340 });
+  assert.equal(avoider({}).style.paddingBottom, 340, "a docked keyboard lifts the card above it");
+  assert.equal(panel(turns).height, 720 - 24 - 340, "the full-height card fits between the top margin and the keyboard");
+  keyboard.keyboardWillHide();
+
+  window = { width: 402, height: 874 };
+  assert.equal(avoider({}).enabled, true, "phone sheets keep the KeyboardAvoidingView");
+  assert.equal(avoider({}).style, undefined);
+  assert.equal(panel(turns).height, 874 - 24, "a phone page sheet fills the height below the status bar");
+  assert.equal(panel({ detent: "fit" }).height, undefined, "a phone fit sheet sizes to its content");
+  hooks.unmount();
+}
+
 console.log("Chat workflow checks passed");
