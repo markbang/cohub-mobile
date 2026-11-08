@@ -4,7 +4,8 @@ import { createStandardNativeStackNavigator, type NativeStackNavigatorCreateProp
 import { StackRouter } from "expo-router/build/layouts/stack-router";
 import { useLinkPreviewContext } from "expo-router/build/link/preview/LinkPreviewContext";
 import { INTERNAL_EXPO_ROUTER_NO_ANIMATION_PARAM_NAME } from "expo-router/build/navigationParams";
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { IsFocusedContext } from "expo-router/build/react-navigation/core/useIsFocused";
+import { use, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { chatSessionId, focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
 import { useTranslation } from "@/src/i18n";
@@ -29,6 +30,7 @@ const NativeStackContent = createStandardNativeStackNavigator.NavigatorContent;
  */
 function SplitStackContent(props: ContentProps) {
   const { state, descriptors, emitter, isPreloaded } = props;
+  const navigatorFocused = use(IsFocusedContext);
   const window = useWindowDimensions();
   const mode = splitMode(window.width, window.height);
   const split = mode === "split";
@@ -83,7 +85,7 @@ function SplitStackContent(props: ContentProps) {
     ...descriptors,
     [root.key]: {
       ...rootDescriptor,
-      render: () => <SplitRoot split={split} leftPane={leftPane} rightPane={rightPane} paneStack={paneStack}>{rootDescriptor.render()}</SplitRoot>,
+      render: () => <SplitRoot split={split} leftPane={leftPane} rightPane={rightPane} paneStack={paneStack} navigatorFocused={navigatorFocused}>{rootDescriptor.render()}</SplitRoot>,
     },
   };
   const outerState = split ? { index: overlays.length, routes: [root, ...overlays] } : state;
@@ -93,14 +95,18 @@ function SplitStackContent(props: ContentProps) {
   </SplitLayoutContext>;
 }
 
-/** The tab app's screen. Its children keep one position in both layouts, so switching never remounts the tabs. */
-function SplitRoot({ split, leftPane, rightPane, paneStack, children }: { split: boolean; leftPane: Pane; rightPane: Pane; paneStack: ReactNode; children: ReactNode }) {
+/**
+ * The tab app's screen. Its children keep one position in both layouts, so switching never remounts the tabs.
+ * The right pane draws inside this screen, which is unfocused whenever a pane route is on top; its
+ * routes take focus from the root navigator instead, as they would as the stack's own screens.
+ */
+function SplitRoot({ split, leftPane, rightPane, paneStack, navigatorFocused, children }: { split: boolean; leftPane: Pane; rightPane: Pane; paneStack: ReactNode; navigatorFocused: boolean | undefined; children: ReactNode }) {
   return <View className="flex-1 flex-row">
     {/* Each pane clips its own push transitions and slide-out panels. */}
     <View className={split ? "overflow-hidden border-border" : "flex-1"} style={split ? { width: leftPane.width, borderRightWidth: StyleSheet.hairlineWidth } : undefined}>
       <PaneContext value={split ? leftPane : null}>{children}</PaneContext>
     </View>
-    {split ? <View testID="split-right-pane" className="flex-1 overflow-hidden"><PaneContext value={rightPane}>{paneStack ?? <EmptyPane />}</PaneContext></View> : null}
+    {split ? <View testID="split-right-pane" className="flex-1 overflow-hidden"><IsFocusedContext value={navigatorFocused}><PaneContext value={rightPane}>{paneStack ?? <EmptyPane />}</PaneContext></IsFocusedContext></View> : null}
   </View>;
 }
 
