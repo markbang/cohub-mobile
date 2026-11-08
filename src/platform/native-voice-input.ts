@@ -9,6 +9,9 @@ type VoiceCallbacks = {
   onFinal: (text: string) => void;
 };
 
+/** `starting` lasts until the in-flight `start` settles, even when `stop` lands during it. */
+type VoicePhase = "idle" | "starting" | "recording";
+
 type VoiceMessage = {
   type?: string;
   payload?: { text?: unknown; message?: unknown };
@@ -36,13 +39,12 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
   const waitingRef = useRef<((message: VoiceMessage) => void) | null>(null);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const streamStopRequestedRef = useRef(false);
-  const streamStartedRef = useRef(false);
   const streamOwnerRef = useRef<number | null>(null);
   const operationRef = useRef(0);
-  const startInFlightRef = useRef(false);
   const mountedRef = useRef(true);
-  const [isStarting, setIsStarting] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  // Guards read the ref: a second tap can land before the render that shows the new phase.
+  const phaseRef = useRef<VoicePhase>("idle");
+  const [phase, setPhaseState] = useState<VoicePhase>("idle");
   const [partial, setPartial] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { stream } = useAudioStream({
@@ -63,6 +65,19 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
     onFinalRef.current = onFinal;
   }, [onFinal]);
 
+  const setPhase = useCallback((next: VoicePhase) => {
+    phaseRef.current = next;
+    if (mountedRef.current) setPhaseState(next);
+  }, []);
+
+  const endRecording = useCallback(() => {
+    if (phaseRef.current === "recording") setPhase("idle");
+  }, [setPhase]);
+
+  const endStarting = useCallback(() => {
+    if (phaseRef.current === "starting") setPhase("idle");
+  }, [setPhase]);
+
   const closeSocket = useCallback(() => {
     waitingRef.current = null;
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
@@ -74,8 +89,7 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
 
   const stopOwnedStream = useCallback(
     (owner: number) => {
-      if (!streamStartedRef.current || streamOwnerRef.current !== owner) return;
-      streamStartedRef.current = false;
+      if (streamOwnerRef.current !== owner) return;
       streamOwnerRef.current = null;
       streamStopRequestedRef.current = true;
       try {
@@ -95,20 +109,17 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
   }, [stopOwnedStream]);
 
   const start = useCallback(async () => {
-    if (startInFlightRef.current || isStarting || isRecording) return;
-    if (streamStartedRef.current) return;
+    if (phaseRef.current !== "idle" || streamOwnerRef.current !== null) return;
 
     const operation = operationRef.current + 1;
     operationRef.current = operation;
-    startInFlightRef.current = true;
+    setPhase("starting");
     // A prior stop may still have a delayed server close callback. Clear both
     // the timer and socket before assigning this operation's connection.
     closeSocket();
     streamStopRequestedRef.current = false;
-    streamOwnerRef.current = null;
     const isCurrent = () => mountedRef.current && operationRef.current === operation;
     setError(null);
-    setIsStarting(true);
 
     try {
       const permission = await requestRecordingPermissionsAsync();
@@ -139,7 +150,7 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
           reject(new Error(translate("voice.connectionClosed")));
           if (isCurrent()) {
             stopStream();
-            setIsRecording(false);
+            endRecording();
           }
         };
       });
@@ -173,13 +184,13 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
         if (message.type === "asr.done") {
           setPartial("");
           stopStream();
-          setIsRecording(false);
+          endRecording();
           closeSocket();
         }
         if (message.type === "asr.error") {
           setError(asText(message.payload?.message) || translate("voice.failed"));
           stopStream();
-          setIsRecording(false);
+          endRecording();
           closeSocket();
         }
       };
@@ -193,13 +204,12 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
       await asrReady;
       if (!isCurrent()) return;
       await stream.start();
-      streamStartedRef.current = true;
       streamOwnerRef.current = operation;
       if (!isCurrent() || streamStopRequestedRef.current) {
         stopOwnedStream(operation);
         return;
       }
-      setIsRecording(true);
+      setPhase("recording");
     } catch (caught) {
       if (!isCurrent()) {
         stopOwnedStream(operation);
@@ -208,12 +218,10 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
       stopOwnedStream(operation);
       closeSocket();
       setError(voiceErrorMessage(caught));
-      setIsRecording(false);
     } finally {
-      startInFlightRef.current = false;
-      if (mountedRef.current) setIsStarting(false);
+      endStarting();
     }
-  }, [closeSocket, getAccessToken, isRecording, isStarting, stopOwnedStream, stopStream, stream]);
+  }, [closeSocket, endRecording, endStarting, getAccessToken, setPhase, stopOwnedStream, stopStream, stream]);
 
   const stop = useCallback(() => {
     operationRef.current += 1;
@@ -225,12 +233,9 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
     } else {
       closeSocket();
     }
-    if (mountedRef.current) {
-      setPartial("");
-      setIsRecording(false);
-      if (!startInFlightRef.current) setIsStarting(false);
-    }
-  }, [closeSocket, stopStream]);
+    if (mountedRef.current) setPartial("");
+    endRecording();
+  }, [closeSocket, endRecording, stopStream]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -248,8 +253,8 @@ export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks)
   return {
     start,
     stop,
-    isStarting,
-    isRecording,
+    isStarting: phase === "starting",
+    isRecording: phase === "recording",
     partial,
     error,
   };

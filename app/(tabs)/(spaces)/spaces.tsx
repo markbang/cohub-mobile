@@ -81,8 +81,9 @@ export default function SpacesScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [create, setCreate] = useState<{ status: "idle" | "creating" } | { status: "failed"; message: string }>({ status: "idle" });
+  const creating = create.status === "creating";
+  const createError = create.status === "failed" ? create.message : null;
   const toast = useToast();
   const deviceInstances = useDeviceRuntimeInstances();
   const [placement, setPlacement] = useState<"cloud" | "device">("cloud");
@@ -200,20 +201,16 @@ export default function SpacesScreen() {
   };
 
   const submitCreate = async () => {
-    setCreating(true);
-    setCreateError(null);
+    setCreate({ status: "creating" });
     const space = await createSpace(name, description, { onDevice }).catch((error: unknown) => {
-      setCreateError(error instanceof Error ? error.message : t("spaces.create.error"));
+      setCreate({ status: "failed", message: error instanceof Error ? error.message : t("spaces.create.error") });
       return null;
     });
-    if (!space) {
-      setCreating(false);
-      return;
-    }
+    if (!space) return;
     // Once the Space exists the sheet must close, since a retry from it would create a duplicate;
     // `connectFolder` reports a failure without throwing, and the folder can be reconnected in the Space.
     if (onDevice && folder) await connectFolder(space.id, folder.path);
-    setCreating(false);
+    setCreate({ status: "idle" });
     resetCreate();
     router.push({ pathname: "/space/[spaceId]", params: { spaceId: space.id } });
   };
@@ -224,7 +221,7 @@ export default function SpacesScreen() {
   const searchEmpty = remoteSearch.query === trimmedQuery && remoteSearch.loading && trimmedQuery.length >= 2 && listItems.length === 0
     ? <LoadingState label={t("spaces.searching")} />
     : filter === "device" && !trimmedQuery
-      ? <EmptyState icon="smartphone" title={t("spaces.empty.device.title")} description={t("spaces.empty.device.body")} action={{ icon: "plus", label: t("spaces.action.create"), onPress: () => { setCreateError(null); setPlacement("device"); setCreateOpen(true); } }} />
+      ? <EmptyState icon="smartphone" title={t("spaces.empty.device.title")} description={t("spaces.empty.device.body")} action={{ icon: "plus", label: t("spaces.action.create"), onPress: () => { setCreate({ status: "idle" }); setPlacement("device"); setCreateOpen(true); } }} />
       : <EmptyState icon={filter === "pinned" ? "pin" : trimmedQuery ? "search" : "layers"} title={filter === "pinned" ? t("spaces.empty.pinned.title") : trimmedQuery ? t("spaces.empty.matching.title") : t("spaces.empty.none.title")} action={filter === "pinned" || trimmedQuery ? { icon: "x", label: t("spaces.action.clearFilters"), onPress: () => { setFilter("recent"); setQuery(""); } } : undefined} />;
 
   const filterOptions = [
@@ -239,7 +236,7 @@ export default function SpacesScreen() {
     const count = filterCounts[option.value];
     return { icon: option.icon, title: count === null ? option.label : `${option.label} · ${count}`, checked: option.value === filter, onPress: () => setFilter(option.value) };
   });
-  const openCreate = () => { setCreateError(null); setCreateOpen(true); };
+  const openCreate = () => { setCreate({ status: "idle" }); setCreateOpen(true); };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
     title: t("tabs.spaces"),

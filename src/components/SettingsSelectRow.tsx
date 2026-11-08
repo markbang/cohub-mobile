@@ -28,7 +28,9 @@ const MARGIN = 12;
 const PRESS_DELAY_MS = 120;
 const TOUCH_SLOP = 8;
 
-type PressState = { timer: ReturnType<typeof setTimeout> | null; x: number; y: number; sliding: boolean; held: boolean };
+type PressState =
+  | { phase: "idle" | "held" | "sliding"; x: number; y: number }
+  | { phase: "pending"; timer: ReturnType<typeof setTimeout>; x: number; y: number };
 type MenuLayout = { left: number; top: number; width: number; height: number; anchor: MorphRect };
 
 /** Places the menu over the value it replaces, trailing edges aligned; it grows upward when the space below runs out. */
@@ -72,11 +74,11 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   // Touch callbacks read the latest menu and press through shared values: a press outlives the render that began it.
   const menuRef = useSharedValue<MenuLayout | null>(null);
   const highlightRef = useSharedValue<number | null>(null);
-  const press = useSharedValue<PressState>({ timer: null, x: 0, y: 0, sliding: false, held: false });
+  const press = useSharedValue<PressState>({ phase: "idle", x: 0, y: 0 });
   const current = options.find((option) => option.value === value);
   const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, ...options.map((option) => Array.from(option.label).length * 10 + 60)));
 
-  useEffect(() => () => { const timer = press.get().timer; if (timer) clearTimeout(timer); }, [press]);
+  useEffect(() => () => { const state = press.get(); if (state.phase === "pending") clearTimeout(state.timer); }, [press]);
 
   const open = () => {
     if (disabled) return;
@@ -122,27 +124,31 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
       if (!touch) return;
       // Inside a scroll view a touch may start a scroll, so the menu waits a beat before claiming it.
       const timer = setTimeout(() => {
-        press.set({ ...press.get(), timer: null, held: true });
+        const state = press.get();
+        press.set({ phase: "held", x: state.x, y: state.y });
         manager.activate();
         open();
       }, PRESS_DELAY_MS);
-      press.set({ timer, x: touch.absoluteX, y: touch.absoluteY, sliding: false, held: false });
+      press.set({ phase: "pending", timer, x: touch.absoluteX, y: touch.absoluteY });
     })
     .onTouchesMove((event, manager) => {
       const touch = event.allTouches[0];
       if (!touch) return;
       const state = press.get();
       const moved = Math.hypot(touch.absoluteX - state.x, touch.absoluteY - state.y) > TOUCH_SLOP;
-      if (!state.held) {
-        if (moved && state.timer) {
+      if (state.phase === "pending") {
+        if (moved) {
           clearTimeout(state.timer);
-          press.set({ ...state, timer: null });
+          press.set({ phase: "idle", x: state.x, y: state.y });
           manager.fail();
         }
         return;
       }
-      if (!state.sliding && !moved) return;
-      if (!state.sliding) press.set({ ...state, sliding: true });
+      if (state.phase === "idle") return;
+      if (state.phase === "held") {
+        if (!moved) return;
+        press.set({ ...state, phase: "sliding" });
+      }
       const index = optionAt(touch.absoluteX, touch.absoluteY);
       if (index !== highlightRef.get()) {
         highlightRef.set(index);
@@ -152,17 +158,17 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
     })
     .onTouchesUp((event, manager) => {
       const state = press.get();
-      if (state.timer) {
+      if (state.phase === "pending") {
         // A quick tap: open on release and leave the menu up for a second tap.
         clearTimeout(state.timer);
-        press.set({ ...state, timer: null });
+        press.set({ phase: "idle", x: state.x, y: state.y });
         manager.fail();
         open();
         return;
       }
       const touch = event.changedTouches[0];
       // A press let go where it went down leaves the menu open; one slid onto a choice picks it.
-      const index = state.sliding && touch ? optionAt(touch.absoluteX, touch.absoluteY) : null;
+      const index = state.phase === "sliding" && touch ? optionAt(touch.absoluteX, touch.absoluteY) : null;
       highlightRef.set(null);
       if (index !== null) choose(options[index].value);
       else setHighlight(null);
@@ -171,8 +177,10 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
     // Already finishing: failing it here re-enters the state change (see FloatingTabBar).
     .onTouchesCancelled(() => {
       const state = press.get();
-      if (state.timer) clearTimeout(state.timer);
-      press.set({ ...state, timer: null });
+      if (state.phase === "pending") {
+        clearTimeout(state.timer);
+        press.set({ phase: "idle", x: state.x, y: state.y });
+      }
       highlightRef.set(null);
       setHighlight(null);
     });

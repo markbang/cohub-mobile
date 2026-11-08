@@ -17,17 +17,21 @@ export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, 
   // Callbacks and copy are read when the system calls back, not when the sheet was shown.
   const latest = useRef({ onConfirm, onClose, title, error });
   useEffect(() => { latest.current = { onConfirm, onClose, title, error }; });
-  const shown = useRef(false);
-  const attempted = useRef(false);
+  // `confirming` from a confirm or retry until its outcome is handled; a retry after closing is dropped.
+  const stage = useRef<"closed" | "shown" | "confirming">("closed");
+  const confirm = () => {
+    if (stage.current === "closed") return;
+    stage.current = "confirming";
+    latest.current.onConfirm();
+  };
 
   useEffect(() => {
     if (!visible) {
-      shown.current = false;
-      attempted.current = false;
+      stage.current = "closed";
       return;
     }
-    if (shown.current) return;
-    shown.current = true;
+    if (stage.current !== "closed") return;
+    stage.current = "shown";
     ActionSheetIOS.showActionSheetWithOptions({
       title,
       message: [subtitle, message].filter(Boolean).join("\n\n"),
@@ -37,8 +41,7 @@ export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, 
       userInterfaceStyle: theme.mode,
     }, (index) => {
       if (index === 1) {
-        attempted.current = true;
-        latest.current.onConfirm();
+        confirm();
       } else {
         latest.current.onClose();
       }
@@ -47,14 +50,14 @@ export function ConfirmSheet({ visible, title, subtitle, message, confirmLabel, 
 
   useEffect(() => {
     // Only a failure of the confirm just made is reported; an older error on the screen is not.
-    if (!visible || busy || !attempted.current) return;
-    attempted.current = false;
+    if (!visible || busy || stage.current !== "confirming") return;
+    stage.current = "shown";
     const failure = latest.current.error;
     // Still open without an error: the owner reported the failure its own way, so let go of the sheet.
     if (!failure) { latest.current.onClose(); return; }
     Alert.alert(latest.current.title, failure, [
       { text: t("common.cancel"), style: "cancel", onPress: () => latest.current.onClose() },
-      { text: t("common.retry"), isPreferred: true, onPress: () => { attempted.current = true; latest.current.onConfirm(); } },
+      { text: t("common.retry"), isPreferred: true, onPress: confirm },
     ], { userInterfaceStyle: theme.mode, onDismiss: () => latest.current.onClose() });
   }, [busy, error, t, theme.mode, visible]);
 

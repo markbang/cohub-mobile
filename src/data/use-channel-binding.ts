@@ -13,23 +13,22 @@ export function useChannelBinding(client: CohubClient | null, channel: Channel, 
     queryFn: (): Promise<SpaceRecord[]> => listAllSpaces(client!),
     enabled: Boolean(client) && !channel.boundSpace,
   });
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<{ status: "idle" | "saving" } | { status: "failed"; message: string }>({ status: "idle" });
+  const saving = saveState.status === "saving";
+  const saveError = saveState.status === "failed" ? saveState.message : null;
   const loadError = !client ? t("settings.channels.connect") : spacesQuery.error ? spacesQuery.error.message || t("settings.channels.bindingError") : null;
 
   const save = async (spaceId: string): Promise<void> => {
     if (!client || saving) return;
-    setSaving(true);
-    setSaveError(null);
+    setSaveState({ status: "saving" });
     try {
       if (channel.boundSpace) await client.space(channel.boundSpace.id).channels.unbind(channel.id);
       else await client.space(spaceId).channels.bind(channel.id);
       void queryClient.invalidateQueries({ queryKey: ["channels"] });
+      setSaveState({ status: "idle" });
       onChanged();
     } catch (caught) {
-      setSaveError(caught instanceof Error ? caught.message : t("settings.channels.bindingError"));
-    } finally {
-      setSaving(false);
+      setSaveState({ status: "failed", message: caught instanceof Error ? caught.message : t("settings.channels.bindingError") });
     }
   };
   return {
@@ -37,7 +36,10 @@ export function useChannelBinding(client: CohubClient | null, channel: Channel, 
     loading: Boolean(client) && !channel.boundSpace && spacesQuery.isPending,
     saving,
     error: saveError ?? loadError,
-    load: async () => { setSaveError(null); await spacesQuery.refetch(); },
+    load: async () => {
+      setSaveState((current) => (current.status === "failed" ? { status: "idle" } : current));
+      await spacesQuery.refetch();
+    },
     save,
   };
 }
