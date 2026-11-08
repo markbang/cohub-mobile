@@ -69,8 +69,15 @@ name: Tablet split layout
 # A draft survives turning the window.
 - tapOn:
     id: "chat-composer-input"
+# A retried run finds the previous attempt's draft, which is persisted.
+- eraseText: 60
 - inputText: "tablet draft 4821"
-- hideKeyboard
+# Maestro's hideKeyboard fails on the iPad simulator; there the keyboard stays up, which the steps allow.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - setOrientation: ${LANDSCAPE}
 - waitForAnimationToEnd:
     timeout: 5000
@@ -83,7 +90,12 @@ name: Tablet split layout
 - tapOn:
     id: "chat-composer-input"
 - eraseText: 30
-- hideKeyboard
+# Maestro's hideKeyboard fails on the iPad simulator; there the keyboard stays up, which the steps allow.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 
 # Selecting another Chat replaces the first instead of stacking on it.
 - tapOn:
