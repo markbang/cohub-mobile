@@ -1425,7 +1425,16 @@ let menuFocused = true;
 let menuPredictiveBackBlocked = null;
 const menuCleanups = [];
 // The rows live in their own component; it is expanded in place so the assertions below still reach them.
-const renderMenuContent = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredMenuContent", { ...chromeScope, ScrollView: "ScrollView" });
+let menuTicks = 0;
+const menuLit = [];
+const menuDrags = [];
+const renderMenuContent = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredMenuContent", {
+  ...chromeScope, ScrollView: "ScrollView", Fragment: "Fragment",
+  useMenuRowHighlight: () => ({ light: (row) => menuLit.push(row?.frame ?? null), plate: null }),
+  useRef: (current) => ({ current }), useState: (initial) => [initial, () => undefined],
+  useMenuDrag: () => null, dragMenu: (_drag, dx, dy) => menuDrags.push([dx, dy]),
+  menuScrub: { slack: 24 }, haptics: { selection: () => { menuTicks += 1; } },
+});
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
   ...chromeScope,
   React: { ...chromeScope.React, createElement: (type, props, ...children) => type === "AnchoredMenuContent" ? renderMenuContent(props) : chromeScope.React.createElement(type, props, ...children) },
@@ -1458,10 +1467,46 @@ assert.deepEqual(menuNodes.filter((node) => node.type === "Text").flatMap((node)
 assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.accessibilityLabel, "Current chat", "the menu retains its screen-reader context");
 assert.equal(menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.testID, "chat-actions-menu");
 assert.equal(menuItems.length, 2);
-assert.equal(menuItems[1].props.disabled, true);
+assert.equal(menuItems[1].props.accessibilityActions, undefined, "a disabled item offers no activate action");
 assert.equal(menuItems[1].props.accessibilityState.disabled, true);
-menuItems[0].props.onPress();
+menuItems[0].props.onAccessibilityAction({ nativeEvent: { actionName: "activate" } });
 assert.deepEqual(chatMenuEvents.splice(0), ["close", "share"], "close the menu before executing Share or opening another surface");
+// A finger picks the row it lifts on; sliding through rows ticks once per row, and a disabled row is never picked.
+{
+  const scrubEvents = [];
+  const scrubNodes = chromeNodes(renderMenuContent({ testID: "scrub-menu", onClose: () => scrubEvents.push("close"), sections: [{ actions: [
+    { icon: "share", title: "Share", onPress: () => scrubEvents.push("share") },
+    { icon: "pencil", title: "Rename", onPress: () => scrubEvents.push("rename") },
+    { icon: "tag", title: "Labels", disabled: true, onPress: () => scrubEvents.push("labels") },
+  ] }] }));
+  scrubNodes.filter((node) => node.props?.accessibilityRole === "menuitem").forEach((row, index) => row.props.onLayout({ nativeEvent: { layout: { y: index * 42, height: 42 } } }));
+  const rows = scrubNodes.find((node) => node.props?.pointerEvents === "box-only");
+  rows.props.onLayout({ nativeEvent: { layout: { width: 250, height: 126 } } });
+  const at = (x, y) => ({ nativeEvent: { locationX: x, locationY: y, pageX: 100 + x, pageY: 300 + y } });
+  rows.props.onResponderGrant(at(40, 20));
+  rows.props.onResponderRelease(at(40, 24));
+  assert.deepEqual(scrubEvents.splice(0), ["close", "share"], "a tap picks the row under it");
+  menuTicks = 0;
+  rows.props.onResponderGrant(at(40, 20));
+  rows.props.onResponderMove(at(40, 60));
+  rows.props.onResponderMove(at(40, 110));
+  assert.equal(menuTicks, 1, "a slide ticks on reaching a new row, not over a disabled one");
+  rows.props.onResponderRelease(at(40, 110));
+  assert.deepEqual(scrubEvents.splice(0), [], "lifting on a disabled row picks nothing");
+  rows.props.onResponderGrant(at(40, 20));
+  rows.props.onResponderMove(at(40, 60));
+  rows.props.onResponderRelease(at(40, 60));
+  assert.deepEqual(scrubEvents.splice(0), ["close", "rename"], "a slide picks the row it lifts on");
+  rows.props.onResponderGrant(at(40, 20));
+  rows.props.onResponderMove(at(300, 60));
+  rows.props.onResponderRelease(at(300, 60));
+  assert.deepEqual(scrubEvents.splice(0), [], "lifting off the menu picks nothing");
+  rows.props.onResponderGrant(at(40, 20));
+  rows.props.onResponderTerminate();
+  assert.deepEqual(scrubEvents.splice(0), [], "a scroll that takes the touch cancels the pick");
+  assert.deepEqual(menuDrags.at(-1), [0, 0], "the panel springs back once the finger lets go");
+  assert.deepEqual(menuLit.slice(-2), [{ top: 0, height: 42 }, null], "the lit row's capsule goes once the touch is cancelled");
+}
 menuNodes.find((node) => node.props?.accessibilityRole === "button").props.onPress();
 assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
 menuNodes.find((node) => node.props?.accessibilityRole === "menu").props.onAccessibilityEscape();
@@ -1475,6 +1520,8 @@ assert.ok(!menuNodes.some((node) => node.type === "Modal"), "opening a native sh
 const barMenuNodes = chromeNodes(renderChatMenu({ ...chatMenuProps, heading: "All", actions: [{ icon: "messages", title: "All", checked: true, onPress: () => undefined }] }));
 assert.deepEqual(barMenuNodes.find((node) => node.props?.accessibilityRole === "header").props.children, ["All"], "a navigation-bar menu shows its heading, as UIKit's does");
 assert.deepEqual(barMenuNodes.filter((node) => node.type === "AppIcon").map((node) => node.props.name), ["check", "messages"], "a navigation-bar menu keeps the glyph and checks in its own column");
+const choiceMenuNodes = chromeNodes(renderChatMenu({ ...chatMenuProps, actions: [{ icon: "messages", title: "All", checked: true, onPress: () => undefined }, { icon: "archive", title: "Archived", checked: false, onPress: () => undefined }] }));
+assert.deepEqual(choiceMenuNodes.filter((node) => node.type === "AppIcon").map((node) => node.props.name), ["check", "messages", "archive"], "a menu of choices keeps its checks in their own column, before the glyphs");
 menuCleanups[0]();
 assert.equal(menuBackRemoved, true);
 menuFocused = false;
@@ -1486,6 +1533,7 @@ assert.equal(menuPredictiveBackBlocked, false);
 let presenceMounted;
 const renderPresence = loadChromeComponent("../src/ui/MorphMenuSurface.tsx", "MenuPresence", {
   ...chromeScope,
+  menuScrub: { plateInset: 8 },
   useState: (initial) => { presenceMounted ??= initial; return [presenceMounted, (next) => { presenceMounted = next; }]; },
   useMemo: (factory) => factory(),
   PresenceContext: { Provider: "PresenceProvider" },
@@ -1531,16 +1579,17 @@ for (const isPinned of [false, true]) {
     const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), sections });
     assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
     const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
-    items[0].props.onPress();
+    const activate = (item) => item.props.onAccessibilityAction({ nativeEvent: { actionName: "activate" } });
+    activate(items[0]);
     assert.deepEqual(events.splice(0), ["close", "chat"]);
-    items[1].props.onPress();
+    activate(items[1]);
     assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
-    items[2].props.onPress();
+    activate(items[2]);
     assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
     if (!pinning) {
-      items[3].props.onPress();
+      activate(items[3]);
       assert.deepEqual(events.splice(0), ["close", "togglePin"]);
-    } else assert.equal(items[3].props.disabled, true);
+    } else assert.equal(items[3].props.accessibilityState.disabled, true);
   }
 }
 

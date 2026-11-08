@@ -56,6 +56,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
         testID={testID}
         material={material}
         anchor={anchor}
+        anchorRef={anchorRef}
         open={presence.open}
         onClosed={presence.onExited}
         accessibilityViewIsModal

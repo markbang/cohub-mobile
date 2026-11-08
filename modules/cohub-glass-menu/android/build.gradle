@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'io.github.markbang.cohubmobile'
+version = '1.0.0'
+
+android {
+  namespace "io.github.markbang.cohubmobile.glassmenu"
+  defaultConfig {
+    versionCode 1
+    versionName '1.0.0'
+    consumerProguardFiles 'proguard-rules.pro'
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+}

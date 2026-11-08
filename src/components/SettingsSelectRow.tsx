@@ -1,5 +1,5 @@
 import { haptics } from "@/src/platform/haptics";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
@@ -8,7 +8,7 @@ import { SettingsRow } from "@/src/components/SettingsRow";
 import { traceAction } from "@/src/data/interaction-trace";
 import type { IconName } from "@/src/icons";
 import { AppIcon } from "@/src/ui";
-import { MenuAnchor, MorphMenuSurface, type MorphRect } from "@/src/ui/MorphMenuSurface";
+import { MenuAnchor, MorphMenuSurface, useMenuRowHighlight, type MorphRect } from "@/src/ui/MorphMenuSurface";
 import { GlassBackdropScope } from "@/src/ui/Glass";
 import { raiseToastOverlay, ToastViewport } from "@/src/components/Toast";
 
@@ -67,6 +67,8 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   const window = useWindowDimensions();
   // Held in state rather than a ref: touch callbacks measure it, and they are built during render.
   const [anchor, setAnchor] = useState<View | null>(null);
+  const anchorRef = useRef<View | null>(null);
+  const attachAnchor = useCallback((node: View | null) => { anchorRef.current = node; setAnchor(node); }, []);
   const [menu, setMenu] = useState<MenuLayout | null>(null);
   // The menu stays mounted while it shrinks back into the value; `menuOpen` is false for that stretch.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -199,18 +201,18 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         testID={testID}
       >
         <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
-          <MenuAnchor ref={setAnchor} open={menuOpen} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
+          <MenuAnchor ref={attachAnchor} open={menuOpen} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
             <Text numberOfLines={1} className="shrink text-body text-fg-muted">{current?.label}</Text>
             <AppIcon name="chevrons-up-down" size={16} tone="muted" />
           </MenuAnchor>
         </SettingsRow>
       </View>
     </GestureDetector>
-    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} /> : null}
+    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} anchorRef={anchorRef} /> : null}
   </>;
 }
 
-function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed }: {
+function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed, anchorRef }: {
   menu: MenuLayout;
   open: boolean;
   title: string;
@@ -220,10 +222,12 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   onChoose: (value: T) => void;
   onClose: () => void;
   onClosed: () => void;
+  anchorRef: RefObject<View | null>;
 }) {
   const rootRef = useRef<View>(null);
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
+  // A tap on the open menu lights its row too; a press slid from the settings row lights it through `highlight`.
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
     <GlassBackdropScope inside={false}>
     <View ref={rootRef} collapsable={false} pointerEvents={open ? "auto" : "none"} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
@@ -238,27 +242,45 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
         style={{ left: menu.left - origin.x, top: menu.top - origin.y, width: menu.width }}
         open={open}
         onClosed={onClosed}
+        anchorRef={anchorRef}
       >
-        <View style={{ paddingVertical: MENU_PADDING }}>
-        {options.map((option, index) => {
-          const selected = option.value === value;
-          return <Pressable
-            key={option.value}
-            accessibilityRole="menuitem"
-            accessibilityLabel={option.label}
-            accessibilityState={{ checked: selected }}
-            onPress={() => onChoose(option.value)}
-            className={`flex-row items-center active:opacity-70 ${highlight === index ? "opacity-70" : ""}`}
-            style={ROW}
-          >
-            <View style={CHECK}>{selected ? <AppIcon name="check" size={17} tone="fg" /> : null}</View>
-            <Text numberOfLines={1} className="min-w-0 flex-1 text-body text-fg">{option.label}</Text>
-          </Pressable>;
-        })}
-        </View>
+        <SelectMenuRows options={options} value={value} highlight={highlight} onChoose={onChoose} />
       </MorphMenuSurface>
     </View>
     <ToastViewport />
     </GlassBackdropScope>
   </Modal>;
+}
+
+/** The menu's rows, inside its surface so they can light a row the way that surface draws it. */
+function SelectMenuRows<T extends string>({ options, value, highlight, onChoose }: { options: readonly SelectOption<T>[]; value: T; highlight: number | null; onChoose: (value: T) => void }) {
+  // A tap on the open menu lights its row too; a press slid from the settings row lights it through `highlight`.
+  const [pressed, setPressed] = useState<number | null>(null);
+  const rowViews = useRef<(View | null)[]>([]);
+  const { light, plate } = useMenuRowHighlight();
+  const lit = highlight ?? pressed;
+  useEffect(() => {
+    light(lit === null ? null : { view: rowViews.current[lit] ?? null, frame: { top: MENU_PADDING + lit * ROW_HEIGHT, height: ROW_HEIGHT } });
+  }, [light, lit]);
+  return <View style={{ paddingVertical: MENU_PADDING }}>
+    {plate}
+    {options.map((option, index) => {
+      const selected = option.value === value;
+      return <Pressable
+        key={option.value}
+        ref={(node) => { rowViews.current[index] = node; }}
+        accessibilityRole="menuitem"
+        accessibilityLabel={option.label}
+        accessibilityState={{ checked: selected }}
+        onPressIn={() => setPressed(index)}
+        onPressOut={() => setPressed(null)}
+        onPress={() => onChoose(option.value)}
+        className="flex-row items-center"
+        style={ROW}
+      >
+        <View style={CHECK}>{selected ? <AppIcon name="check" size={17} tone="fg" /> : null}</View>
+        <Text numberOfLines={1} className="min-w-0 flex-1 text-body text-fg">{option.label}</Text>
+      </Pressable>;
+    })}
+  </View>;
 }
