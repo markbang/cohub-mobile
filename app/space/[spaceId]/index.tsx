@@ -1,6 +1,6 @@
 import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
@@ -155,9 +155,7 @@ export default function SpaceScreen() {
   const taskCursor = taskList.hasMore;
   const tasksLoadingMore = taskList.loadingMore;
   const [pageRefreshing, setPageRefreshing] = useState(false);
-  const [spaceActionsOpen, setSpaceActionsOpen] = useState(false);
   const spaceActionsRef = useRef<View>(null);
-  const closeSpaceActions = useCallback(() => setSpaceActionsOpen(false), []);
   const [pinning, setPinning] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
   const [checkpointing, setCheckpointing] = useState(false);
@@ -239,7 +237,13 @@ export default function SpaceScreen() {
     ] },
   ];
   return <Screen>
-    <View className="flex-1" accessibilityElementsHidden={spaceActionsOpen} importantForAccessibility={spaceActionsOpen ? "no-hide-descendants" : "auto"}>
+    <SpaceActionsHost menu={(onClose) => <AnchoredActionMenu
+      anchorRef={spaceActionsRef}
+      title={name}
+      testID="space-actions-menu"
+      onClose={onClose}
+      sections={spaceSections}
+    />}>
     <SpacePanels
       key={space.id}
       spaceId={space.id}
@@ -259,7 +263,7 @@ export default function SpaceScreen() {
       drawn
       title={name}
       onBack={() => router.back()}
-      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} sections={spaceSections} testID="space-actions-menu" /> : <MenuAnchor ref={spaceActionsRef} open={spaceActionsOpen}><IconButton name="more" label={t("space.actions")} onPress={() => setSpaceActionsOpen(true)} /></MenuAnchor>}</>}
+      actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} sections={spaceSections} testID="space-actions-menu" /> : <SpaceActionsTrigger anchorRef={spaceActionsRef} label={t("space.actions")} />}</>}
     />
     {realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{realtimeError}</Text> : null}
     {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}
@@ -335,15 +339,29 @@ export default function SpaceScreen() {
     </ScrollView>
       </View>
     </SpacePanels>
-    </View>
-    <MenuPresence open={spaceActionsOpen}><AnchoredActionMenu
-      anchorRef={spaceActionsRef}
-      title={name}
-      testID="space-actions-menu"
-      onClose={closeSpaceActions}
-      sections={spaceSections}
-    /></MenuPresence>
+    </SpaceActionsHost>
   </Screen>;
+}
+
+const SpaceActionsContext = createContext<{ open: boolean; setOpen: (open: boolean) => void }>({ open: false, setOpen: () => undefined });
+
+/**
+ * Owns the drawn Space menu's open state below the screen. `children` is the element the screen built, so
+ * opening or closing the menu re-renders only this host, the trigger and the menu, never the page under them.
+ */
+function SpaceActionsHost({ menu, children }: { menu: (onClose: () => void) => ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const value = useMemo(() => ({ open, setOpen }), [open]);
+  return <SpaceActionsContext.Provider value={value}>
+    <View className="flex-1" accessibilityElementsHidden={open} importantForAccessibility={open ? "no-hide-descendants" : "auto"}>{children}</View>
+    <MenuPresence open={open}>{menu(close)}</MenuPresence>
+  </SpaceActionsContext.Provider>;
+}
+
+function SpaceActionsTrigger({ anchorRef, label }: { anchorRef: RefObject<View | null>; label: string }) {
+  const { open, setOpen } = useContext(SpaceActionsContext);
+  return <MenuAnchor ref={anchorRef} open={open}><IconButton name="more" label={label} onPress={() => setOpen(true)} /></MenuAnchor>;
 }
 
 function ResourceRow({ icon, tone, status, title, meta, subtitle, onPress }: { icon: IconName; tone: IconTone; status?: string; title: string; meta?: string; subtitle: string; onPress?: () => void }) {
