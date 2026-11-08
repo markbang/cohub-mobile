@@ -11,13 +11,7 @@
 A native iOS and Android client for Cohub, built with React Native and Expo.
 
 <p align="center">
-  <img src="landing/screenshots/chats.webp" width="22%" alt="Chats inbox" />
-  &nbsp;
-  <img src="landing/screenshots/spaces.webp" width="22%" alt="Spaces list" />
-  &nbsp;
-  <img src="landing/screenshots/activity.webp" width="22%" alt="Activity" />
-  &nbsp;
-  <img src="landing/screenshots/me.webp" width="22%" alt="Me" />
+  <img src="docs/screenshots.webp" width="100%" alt="Cohub Mobile: Chats, Spaces, Activity, and Me" />
 </p>
 
 ## Download
