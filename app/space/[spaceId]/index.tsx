@@ -236,7 +236,7 @@ export default function SpaceScreen() {
       { icon: "bookmark", title: checkpointing ? t("space.saveCheckpointSaving") : t("space.saveCheckpoint"), disabled: checkpointing, onPress: () => void createCheckpoint() },
     ] },
   ];
-  return <Screen>
+  return <Screen edgeToEdge>
     <SpaceActionsHost menu={(onClose) => <AnchoredActionMenu
       anchorRef={spaceActionsRef}
       title={name}
@@ -245,6 +245,7 @@ export default function SpaceScreen() {
       sections={spaceSections}
     />}>
     <SpacePanels
+      edgeToEdge
       key={space.id}
       spaceId={space.id}
       spaceName={name}
@@ -258,7 +259,8 @@ export default function SpaceScreen() {
       onOpenFile={(path) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId: space.id, path } })}
       onOpenFilesPage={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId: space.id } })}
     >
-      <View className="flex-1">
+      {/* The inset sits inside the pager's clip so the bar's glass buttons can swell above the bar. */}
+      <View className="flex-1" style={{ paddingTop: insets.top }}>
     <TopBar
       drawn
       title={name}
