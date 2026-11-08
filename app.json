@@ -87,7 +87,6 @@
       ],
       "./modules/cohub-device-runtime/app.plugin.js",
       "./modules/cohub-predictive-back/app.plugin.js",
-      "./plugins/android-orientation.js",
       [
         "expo-splash-screen",
         {
