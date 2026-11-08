@@ -26,7 +26,7 @@ import { NativeInteractionBridge } from "@/src/platform/NavigationBridge";
 import { clearLauncherShortcuts } from "@/src/platform/quick-actions";
 import { LauncherShortcuts } from "@/src/components/LauncherShortcuts";
 import { SplitStack } from "@/src/components/SplitStack";
-import { rootScreenOrientation } from "@/src/platform/orientation";
+import { useRootScreenOrientation } from "@/src/platform/orientation";
 import { signOutDeviceRuntime } from "@/src/platform/device-runtime";
 // Configures Android's back gesture before the first screen mounts.
 import "@/src/platform/predictive-back";
@@ -253,6 +253,7 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
 
 function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
   const { t } = useTranslation();
+  const rootScreenOrientation = useRootScreenOrientation();
   useRouteTracking();
   // The authenticated navigation tree owns the lifetime of diagnostic recordings.
   useEffect(() => () => chatScrollTrace.reset(), []);

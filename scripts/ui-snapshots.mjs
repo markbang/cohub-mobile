@@ -529,6 +529,10 @@ const android = {
     if (target === "phone") adb("shell", "wm", "density", String(Math.round((naturalWidth / LOGICAL_WIDTH) * 160)));
     const density = Number(/(\d+)\s*$/.exec(adb("shell", "wm", "density").trim())?.[1]);
     if (!density) throw new Error("Could not read the emulator's density from `wm density`.");
+    // A tablet's system may letterbox an app that asks for portrait rather than turn the display for it, as HyperOS
+    // does. The emulator turns the display by default, which hides how the app releases a letterboxed tablet.
+    const ignoredOrientation = target === "tablet" ? /\btrue\b/.test(adb("shell", "wm", "get-ignore-orientation-request")) : null;
+    if (target === "tablet") adb("shell", "wm", "set-ignore-orientation-request", "true");
     // Rotation 0 is the panel's natural orientation, which is landscape on a tablet such as the Pixel Tablet.
     const naturalLandscape = naturalWidth > naturalHeight;
     const rotationFor = (orientation) => (orientation === "landscape") === naturalLandscape ? 0 : 1;
@@ -575,6 +579,7 @@ const android = {
       restore() {
         run("adb", ["-s", serial, "shell", "settings", "put", "system", "accelerometer_rotation", "1"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "wm", "density", "reset"], { allowFailure: true });
+        if (ignoredOrientation !== null) run("adb", ["-s", serial, "shell", "wm", "set-ignore-orientation-request", String(ignoredOrientation)], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "settings", "put", "global", "hide_error_dialogs", "0"], { allowFailure: true });
         run("adb", ["-s", serial, "shell", "am", "broadcast", "-a", "com.android.systemui.demo", "-e", "command", "exit"], { allowFailure: true });
       },
