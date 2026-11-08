@@ -150,15 +150,13 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
       rmSync(temp, { recursive: true, force: true });
     }
   };
-  if (platform === "android") {
-    const firstPublishMismatch = runPublish(["ok"], "d".repeat(40));
-    assert.equal(firstPublishMismatch.status, 0);
-    assert.equal(firstPublishMismatch.calls, 0, "a new runtime must not accept incompatible code before its first OTA establishes a server baseline");
-    assert.match(firstPublishMismatch.output, /Native fingerprint mismatch/);
-    const missingNativeFingerprint = runPublish(["ok"], "");
-    assert.notEqual(missingNativeFingerprint.status, 0, "a missing native baseline fails clearly");
-    assert.equal(missingNativeFingerprint.calls, 0);
-  }
+  const firstPublishMismatch = runPublish(["ok"], "d".repeat(40));
+  assert.equal(firstPublishMismatch.status, 0);
+  assert.equal(firstPublishMismatch.calls, 0, `${platform}: a new runtime must not accept incompatible code before its first OTA establishes a server baseline`);
+  assert.match(firstPublishMismatch.output, /Native fingerprint mismatch/);
+  const missingNativeFingerprint = runPublish(["ok"], "");
+  assert.notEqual(missingNativeFingerprint.status, 0, `${platform}: a missing native baseline fails clearly`);
+  assert.equal(missingNativeFingerprint.calls, 0);
   const recovered = runPublish([headersTimeoutLog, "Error: OTA 503: unavailable", "ok"]);
   assert.equal(recovered.status, 0, recovered.output);
   assert.equal(recovered.calls, 3, `${platform}: transient failures retry until success`);

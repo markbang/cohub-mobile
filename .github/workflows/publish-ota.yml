@@ -467,6 +467,7 @@ jobs:
           OTA_PLATFORM: ios
           SOURCE_COMMIT: ${{ needs.prepare.outputs.sha }}
           COHUB_OTA_RUNTIME_VERSION: ${{ needs.ios.outputs.runtime }}
+          NATIVE_SOURCE_FINGERPRINT: ${{ needs.ios.outputs.fingerprint }}
           OTA_EXPORT_DIR: ${{ runner.temp }}/cohub-ota-export
           OTA_INPUTS_DIR: ${{ runner.temp }}/cohub-ota-inputs
         run: |
@@ -476,6 +477,14 @@ jobs:
           runtime=$(COHUB_OTA_RUNTIME_VERSION="$COHUB_OTA_RUNTIME_VERSION" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.COHUB_OTA_RUNTIME_VERSION, "prepare runtime"))')
           test -d "$OTA_EXPORT_DIR"
           SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.OTA_INPUTS_DIR + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
+          NATIVE_SOURCE_FINGERPRINT=$(NATIVE_SOURCE_FINGERPRINT="$NATIVE_SOURCE_FINGERPRINT" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.NATIVE_SOURCE_FINGERPRINT, "released iOS native fingerprint"))')
+          # The server pins a runtime to the first fingerprint published on it, so a mismatched
+          # commit must never reach it: it would block every matching OTA on that runtime.
+          if ! SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" node --input-type=module -e 'import { assertFingerprintsMatch } from "./scripts/ota-publish.mjs"; assertFingerprintsMatch(process.env.NATIVE_SOURCE_FINGERPRINT, process.env.SOURCE_FINGERPRINT)'; then
+            echo "iOS OTA skipped: source native fingerprint differs from the released IPA." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=iOS OTA skipped::Native fingerprint changed; ship a new native distribution first."
+            exit 0
+          fi
           # Mirrors the Android publish: a fingerprint-mismatch rejection means this
           # commit needs a new native distribution, not that the pipeline is broken.
           # Retries transient failures exactly like the Android publish.
