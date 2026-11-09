@@ -1433,6 +1433,8 @@ const renderMenuContent = loadChromeComponent("../src/components/AnchoredActionM
   useMenuRowHighlight: () => ({ light: (row) => menuLit.push(row?.frame ?? null), plate: null }),
   useRef: (current) => ({ current }), useState: (initial) => [initial, () => undefined],
   useMenuDrag: () => null, dragMenu: (_drag, dx, dy) => menuDrags.push([dx, dy]),
+  useImperativeHandle: (ref, factory) => { if (ref) ref.current = factory(); },
+  useMemo: (factory) => factory(), useEffect: (effect) => effect(),
   menuScrub: { slack: 24 }, haptics: { selection: () => { menuTicks += 1; } },
 });
 const renderChatMenu = loadChromeComponent("../src/components/AnchoredActionMenu.tsx", "AnchoredActionMenu", {
@@ -1506,6 +1508,24 @@ assert.deepEqual(chatMenuEvents.splice(0), ["close", "share"], "close the menu b
   assert.deepEqual(scrubEvents.splice(0), [], "a scroll that takes the touch cancels the pick");
   assert.deepEqual(menuDrags.at(-1), [0, 0], "the panel springs back once the finger lets go");
   assert.deepEqual(menuLit.slice(-2), [{ top: 0, height: 42 }, null], "the lit row's capsule goes once the touch is cancelled");
+  // A press held on a select row drives the open menu in window coordinates: it lights rows, and picks the one it lifts on.
+  const driveRef = { current: null };
+  const drivenNodes = chromeNodes(renderMenuContent({ testID: "select-menu", onDrive: (drive) => { driveRef.current = drive; }, onClose: () => scrubEvents.push("close"), sections: [{ actions: [
+    { title: "System browser", checked: true, onPress: () => scrubEvents.push("system") },
+    { title: "In-app browser", checked: false, onPress: () => scrubEvents.push("in-app") },
+  ] }] }));
+  drivenNodes.filter((node) => node.props?.accessibilityRole === "menuitem").forEach((row, index) => row.props.onLayout({ nativeEvent: { layout: { y: index * 42, height: 42 } } }));
+  const drivenRows = drivenNodes.find((node) => node.props?.pointerEvents === "box-only");
+  drivenRows.props.onLayout({ nativeEvent: { layout: { width: 250, height: 84 } } });
+  drivenRows.props.ref.current = { measureInWindow: (callback) => callback(100, 300) };
+  assert.ok(!drivenNodes.some((node) => node.type === "AppIcon" && node.props.name !== "check"), "a picker's choices have no glyph column");
+  menuLit.length = 0;
+  driveRef.current.move(150, 360);
+  assert.deepEqual(menuLit.at(-1), { top: 42, height: 42 }, "a held press slid onto a choice lights it");
+  driveRef.current.release(500, 360);
+  assert.deepEqual(scrubEvents.splice(0), [], "lifted off the menu, a held press picks nothing and leaves it open");
+  driveRef.current.release(150, 360);
+  assert.deepEqual(scrubEvents.splice(0), ["close", "in-app"], "lifted on a choice, a held press picks it");
 }
 menuNodes.find((node) => node.props?.accessibilityRole === "button").props.onPress();
 assert.deepEqual(chatMenuEvents.splice(0), ["close"]);
@@ -3496,23 +3516,6 @@ for (const file of ["../src/components/FloatingTabBar.tsx", "../src/components/S
   findCancel(gestureSource);
   assert.ok(cancelCallbacks.length > 0, `${file} still handles cancelled touches`);
   for (const callback of cancelCallbacks) assert.doesNotMatch(callback, /manager\.(fail|end|activate)\(/, `${file}: changing state from onTouchesCancelled re-enters the handler's own cancellation and crashes RNGH 3.3 on Android`);
-}
-// A closing select menu's Modal still takes every touch, so the menu itself must hand the touch on, not drop it.
-{
-  const renderSelectMenu = loadChromeComponent("../src/components/SettingsSelectRow.tsx", "SelectMenu", {
-    ...chromeScope, Modal: "Modal", GlassBackdropScope: "GlassBackdropScope", MorphMenuSurface: "MorphMenuSurface", SelectMenuRows: "SelectMenuRows", ToastViewport: "ToastViewport",
-    raiseToastOverlay: () => undefined, useRef: () => ({ current: null }), useState: () => [{ x: 0, y: 24 }, () => undefined],
-  });
-  const touches = [];
-  const props = { menu: { left: 100, top: 300, width: 250, height: 104, anchor: { x: 280, y: 306, width: 80, height: 22 } }, title: "Web browsing", options: [], value: "system", highlight: null, onChoose() {}, onClose() {}, onClosed() {}, onTouchWhileClosing: (x, y) => touches.push([x, y]), anchorRef: { current: null } };
-  const root = (open) => chromeNodes(renderSelectMenu({ ...props, open })).find((node) => node.props?.onResponderGrant);
-  assert.equal(root(true).props.pointerEvents, "auto");
-  assert.equal(root(true).props.onStartShouldSetResponder(), false, "an open menu leaves touches to its rows and backdrop");
-  const closing = root(false);
-  assert.equal(closing.props.pointerEvents, "box-only", "a closing menu takes the touch itself, so its rows and backdrop cannot");
-  assert.equal(closing.props.onStartShouldSetResponder(), true);
-  closing.props.onResponderGrant({ nativeEvent: { pageX: 300, pageY: 290 } });
-  assert.deepEqual(touches, [[300, 314]], "a touch while closing is handed on in window coordinates");
 }
 const messageContent = readFileSync(new URL("../src/components/MessageContent.tsx", import.meta.url), "utf8");
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
