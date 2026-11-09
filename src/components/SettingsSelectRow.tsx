@@ -24,6 +24,8 @@ const RAISE = 6;
 const ROW = { height: ROW_HEIGHT, paddingLeft: 19, paddingRight: 16 } as const;
 const CHECK = { width: 17, marginRight: 8, alignItems: "center" } as const;
 const MARGIN = 12;
+/** The point on the chevron the menu grows from, in points. */
+const SOURCE_DOT = 6;
 /** A touch held this long without moving opens the menu under the finger; a quicker one is a tap or a scroll. */
 const PRESS_DELAY_MS = 120;
 const TOUCH_SLOP = 8;
@@ -39,9 +41,10 @@ function menuLayout(anchor: MorphRect, window: { width: number; height: number }
   const left = Math.min(Math.max(MARGIN, anchor.x + anchor.width - width), window.width - MARGIN - width);
   const upward = anchor.y + height > window.height - insets.bottom - MARGIN;
   const top = upward ? Math.max(insets.top + MARGIN, anchor.y + anchor.height + RAISE - height) : anchor.y - RAISE;
-  // The menu grows out of the chevron as a drop, not out of the whole value: the value has no glass of its own,
-  // so a glass lobe the value's size would show around it. The value itself hides at the tap.
-  const bead = { x: anchor.x + anchor.width - anchor.height, y: anchor.y, width: anchor.height, height: anchor.height };
+  // The menu grows out of a point on the chevron and runs back into it. The value has no glass of its own, and the
+  // native glass draws a drop the size of the trigger it starts from, so a value-sized (or chevron-sized) start shows
+  // a grey disc that is not there at rest. The value itself hides at the tap.
+  const bead = { x: anchor.x + anchor.width - 8 - SOURCE_DOT / 2, y: anchor.y + anchor.height / 2 - SOURCE_DOT / 2, width: SOURCE_DOT, height: SOURCE_DOT };
   return { left, top, width, height, anchor: bead };
 }
 

@@ -199,9 +199,17 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
     endGlassSession();
     onClosedRef.current();
   }, []);
+  // Native holds its last frame, the glass run back into the trigger, until React removes the view. Hide that frame
+  // first and reveal the trigger only after, or the glass's resting drop shows over the trigger for a few frames.
+  const [collapsed, setCollapsed] = useState(false);
   const onStateChange = useCallback((event: { nativeEvent: { state: GlassMenuState } }) => {
-    if (event.nativeEvent.state === "closed") finish();
-  }, [finish]);
+    if (event.nativeEvent.state === "closed") setCollapsed(true);
+  }, []);
+  // Reopened as it arrived (a tap on its row): native starts over from the trigger.
+  if (collapsed && open) setCollapsed(false);
+  useEffect(() => {
+    if (collapsed && !open) finish();
+  }, [collapsed, finish, open]);
   // A screen that leaves view (a tab switch, a push) detaches the native glass, which then gets no frames and never
   // reports `closed`: the menu would stay mounted and its session would keep every trigger hidden. Off screen there
   // is no close to watch, so a closing menu ends there.
@@ -212,7 +220,7 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
   if (!GlassMenuView) return null;
   const radius = material === "panel" ? RADIUS.lg : glassMenu.radius;
   return <GlassMenuView
-    style={StyleSheet.absoluteFill}
+    style={[StyleSheet.absoluteFill, collapsed ? HIDDEN : null]}
     open={open}
     sourceRect={anchor}
     sourceTag={tags.source}
@@ -231,6 +239,51 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
       </View>
     </View>
   </GlassMenuView>;
+}
+
+const HIDDEN = { opacity: 0 } as const;
+
+/** How long after the app's navigation mounts the glass warms up, clear of the launch's own work. */
+const GLASS_WARMUP_DELAY_MS = 800;
+const WARMUP_BOX = { position: "absolute", left: 0, top: 0, width: 96, height: 96 } as const;
+const WARMUP_PANEL = { position: "absolute", left: 16, top: 40, width: 64, height: 48 } as const;
+
+/**
+ * Runs one small glass morph under the screen soon after launch. The first glass frame compiles the material,
+ * lens and shadow shaders and every blur radius (upstream's `warmPipelines`) and runs the shape field before ART
+ * has compiled it; upstream pays that when its resting glass triggers first draw, but our triggers are plain, so
+ * the first menu opened stalled for over a second. Compiled shaders are cached for the process, Modals included.
+ * Mount it first in the root, beneath opaque screens: Android still draws covered views, so nothing shows.
+ */
+export function GlassMenuWarmup() {
+  const theme = useAppTheme();
+  const [phase, setPhase] = useState<"waiting" | "open" | "closing" | "done">("waiting");
+  useEffect(() => {
+    if (!nativeGlassMenu) return;
+    const timer = setTimeout(() => setPhase("open"), GLASS_WARMUP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!GlassMenuView || phase === "waiting" || phase === "done") return null;
+  return <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={WARMUP_BOX}>
+    <GlassMenuView
+      style={StyleSheet.absoluteFill}
+      open={phase === "open"}
+      sourceRect={{ x: 24, y: 8, width: 48, height: 24 }}
+      sourceTag={null}
+      backdropTag={null}
+      backdropColor={theme.colors.background}
+      dark={theme.mode === "dark"}
+      cornerRadius={glassMenu.radius}
+      plateTag={null}
+      onStateChange={(event) => {
+        const { state } = event.nativeEvent;
+        if (state === "open") setPhase("closing");
+        else if (state === "closed") setPhase("done");
+      }}
+    >
+      <View collapsable={false} style={WARMUP_PANEL} />
+    </GlassMenuView>
+  </View>;
 }
 
 /** Upstream's menu corner, which the native glass is tuned to. */
