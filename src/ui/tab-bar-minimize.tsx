@@ -20,8 +20,11 @@ export function useTabBarMinimized() {
 // Scrolling this far in one direction minimizes or restores the bar, so a finger's jitter does neither.
 const TRAVEL = 8;
 
-/** Minimizes the tab bar while the content scrolls down and restores it on the way back up or at the top. */
-export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefined) {
+/**
+ * Minimizes the tab bar while the content scrolls down past `top` and restores it on the way back up or at
+ * `top`. As in UIKit, scrolling that only collapses the navigation bar leaves the tab bar alone.
+ */
+export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefined, top = 0) {
   const minimized = useContext(TabBarMinimize);
   const focused = useScreenVisible();
   const active = useSharedValue(focused);
@@ -30,7 +33,7 @@ export function useMinimizeTabBarOnScroll(scrollY: SharedValue<number> | undefin
   useEffect(() => { active.set(focused); }, [active, focused]);
   useAnimatedReaction(() => (scrollY ? scrollY.get() : 0), (y) => {
     if (!minimized || !active.get()) { turn.set(y); return; }
-    if (y <= 0) {
+    if (y <= top) {
       if (minimized.get() !== 0) minimized.set(0);
       turn.set(y);
       return;
