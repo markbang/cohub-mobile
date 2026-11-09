@@ -53,6 +53,7 @@ import { NativeMenuButton, nativeMenus, type NativeMenuAction, type NativeMenuSe
 import { NativeContextMenu, nativeContextMenus } from "@/src/components/NativeContextMenu";
 import type { AnchoredMenuAction } from "@/src/components/AnchoredActionMenu";
 import { MenuAnchor } from "@/src/ui/MorphMenuSurface";
+import { MenuLayer, MenuLayerOutlet } from "@/src/ui/menu-layer";
 import type { AttachmentDraft, ActivityItem } from "@/src/data/types";
 import { initials } from "@/src/utils";
 
@@ -221,9 +222,11 @@ export function Screen({ children: content, scroll = false, refreshing = false, 
   const wrapped = !keyboard ? body : <KeyboardAvoidingView behavior="padding" style={FILL}>{body}</KeyboardAvoidingView>;
   // The iOS navigation bar overlays the screen, and the native safe area measures only the status bar
   // above it, so content starts below the bar's measured height.
-  if (Platform.OS === "ios" && !edgeToEdge && headerHeight > 0) return <View className="flex-1 bg-background" style={{ paddingTop: headerHeight }}>{wrapped}</View>;
-  if (Platform.OS === "ios" && !edgeToEdge) return <View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView></View>;
-  return <View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}</View>;
+  // Menus opened from inside the content (`MenuPortal`) draw last, over it and outside any scroll view.
+  const menus = <GlassBackdrop target={blurTarget ?? null}><MenuLayerOutlet /></GlassBackdrop>;
+  if (Platform.OS === "ios" && !edgeToEdge && headerHeight > 0) return <MenuLayer><View className="flex-1 bg-background" style={{ paddingTop: headerHeight }}>{wrapped}{menus}</View></MenuLayer>;
+  if (Platform.OS === "ios" && !edgeToEdge) return <MenuLayer><View className="flex-1 bg-background"><SafeAreaView edges={TOP_EDGE} style={FILL}>{wrapped}</SafeAreaView>{menus}</View></MenuLayer>;
+  return <MenuLayer><View className="flex-1 bg-background" style={{ paddingTop: edgeToEdge ? 0 : insets.top }}>{wrapped}{menus}</View></MenuLayer>;
 }
 
 const TOP_EDGE = ["top"] as const;
