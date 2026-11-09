@@ -26,8 +26,10 @@ type MorphMenuSurfaceProps = Omit<ViewProps, "style" | "children"> & {
   style: StyleProp<ViewStyle>;
   /** `glass`: a floating menu; `panel`: the composer's larger sheet, solid and bordered on iOS, glass on Android. */
   material?: "glass" | "panel";
-  /** The trigger's view; Android's glass draws it inside the glass while it morphs. */
+  /** The trigger's view; Android's glass draws it while it morphs. */
   anchorRef?: RefObject<View | null>;
+  /** A trigger without glass of its own (a select's value): Android's glass fades in from it rather than budding. */
+  plainTrigger?: boolean;
   children: ReactNode;
 };
 
@@ -49,7 +51,7 @@ export function MorphMenuSurface(props: MorphMenuSurfaceProps) {
  * absolute layer, so animating its frame re-lays out nothing else; the rows keep their final layout and are
  * only moved, zoomed and clipped by transforms, so hit-testing matches what is drawn once the menu settles.
  */
-function DrawnMorphMenuSurface({ anchor, open, onClosed, style, material = "glass", anchorRef: _anchorRef, children, ...viewProps }: MorphMenuSurfaceProps) {
+function DrawnMorphMenuSurface({ anchor, open, onClosed, style, material = "glass", anchorRef: _anchorRef, plainTrigger: _plainTrigger, children, ...viewProps }: MorphMenuSurfaceProps) {
   const glass = useGlassMaterial();
   const reduced = useReducedMotion();
   // Frames into the current morph (a 0–1 fade under Reduce Motion), and which way it runs.
@@ -175,7 +177,7 @@ function DrawnMorphMenuSurface({ anchor, open, onClosed, style, material = "glas
  * and the glass leans toward a finger on the rows. The native view fills the surface's parent, so the anchor and
  * the panel's `style` share its coordinates; the panel stays a plain view for touches and screen readers.
  */
-function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", anchorRef, children, ...viewProps }: MorphMenuSurfaceProps) {
+function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", anchorRef, plainTrigger = false, children, ...viewProps }: MorphMenuSurfaceProps) {
   const theme = useAppTheme();
   const backdrop = useGlassBackdropTarget();
   const [tags, setTags] = useState<{ source: number | null; backdrop: number | null }>({ source: null, backdrop: null });
@@ -223,6 +225,7 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
     style={[StyleSheet.absoluteFill, collapsed ? HIDDEN : null]}
     open={open}
     sourceRect={anchor}
+    sourceGlass={!plainTrigger}
     sourceTag={tags.source}
     backdropTag={tags.backdrop}
     backdropColor={theme.colors.background}

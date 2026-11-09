@@ -49,8 +49,8 @@ type AnchoredActionMenuProps = {
    */
   heading?: string;
   /**
-   * `plain`: a trigger without glass of its own, such as a select's value. The menu grows from a point on its trailing
-   * chevron, since the glass draws its source as a drop the trigger's size, and does not draw the trigger.
+   * `plain`: a trigger without glass of its own, such as a select's value. The glass fades in from it while the
+   * trigger shrinks away, instead of budding out of it.
    */
   trigger?: "glass" | "plain";
   /** Receives the rows' driver while they are mounted, and null after. */
@@ -58,9 +58,6 @@ type AnchoredActionMenuProps = {
   onClose: () => void;
   testID: string;
 };
-
-/** The point on a plain trigger's chevron its menu grows from, in points. */
-const PLAIN_SOURCE = 6;
 
 export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: sectionsProp, heading, trigger = "glass", onDrive, onClose, testID }: AnchoredActionMenuProps) {
   const sections = (sectionsProp ?? [{ actions }]).filter((section) => section.actions.length > 0);
@@ -76,9 +73,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
   const measure = useCallback(() => {
     overlayRef.current?.measureInWindow((x, y, viewportWidth, viewportHeight) => {
       anchorRef.current?.measureInWindow((anchorX, anchorY, anchorWidth, anchorHeight) => {
-        setAnchor(trigger === "plain"
-          ? { x: anchorX - x + anchorWidth - 8 - PLAIN_SOURCE / 2, y: anchorY - y + anchorHeight / 2 - PLAIN_SOURCE / 2, width: PLAIN_SOURCE, height: PLAIN_SOURCE }
-          : { x: anchorX - x, y: anchorY - y, width: anchorWidth, height: anchorHeight });
+        setAnchor({ x: anchorX - x, y: anchorY - y, width: anchorWidth, height: anchorHeight });
         setLayout(getAnchoredMenuLayout({
           anchor: { x: anchorX, y: anchorY, width: anchorWidth, height: anchorHeight },
           viewport: { x, y, width: viewportWidth, height: viewportHeight },
@@ -86,7 +81,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
         }));
       });
     });
-  }, [anchorRef, insets.bottom, trigger]);
+  }, [anchorRef, insets.bottom]);
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(measure);
@@ -112,7 +107,8 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
       accessibilityLabel={title}
       onAccessibilityEscape={onClose}
       anchor={anchor}
-      anchorRef={trigger === "plain" ? undefined : anchorRef}
+      anchorRef={anchorRef}
+      plainTrigger={trigger === "plain"}
       style={layout}
       open={open}
       onClosed={onExited}

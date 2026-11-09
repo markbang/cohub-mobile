@@ -34,6 +34,7 @@ import io.github.markbang.cohubmobile.glassmenu.records.GlassPlateRecord
 import io.github.markbang.cohubmobile.glassmenu.records.GlassRectRecord
 import io.github.markbang.cohubmobile.glassmenu.records.GlassTriggerConfigRecord
 import io.github.markbang.cohubmobile.glassmenu.render.GlassRenderer
+import io.github.markbang.cohubmobile.glassmenu.render.GlassRendererPool
 import io.github.markbang.cohubmobile.glassmenu.render.GlassSurfaceState
 import java.lang.reflect.Field
 import kotlin.math.max
@@ -59,6 +60,12 @@ class GlassMenuView(context: Context, appContext: AppContext) :
   internal var backdropColor = Color.BLACK
   internal var dark = true
   internal var cornerRadius = 34f
+  /**
+   * The trigger is glass (a bar button): the menu buds from it as a second lobe and the trigger is drawn inside the
+   * glass. Otherwise (a select's value) the glass fades in from the trigger's spot and the trigger is drawn over the
+   * screen, shrinking away, as upstream draws a trigger with `glass={false}`.
+   */
+  internal var sourceGlass = true
   internal var plateTag: Int? = null
   internal var plate = GlassPlateRecord()
   internal var config = GlassMenuConfigRecord()
@@ -88,7 +95,6 @@ class GlassMenuView(context: Context, appContext: AppContext) :
   private var rowsNode: Any? = null
   private var triggerNode: Any? = null
   private var plateNode: Any? = null
-  private var warmed = false
 
   private val jelly = GlassJelly()
   private var touching = false
@@ -150,7 +156,7 @@ class GlassMenuView(context: Context, appContext: AppContext) :
 
   @RequiresApi(Build.VERSION_CODES.TIRAMISU)
   private fun releaseGraphics() {
-    (renderer as? GlassRenderer)?.release()
+    (renderer as? GlassRenderer)?.let { GlassRendererPool.recycle(it, density) }
     renderer = null
     for (node in listOf(backdropNode, rowsNode, triggerNode, plateNode)) (node as? RenderNode)?.discardDisplayList()
   }
@@ -389,25 +395,23 @@ class GlassMenuView(context: Context, appContext: AppContext) :
     state.lockedFieldStep = lockedFieldStep
     state.radiusX = frame.radiusX
     state.radiusY = frame.radiusY
-    state.hasSource = true
+    state.hasSource = sourceGlass
     state.source.set(frame.sourceLobe)
     state.sourceRadius = min(state.source.width(), state.source.height()) / 2f
     state.smoothing = frame.smoothing
     state.lensHeight = frame.lensHeight
     state.lensAmount = frame.lensAmount
     state.materialProgress = frame.contentProgress
-    state.surfaceOpacity = 1f
+    state.surfaceOpacity = if (sourceGlass) 1f else frame.contentProgress
     state.dark = dark
     state.config = config
     state.trigger = triggerConfig
     applyLight(frame.contentProgress)
-    val glass = renderer as? GlassRenderer ?: GlassRenderer(density, density * FieldStep).also { renderer = it }
+    val glass = renderer as? GlassRenderer ?: GlassRendererPool.obtain(density, density * FieldStep).also { renderer = it }
     glass.prepare(state)
     glass.drawGlass(canvas, backdrop, state, limits)
-    if (!warmed) {
-      warmed = true
-      if (glass.warmPipelines(canvas)) post { invalidate() }
-    }
+    // Once per renderer; a pooled renderer is already warm.
+    if (glass.warmPipelines(canvas)) post { invalidate() }
 
     val rows = recordRows()
     val zoom = frame.contentZoom
@@ -446,12 +450,13 @@ class GlassMenuView(context: Context, appContext: AppContext) :
       plateLayer.setAlpha(frame.rowsOpacity)
     }
     glass.drawForeground(canvas, state, animating && !held, frame.portalBlur * config.morphBlur) { recording ->
-      if (trigger != null && frame.sourceOpacity > .001f) recording.drawRenderNode(trigger)
+      if (sourceGlass && trigger != null && frame.sourceOpacity > .001f) recording.drawRenderNode(trigger)
       if (frame.rowsOpacity > .001f) {
         if (plateLayer != null) recording.drawRenderNode(plateLayer)
         recording.drawRenderNode(rows)
       }
     }
+    if (!sourceGlass && trigger != null && frame.sourceOpacity > .001f) canvas.drawRenderNode(trigger)
   }
 
   // Upstream `GlassMenuSession.applyLight`; the trigger here has no light of its own.
