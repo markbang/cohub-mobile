@@ -3497,6 +3497,23 @@ for (const file of ["../src/components/FloatingTabBar.tsx", "../src/components/S
   assert.ok(cancelCallbacks.length > 0, `${file} still handles cancelled touches`);
   for (const callback of cancelCallbacks) assert.doesNotMatch(callback, /manager\.(fail|end|activate)\(/, `${file}: changing state from onTouchesCancelled re-enters the handler's own cancellation and crashes RNGH 3.3 on Android`);
 }
+// A closing select menu's Modal still takes every touch, so the menu itself must hand the touch on, not drop it.
+{
+  const renderSelectMenu = loadChromeComponent("../src/components/SettingsSelectRow.tsx", "SelectMenu", {
+    ...chromeScope, Modal: "Modal", GlassBackdropScope: "GlassBackdropScope", MorphMenuSurface: "MorphMenuSurface", SelectMenuRows: "SelectMenuRows", ToastViewport: "ToastViewport",
+    raiseToastOverlay: () => undefined, useRef: () => ({ current: null }), useState: () => [{ x: 0, y: 24 }, () => undefined],
+  });
+  const touches = [];
+  const props = { menu: { left: 100, top: 300, width: 250, height: 104, anchor: { x: 280, y: 306, width: 80, height: 22 } }, title: "Web browsing", options: [], value: "system", highlight: null, onChoose() {}, onClose() {}, onClosed() {}, onTouchWhileClosing: (x, y) => touches.push([x, y]), anchorRef: { current: null } };
+  const root = (open) => chromeNodes(renderSelectMenu({ ...props, open })).find((node) => node.props?.onResponderGrant);
+  assert.equal(root(true).props.pointerEvents, "auto");
+  assert.equal(root(true).props.onStartShouldSetResponder(), false, "an open menu leaves touches to its rows and backdrop");
+  const closing = root(false);
+  assert.equal(closing.props.pointerEvents, "box-only", "a closing menu takes the touch itself, so its rows and backdrop cannot");
+  assert.equal(closing.props.onStartShouldSetResponder(), true);
+  closing.props.onResponderGrant({ nativeEvent: { pageX: 300, pageY: 290 } });
+  assert.deepEqual(touches, [[300, 314]], "a touch while closing is handed on in window coordinates");
+}
 const messageContent = readFileSync(new URL("../src/components/MessageContent.tsx", import.meta.url), "utf8");
 assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message markdown must not blanket-block the panel swipe");
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");

@@ -94,6 +94,20 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
       onOpenChange?.(true);
     });
   };
+  const rowRef = useRef<View>(null);
+  /**
+   * A touch while the menu runs back into its value. The menu's Modal is a window of its own and takes every touch
+   * until it unmounts, so the screen under it cannot see this one: a touch on this row reopens the menu, and any
+   * other touch ends the close at once so the next touch reaches the screen.
+   */
+  const touchWhileClosing = (x: number, y: number) => {
+    const row = rowRef.current;
+    if (!row) { setMenu(null); return; }
+    row.measureInWindow((rowX, rowY, rowWidth, rowHeight) => {
+      if (x >= rowX && x <= rowX + rowWidth && y >= rowY && y <= rowY + rowHeight) open();
+      else setMenu(null);
+    });
+  };
   const close = () => {
     menuRef.set(null);
     highlightRef.set(null);
@@ -190,6 +204,7 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   return <>
     <GestureDetector gesture={gesture}>
       <View
+        ref={rowRef}
         collapsable={false}
         accessible
         accessibilityRole="button"
@@ -208,11 +223,11 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         </SettingsRow>
       </View>
     </GestureDetector>
-    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} anchorRef={anchorRef} /> : null}
+    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} onTouchWhileClosing={touchWhileClosing} anchorRef={anchorRef} /> : null}
   </>;
 }
 
-function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed, anchorRef }: {
+function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed, onTouchWhileClosing, anchorRef }: {
   menu: MenuLayout;
   open: boolean;
   title: string;
@@ -222,6 +237,8 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   onChoose: (value: T) => void;
   onClose: () => void;
   onClosed: () => void;
+  /** A touch while closing, in window coordinates. */
+  onTouchWhileClosing: (x: number, y: number) => void;
   anchorRef: RefObject<View | null>;
 }) {
   const rootRef = useRef<View>(null);
@@ -230,7 +247,15 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   // A tap on the open menu lights its row too; a press slid from the settings row lights it through `highlight`.
   return <Modal transparent visible animationType="none" statusBarTranslucent navigationBarTranslucent onShow={raiseToastOverlay} onRequestClose={onClose}>
     <GlassBackdropScope inside={false}>
-    <View ref={rootRef} collapsable={false} pointerEvents={open ? "auto" : "none"} className="flex-1" onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
+    <View
+      ref={rootRef}
+      collapsable={false}
+      // Closing, the root takes the touch itself (box-only) so the rows and backdrop cannot.
+      pointerEvents={open ? "auto" : "box-only"}
+      onStartShouldSetResponder={() => !open}
+      onResponderGrant={(event) => onTouchWhileClosing(event.nativeEvent.pageX + origin.x, event.nativeEvent.pageY + origin.y)}
+      className="flex-1"
+      onLayout={() => rootRef.current?.measureInWindow((x, y) => setOrigin((current) => current.x === x && current.y === y ? current : { x, y }))}>
       <Pressable accessibilityRole="button" accessibilityLabel={title} style={StyleSheet.absoluteFill} onPress={onClose} />
       <MorphMenuSurface
         accessibilityRole="menu"
