@@ -1,4 +1,4 @@
-import type { CohubClient, CronJobRecord, SandboxSpecId, SpaceMember, SpaceModListItem, SpaceRole, SpaceSandboxConfig, SpaceSandboxRecord, SpaceWalletSummary } from "@neta-art/cohub";
+import type { CohubClient, CronJobRecord, SandboxSpecId, SpaceMember, SpaceModListItem, SpaceRole, SpaceSandboxConfig, SpaceSandboxRecord, SpaceWalletSummary, WorkspaceUsage } from "@neta-art/cohub";
 import { useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useCallback, useMemo, type SetStateAction } from "react";
 import { useTranslation } from "@/src/i18n";
@@ -8,7 +8,7 @@ export type SpaceEnvironmentItem = { name: string; value: string };
 type InvitationItem = { token: string; role: SpaceRole; status: string };
 export type SpaceSettingsResourceState = { loading: boolean; loaded: boolean; error: string | null };
 type Ports = Record<string, { url?: string; port?: number }>;
-type ResourceKey = "env" | "config" | "sandbox" | "wallet" | "ports" | "allowedSpec" | "members" | "invitations" | "mods" | "schedules";
+type ResourceKey = "env" | "config" | "sandbox" | "usage" | "wallet" | "ports" | "allowedSpec" | "members" | "invitations" | "mods" | "schedules";
 
 const NO_ENV: SpaceEnvironmentItem[] = [];
 const NO_PORTS: Ports = {};
@@ -34,6 +34,8 @@ export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
     env: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "env"), queryFn: async () => (await space!.env.list()).env as SpaceEnvironmentItem[], enabled }),
     config: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "config"), queryFn: async (): Promise<SpaceSandboxConfig | null> => (await space!.getConfig()).config.sandbox, enabled }),
     sandbox: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "sandbox"), queryFn: async (): Promise<SpaceSandboxRecord | null> => (await space!.sandbox.get()).sandbox, enabled }),
+    // Only Space details carry the workspace measurement; local Runtimes have none.
+    usage: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "usage"), queryFn: async (): Promise<WorkspaceUsage | null> => (await client!.spaces.get(spaceId)).workspaceUsage ?? null, enabled }),
     wallet: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "wallet"), queryFn: (): Promise<SpaceWalletSummary> => space!.wallet.get(), enabled }),
     ports: useScreenQuery({ queryKey: spaceSettingsKey(spaceId, "ports"), queryFn: async (): Promise<Ports> => (await space!.sandbox.ports()).endpoints, enabled }),
     allowedSpec: useScreenQuery({
@@ -81,6 +83,7 @@ export function useSpaceSettings(client: CohubClient | null, spaceId: string) {
     env: queries.env.data ?? NO_ENV,
     config: queries.config.data ?? null,
     sandbox: queries.sandbox.data ?? null,
+    usage: queries.usage.data ?? null,
     wallet: queries.wallet.data ?? null,
     ports: queries.ports.data ?? NO_PORTS,
     allowedSpec: queries.allowedSpec.data ?? "standard",

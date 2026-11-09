@@ -17,7 +17,7 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
 import type { SessionSourceFilter } from "@/src/data/session-source";
-import { useSourceSessions } from "@/src/data/use-source-sessions";
+import { useSourceSessions, type ChatsListFilter } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
 import { uiSnapshots } from "@/src/config";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
@@ -65,34 +65,38 @@ export default function ChatsScreen() {
   const [query, setQuery] = useState("");
   const sourcePreference = useSessionSourcePreference();
   const sourceFilter = sourcePreference.filter;
+  // The archive is a place to visit, not a saved preference: the tab reopens on the chosen source.
+  const [archivedView, setArchivedView] = useState(false);
+  const listFilter: ChatsListFilter = archivedView ? "archived" : sourceFilter;
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
   const sourceButtonRef = useRef<View>(null);
   const toast = useToast();
   const selectSource = (next: SessionSourceFilter) => {
+    setArchivedView(false);
     if (next === sourceFilter) return;
     void saveSessionSourcePreference(next).catch(() => toast({ title: t("chats.source.saveFailed"), tone: "danger" }));
   };
-  const sourceSessions = useSourceSessions(client, sourceFilter);
+  const sourceSessions = useSourceSessions(client, listFilter);
   const sourceSessionList = sourceSessions.sessions;
   const sourceLoadMore = sourceSessions.loadMore;
   const sourceLoadingMore = sourceSessions.loadingMore;
-  const baseSessions = sourceFilter === "all" ? state.sessions : sourceSessionList;
+  const baseSessions = listFilter === "all" ? state.sessions : sourceSessionList;
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
     const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
-  useSyncQuery("chats", refreshChats, 15_000, sourceFilter === "all" && !state.booting);
+  useSyncQuery("chats", refreshChats, 15_000, listFilter === "all" && !state.booting);
   const dataError = state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
-  const remoteSearch = useRemoteSearch(client, query, { enabled: sourceFilter === "all", types: CHAT_SEARCH_TYPES });
+  const remoteSearch = useRemoteSearch(client, query, { enabled: listFilter === "all", types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
   useEffect(() => {
-    if (sourceFilter === "all" || sourceSessionList.length === 0) return;
+    if (listFilter === "all" || sourceSessionList.length === 0) return;
     void refreshSessionStatuses(sourceSessionList, { silent: true });
-  }, [refreshSessionStatuses, sourceFilter, sourceSessionList]);
+  }, [refreshSessionStatuses, listFilter, sourceSessionList]);
 
   const localSessions = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
@@ -100,24 +104,24 @@ export default function ChatsScreen() {
     return baseSessions.filter((session) => [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
   }, [baseSessions, trimmedQuery]);
   const localSpaces = useMemo(() => {
-    if (sourceFilter !== "all" || !trimmedQuery) return [];
+    if (listFilter !== "all" || !trimmedQuery) return [];
     const needle = trimmedQuery.toLowerCase();
     return state.spaces.filter((space) => [space.name, space.title, space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [sourceFilter, state.spaces, trimmedQuery]);
+  }, [listFilter, state.spaces, trimmedQuery]);
   const countSpaceIds = useMemo(() => localSpaces.filter((space) => !space.description?.trim()).map((space) => space.id), [localSpaces]);
   // Search results reuse already-probed counts; they do not fan out probes of their own.
   const spaceSessionCounts = useSpaceSessionCounts(client, countSpaceIds, { probe: false });
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatListItem[]>(() => {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
-    if (!trimmedQuery && sourceFilter === "all") {
+    if (!trimmedQuery && listFilter === "all") {
       const running = new Set(runningIds);
       const keep = (session: (typeof localSessions)[number]) => running.has(session.id);
       return buildSessionForkTree(localSessions, sessionForks, { expanded: expandedForks, keep }).map((entry): ChatListItem => entry.type === "toggle"
         ? { kind: "fork-toggle", rootId: entry.rootId, hidden: entry.hidden, expanded: entry.expanded }
         : { kind: "local-session", session: entry.session, fork: entry.fork, tree: entry.tree });
     }
-    if (!trimmedQuery || sourceFilter !== "all") return localSessions.map(flatSession);
+    if (!trimmedQuery || listFilter !== "all") return localSessions.map(flatSession);
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
     const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
     const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
@@ -129,13 +133,13 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [expandedForks, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, sourceFilter, trimmedQuery]);
+  }, [expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.
   // Release follows whichever comes last of drag end, momentum end, or a scroll event (iOS skips momentum end
   // when a touch stops a fling); blur and a hard cap cover gestures whose end never arrives.
-  const orderContext = `${sourceFilter}\n${trimmedQuery}`;
+  const orderContext = `${listFilter}\n${trimmedQuery}`;
   const [heldOrder, setHeldOrder] = useState<{ context: string; keys: readonly string[] } | null>(null);
   const shownKeysRef = useRef<readonly string[]>([]);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -178,7 +182,7 @@ export default function ChatsScreen() {
     [spaceSessionCounts, t, theme, prefetchSession, selectedChatId],
   );
 
-  const refresh = () => { if (sourceFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
+  const refresh = () => { if (listFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
   const refreshOnPull = async () => {
     setPullRefreshing(true);
     try {
@@ -197,30 +201,35 @@ export default function ChatsScreen() {
     { value: "web", label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" },
     { value: "other", label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" },
   ] as const satisfies readonly { value: SessionSourceFilter; label: string; detail?: string; icon: NativeMenuAction["icon"] }[];
-  const sourceLabel = sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
+  const sourceLabel = archivedView ? t("chats.archived") : sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
   // Counting a source needs its own paged query, so each choice says what it covers instead.
-  const sourceActions: NativeMenuAction[] = sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: "detail" in option ? option.detail : undefined, checked: option.value === sourceFilter, onPress: () => selectSource(option.value) }));
-  const hasActiveFilter = Boolean(trimmedQuery) || sourceFilter !== "all";
+  const sourceActions: NativeMenuAction[] = [
+    ...sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: "detail" in option ? option.detail : undefined, checked: !archivedView && option.value === sourceFilter, onPress: () => selectSource(option.value) })),
+    { icon: "archive", title: t("chats.archived"), checked: archivedView, onPress: () => setArchivedView(true) },
+  ];
+  const hasActiveFilter = Boolean(trimmedQuery) || listFilter !== "all";
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
     title: t("tabs.chats"),
     search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
     // Leading to trailing: the prominent action takes the trailing edge, as on Android.
     items: [
-      { kind: "menu", label: t("chats.source.filter"), icon: "filter", title: sourceLabel, active: sourceFilter !== "all", actions: sourceActions },
+      { kind: "menu", label: t("chats.source.filter"), icon: archivedView ? "archive" : "filter", title: sourceLabel, active: listFilter !== "all", actions: sourceActions },
       { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
     ],
   });
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <LoadingState label={t("chats.searching")} />
-    : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
+    : archivedView && !trimmedQuery
+      ? <EmptyState icon="archive" title={t("chats.empty.archived.title")} description={t("chats.empty.archived.body")} action={{ icon: "x", label: t("chats.action.clearFilters"), onPress: () => selectSource("all") }} />
+      : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
 
   return (
     <Screen edgeToEdge blurTarget={blurTarget}>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
-          <IconButton name="filter" label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={sourceFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
+          <IconButton name={archivedView ? "archive" : "filter"} label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={listFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </MenuAnchor>
         <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
       </>} />
@@ -256,7 +265,7 @@ export default function ChatsScreen() {
         // UI captures hide the scroll bar, which Android leaves up after a tab switch.
         showsVerticalScrollIndicator={!uiSnapshots}
         {...pullRefresh.listProps}
-        onEndReached={() => { if (trimmedQuery) return; if (sourceFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
+        onEndReached={() => { if (trimmedQuery) return; if (listFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
@@ -271,8 +280,8 @@ export default function ChatsScreen() {
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
           </View>
         </View>}
-        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (sourceFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
-        ListFooterComponent={!dataError && (state.sessionsLoadingMore || (sourceFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
+        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
+        ListFooterComponent={!dataError && (state.sessionsLoadingMore || (listFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
       </BrandRefreshArea>
       </EdgeBlurTarget>

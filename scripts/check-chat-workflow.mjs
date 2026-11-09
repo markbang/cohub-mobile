@@ -82,7 +82,7 @@ import { channelHealthState, createSettingsChannel, createWeChatLoginPoller, isC
 import { activityContributorName, activityRange, localDateKey, tokenDays } from "../src/data/activity.ts";
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
-import { canUseRuntimeHarness, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
+import { approvalModeFromTurns, canUseRuntimeHarness, fastServiceTier, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
 import { RELEASE_GRACE_MS, ToastClock, pushToast, toastDuration } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
@@ -222,6 +222,10 @@ const t = (key, vars = {}) => key + (Object.keys(vars).length ? ` ${JSON.stringi
 const running = sessionActivity({ activeTurn: { id: "turn", sequence: 2, status: "running", provider: null, model: null, startedAt: "2026-01-01T00:00:00Z", anchorUserMessageId: null } }, { status: "running", latestTurn: null, live: null, t, now: Date.parse("2026-01-01T03:05:00Z") });
 assert.equal(running.text, 'ui.status.running session.activity.elapsedHours {"hours":3}', "running rows show elapsed buckets");
 assert.equal(sessionActivity({ activeTurn: null }, { status: "failed", latestTurn: { id: "turn", sequence: 2, status: "failed", updatedAt: "2026-01-01T00:00:00Z", errorMessage: "model overloaded" }, live: null, t }).text, "ui.status.failed · model overloaded", "the fetched Turn explains a failed row");
+assert.equal(sessionActivity({ activeTurn: null, lastTurnIssue: { turnId: "turn", sequence: 2, status: "interrupted", reason: "billing", errorMessage: null } }, { status: "stopped", latestTurn: null, live: null, t }).text, "session.activity.billingStopped", "a run stopped for an empty balance says why");
+assert.equal(approvalModeFromTurns([{ executionKind: "agent", meta: { harness: "codex", approvalMode: "read_only" } }, { executionKind: "note", meta: { harness: "codex", approvalMode: "auto" } }], "codex"), "read_only", "notes never set the approval mode");
+assert.deepEqual([fastServiceTier({ defaultServiceTier: "priority" }, false), fastServiceTier(null, false), fastServiceTier(null, true)], ["default", undefined, "priority"], "turning Fast off only says so where it is the default");
+assert.deepEqual(spaceRealtimeChange({ type: "space.session.approvals.changed", spaceId: "space", sessionId: "chat", payload: { sessionId: "chat" } }).exact, ["session:chat:approvals"]);
 assert.equal(sessionActivity({ activeTurn: null, lastTurnIssue: null }, { status: "idle", latestTurn: { id: "turn", sequence: 2, status: "completed", updatedAt: "2026-01-01T00:00:00Z", assistantText: "done" }, live: null, t }), null, "finished rows fall back to the preview");
 assert.ok(statusChange.prefixes.includes("chats") && !statusChange.prefixes.includes("running:"), "Turn events update Running in place instead of rescanning the account");
 assert.throws(() => spaceRealtimeChange({ type: "session.updated", spaceId: "space", sessionId: "chat", payload: { session: { id: "other", spaceId: "space" } } }), /Invalid realtime/);
@@ -240,6 +244,7 @@ const activeTurnPatch = { type: "session.updated", spaceId: "unwatched", session
 assert.equal(spaceRealtimeChange(activeTurnPatch).session, undefined, "an activeTurn-only update has no revision to order metadata");
 assert.deepEqual(userSessionRealtimeChange(activeTurnPatch, () => true), { exact: [], prefixes: [], sessionId: "chat" }, "an activeTurn-only update is accepted, not reported as invalid metadata");
 assert.throws(() => spaceRealtimeChange({ ...activeTurnPatch, payload: { session: { ...activeTurnPatch.payload.session, updatedAt: "not-a-date" } } }), /Invalid realtime Chat metadata/);
+assert.equal(spaceRealtimeChange({ type: "session.updated", spaceId: "space", sessionId: "chat", payload: { session: { id: "chat", spaceId: "space", updatedAt: "2026-11-06T00:00:00Z", archivedAt: "2026-11-06T00:00:00Z" } } }).session.archivedAt, "2026-11-06T00:00:00Z", "archive state reaches held rows");
 
 const syncRows = Array.from({ length: 120 }, (_, index) => ({ id: String(1000 - index), spaceId: "space", lastMessageAt: new Date(200000 - index * 1000).toISOString(), updatedAt: new Date(200000 - index * 1000).toISOString() }));
 const newHeadRow = { ...syncRows[0], id: "new", lastMessageAt: new Date(201000).toISOString(), updatedAt: new Date(201000).toISOString() };
@@ -976,7 +981,7 @@ for (const [tab, component, expectedRequests] of [
     useRouter: () => ({ back() {} }), useLocalSearchParams: () => ({ spaceId: "space", path: filePath }),
     firstParam: (value) => value ?? "", ...appHooks(() => ({ client })), useToast: () => () => {},
     usePreventRemove: (enabled, callback) => { guard = { enabled, callback }; },
-    Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict, isMarkdownFile,
+    Alert: { alert: (...args) => alerts.push(args) }, detectCodeLanguage: () => "text", isEditableTextFile, isFileConflictError, classifySaveConflict, isMarkdownFile, isSpaceFsSymlink: (value) => value.kind === "symlink",
     MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor", AnchoredActionMenu: "AnchoredActionMenu", MAX_EDITABLE_CODE_BYTES: 512 * 1024, CodeBlock: "CodeBlock", CodeEditor: "CodeEditor", MarkdownDocument: "MarkdownDocument", SaveBanner: "SaveBanner", FileError: "FileError", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
   });
   const render = () => chromeNodes(runner.render(renderFile));
@@ -1050,9 +1055,9 @@ for (const [tab, component, expectedRequests] of [
 {
   const runner = createScreenHooks();
   const requests = [];
-  const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } } };
+  const client = { apps: { get: () => { const pending = Promise.withResolvers(); requests.push(pending); return pending.promise; } }, user: { likes: { isLiked: async () => false } } };
   const renderWork = loadChromeComponent("../app/work/[appId].tsx", "WorkScreen", {
-    ...formScope, ...runner.hooks,
+    ...formScope, ...runner.hooks, useToast: () => () => {},
     useRouter: () => ({}), useLocalSearchParams: () => ({ appId: "work" }), ...appHooks(() => ({ client })), AppHostWebView: "AppHostWebView", LoadingState: "LoadingState",
   });
   const render = () => chromeNodes(runner.render(renderWork));
@@ -1256,6 +1261,7 @@ for (const [tab, component, expectedRequests] of [
     useRemoteSearch: () => panelSearch,
     buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
+    usePagedQuery: () => ({ query: { error: null, refetch: async () => {} }, items: null, hasMore: false, loadingMore: false, loadMoreError: null, loadMore: async () => {} }),
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader", KeyboardAvoidingView: "KeyboardAvoidingView", PANEL_FILL: {},
   });
   const props = { spaceId: "space", spaceName: "Space", sessions: [runningFixture], client, onChipsTouchChange() {}, onClose() {}, onNewChat() {}, onOpenSession() {} };
@@ -2602,7 +2608,7 @@ inspectPagination(contextSource);
 assert.ok(paginationCallback && stateSyncHook && timeoutSource);
 const listReducerSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
 const latestStatusSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "updateLatestTurn");
-const reducerHelperSources = ["preferNewerSession", "mergeSessionItem", "placeRunningSession"].map((name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource)).join("\n");
+const reducerHelperSources = ["isListedSession", "preferNewerSession", "mergeSessionItem", "placeRunningSession"].map((name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource)).join("\n");
 const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionSourceFilterOf", "mergeSessionForks", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
   (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionSourceFilterOf, mergeSessionForks,
 );
@@ -2618,6 +2624,9 @@ assert.equal(refreshedList.sessionViews, listSyncState.sessionViews, "list polli
 const completeHead = reduceListSync(listSyncState, { type: "sessions-head-success", sessions: syncRows.slice(0, 5), hasMore: false, cursor: null, boundary: { lastMessageAt: syncRows[4].lastMessageAt }, requestStartedAt: 300000 });
 const lateTail = reduceListSync(completeHead, { type: "sessions-more-success", sessions: syncRows.slice(60), hasMore: false, cursor: null, boundary: listSyncState.sessionsPageBoundary });
 assert.equal(lateTail.sessions, completeHead.sessions, "an old in-flight tail cannot restore rows removed by a complete head snapshot");
+const archivedRow = reduceListSync(listSyncState, { type: "session-realtime-meta", sessionId: syncRows[0].id, session: { id: syncRows[0].id, updatedAt: new Date(300000).toISOString(), archivedAt: new Date(300000).toISOString() } });
+assert.equal(archivedRow.sessions.some((session) => session.id === syncRows[0].id), false, "an archived Chat leaves the default list");
+assert.equal(reduceListSync(archivedRow, { type: "session-upsert", session: { ...syncRows[0], archivedAt: null, updatedAt: new Date(300001).toISOString() } }).sessions[0].id, syncRows[0].id, "unarchiving lists the Chat again");
 const backgroundStatusStart = reduceListSync(listSyncState, { type: "session-status-start", silent: true });
 assert.equal(backgroundStatusStart.sessionStatusRequests, 0, "automatic status probes do not flash empty-list skeletons");
 assert.equal(reduceListSync(backgroundStatusStart, { type: "session-status-end", silent: true }).sessionStatusRequests, 0);
@@ -4646,7 +4655,7 @@ assert.equal(reduceQueueFailure({ sessionViews: { fixture: { catchingUp: true } 
     emptyView: () => ({ messages: [], turns: [], hasMoreOlder: false, hasMoreNewer: false, windowGeneration: 0, stream: null }),
     mergeTurnWindows, turnWindowsJoin, turnFitsWindow, latestTurn, mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage,
     isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, streamRecoveryFromTail,
-    preferNewerSession: (_current, incoming) => incoming,
+    preferNewerSession: (_current, incoming) => incoming, isListedSession: (session) => !session.archivedAt,
     updateView: (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }),
     updateLatestTurn: (state, id, turn) => ({ ...state, sessionLatestTurns: { ...state.sessionLatestTurns, [id]: turn ?? state.sessionLatestTurns?.[id] } }),
     isLiveMessage: (message) => message.meta?.optimistic === true || message.meta?._mobileLive === true || isFailedSend(message),

@@ -55,9 +55,12 @@ import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlo
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
 import type { UploadTarget } from "@/src/data/attachment-uploads";
 import { useAttachmentUploadState } from "@/src/data/use-attachment-upload";
-import { canUseRuntimeHarness, localModelsForHarness, runtimeHarnessFromTurn, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
+import { approvalModeFromTurns, approvalModesFor, canUseRuntimeHarness, fastServiceTier, FAST_SERVICE_TIER, localModelsForHarness, runtimeHarnessFromTurn, runtimeModelFor, supportsFast, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
+import type { LocalExecution } from "@/src/data/context";
+import type { LocalExecutionMenu } from "@/src/components/ExecutionHarnessMenu";
+import { SessionApprovals } from "@/src/components/SessionApprovals";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
-import { harnessLabel, HttpError, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
+import { harnessLabel, HttpError, isAgentTurn, type ApprovalMode, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
 import { appendVoiceText as appendDictation } from "@/src/data/voice-append";
 import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, isSubmittingSend, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
@@ -231,7 +234,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  const { client, userUuid, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, setSessionArchived, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -684,7 +687,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   }, [headerHeight, measurements, measuredMessages, view.hasMoreOlder]);
   const turnsNewestFirst = useMemo(() => [...view.turns].reverse(), [view.turns]);
   const recordedModel = useMemo(() => recordedChatModel(turnsNewestFirst, messages, models), [messages, models, turnsNewestFirst]);
-  const lastAgentTurn = useMemo(() => turnsNewestFirst.find((turn) => turn.executionKind !== "direct_generation"), [turnsNewestFirst]);
+  const lastAgentTurn = useMemo(() => turnsNewestFirst.find(isAgentTurn), [turnsNewestFirst]);
   const composerHarness = selectedHarness ?? runtimeHarnessFromTurn(lastAgentTurn);
   const recordedLocalModel = composerHarness === "cohub" ? null : turnsNewestFirst.find((turn) => runtimeHarnessFromTurn(turn) === composerHarness && turn.model);
   const activeModel = composerHarness === "cohub"
@@ -693,6 +696,23 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
   const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
+  // Unsent choices per Harness; once sent, the Turn's own record shows what ran.
+  const [approvalChoices, setApprovalChoices] = useState<Partial<Record<RuntimeHarness, ApprovalMode>>>({});
+  const [fastChoices, setFastChoices] = useState<Partial<Record<RuntimeHarness, boolean>>>({});
+  const approvalModes = approvalModesFor(runtime.status, composerHarness);
+  const approvalMode = composerHarness === "cohub" ? null : approvalChoices[composerHarness] ?? approvalModeFromTurns(view.turns, composerHarness);
+  const runtimeModel = runtimeModelFor(runtime.status, composerHarness, activeModel?.id);
+  const fastAvailable = supportsFast(runtimeModel);
+  const fast = fastAvailable && (fastChoices[composerHarness] ?? runtimeModel?.defaultServiceTier === FAST_SERVICE_TIER);
+  const execution: LocalExecution | undefined = composerHarness === "cohub" ? undefined : {
+    // Kept when the Runtime stops offering it, so the send fails instead of silently dropping a limit.
+    ...(approvalMode ? { approvalMode } : {}),
+    ...(fastAvailable && fastChoices[composerHarness] !== undefined ? { serviceTier: fastServiceTier(runtimeModel, fast) } : {}),
+  };
+  const executionMenu: LocalExecutionMenu = composerHarness === "cohub" ? {} : {
+    approval: { modes: approvalModes, value: approvalMode, onSelect: (mode) => setApprovalChoices((current) => ({ ...current, [composerHarness]: mode })) },
+    ...(fastAvailable ? { fast: { value: fast, onToggle: () => setFastChoices((current) => ({ ...current, [composerHarness]: !fast })) } } : {}),
+  };
   // The catalog names the recorded model; before it loads the trigger would show the raw id.
   useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
   const liveStream = shouldShowLiveStream(view.stream, messages);
@@ -1074,6 +1094,20 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       setRenameSaving(false);
     }
   };
+  const archived = Boolean(session?.archivedAt);
+  // Only the person whose run stopped can top up for it; other members see the Turn as stopped.
+  const billingStopped = useMemo(() => {
+    const turn = view.turns.at(-1);
+    return turn?.status === "interrupted" && turn.summary?.reason === "billing" && turn.userUuid === userUuid;
+  }, [userUuid, view.turns]);
+  const [archiving, setArchiving] = useState(false);
+  const toggleArchive = async () => {
+    if (!session || archiving) return;
+    setArchiving(true);
+    try { await setSessionArchived(session, !archived); } catch (error) { showToast({ title: t("session.archive.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }); } finally {
+      setArchiving(false);
+    }
+  };
   const titleActions: AnchoredMenuAction[] = [
     { icon: "copy", title: t("chat.titleActions.copy"), onPress: () => void copySessionTitle() },
     { icon: "square-pen", title: t("chat.titleActions.edit"), onPress: openRename },
@@ -1084,6 +1118,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       { icon: "share", title: t("chat.actions.share"), onPress: () => void shareChat() },
       { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
       { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
+      // The server refuses to archive a running Chat; the item says why instead of failing.
+      { icon: "archive", title: archived ? t("session.unarchive") : running ? t("session.archive.running") : t("session.archive"), disabled: !client || !session || archiving || (!archived && running), onPress: () => void toggleArchive() },
     ] },
     { title: spaceName, actions: [
       { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
@@ -1337,6 +1373,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     sendNewMessage(draftSpace.id, text, files, {
       model,
       harness,
+      ...(harness === composerHarness && execution ? { execution } : {}),
       onOptimistic: (message) => {
         pending = message;
         setNewChat({ pending: message });
@@ -1391,6 +1428,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     sendMessage(sessionId, text, files, {
       model: activeModel,
       harness,
+      ...(execution ? { execution } : {}),
       onOptimistic: (message) => {
         optimisticCreated = true;
         flight.inserted(message);
@@ -1648,8 +1686,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           </ScrollView>
         </Animated.View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
+        {/* Only local Harnesses ask for approval, so Cloud-only Chats never read for it. */}
+        {sessionId && spaceId && (composerHarness !== "cohub" || view.turns.some((turn) => runtimeHarnessFromTurn(turn) !== "cohub")) ? <SessionApprovals client={client} spaceId={spaceId} sessionId={sessionId} running={running} harnessOf={(turnId) => runtimeHarnessFromTurn(view.turns.find((turn) => turn.id === turnId))} /> : null}
+        {billingStopped ? <ComposerNotice icon="wallet" text={t("chat.billingStopped.notice")} action={t("chat.billingStopped.action")} onAction={() => router.push("/settings/billing")} /> : null}
+        {archived ? <ComposerNotice icon="archive" text={t("chat.archived.notice")} action={t("session.unarchive")} busy={archiving} onAction={() => void toggleArchive()} /> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh() })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
+        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh(), execution: executionMenu })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
@@ -1663,7 +1705,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => closeOverlay("labels")} onChanged={() => undefined} /> : null}
         <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => closeOverlay("attachments")} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => closeOverlay("turns")} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
-        <GlassBackdrop target={screenBlurTarget}>{runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} open={harnessMenuOpen} onClose={() => closeOverlay("harness")} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); closeOverlay("harness"); }} /> : null}
+        <GlassBackdrop target={screenBlurTarget}>{runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} execution={executionMenu} open={harnessMenuOpen} onClose={() => closeOverlay("harness")} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); closeOverlay("harness"); }} /> : null}
         <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); closeOverlay("model"); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
         <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="chat-notice-sheet" />
         <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => closeOverlay("rename")}>
@@ -1752,7 +1794,7 @@ function recordedChatModel(turnsNewestFirst: readonly SessionTurnRecord[], messa
     const requestedLevel = requestedThinkingLevel(meta);
     return { provider, id, ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}), ...(requestedLevel ? { thinkingLevel: requestedLevel } : {}) };
   };
-  const turn = turnsNewestFirst.find((item) => item.executionKind !== "direct_generation" && item.provider !== "generation");
+  const turn = turnsNewestFirst.find((item) => isAgentTurn(item) && item.provider !== "generation");
   if (turn) return turn.model ? selection(turn.provider || "cohub", turn.model, turn.meta) : null;
   const message = messages.findLast((item) => item.meta?.messageKind !== "generation_result" && item.provider !== "generation" && (Boolean(item.model) || item.role === "assistant"));
   return message?.model ? selection(message.provider || "cohub", message.model, message.meta) : null;
@@ -1771,6 +1813,17 @@ function MissingChat() {
   const router = useRouter();
   const { t } = useTranslation();
   return <Screen><TopBar title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center"><Text className="text-body text-fg-muted">{t("chat.missing")}</Text></View></Screen>;
+}
+
+/** A state of the Chat the composer answers, with the one action that changes it. */
+function ComposerNotice({ icon, text, action, busy = false, onAction }: { icon: IconName; text: string; action: string; busy?: boolean; onAction: () => void }) {
+  return <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} accessibilityRole="summary" className="flex-row items-center gap-2 bg-background pl-4 pr-2">
+    <AppIcon name={icon} size={14} tone="muted" />
+    <Text className="flex-1 text-caption text-fg-muted">{text}</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={onAction} className="min-h-11 justify-center px-2 active:opacity-70 disabled:opacity-55">
+      <Text className="text-caption font-semibold text-accent">{action}</Text>
+    </Pressable>
+  </Animated.View>;
 }
 
 function VoiceStatusRow({ error, partial }: { error: string | null; partial: string }) {

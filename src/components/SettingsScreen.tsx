@@ -647,6 +647,28 @@ function BillingSection({
 			setPendingProductKey(null);
 		}
 	};
+	// A renewal that failed to charge keeps the plan for a grace period; it is paid or ended here.
+	const recovering = catalog?.currentSubscriptions.find((item) => item.renewalRecovery && item.renewalRecovery.state !== "none") ?? null;
+	const [recoveryAction, setRecoveryAction] = useState<"pay" | "end" | "check" | null>(null);
+	const [endRecoveryOpen, setEndRecoveryOpen] = useState(false);
+	const runRecovery = async (action: "pay" | "end" | "check") => {
+		if (!client || !recovering || recoveryAction) return;
+		setRecoveryAction(action);
+		try {
+			if (action === "pay") {
+				const result = await client.billing.getSubscriptionPaymentAction(recovering.id);
+				if (result.checkoutUrl) await openWebLink(result.checkoutUrl);
+			} else if (action === "end") {
+				await client.billing.cancelSubscriptionAutoRenew(recovering.id);
+				setEndRecoveryOpen(false);
+			}
+			await load();
+		} catch (caught) {
+			onNotice({ title: t("settings.billing.recovery.failed"), message: caught instanceof Error ? caught.message : t("settings.billing.recovery.failed") });
+		} finally {
+			setRecoveryAction(null);
+		}
+	};
 	const plans = catalog?.plans ?? [];
 	const addons = catalog?.addons ?? [];
 	const price = (amountUsd: number) => <Text className="text-subhead tabular-nums text-fg-muted">{formatUsd(amountUsd)}</Text>;
@@ -666,6 +688,14 @@ function BillingSection({
 							</Text>
 						</View>
 					</SettingsGroup>
+					{recovering?.renewalRecovery ? <RenewalRecovery
+						recovery={recovering.renewalRecovery}
+						action={recoveryAction}
+						onPay={() => void runRecovery("pay")}
+						onEnd={() => setEndRecoveryOpen(true)}
+						onCheck={() => void runRecovery("check")}
+					/> : null}
+					<ConfirmSheet visible={endRecoveryOpen} title={t("settings.billing.recovery.end")} message={t("settings.billing.recovery.endConfirm")} confirmLabel={t("settings.billing.recovery.end")} confirmIcon="x" busy={recoveryAction === "end"} onConfirm={() => void runRecovery("end")} onClose={() => setEndRecoveryOpen(false)} />
 					<SettingsGroup label={t("settings.billing.plans")}>
 						{plans.map((plan, index) => (
 							<SettingsRow
@@ -700,6 +730,25 @@ function BillingSection({
 				</>
 			)}
 		</View>
+	);
+}
+
+function RenewalRecovery({ recovery, action, onPay, onEnd, onCheck }: { recovery: NonNullable<BillingCatalog["currentSubscriptions"][number]["renewalRecovery"]>; action: "pay" | "end" | "check" | null; onPay: () => void; onEnd: () => void; onCheck: () => void }) {
+	const { t } = useTranslation();
+	// A charge the provider has not settled yet, or a plan being ended, only waits; paying again could charge twice.
+	const processing = recovery.state === "closing" || recovery.payInvoice.reason === "payment_unresolved";
+	const date = recovery.effectiveEndsAt ? new Date(recovery.effectiveEndsAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+	const busy = action !== null;
+	return (
+		<SettingsGroup label={processing ? t("settings.billing.recovery.processing") : t("settings.billing.recovery.grace")} footer={processing ? undefined : t("settings.billing.recovery.graceDetail", { date })}>
+			{processing ? (
+				<GroupRow leading={action === "check" ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="refresh" accent />} title={t("settings.billing.recovery.check")} titleClassName="text-accent" disabled={busy} onPress={onCheck} last />
+			) : <>
+				{recovery.payInvoice.allowed ? <GroupRow leading={action === "pay" ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="wallet" accent />} title={t("settings.billing.recovery.pay")} titleClassName="text-accent" disabled={busy} onPress={onPay} last={!recovery.endRecovery.allowed} /> : null}
+				{recovery.endRecovery.allowed ? <GroupRow leading={<GroupTile icon="zap" />} title={t("settings.billing.recovery.end")} disabled={busy} onPress={onEnd} last /> : null}
+				{!recovery.payInvoice.allowed && !recovery.endRecovery.allowed ? <GroupRow leading={action === "check" ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="refresh" accent />} title={t("settings.billing.recovery.check")} titleClassName="text-accent" disabled={busy} onPress={onCheck} last /> : null}
+			</>}
+		</SettingsGroup>
 	);
 }
 

@@ -7,7 +7,7 @@ import type { AppDevice } from "@neta-art/cohub";
  */
 export const APP_HOST_ORIGIN = "https://cohub.live";
 
-const DEVICES: readonly AppDevice[] = ["camera", "microphone", "screen"];
+const DEVICES: readonly AppDevice[] = ["camera", "microphone", "screen", "location"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function appHostScript(appOrigin: string): string {
@@ -20,6 +20,8 @@ if(window.parent!==host)return;
 try{Object.defineProperty(document,"referrer",{configurable:true,get:function(){return HOST+"/"}})}catch(e){}
 var granted=[];var media=navigator.mediaDevices;
 if(media&&media.getUserMedia){var original=media.getUserMedia.bind(media);media.getUserMedia=function(constraints){var wanted=[];if(constraints&&constraints.video)wanted.push("camera");if(constraints&&constraints.audio)wanted.push("microphone");for(var i=0;i<wanted.length;i++){if(granted.indexOf(wanted[i])<0)return Promise.reject(new DOMException("Cohub has not allowed this App to use the "+wanted[i]+".","NotAllowedError"))}return original(constraints)}}
+var geo=navigator.geolocation;
+if(geo){var denied=function(fail){if(fail)fail({code:1,message:"Cohub has not allowed this App to use the location.",PERMISSION_DENIED:1,POSITION_UNAVAILABLE:2,TIMEOUT:3})};var current=geo.getCurrentPosition.bind(geo),watch=geo.watchPosition.bind(geo);geo.getCurrentPosition=function(ok,fail,options){if(granted.indexOf("location")<0)return denied(fail);return current(ok,fail,options)};geo.watchPosition=function(ok,fail,options){if(granted.indexOf("location")<0){denied(fail);return 0}return watch(ok,fail,options)}}
 window.__cohubHost={deliver:function(message){window.dispatchEvent(new MessageEvent("message",{data:message,origin:HOST,source:host}))},grant:function(devices){granted=devices.slice()}};
 }catch(e){}})();true;`;
 }

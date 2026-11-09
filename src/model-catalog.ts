@@ -8,7 +8,8 @@ export type ModelThinkingLevel =
 	| "medium"
 	| "high"
 	| "xhigh"
-	| "max";
+	| "max"
+	| "ultra";
 
 const THINKING_LEVELS: ModelThinkingLevel[] = [
 	"off",
@@ -18,7 +19,11 @@ const THINKING_LEVELS: ModelThinkingLevel[] = [
 	"high",
 	"xhigh",
 	"max",
+	"ultra",
 ];
+
+/** Offered only when the model's `thinkingLevelMap` names them. */
+const OPT_IN_THINKING_LEVELS: ReadonlySet<ModelThinkingLevel> = new Set(["xhigh", "max", "ultra"]);
 
 export type ModelAvailabilityLevel =
 	| "available"
@@ -69,15 +74,12 @@ export function getSupportedThinkingLevels(
 	if (entry.model?.reasoning !== true) return ["off"];
 	const map = entry.model?.thinkingLevelMap;
 	if (!map || typeof map !== "object" || Array.isArray(map)) {
-		return THINKING_LEVELS.filter(
-			(level) => level !== "xhigh" && level !== "max",
-		);
+		return THINKING_LEVELS.filter((level) => !OPT_IN_THINKING_LEVELS.has(level));
 	}
 	const values = map as Record<string, unknown>;
 	return THINKING_LEVELS.filter((level) => {
 		if (values[level] === null) return false;
-		if (level === "xhigh" || level === "max")
-			return values[level] !== undefined;
+		if (OPT_IN_THINKING_LEVELS.has(level)) return values[level] !== undefined;
 		return true;
 	});
 }
@@ -130,6 +132,8 @@ export function formatThinkingLevel(level: ModelThinkingLevel) {
 			return translate("model.thinkingLevel.xhigh");
 		case "max":
 			return translate("model.thinkingLevel.max");
+		case "ultra":
+			return translate("model.thinkingLevel.ultra");
 	}
 }
 

@@ -33,10 +33,10 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
       // Partial updates (e.g. activeTurn-only) carry no revision, so they cannot order metadata.
       if (session.updatedAt === undefined) break;
       const metadata: Partial<SessionRecord> = { id: session.id, spaceId, updatedAt: session.updatedAt };
-      for (const key of ["title", "source", "latestMessageText", "lastMessageId", "lastMessageAt"] as const) {
+      for (const key of ["title", "source", "latestMessageText", "lastMessageId", "lastMessageAt", "archivedAt"] as const) {
         const value = session[key];
         if (value === undefined) continue;
-        if (value !== null && (typeof value !== "string" || (key === "lastMessageAt" && !Number.isFinite(Date.parse(value))))) throw new Error("Invalid realtime Chat metadata. Reopen the Space to retry.");
+        if (value !== null && (typeof value !== "string" || ((key === "lastMessageAt" || key === "archivedAt") && !Number.isFinite(Date.parse(value))))) throw new Error("Invalid realtime Chat metadata. Reopen the Space to retry.");
         metadata[key] = value;
       }
       change.session = metadata;
@@ -66,6 +66,15 @@ export function spaceRealtimeChange(event: SpaceRealtimeEvent): SpaceChange {
     }
     case "space.fs.changed":
       change.prefixes.push(`space:${spaceId}:files:`);
+      break;
+    case "space.workspace_usage.updated":
+      change.exact.push(`space:${spaceId}:settings:usage`);
+      break;
+    case "space.wallet.updated":
+      change.exact.push(`space:${spaceId}:wallet`);
+      break;
+    case "space.session.approvals.changed":
+      if (typeof event.sessionId === "string" && event.sessionId) change.exact.push(`session:${event.sessionId}:approvals`);
       break;
     case "app.version.published":
       change.exact.push(`space:${spaceId}:resources`);

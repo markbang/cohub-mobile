@@ -44,6 +44,8 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   gift: "gift",
   "git-fork": "arrow.triangle.branch",
   globe: "globe",
+  heart: "heart",
+  "heart-fill": "heart.fill",
   images: "photo.on.rectangle",
   info: "info.circle",
   layers: "square.stack.3d.up",

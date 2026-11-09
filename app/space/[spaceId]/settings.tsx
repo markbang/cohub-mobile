@@ -23,6 +23,7 @@ import { deviceRuntimeSupported, installDeviceCli, openDeviceControlSettings, pa
 import { useSpaceSettings, type SpaceEnvironmentItem, type SpaceSettingsResourceState } from "@/src/data/use-space-settings";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupStatus } from "@/src/data/sandbox-setup";
 import { formatUsd } from "@/src/data/space-wallet";
+import { formatWorkspaceBytes, workspaceUsageNote } from "@/src/data/workspace-usage";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
@@ -45,7 +46,7 @@ export default function SpaceSettingsScreen() {
   const { t } = useTranslation();
   const toast = useToast();
   const { client } = useAppActions();
-  const { env, setEnv, config, setConfig, sandbox, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
+  const { env, setEnv, config, setConfig, sandbox, usage, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -338,6 +339,11 @@ export default function SpaceSettingsScreen() {
               onPress={() => router.push({ pathname: "/space/[spaceId]/setup", params: { spaceId } })}
             />
           </SettingsGroup>
+          {usage ? (
+            <SettingsGroup>
+              <SettingsRow icon="database" title={t("space.settings.storage")} value={workspaceUsageNote(usage)} detail={usage.bytes === null ? "—" : formatWorkspaceBytes(usage.bytes)} last />
+            </SettingsGroup>
+          ) : null}
         </> : resources.config.loading || resources.config.error ? (
           <SettingsGroup label={t("space.settings.sandbox")}>
             <ResourceStatus state={resources.config} onRetry={() => void loadResource("config")} />
