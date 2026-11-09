@@ -47,7 +47,7 @@ export function largeTitleScroll(search: boolean) {
  * scrolled under it. The same scroll minimizes the floating tab bar, as UIKit's tab bar does.
  */
 export function LargeTitleBar({ title, actions, scrollY, hold = 0 }: { title: string; actions?: ReactNode; scrollY?: SharedValue<number>; hold?: number }) {
-  useMinimizeTabBarOnScroll(scrollY);
+  useMinimizeTabBarOnScroll(scrollY, hold + COLLAPSE_AT);
   const swap = useTitleSwap(scrollY, hold);
   const titleStyle = useAnimatedStyle(() => {
     const progress = swap.get();
