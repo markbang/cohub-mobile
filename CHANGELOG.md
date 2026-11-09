@@ -1,5 +1,49 @@
 # Changelog
 
+## [2.3.12](https://github.com/markbang/cohub-mobile/compare/v2.3.11...v2.3.12) (2026-11-09)
+
+
+### Features
+
+* **android:** draw menus as native Liquid Glass ([#214](https://github.com/markbang/cohub-mobile/issues/214)) ([5a24aeb](https://github.com/markbang/cohub-mobile/commit/5a24aeb2cc33ebb5d192fa09307f5de0c8e976b7))
+* **landing:** redesign in the app's dark style with the latest screenshots ([349bcde](https://github.com/markbang/cohub-mobile/commit/349bcde678005362348cf0742f4fa5548794b591))
+
+
+### Fixes
+
+* **android:** draw the composer controls as glass and blur the composer under its menus ([5508bff](https://github.com/markbang/cohub-mobile/commit/5508bffaa551413419309520def089de44147053))
+* **android:** fit the feedback sheet to its content and lift phone sheets once for the keyboard ([#212](https://github.com/markbang/cohub-mobile/issues/212)) ([d7d60d9](https://github.com/markbang/cohub-mobile/commit/d7d60d905038538b950a63ba90a6fa6bcd2cb6b3))
+* **android:** keep tablet sheets steady over the keyboard and give full-height ones a height ([#211](https://github.com/markbang/cohub-mobile/issues/211)) ([e4f4d0a](https://github.com/markbang/cohub-mobile/commit/e4f4d0a550639d2e89e60a7a2f17cf38b5e4adb7))
+* **android:** keep the tab bar while the Large Title collapses ([#215](https://github.com/markbang/cohub-mobile/issues/215)) ([2a5ad8b](https://github.com/markbang/cohub-mobile/commit/2a5ad8b4d8b9b8487bd8ad14cff476fbb94b70c4))
+* **android:** let tablets turn from launch instead of letterboxing in landscape ([#203](https://github.com/markbang/cohub-mobile/issues/203)) ([d1bac47](https://github.com/markbang/cohub-mobile/commit/d1bac47d3671feb7e4e8496e0281c3e7d0c3e784))
+* **android:** lock phones in MainActivity so tablets turn from launch ([#206](https://github.com/markbang/cohub-mobile/issues/206)) ([f20b02f](https://github.com/markbang/cohub-mobile/commit/f20b02fc2a70af2bc67fc153069f499947f73440))
+* **android:** release tablets letterboxed in landscape without a native change ([#205](https://github.com/markbang/cohub-mobile/issues/205)) ([9326b13](https://github.com/markbang/cohub-mobile/commit/9326b139f3fc9a2769c1ceff19ccf3d5f24fd8fe))
+* **landing:** bust the cached stylesheet so the redesign loads its own CSS ([4ecd9ce](https://github.com/markbang/cohub-mobile/commit/4ecd9ceada24adad439a2d105d0e24ac0c5e3e11))
+* **space:** keep pressed bar buttons from clipping on the Space page ([73d2e91](https://github.com/markbang/cohub-mobile/commit/73d2e9169b661e6bf1216c5d83dbd66ca052cfce))
+* **tablet:** focus the right pane's top screen so its data loads ([#208](https://github.com/markbang/cohub-mobile/issues/208)) ([31920f4](https://github.com/markbang/cohub-mobile/commit/31920f4a9504139f601120381607a5f5f059d65a))
+
+
+### Performance
+
+* **space:** keep the actions menu and Chats panel from redrawing the Space page ([#213](https://github.com/markbang/cohub-mobile/issues/213)) ([1834d46](https://github.com/markbang/cohub-mobile/commit/1834d46245cb1833187cb4b206341cd448d84add))
+
+
+### Refactoring
+
+* make implicit UI state machines explicit ([#207](https://github.com/markbang/cohub-mobile/issues/207)) ([997852b](https://github.com/markbang/cohub-mobile/commit/997852b3668e362f6e5f7adc72b9615711e6fbbf))
+
+
+### Documentation
+
+* **readme:** show the app screens as one composed image ([56f1bbb](https://github.com/markbang/cohub-mobile/commit/56f1bbb037ee8f42e6c684756d3548b7445c1e33))
+* **release:** list the Android glass menu in the next native baseline ([#216](https://github.com/markbang/cohub-mobile/issues/216)) ([0de313f](https://github.com/markbang/cohub-mobile/commit/0de313fc5f2023e47cc30388daddf338343d2d2f))
+
+
+### CI
+
+* cache dependencies and build outputs, run checks beside exports and native builds ([#210](https://github.com/markbang/cohub-mobile/issues/210)) ([4a15e43](https://github.com/markbang/cohub-mobile/commit/4a15e434ac6e47d67cdb0943ddfe7c85df902fc5))
+* **ota:** skip iOS publishes whose fingerprint differs from the released IPA ([#209](https://github.com/markbang/cohub-mobile/issues/209)) ([4013c26](https://github.com/markbang/cohub-mobile/commit/4013c268ac25e5027ecb76c7195834fffd7be1f1))
+
 ## [2.3.11](https://github.com/markbang/cohub-mobile/compare/v2.3.10...v2.3.11) (2026-11-08)
 
 
