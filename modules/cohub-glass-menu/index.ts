@@ -47,6 +47,11 @@ export type GlassMenuViewProps = ViewProps & {
   sourceRect: { x: number; y: number; width: number; height: number };
   /** The trigger's view, drawn inside the glass while it morphs; JS hides the trigger itself meanwhile. */
   sourceTag: number | null;
+  /**
+   * Whether the trigger is glass. A glass trigger buds into the menu as a second lobe and is drawn inside the glass;
+   * a plain one (a select's value) is drawn over the screen shrinking away while the glass fades in from its spot.
+   */
+  sourceGlass?: boolean;
   /** An expo-blur `BlurTargetView` the glass refracts. It must not contain this view. */
   backdropTag: number | null;
   /** The page color behind the backdrop content, and all the glass shows without one. */

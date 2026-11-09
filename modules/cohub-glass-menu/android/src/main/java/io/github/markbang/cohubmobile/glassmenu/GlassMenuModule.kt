@@ -26,6 +26,7 @@ class GlassMenuModule : Module() {
       Prop("backdropColor") { view: GlassMenuView, value: Color? -> view.backdropColor = value?.toArgb() ?: Color.BLACK }
       Prop("dark") { view: GlassMenuView, value: Boolean? -> view.dark = value ?: true }
       Prop("cornerRadius") { view: GlassMenuView, value: Float? -> view.cornerRadius = value ?: 34f }
+      Prop("sourceGlass") { view: GlassMenuView, value: Boolean? -> view.sourceGlass = value ?: true }
       Prop("plateTag") { view: GlassMenuView, value: Int? -> view.plateTag = value }
       Prop("plate") { view: GlassMenuView, value: GlassPlateRecord? -> view.plate = value ?: GlassPlateRecord() }
       Prop("config") { view: GlassMenuView, value: GlassMenuConfigRecord? -> view.config = value ?: GlassMenuConfigRecord() }
