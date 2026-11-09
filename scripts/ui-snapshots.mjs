@@ -131,7 +131,7 @@ export const MOTIONS = [
   { name: "motion-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
   { name: "motion-filter", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ tapOn: "Filter Chats by source.*" }, { waitFor: "Web app" }, { tapOn: "All" }] },
   // Opens the Web browsing picker and closes it from outside, so the account's setting is left alone.
-  { name: "motion-select", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }, { tapPoint: OUTSIDE }] },
+  { name: "motion-select", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }, { tapPoint: OUTSIDE }, { waitGone: "In-app browser" }] },
   { name: "motion-attach", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }, { tapPoint: OUTSIDE }] },
   { name: "motion-model", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }, { tapOnId: "model-option-automatic" }] },
   // A glass button held and let go: it swells under the finger and bounces past rest.

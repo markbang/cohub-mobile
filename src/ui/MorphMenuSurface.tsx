@@ -7,6 +7,7 @@ import { menuMorph, menuScrub, motion } from "@/src/motion";
 import { GlassMenuView, nativeGlassMenu, type GlassMenuState } from "@/src/platform/glass-menu";
 import { useAppTheme } from "@/src/theme";
 import { GlassBackground, useGlassBackdropTarget, useGlassMaterial, useReduceTransparency } from "@/src/ui/Glass";
+import { useScreenVisible } from "@/src/ui/pane";
 import { CLOSE_FRAMES, MORPH_FRAME_MS, OPEN_FRAMES, morphShape, resumeFrame, type MorphRect } from "@/src/ui/menu-morph";
 
 export type { MorphRect } from "@/src/ui/menu-morph";
@@ -192,12 +193,22 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
     beginGlassSession();
     return () => { if (!ended.current) endGlassSession(); };
   }, []);
-  const onStateChange = useCallback((event: { nativeEvent: { state: GlassMenuState } }) => {
-    if (event.nativeEvent.state !== "closed" || ended.current) return;
+  const finish = useCallback(() => {
+    if (ended.current) return;
     ended.current = true;
     endGlassSession();
     onClosedRef.current();
   }, []);
+  const onStateChange = useCallback((event: { nativeEvent: { state: GlassMenuState } }) => {
+    if (event.nativeEvent.state === "closed") finish();
+  }, [finish]);
+  // A screen that leaves view (a tab switch, a push) detaches the native glass, which then gets no frames and never
+  // reports `closed`: the menu would stay mounted and its session would keep every trigger hidden. Off screen there
+  // is no close to watch, so a closing menu ends there.
+  const visible = useScreenVisible();
+  useEffect(() => {
+    if (!open && !visible) finish();
+  }, [finish, open, visible]);
   if (!GlassMenuView) return null;
   const radius = material === "panel" ? RADIUS.lg : glassMenu.radius;
   return <GlassMenuView

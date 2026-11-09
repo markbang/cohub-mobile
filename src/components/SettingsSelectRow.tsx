@@ -1,5 +1,5 @@
 import { haptics } from "@/src/platform/haptics";
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
@@ -39,7 +39,10 @@ function menuLayout(anchor: MorphRect, window: { width: number; height: number }
   const left = Math.min(Math.max(MARGIN, anchor.x + anchor.width - width), window.width - MARGIN - width);
   const upward = anchor.y + height > window.height - insets.bottom - MARGIN;
   const top = upward ? Math.max(insets.top + MARGIN, anchor.y + anchor.height + RAISE - height) : anchor.y - RAISE;
-  return { left, top, width, height, anchor };
+  // The menu grows out of the chevron as a drop, not out of the whole value: the value has no glass of its own,
+  // so a glass lobe the value's size would show around it. The value itself hides at the tap.
+  const bead = { x: anchor.x + anchor.width - anchor.height, y: anchor.y, width: anchor.height, height: anchor.height };
+  return { left, top, width, height, anchor: bead };
 }
 
 /**
@@ -67,8 +70,6 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   const window = useWindowDimensions();
   // Held in state rather than a ref: touch callbacks measure it, and they are built during render.
   const [anchor, setAnchor] = useState<View | null>(null);
-  const anchorRef = useRef<View | null>(null);
-  const attachAnchor = useCallback((node: View | null) => { anchorRef.current = node; setAnchor(node); }, []);
   const [menu, setMenu] = useState<MenuLayout | null>(null);
   // The menu stays mounted while it shrinks back into the value; `menuOpen` is false for that stretch.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,9 +84,11 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
   useEffect(() => () => { const state = press.get(); if (state.phase === "pending") clearTimeout(state.timer); }, [press]);
 
   const open = () => {
-    if (disabled) return;
+    if (disabled || !anchor) return;
     traceAction("select_open", { title });
-    anchor?.measureInWindow((x, y, anchorWidth, anchorHeight) => {
+    // The value hides at once, as a menu's trigger does, rather than once the menu has been measured.
+    setMenuOpen(true);
+    anchor.measureInWindow((x, y, anchorWidth, anchorHeight) => {
       const layout = menuLayout({ x, y, width: anchorWidth, height: anchorHeight }, window, insets, width, options.length);
       menuRef.set(layout);
       setMenu(layout);
@@ -216,18 +219,18 @@ export function SettingsSelectRow<T extends string>({ icon, title, value, option
         testID={testID}
       >
         <SettingsRow icon={icon} title={title} last={last} disabled={disabled}>
-          <MenuAnchor ref={attachAnchor} open={menuOpen} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
+          <MenuAnchor ref={setAnchor} open={menuOpen} className="shrink flex-row items-center gap-1" style={{ maxWidth: "50%" }}>
             <Text numberOfLines={1} className="shrink text-body text-fg-muted">{current?.label}</Text>
             <AppIcon name="chevrons-up-down" size={16} tone="muted" />
           </MenuAnchor>
         </SettingsRow>
       </View>
     </GestureDetector>
-    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} onTouchWhileClosing={touchWhileClosing} anchorRef={anchorRef} /> : null}
+    {menu ? <SelectMenu menu={menu} open={menuOpen} title={title} options={options} value={value} highlight={highlight} onChoose={choose} onClose={close} onClosed={() => setMenu(null)} onTouchWhileClosing={touchWhileClosing} /> : null}
   </>;
 }
 
-function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed, onTouchWhileClosing, anchorRef }: {
+function SelectMenu<T extends string>({ menu, open, title, options, value, highlight, onChoose, onClose, onClosed, onTouchWhileClosing }: {
   menu: MenuLayout;
   open: boolean;
   title: string;
@@ -239,7 +242,6 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
   onClosed: () => void;
   /** A touch while closing, in window coordinates. */
   onTouchWhileClosing: (x: number, y: number) => void;
-  anchorRef: RefObject<View | null>;
 }) {
   const rootRef = useRef<View>(null);
   // The layout is in window coordinates; the modal's root is normally at the window origin, but measure it.
@@ -267,7 +269,6 @@ function SelectMenu<T extends string>({ menu, open, title, options, value, highl
         style={{ left: menu.left - origin.x, top: menu.top - origin.y, width: menu.width }}
         open={open}
         onClosed={onClosed}
-        anchorRef={anchorRef}
       >
         <SelectMenuRows options={options} value={value} highlight={highlight} onChoose={onChoose} />
       </MorphMenuSurface>
