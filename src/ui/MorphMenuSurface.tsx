@@ -233,6 +233,49 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
   </GlassMenuView>;
 }
 
+/** How long after the app's navigation mounts the glass warms up, clear of the launch's own work. */
+const GLASS_WARMUP_DELAY_MS = 800;
+const WARMUP_BOX = { position: "absolute", left: 0, top: 0, width: 96, height: 96 } as const;
+const WARMUP_PANEL = { position: "absolute", left: 16, top: 40, width: 64, height: 48 } as const;
+
+/**
+ * Runs one small glass morph under the screen soon after launch. The first glass frame compiles the material,
+ * lens and shadow shaders and every blur radius (upstream's `warmPipelines`) and runs the shape field before ART
+ * has compiled it; upstream pays that when its resting glass triggers first draw, but our triggers are plain, so
+ * the first menu opened stalled for over a second. Compiled shaders are cached for the process, Modals included.
+ * Mount it first in the root, beneath opaque screens: Android still draws covered views, so nothing shows.
+ */
+export function GlassMenuWarmup() {
+  const theme = useAppTheme();
+  const [phase, setPhase] = useState<"waiting" | "open" | "closing" | "done">("waiting");
+  useEffect(() => {
+    if (!nativeGlassMenu) return;
+    const timer = setTimeout(() => setPhase("open"), GLASS_WARMUP_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!GlassMenuView || phase === "waiting" || phase === "done") return null;
+  return <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={WARMUP_BOX}>
+    <GlassMenuView
+      style={StyleSheet.absoluteFill}
+      open={phase === "open"}
+      sourceRect={{ x: 24, y: 8, width: 48, height: 24 }}
+      sourceTag={null}
+      backdropTag={null}
+      backdropColor={theme.colors.background}
+      dark={theme.mode === "dark"}
+      cornerRadius={glassMenu.radius}
+      plateTag={null}
+      onStateChange={(event) => {
+        const { state } = event.nativeEvent;
+        if (state === "open") setPhase("closing");
+        else if (state === "closed") setPhase("done");
+      }}
+    >
+      <View collapsable={false} style={WARMUP_PANEL} />
+    </GlassMenuView>
+  </View>;
+}
+
 /** Upstream's menu corner, which the native glass is tuned to. */
 const glassMenu = { radius: 34 } as const;
 

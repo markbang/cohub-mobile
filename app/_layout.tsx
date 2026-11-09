@@ -14,6 +14,7 @@ import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
 import { AppUpdateBanner } from "@/src/components/AppUpdateBanner";
 import { ToastProvider } from "@/src/components/Toast";
+import { GlassMenuWarmup } from "@/src/ui/MorphMenuSurface";
 import { config, defaultEnvironment, resolveConfig, setActiveEnvironment, type CohubEnvironment } from "@/src/config";
 import { AppProvider } from "@/src/data/context";
 import { loadEnvironmentPreference, saveEnvironmentPreference } from "@/src/data/environment-preference";
@@ -267,6 +268,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
       <NativeInteractionBridge />
       <LauncherShortcuts />
       <ToastProvider>
+        <GlassMenuWarmup />
         <View className="flex-1">
           {/* Deeper screens use the platform transition: the iOS push (with its interactive back
               swipe) and Android's own forward animation. Overriding it replaces a platform behavior
