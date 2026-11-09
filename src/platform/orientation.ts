@@ -11,11 +11,12 @@ const LETTERBOX_ASPECT = 1.9;
 const PROBE_MS = 1500;
 
 /**
- * Phones stay in portrait; tablets turn freely. iOS declares this per idiom in Info.plist. Android's
- * manifest keeps every device in portrait from launch (sign-in included), and the root screens release a
- * tablet once the app's navigator mounts.
+ * Phones stay in portrait; tablets turn freely. iOS declares this per idiom in Info.plist. On Android,
+ * MainActivity locks a phone before the first frame (`plugins/android-orientation.js`), and the root screens
+ * keep a tablet free once the app's navigator mounts.
  *
- * Launched in landscape, a tablet whose system honours the lock (HyperOS does; Pixel Tablet does not) is
+ * Binaries before that lock carry a manifest portrait lock instead. Launched in landscape, a tablet whose
+ * system honours it (HyperOS does; Pixel Tablet does not) is
  * letterboxed into a portrait window, and every size the app can read, `expo-device`'s type included,
  * then describes that window, not the screen. So a window too square to be a phone's is released first:
  * a tablet grows to the full screen and stays free; a phone's window stays put and is locked again.
