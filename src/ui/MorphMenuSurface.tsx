@@ -199,9 +199,17 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
     endGlassSession();
     onClosedRef.current();
   }, []);
+  // Native holds its last frame, the glass run back into the trigger, until React removes the view. Hide that frame
+  // first and reveal the trigger only after, or the glass's resting drop shows over the trigger for a few frames.
+  const [collapsed, setCollapsed] = useState(false);
   const onStateChange = useCallback((event: { nativeEvent: { state: GlassMenuState } }) => {
-    if (event.nativeEvent.state === "closed") finish();
-  }, [finish]);
+    if (event.nativeEvent.state === "closed") setCollapsed(true);
+  }, []);
+  // Reopened as it arrived (a tap on its row): native starts over from the trigger.
+  if (collapsed && open) setCollapsed(false);
+  useEffect(() => {
+    if (collapsed && !open) finish();
+  }, [collapsed, finish, open]);
   // A screen that leaves view (a tab switch, a push) detaches the native glass, which then gets no frames and never
   // reports `closed`: the menu would stay mounted and its session would keep every trigger hidden. Off screen there
   // is no close to watch, so a closing menu ends there.
@@ -212,7 +220,7 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
   if (!GlassMenuView) return null;
   const radius = material === "panel" ? RADIUS.lg : glassMenu.radius;
   return <GlassMenuView
-    style={StyleSheet.absoluteFill}
+    style={[StyleSheet.absoluteFill, collapsed ? HIDDEN : null]}
     open={open}
     sourceRect={anchor}
     sourceTag={tags.source}
@@ -232,6 +240,8 @@ function GlassMenuSurface({ anchor, open, onClosed, style, material = "glass", a
     </View>
   </GlassMenuView>;
 }
+
+const HIDDEN = { opacity: 0 } as const;
 
 /** How long after the app's navigation mounts the glass warms up, clear of the launch's own work. */
 const GLASS_WARMUP_DELAY_MS = 800;
