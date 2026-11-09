@@ -103,6 +103,26 @@ export const menuMorph = {
 } as const;
 
 /**
+ * A finger on a drawn menu, after expo-glass-custom-menu (MIT): the row capsule slides between rows and fades on
+ * release, and the panel leans toward a drag, stretching along it and narrowing across it, then springs back.
+ * `stretch`, `squash` and `shift` are the full amounts in points, reached as tanh(drag / `reach`) runs to 1.
+ */
+export const menuScrub = {
+  plateSlide: { duration: 130, dampingRatio: 0.85 },
+  plateFade: { duration: 140, dampingRatio: 1 },
+  dragFollow: { duration: 180, dampingRatio: 0.65 },
+  dragRelease: { duration: 450, dampingRatio: 0.5 },
+  reach: 260,
+  stretch: 16,
+  squash: 21,
+  shift: 21,
+  /** A sliding finger this far outside the menu still lights the nearest row. */
+  slack: 24,
+  /** The capsule's inset from the menu's sides. */
+  plateInset: 8,
+} as const;
+
+/**
  * Drawn Android alerts: iOS 27's alert, settling from 1.125 × over 240 ms while it fades in. `settle` is its
  * measured curve (liquidglass), as [time, progress] points.
  */

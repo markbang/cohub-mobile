@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useScreenVisible } from "@/src/ui/pane";
@@ -6,10 +6,12 @@ import { AppIcon, type IconName } from "@/src/ui";
 import { useTranslation } from "@/src/i18n";
 import { getAnchoredMenuLayout } from "@/src/ui/anchored-menu-layout";
 import { setDialogOpen, traceAction } from "@/src/data/interaction-trace";
+import { menuScrub } from "@/src/motion";
+import { haptics } from "@/src/platform/haptics";
 import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
-import { MorphMenuSurface, useMenuPresence, type MorphRect } from "@/src/ui/MorphMenuSurface";
+import { MorphMenuSurface, dragMenu, useMenuDrag, useMenuPresence, useMenuRowHighlight, type MenuRowFrame, type MorphRect } from "@/src/ui/MorphMenuSurface";
 
-/** A menu item; `checked` draws a check in place of its glyph and `detail` a second line, as iOS menus do. */
+/** A menu item; `checked` (on every item of a menu of choices) draws a check before its glyph, `detail` a second line. */
 export type AnchoredMenuAction = {
   icon: IconName;
   title: string;
@@ -84,6 +86,7 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
       accessibilityLabel={title}
       onAccessibilityEscape={onClose}
       anchor={anchor}
+      anchorRef={anchorRef}
       style={layout}
       open={open}
       onClosed={onExited}
@@ -93,33 +96,134 @@ export function AnchoredActionMenu({ anchorRef, title, actions = [], sections: s
   </View>;
 }
 
-/** A menu's rows as iOS draws them, for the drawn menus that hold them. */
+type MenuTouch = { x: number; y: number; pageX: number; pageY: number };
+
+/**
+ * A menu's rows as iOS draws them, for the drawn menus that hold them. A finger lights the row under it with a
+ * capsule and can slide through the rows, with a tick per row, picking the one it lifts on (after
+ * expo-glass-custom-menu); a drag that scrolls a long menu cancels the pick.
+ */
 export function AnchoredMenuContent({ sections, heading, onClose, testID }: { sections: readonly AnchoredMenuSection[]; heading?: string; onClose: () => void; testID: string }) {
   const bar = heading !== undefined;
+  // A menu of choices keeps its checks in a column of their own, before the glyphs.
+  const checkColumn = bar || sections.some((section) => section.actions.some((action) => action.checked !== undefined));
+  const drag = useMenuDrag();
+  const actions = sections.flatMap((section) => section.actions);
+  const frames = useRef<(MenuRowFrame | undefined)[]>([]);
+  const rowViews = useRef<(View | null)[]>([]);
+  const size = useRef({ width: 0, height: 0 });
+  const touch = useRef<MenuTouch | null>(null);
+  const activeRef = useRef<number | null>(null);
+  const highlight = useMenuRowHighlight();
+
+  const selectable = (index: number) => frames.current[index] !== undefined && actions[index] !== undefined && !actions[index].disabled;
+  /** The row a sliding finger lights: the nearest one, while the finger is on or near the menu. */
+  const rowNear = (x: number, y: number) => {
+    const { width, height } = size.current;
+    const slack = menuScrub.slack;
+    if (x < -slack || x > width + slack || y < -slack || y > height + slack) return null;
+    let best: number | null = null;
+    let distance = Infinity;
+    frames.current.forEach((frame, index) => {
+      if (!frame || !selectable(index)) return;
+      const gap = y < frame.top ? frame.top - y : y > frame.top + frame.height ? y - frame.top - frame.height : 0;
+      if (gap < distance) { distance = gap; best = index; }
+    });
+    return best;
+  };
+  /** The row a lifted finger picks: only one it is on. */
+  const rowAt = (x: number, y: number) => {
+    if (x < 0 || x > size.current.width) return null;
+    const index = frames.current.findIndex((frame) => frame !== undefined && y >= frame.top && y < frame.top + frame.height);
+    return index >= 0 && selectable(index) ? index : null;
+  };
+  const light = (index: number | null) => {
+    const previous = activeRef.current;
+    if (index === previous) return;
+    activeRef.current = index;
+    const frame = index === null ? undefined : frames.current[index];
+    highlight.light(index === null || !frame ? null : { view: rowViews.current[index] ?? null, frame });
+    if (previous !== null && index !== null) haptics.selection();
+  };
+  const select = (index: number) => {
+    const action = actions[index];
+    if (!action || action.disabled) return;
+    traceAction("menu_item", { menu: testID, item: action.title });
+    onClose();
+    action.onPress();
+  };
+  /** The touch in the rows' coordinates; moves are tracked by page offset, which holds while the rows stay put. */
+  const point = (pageX: number, pageY: number) => {
+    const start = touch.current;
+    return start ? { x: start.x + pageX - start.pageX, y: start.y + pageY - start.pageY } : null;
+  };
+  const release = () => {
+    touch.current = null;
+    dragMenu(drag, 0, 0);
+  };
+
+  let flat = 0;
   return <ScrollView style={{ flexGrow: 0 }} bounces={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.content}>
     {bar ? <Text accessibilityRole="header" numberOfLines={1} className="text-caption font-normal text-fg-tertiary" style={styles.heading}>{heading}</Text> : null}
-    {sections.map((section, index) => <View key={section.title ?? index}>
-      {index > 0 ? <View className="bg-border" style={styles.separator} /> : null}
-      {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-tertiary" style={styles.header}>{section.title}</Text> : null}
-      {section.actions.map((action) => <Pressable
-        key={action.title}
-        accessibilityRole="menuitem"
-        accessibilityLabel={action.detail ? `${action.title}, ${action.detail}` : action.title}
-        accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
-        disabled={action.disabled}
-        onPress={() => { traceAction("menu_item", { menu: testID, item: action.title }); onClose(); action.onPress(); }}
-        className="flex-row items-center active:opacity-70 disabled:opacity-45"
-        style={[action.detail ? styles.detailRow : styles.row, bar ? styles.barRow : null]}
-      >
-        {bar ? <View style={styles.check}>{action.checked ? <AppIcon name="check" size={17} tone="fg" /> : null}</View> : null}
-        {/* iOS 27's menu symbols run about 5% larger and heavier than the drawn glyphs at 22. */}
-        <View style={styles.glyph}><AppIcon name={action.checked && !bar ? "check" : action.icon} size={action.checked && !bar ? 17 : 23} bold={action.checked && !bar ? 0 : 0.15} tone="fg" /></View>
-        <View className="min-w-0 flex-1">
-          <Text className="text-body text-fg">{action.title}</Text>
-          {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-tertiary" style={styles.detail}>{action.detail}</Text> : null}
-        </View>
-      </Pressable>)}
-    </View>)}
+    {/* The rows take every touch here (box-only) so a touch's coordinates are always the rows'. */}
+    <View
+      pointerEvents="box-only"
+      onLayout={(event) => { size.current = { width: event.nativeEvent.layout.width, height: event.nativeEvent.layout.height }; }}
+      onStartShouldSetResponder={() => true}
+      onResponderTerminationRequest={() => true}
+      onResponderGrant={(event) => {
+        const { locationX, locationY, pageX, pageY } = event.nativeEvent;
+        touch.current = { x: locationX, y: locationY, pageX, pageY };
+        light(rowNear(locationX, locationY));
+      }}
+      onResponderMove={(event) => {
+        const { pageX, pageY } = event.nativeEvent;
+        const start = touch.current;
+        const at = point(pageX, pageY);
+        if (!start || !at) return;
+        dragMenu(drag, pageX - start.pageX, pageY - start.pageY);
+        light(rowNear(at.x, at.y));
+      }}
+      onResponderRelease={(event) => {
+        const at = point(event.nativeEvent.pageX, event.nativeEvent.pageY);
+        release();
+        const index = at ? rowAt(at.x, at.y) : null;
+        light(null);
+        if (index !== null) select(index);
+      }}
+      onResponderTerminate={() => { release(); light(null); }}
+    >
+      {highlight.plate}
+      {sections.map((section, sectionIndex) => <Fragment key={section.title ?? sectionIndex}>
+        {sectionIndex > 0 ? <View className="bg-border" style={styles.separator} /> : null}
+        {section.title ? <Text accessibilityRole="header" className="text-caption font-normal text-fg-tertiary" style={[styles.header, checkColumn ? styles.checkHeader : null]}>{section.title}</Text> : null}
+        {section.actions.map((action) => {
+          const index = flat++;
+          return <View
+            key={action.title}
+            ref={(node) => { rowViews.current[index] = node; }}
+            collapsable={false}
+            accessible
+            accessibilityRole="menuitem"
+            accessibilityLabel={action.detail ? `${action.title}, ${action.detail}` : action.title}
+            accessibilityState={{ disabled: Boolean(action.disabled), checked: action.checked }}
+            accessibilityActions={action.disabled ? undefined : [{ name: "activate" }]}
+            onAccessibilityAction={() => select(index)}
+            onLayout={(event) => { frames.current[index] = { top: event.nativeEvent.layout.y, height: event.nativeEvent.layout.height }; }}
+            className={`flex-row items-center ${action.disabled ? "opacity-45" : ""}`}
+            style={[action.detail ? styles.detailRow : styles.row, checkColumn ? styles.checkRow : null]}
+          >
+            {checkColumn ? <View style={styles.check}>{action.checked ? <AppIcon name="check" size={17} tone="fg" /> : null}</View> : null}
+            {/* iOS 27's menu symbols run about 5% larger and heavier than the drawn glyphs at 22. */}
+            <View style={styles.glyph}><AppIcon name={action.icon} size={23} bold={0.15} tone="fg" /></View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-body text-fg">{action.title}</Text>
+              {action.detail ? <Text numberOfLines={2} className="text-subhead text-fg-tertiary" style={styles.detail}>{action.detail}</Text> : null}
+            </View>
+          </View>;
+        })}
+      </Fragment>)}
+    </View>
   </ScrollView>;
 }
 
@@ -133,10 +237,11 @@ const styles = StyleSheet.create({
   detail: { marginTop: -2, lineHeight: 18 },
   separator: { height: 1, marginHorizontal: 24, marginVertical: 10 },
   header: { paddingLeft: 28, paddingRight: 16, paddingTop: 3.5, paddingBottom: 7.5 },
-  // UIKit's navigation-bar menu (iOS 27): the heading's text 44 pt in, the check centred 27 pt in, the glyph 55 and
-  // the title 80.
+  // UIKit's navigation-bar menu (iOS 27), and any menu of choices: the heading's text 44 pt in, the check centred
+  // 27 pt in, the glyph 55 and the title 80.
   heading: { paddingLeft: 44, paddingRight: 16, paddingTop: 9, paddingBottom: 14 },
-  barRow: { paddingLeft: 19 },
+  checkHeader: { paddingLeft: 44 },
+  checkRow: { paddingLeft: 19 },
   check: { width: 17, marginRight: 5, alignItems: "center" },
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 20, elevation: 20 },
 });

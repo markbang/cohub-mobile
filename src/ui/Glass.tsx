@@ -59,6 +59,12 @@ export function GlassBackdrop({ target, children }: { target: RefObject<View | n
   return <GlassBackdropContext.Provider value={value}>{children}</GlassBackdropContext.Provider>;
 }
 
+/** The content glass drawn here refracts or blurs; null where it must not (inside that content, or over a surface of its own). */
+export function useGlassBackdropTarget() {
+  const { target, inside } = useContext(GlassBackdropContext);
+  return inside ? null : target;
+}
+
 /**
  * Keeps the outer backdrop and says where glass sits: `inside` the blur target's own content (part of what gets
  * blurred), or not, as in a native Modal, which is its own window and so may blur the screen again.

@@ -44,6 +44,7 @@ This repository is the native iOS/Android client. There is no web target.
 - `modules/react-native-enriched-markdown/`: vendored fork of the native Markdown renderer. Read its `UPSTREAM.md` before editing or updating it.
 - `modules/react-native-screens/`: vendored fork of the native stack, patched to keep the screen under a push for Android's back gesture. Read its `UPSTREAM.md` before editing or updating it.
 - `modules/cohub-predictive-back/`: local Expo module (Android Kotlin) that owns system back and the gesture preview; `app.plugin.js` hooks it into `MainActivity`. JS reaches it only through `src/platform/predictive-back.ts`.
+- `modules/cohub-glass-menu/`: local Expo module (Android Kotlin) that draws the app's menus as Liquid Glass on Android 13+, vendored from expo-glass-custom-menu; read its `UPSTREAM.md` before editing it. JS reaches it only through `src/platform/glass-menu.ts`.
 - `scripts/`: repository checks and native build tooling. Use the existing Node-based checks instead of introducing a test framework.
 
 ## Cohub Reference Source
