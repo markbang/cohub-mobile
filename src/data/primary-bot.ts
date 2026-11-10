@@ -1,7 +1,7 @@
 import type { CohubClient } from "@neta-art/cohub";
 import { BOT_MOD_SPACE_ID } from "@/src/config";
+import { PRIMARY_BOT_SLUG } from "./bot-mode";
 
-const PRIMARY_BOT_SLUG = "cohubbot";
 const BOT_PERSONA_PATH = ".agents/APPEND_SYSTEM.md";
 export const PRIMARY_BOT_PERSONA = `# Cohub
 

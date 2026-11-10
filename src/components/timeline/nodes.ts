@@ -475,6 +475,19 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
+/** `BotTurnTalk`: each thing a Bot said between steps as its own reply, above the final one. */
+export function processTalkNode(ctx: NodeContext, turnId: string, texts: readonly string[]): TimelineNode | null {
+  if (texts.length === 0) return null;
+  const contentWidth = getReplyContentWidth(ctx.width);
+  return {
+    type: "view",
+    children: texts.map((value, index) => ({
+      type: "view" as const, style: { width: "100%", maxWidth: getReplyRowWidth(ctx.width), paddingHorizontal: REPLY_INSET_X, paddingVertical: 6 },
+      children: replyMarkdown(ctx, value, NO_SANDBOX_IMAGES, contentWidth, { color: ctx.theme.colors.assistantBubbleText, id: `talk:${turnId}:${index}` }),
+    })),
+  };
+}
+
 function liveDot(ctx: NodeContext): TimelineNode {
   return { type: "view", style: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: color(ctx.theme.colors.accent) } };
 }

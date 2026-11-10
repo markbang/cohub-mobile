@@ -13,6 +13,7 @@ export type TimelineRow =
   | { kind: "sentFrom"; key: string; owner: string; turn: SessionTurnRecord }
   | { kind: "message"; key: string; owner: string; message: MessageRecord; index: number }
   | { kind: "process"; key: string; owner: string; turn: SessionTurnRecord; live: boolean }
+  | { kind: "talk"; key: string; owner: string; turn: SessionTurnRecord; live: boolean }
   | { kind: "sentTo"; key: string; owner: string; turn: SessionTurnRecord }
   | { kind: "live"; key: "live"; owner: string | null; processInRow: boolean }
   | { kind: "fork"; key: "fork"; owner: string };
@@ -27,6 +28,8 @@ export type TimelineRowsInput = {
   isActiveTurn: (turn: SessionTurnRecord) => boolean;
   hasMoreOlder: boolean;
   hasMoreNewer: boolean;
+  /** A Bot Chat: what the Bot said between steps follows each Turn's steps. */
+  talk?: boolean;
 };
 
 export function timelineRows(input: TimelineRowsInput): TimelineRow[] {
@@ -41,7 +44,9 @@ export function timelineRows(input: TimelineRowsInput): TimelineRow[] {
     if (first) rows.push({ kind: "sentFrom", key: `from:${owner}`, owner, turn: first });
     rows.push({ kind: "message", key: owner, owner, message, index });
     for (const turn of turns ?? []) {
-      rows.push({ kind: "process", key: `process:${turn.id}`, owner, turn, live: turn.id === streamTurnId || input.isActiveTurn(turn) });
+      const live = turn.id === streamTurnId || input.isActiveTurn(turn);
+      rows.push({ kind: "process", key: `process:${turn.id}`, owner, turn, live });
+      if (input.talk) rows.push({ kind: "talk", key: `talk:${turn.id}`, owner, turn, live });
       rows.push({ kind: "sentTo", key: `to:${turn.id}`, owner, turn });
     }
     if (message.id === replyAnchor) rows.push({ kind: "live", key: "live", owner, processInRow: Boolean(turns?.some((turn) => turn.id === streamTurnId)) });

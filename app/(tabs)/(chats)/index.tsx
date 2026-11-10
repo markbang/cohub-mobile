@@ -14,9 +14,8 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
-import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference } from "@/src/data/session-filter-preference";
-import type { SessionSourceFilter } from "@/src/data/session-source";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField, SectionHeader } from "@/src/ui";
+import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference, type ChatsSource } from "@/src/data/session-filter-preference";
 import { useSourceSessions, type ChatsListFilter } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
 import { uiSnapshots } from "@/src/config";
@@ -29,13 +28,21 @@ import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLarge
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
+import { BotRow, NeedsYouRow } from "@/src/components/BotRow";
+import { PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
+import { useBotMode } from "@/src/data/bot-mode-preference";
+import { useBots } from "@/src/data/use-bots";
+import { displaySessionTitle, displaySpaceName } from "@/src/utils";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
   | { kind: "remote-session"; hit: RemoteSessionSearchHit }
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit }
-  | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean };
+  | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean }
+  | { kind: "bots-section"; id: "needs-you" | "bots" }
+  | { kind: "needs-you"; space: import("@neta-art/cohub").SpaceRecord; session: import("@neta-art/cohub").SessionRecord }
+  | { kind: "bot"; entry: BotEntry<import("@neta-art/cohub").SpaceRecord, import("@neta-art/cohub").SessionRecord> };
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 /** How long the row order stays held after a drag or fling settles, so a follow-up tap lands on the row it aimed at. */
 const ORDER_SETTLE_MS = 800;
@@ -53,7 +60,7 @@ export default function ChatsScreen() {
   const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
   const titleScroll = largeTitleScroll(true);
   const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
-  const { client, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession } = useAppActions();
+  const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks }), shallowEqual);
   // Rows read their own status; the list only needs which Chats run, so a Turn update re-renders one row, not every row.
@@ -64,18 +71,30 @@ export default function ChatsScreen() {
   useScrollToTop(listRef);
   const [query, setQuery] = useState("");
   const sourcePreference = useSessionSourcePreference();
-  const sourceFilter = sourcePreference.filter;
+  const botMode = useBotMode(userUuid).enabled;
+  // The Bots view is not a server source; with Bot mode off a saved choice of it reads as every source.
+  const sourceFilter = sourcePreference.filter === "bots" ? "all" : sourcePreference.filter;
   // The archive is a place to visit, not a saved preference: the tab reopens on the chosen source.
   const [archivedView, setArchivedView] = useState(false);
+  // Turning Bot mode on selects the Bots view from Settings; arriving there also leaves the archive.
+  const botsChosen = botMode && sourcePreference.filter === "bots";
+  const [seenBotsChosen, setSeenBotsChosen] = useState(botsChosen);
+  if (seenBotsChosen !== botsChosen) {
+    setSeenBotsChosen(botsChosen);
+    if (botsChosen) setArchivedView(false);
+  }
+  const botsView = botMode && !archivedView && sourcePreference.filter === "bots";
+  const shownSource: ChatsSource = botsView ? "bots" : sourceFilter;
+  const bots = useBots(botsView);
   const listFilter: ChatsListFilter = archivedView ? "archived" : sourceFilter;
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const [expandedForks, setExpandedForks] = useState<ReadonlySet<string>>(() => new Set());
   const sourceButtonRef = useRef<View>(null);
   const toast = useToast();
-  const selectSource = (next: SessionSourceFilter) => {
+  const selectSource = (next: ChatsSource) => {
     setArchivedView(false);
-    if (next === sourceFilter) return;
+    if (next === shownSource) return;
     void saveSessionSourcePreference(next).catch(() => toast({ title: t("chats.source.saveFailed"), tone: "danger" }));
   };
   const sourceSessions = useSourceSessions(client, listFilter);
@@ -86,12 +105,12 @@ export default function ChatsScreen() {
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
-    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.hit.spaceId]))].slice(0, 10);
+    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" || item.kind === "bots-section" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" || item.kind === "needs-you" ? item.space.id : item.kind === "bot" ? item.entry.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
   useSyncQuery("chats", refreshChats, 15_000, listFilter === "all" && !state.booting);
-  const dataError = state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
-  const remoteSearch = useRemoteSearch(client, query, { enabled: listFilter === "all", types: CHAT_SEARCH_TYPES });
+  const dataError = (botsView ? bots.error : null) ?? state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
+  const remoteSearch = useRemoteSearch(client, query, { enabled: listFilter === "all" && !botsView, types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
   useEffect(() => {
     if (listFilter === "all" || sourceSessionList.length === 0) return;
@@ -114,6 +133,16 @@ export default function ChatsScreen() {
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatListItem[]>(() => {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
+    if (botsView) {
+      const needle = trimmedQuery.toLowerCase();
+      const matches = (...values: string[]) => !needle || values.some((value) => normalizeSearchQuery(value).toLowerCase().includes(needle));
+      const waiting = bots.needsYou.filter((item) => matches(displaySpaceName(item.space), displaySessionTitle(item.session)));
+      const entries = bots.entries.filter((entry) => matches(displaySpaceName(entry.space)));
+      return [
+        ...(waiting.length ? [{ kind: "bots-section" as const, id: "needs-you" as const }, ...waiting.map((item) => ({ kind: "needs-you" as const, ...item })), ...(entries.length ? [{ kind: "bots-section" as const, id: "bots" as const }] : [])] : []),
+        ...entries.map((entry) => ({ kind: "bot" as const, entry })),
+      ];
+    }
     if (!trimmedQuery && listFilter === "all") {
       const running = new Set(runningIds);
       const keep = (session: (typeof localSessions)[number]) => running.has(session.id);
@@ -133,13 +162,13 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
+  }, [bots.entries, bots.needsYou, botsView, expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.
   // Release follows whichever comes last of drag end, momentum end, or a scroll event (iOS skips momentum end
   // when a touch stops a fling); blur and a hard cap cover gestures whose end never arrives.
-  const orderContext = `${listFilter}\n${trimmedQuery}`;
+  const orderContext = `${botsView ? "bots" : listFilter}\n${trimmedQuery}`;
   const [heldOrder, setHeldOrder] = useState<{ context: string; keys: readonly string[] } | null>(null);
   const shownKeysRef = useRef<readonly string[]>([]);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,7 +211,7 @@ export default function ChatsScreen() {
     [spaceSessionCounts, t, theme, prefetchSession, selectedChatId],
   );
 
-  const refresh = () => { if (listFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
+  const refresh = () => { if (botsView) void bots.refetch(); if (listFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
   const refreshOnPull = async () => {
     setPullRefreshing(true);
     try {
@@ -195,43 +224,67 @@ export default function ChatsScreen() {
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
     openChat({ sessionId, turn: target?.turn != null ? String(target.turn) : undefined, turnId: target?.turnId || undefined });
   };
+  const newBotChat = (spaceId: string) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } });
+  const openBot = (entry: (typeof bots.entries)[number]) => {
+    if (entry.latest) openSearchSession(entry.latest.id);
+    else newBotChat(entry.space.id);
+  };
+  const primaryBot = bots.entries.find((entry) => entry.space.slug === PRIMARY_BOT_SLUG) ?? null;
+  // Opens the primary Bot's Chat with the request typed in, unless the user already left a draft there.
+  const newBot = async () => {
+    if (!primaryBot) return;
+    const spaceId = primaryBot.space.id;
+    const scope = primaryBot.latest ? { kind: "session" as const, sessionId: primaryBot.latest.id } : { kind: "new" as const };
+    try {
+      if (!(await loadComposerDraft(spaceId, scope)).trim()) await saveComposerDraft(spaceId, scope, t("bots.newBot.prompt"));
+    } catch {
+      toast({ title: t("bots.newBot.draftFailed"), tone: "danger" });
+    }
+    openBot(primaryBot);
+  };
 
-  const sourceOptions = [
+  const sourceOptions: readonly { value: ChatsSource; label: string; detail?: string; icon: NativeMenuAction["icon"] }[] = [
     { value: "all", label: t("chats.source.all"), icon: "messages" },
     { value: "web", label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" },
     { value: "other", label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" },
-  ] as const satisfies readonly { value: SessionSourceFilter; label: string; detail?: string; icon: NativeMenuAction["icon"] }[];
-  const sourceLabel = archivedView ? t("chats.archived") : sourceOptions.find((option) => option.value === sourceFilter)?.label ?? t("chats.source.all");
+    ...(botMode ? [{ value: "bots" as const, label: t("chats.source.bots"), detail: t("chats.source.bots.detail"), icon: "sparkles" as const }] : []),
+  ];
+  const sourceLabel = archivedView ? t("chats.archived") : sourceOptions.find((option) => option.value === shownSource)?.label ?? t("chats.source.all");
   // Counting a source needs its own paged query, so each choice says what it covers instead.
   const sourceActions: NativeMenuAction[] = [
-    ...sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: "detail" in option ? option.detail : undefined, checked: !archivedView && option.value === sourceFilter, onPress: () => selectSource(option.value) })),
+    ...sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: option.detail, checked: !archivedView && option.value === shownSource, onPress: () => selectSource(option.value) })),
     { icon: "archive", title: t("chats.archived"), checked: archivedView, onPress: () => setArchivedView(true) },
   ];
-  const hasActiveFilter = Boolean(trimmedQuery) || listFilter !== "all";
+  const hasActiveFilter = Boolean(trimmedQuery) || listFilter !== "all" || botsView;
+  const newAction = botsView
+    ? { label: t("bots.newBot"), icon: "plus" as const, disabled: !primaryBot, onPress: () => void newBot() }
+    : { label: t("chats.action.newChat"), icon: "square-pen" as const, disabled: false, onPress: () => router.push("/new-chat") };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
     title: t("tabs.chats"),
     search: { query, onQueryChange: setQuery, placeholder: t("ui.search.placeholder") },
     // Leading to trailing: the prominent action takes the trailing edge, as on Android.
     items: [
-      { kind: "menu", label: t("chats.source.filter"), icon: archivedView ? "archive" : "filter", title: sourceLabel, active: listFilter !== "all", actions: sourceActions },
-      { kind: "button", label: t("chats.action.newChat"), icon: "square-pen", prominent: true, onPress: () => router.push("/new-chat") },
+      { kind: "menu", label: t("chats.source.filter"), icon: archivedView ? "archive" : "filter", title: sourceLabel, active: listFilter !== "all" || botsView, actions: sourceActions },
+      { kind: "button", label: newAction.label, icon: newAction.icon, prominent: true, disabled: newAction.disabled, onPress: newAction.onPress },
     ],
   });
   const searchEmpty = trimmedQuery.length >= 2 && remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length === 0
     ? <LoadingState label={t("chats.searching")} />
     : archivedView && !trimmedQuery
       ? <EmptyState icon="archive" title={t("chats.empty.archived.title")} description={t("chats.empty.archived.body")} action={{ icon: "x", label: t("chats.action.clearFilters"), onPress: () => selectSource("all") }} />
-      : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); selectSource("all"); } } : undefined} />;
+      : botsView && !trimmedQuery
+        ? <EmptyState icon="sparkles" title={t("bots.empty")} />
+      : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); if (!botsView) selectSource("all"); } } : undefined} />;
 
   return (
     <Screen edgeToEdge blurTarget={blurTarget}>
       {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
-          <IconButton name={archivedView ? "archive" : "filter"} label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={listFilter !== "all" ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
+          <IconButton name={archivedView ? "archive" : "filter"} label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={listFilter !== "all" || botsView ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
         </MenuAnchor>
-        <IconButton name="square-pen" label={t("chats.action.newChat")} tone="accent" onPress={() => router.push("/new-chat")} />
+        <IconButton name={newAction.icon} label={newAction.label} tone="accent" disabled={newAction.disabled} onPress={newAction.onPress} />
       </>} />
       <ConnectionBanner visible={connectionUnavailable} />
       {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
@@ -258,6 +311,9 @@ export default function ChatsScreen() {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
           if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
+          if (item.kind === "bots-section") return <SectionHeader title={item.id === "needs-you" ? t("bots.needsYou") : t("bots.title")} />;
+          if (item.kind === "needs-you") return <NeedsYouRow space={item.space} session={item.session} onPress={() => openSearchSession(item.session.id)} />;
+          if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => openBot(item.entry)} onNewChat={() => newBotChat(item.entry.space.id)} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
@@ -265,7 +321,7 @@ export default function ChatsScreen() {
         // UI captures hide the scroll bar, which Android leaves up after a tab switch.
         showsVerticalScrollIndicator={!uiSnapshots}
         {...pullRefresh.listProps}
-        onEndReached={() => { if (trimmedQuery) return; if (listFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
+        onEndReached={() => { if (trimmedQuery || botsView) return; if (listFilter !== "all") { sourceLoadMore(); return; } void loadMoreSessions(); }}
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
@@ -280,7 +336,7 @@ export default function ChatsScreen() {
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
           </View>
         </View>}
-        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
+        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (botsView && bots.loading) || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (listFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
       </BrandRefreshArea>
@@ -298,6 +354,9 @@ export default function ChatsScreen() {
 }
 
 function chatItemKey(item: ChatListItem) {
+  if (item.kind === "bots-section") return `bots-section:${item.id}`;
+  if (item.kind === "needs-you") return `needs-you:${item.session.id}`;
+  if (item.kind === "bot") return `bot:${item.entry.space.id}`;
   return item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`;
 }
 

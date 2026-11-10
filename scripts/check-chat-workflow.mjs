@@ -29,6 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
+import { botEntries, botSessionsBySpace, intermediateBlocks, isBotSpace, needsYouItems, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -404,6 +405,9 @@ const chromeScope = {
   nativeContextMenus: false, NativeContextMenu: "NativeContextMenu",
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }), uiSnapshots: false,
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
+  // Bot mode is off unless a check turns it on, so every other screen renders as before.
+  useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
+  useBots: () => ({ entries: [], needsYou: [], loading: false, error: null, refetch: async () => {} }), BotRow: "BotRow", NeedsYouRow: "NeedsYouRow", BotTitle: "BotTitle", BotTurnTalk: "BotTurnTalk",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
@@ -3898,6 +3902,7 @@ const timelineInput = { messages: timelineMessages, turnsBySequence: new Map([[1
 const builtRows = timelineRows(timelineInput);
 assert.deepEqual(builtRows.map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a turn's rows follow its user message, the live reply sits under its steps, and the fork boundary closes the turn");
 assert.equal(builtRows.find((row) => row.kind === "live").processInRow, true, "the streaming turn's steps render in their own row, not twice");
+assert.deepEqual(timelineRows({ ...timelineInput, talk: true }).map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "talk:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "in a Bot Chat what the Bot said between steps follows the steps, above the reply");
 assert.equal(builtRows.find((row) => row.kind === "process").live, true);
 assert.equal(timelineTargetKey(builtRows, "1:user"), "from:1:user", "a turn jump lands on the first row of the message, above its sent-from link");
 assert.deepEqual(visibleTimelineMessages(builtRows, ["live", "process:turn-a", "1:assistant"]).map((item) => item.key), ["1:user", "1:assistant"], "visible attachment rows report their message once, in order");
@@ -3973,7 +3978,7 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
-  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
+  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey, bot: false,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -3986,6 +3991,12 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   const renderForkRow = compileRenderMessage({ ...liveRowScope, client: null, lookupSession: () => null, openRelatedSession: () => {}, messages: forkMessages, replyAnchor: null, forkOrigin: { sequence: 1, ref: { spaceId: "space", sessionId: "parent", turnId: "anchor" } } });
   const dividers = forkMessages.map((item, index) => chromeNodes(renderForkRow({ item, index })).filter((node) => node.type === "ForkedFromDivider").length);
   assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
+}
+{
+  const turn = { id: "turn-a", status: "completed", meta: {} };
+  const botRow = (bot) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: "user-a", role: "user", meta: { turnSequence: 1 } }, index: 0 })).map((node) => node.type);
+  assert.deepEqual(botRow(true).filter((type) => ["TurnProcess", "BotTurnTalk", "SentToList"].includes(type)), ["TurnProcess", "BotTurnTalk", "SentToList"], "a Bot Turn's talk sits between its steps and the reply");
+  assert.ok(!botRow(false).includes("BotTurnTalk"), "other Chats are unchanged");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5629,6 +5640,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const primaryBot = {};
   new Function("require", "exports", source)((name) => {
     if (name === "@/src/config") return { BOT_MOD_SPACE_ID: BOT_MOD };
+    if (name === "./bot-mode") return { PRIMARY_BOT_SLUG };
     throw new Error(`Unexpected primary-bot dependency: ${name}`);
   }, primaryBot);
   const httpError = (status, message = `HTTP ${status}`) => Object.assign(new Error(message), { status });
@@ -5689,6 +5701,47 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const failed = botClient({ owned: [httpError(500, "server down")] });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(failed.client), { status: "error", message: "server down" });
   assert.deepEqual(failed.calls, [["get", "cohubbot"]], "other lookup errors create nothing");
+}
+
+// Bot mode: which Spaces are Bots, how their Chats merge and order, what waits on the user, and what a Bot said between steps.
+{
+  assert.equal(isBotSpace({ slug: "cohubbot" }), true);
+  assert.equal(isBotSpace({ slug: "cohubbot-writer" }), true);
+  assert.equal(isBotSpace({ slug: "cohubbots" }), false, "only the exact slug or a cohubbot- prefix marks a Bot");
+  assert.equal(isBotSpace({ slug: "my-cohubbot" }), false);
+  assert.equal(isBotSpace({ slug: null }), false);
+
+  const chat = (id, spaceId, at, extra = {}) => ({ id, spaceId, title: id, latestMessageText: null, lastMessageAt: at, updatedAt: at, ...extra });
+  const cached = [chat("cached-a", "writer", "2026-11-01T00:00:00Z"), chat("cached-b", "primary", "2026-11-02T00:00:00Z"), chat("elsewhere", "space", "2026-11-09T00:00:00Z")];
+  const loaded = new Map([["writer", [chat("old", "writer", "2026-11-03T00:00:00Z"), chat("new", "writer", "2026-11-05T00:00:00Z")]]]);
+  const bySpace = botSessionsBySpace(["primary", "writer", "idle"], cached, loaded);
+  assert.deepEqual(bySpace.get("writer").map((item) => item.id), ["new", "old"], "a Bot's server list replaces its cached rows, newest first");
+  assert.deepEqual(bySpace.get("primary").map((item) => item.id), ["cached-b"], "until its read lands, a Bot paints from the cached home list");
+  assert.deepEqual(bySpace.get("idle"), []);
+  const renamed = botSessionsBySpace(["writer"], [chat("old", "writer", "2026-11-03T00:00:00Z", { updatedAt: "2026-11-07T00:00:00Z", latestMessageText: "newer" })], loaded).get("writer");
+  assert.deepEqual(renamed.map((item) => [item.id, item.latestMessageText]), [["old", "newer"], ["new", null]], "a home row updated after the Bot's list wins for that Chat, and the Chat updated last opens first");
+
+  const spaces = [
+    { id: "writer", slug: "cohubbot-writer", updatedAt: "2026-10-01T00:00:00Z" },
+    { id: "idle", slug: "cohubbot-idle", lastActivityAt: "2026-11-04T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" },
+    { id: "primary", slug: "cohubbot", updatedAt: "2026-10-01T00:00:00Z" },
+  ];
+  const waiting = new Map([["writer", [chat("ask", "writer", "2026-11-06T00:00:00Z")]], ["idle", [chat("older-ask", "idle", "2026-11-02T00:00:00Z")]]]);
+  const entries = botEntries(spaces, bySpace, waiting, new Set(["writer"]));
+  assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow their latest activity");
+  assert.deepEqual(entries.map((entry) => [entry.latest?.id ?? null, entry.running, entry.needsYou]), [["cached-b", false, false], ["new", true, true], [null, false, true]], "a Bot shows running while any of its Chats runs");
+  assert.deepEqual(needsYouItems(spaces, waiting).map((item) => [item.space.id, item.session.id]), [["writer", "ask"], ["idle", "older-ask"]], "Chats waiting on the user group across Bots, newest first");
+  assert.deepEqual(needsYouItems(spaces, new Map()), [], "with nothing waiting the group is empty and hidden");
+
+  const blocks = intermediateBlocks([
+    { content: [{ type: "text", text: "Looking at the repo." }, { type: "tool_use", id: "t1", name: "bash", input: {} }] },
+    { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }, { type: "thinking", thinking: "hmm" }] },
+    { content: [], text: "  Found it.  " },
+    { content: [{ type: "text", text: "Done: the fix is in." }] },
+  ]);
+  assert.deepEqual(processTexts(blocks, "Done: the fix is in.\n"), ["Looking at the repo.", "Found it."], "tools, results, and thinking stay in the steps; text repeating the final reply shows once");
+  assert.deepEqual(processTexts(blocks, ""), ["Looking at the repo.", "Found it.", "Done: the fix is in."]);
+  assert.deepEqual(processTexts([{ type: "text", text: "   " }], "x"), []);
 }
 
 console.log("Chat workflow checks passed");
