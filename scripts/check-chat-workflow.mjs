@@ -1854,7 +1854,7 @@ try {
   const chat = (id, spaceId) => ({ id, spaceId, title: id });
   const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-old", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   let filter = "bots";
-  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, session: chat("main", "bot"), running: false, needsYou: false };
+  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, session: chat("main", "bot"), running: false };
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
     useRouter: () => ({ push: () => {} }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
@@ -3937,7 +3937,7 @@ const timelineInput = { messages: timelineMessages, turnsBySequence: new Map([[1
 const builtRows = timelineRows(timelineInput);
 assert.deepEqual(builtRows.map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a turn's rows follow its user message, the live reply sits under its steps, and the fork boundary closes the turn");
 assert.equal(builtRows.find((row) => row.kind === "live").processInRow, true, "the streaming turn's steps render in their own row, not twice");
-assert.deepEqual(timelineRows({ ...timelineInput, talk: true }).map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "talk:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "in a Bot Chat what the Bot said between steps follows the steps, above the reply");
+assert.deepEqual(timelineRows({ ...timelineInput, bot: true }).map((row) => row.key), ["older", "from:1:user", "1:user", "talk:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a Bot Chat drops the steps and keeps what the Bot said between them, above the reply");
 assert.equal(builtRows.find((row) => row.kind === "process").live, true);
 assert.equal(timelineTargetKey(builtRows, "1:user"), "from:1:user", "a turn jump lands on the first row of the message, above its sent-from link");
 assert.deepEqual(visibleTimelineMessages(builtRows, ["live", "process:turn-a", "1:assistant"]).map((item) => item.key), ["1:user", "1:assistant"], "visible attachment rows report their message once, in order");
@@ -4029,15 +4029,19 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
 }
 {
   const turn = { id: "turn-a", status: "completed", meta: {} };
-  const botRow = (bot) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: "user-a", role: "user", meta: { turnSequence: 1 } }, index: 0 })).map((node) => node.type);
-  assert.deepEqual(botRow(true).filter((type) => ["TurnProcess", "BotTurnTalk", "SentToList"].includes(type)), ["TurnProcess", "BotTurnTalk", "SentToList"], "a Bot Turn's talk sits between its steps and the reply");
-  assert.ok(!botRow(false).includes("BotTurnTalk"), "other Chats are unchanged");
+  const botScope = (bot, meta = {}) => compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta }]]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotIncomingBubble: "BotIncomingBubble", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Writer", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+  const botRow = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta) => chromeNodes(botScope(bot, meta)({ item, index: 0 })).map((node) => node.type);
+  const shown = ["TurnProcess", "BotTurnTalk", "SentToList", "SentFromLink", "BotHandoffList", "BotIncomingBubble", "BotReplyBubble", "MessageBubble"];
+  assert.deepEqual(botRow(true).filter((type) => shown.includes(type)), ["MessageBubble", "BotTurnTalk", "BotHandoffList"], "a Bot Turn shows what the Bot said, never its steps");
+  assert.deepEqual(botRow(true, { id: "reply", role: "assistant", meta: { turnSequence: 1 } }).filter((type) => shown.includes(type)), ["BotReplyBubble"], "a Bot's reply is a bubble without the reply meta");
+  assert.deepEqual(botRow(true, undefined, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).filter((type) => shown.includes(type)), ["BotIncomingBubble", "BotTurnTalk", "BotHandoffList"], "a message another Bot sent shows as that Bot's bubble");
+  assert.ok(!botRow(false).includes("BotTurnTalk") && botRow(false).includes("TurnProcess"), "other Chats are unchanged");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
 assert.equal(typeof ownerRow.props.onLayout, "function");
 assert.equal(ownerRow.props.children.length, 1, "the measured row has one content wrapper, so the catch-up fade never remounts its children");
-assert.deepEqual(ownerRow.props.children[0].props.children.filter((child) => child?.type === "MessageBubble" || child?.type === "LiveReply").map((child) => child.type), ["MessageBubble", "LiveReply"]);
+assert.deepEqual(chromeNodes(ownerRow.props.children[0]).filter((child) => child?.type === "MessageBubble" || child?.type === "LiveReply").map((child) => child.type), ["MessageBubble", "LiveReply"]);
 assert.equal(ownerRow.props.style?.paddingTop, 8, "a prompt opens its Turn with space above it, in place of the #N divider");
 {
   const reply = { id: "reply-a", role: "assistant", meta: { turnId: "turn-a", turnSequence: 1 } };
@@ -4050,8 +4054,9 @@ assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 }
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, messages: [], turns: [{ id: "turn", startedAt: "2026-10-31T09:00:00.000Z", createdAt: "2026-10-31T08:59:59.000Z" }] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
   ...chromeScope, ...appHooks(() => ({ state: { sessionViews: { fixture: liveView } } })),
-  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
+  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", BotStreamBubble: "BotStreamBubble", BotTurnTalk: "BotTurnTalk", isOptimisticFollowup, thinkingBlocks,
 });
+assert.deepEqual(chromeNodes(renderLiveReply({ sessionId: "fixture", bot: true, showStream: true, processInRow: false, availableWidth: 390 })).map((node) => node.type).filter((type) => ["StreamingTurnProcess", "StreamCard", "BotTurnTalk", "BotStreamBubble"].includes(type)), ["BotTurnTalk", "BotStreamBubble"], "a Bot's live reply is a bubble without the steps");
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).find((node) => node.type === "StreamCard").props.startedAt, "2026-10-31T09:00:00.000Z", "the live reply is stamped with its Turn's start");
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: true, availableWidth: 390 }), null, "completed replies leave no stale live duplicate");
@@ -5801,9 +5806,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
     { id: "primary", slug: "cohubbot", updatedAt: "2026-10-01T00:00:00Z" },
   ];
   const mains = new Map([["writer", chat("w", "2026-11-05T00:00:00Z")], ["idle", null], ["primary", chat("p", "2026-11-02T00:00:00Z")]]);
-  const entries = botEntries(spaces, mains, new Set(["idle"]), new Set(["writer"]));
+  const entries = botEntries(spaces, mains, new Set(["writer"]));
   assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow their Chat's activity, or the Space's before it has one");
-  assert.deepEqual(entries.map((entry) => [entry.session?.id ?? null, entry.running, entry.needsYou]), [["p", false, false], ["w", true, false], [null, false, true]], "each row reflects only its Bot's one Chat");
+  assert.deepEqual(entries.map((entry) => [entry.session?.id ?? null, entry.running]), [["p", false], ["w", true], [null, false]], "each row reflects only its Bot's one Chat");
 
   const blocks = intermediateBlocks([
     { content: [{ type: "text", text: "Looking at the repo." }, { type: "tool_use", id: "t1", name: "bash", input: {} }] },

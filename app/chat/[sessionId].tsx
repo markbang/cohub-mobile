@@ -23,7 +23,8 @@ import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess"
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
 import { latestMessageId } from "@/src/data/chat-read-state";
 import { forkPoint } from "@/src/data/session-fork";
-import type { RelatedSessionRef } from "@/src/data/related-sessions";
+import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
+import { compactionFromMessage } from "@/src/data/compaction";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { HarnessPicker, harnessMenuSections } from "@/src/components/ExecutionHarnessMenu";
 import { AttachmentMenu } from "@/src/components/AttachmentMenu";
@@ -75,8 +76,9 @@ import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotTitle } from "@/src/components/BotTitle";
+import { BotHandoffList, BotIncomingBubble, BotReplyBubble, BotStreamBubble } from "@/src/components/BotBubbles";
 import { BotTurnTalk } from "@/src/components/BotTurnTalk";
-import { isBotSpace } from "@/src/data/bot-mode";
+import { isBotSpace, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
@@ -111,6 +113,7 @@ function footerRowEntering() {
   };
 }
 const TURN_START_STYLE = { paddingTop: 8 } as const;
+const NO_SPACES: SpaceRecord[] = [];
 const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
 const FOOTER_MENU = { marginHorizontal: 12, marginBottom: 4 } as const;
 
@@ -623,6 +626,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // A Bot's Chat runs on Cohub and shows what the Bot says between steps; only while Bot mode is on.
   const bot = useBotMode(userUuid).enabled && isBotSpace({ slug: listedSpaceSlug ?? view.space?.slug ?? draftSpace?.slug });
   const spaceAvatarUrl = listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl ?? draftSpace?.publicProfile?.avatarUrl;
+  const botSpaces = useAppSelector((app) => bot ? app.state.spaces.filter(isBotSpace) : NO_SPACES, shallowEqual);
+  const botPeers = useMemo(() => new Map<string, BotPeer>(botSpaces.map((item) => [item.id, { name: displaySpaceName(item), avatarUrl: item.publicProfile?.avatarUrl ?? null }])), [botSpaces]);
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
   const queuedFollowupIds = useMemo(() => new Set(queuedFollowups.map((turn) => turn.id)), [queuedFollowups]);
@@ -1318,6 +1323,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     return { sequence: point.sequence, ref: { spaceId, sessionId: parentSessionId ?? point.sessionId, turnId: point.turnId } };
   }, [parentSessionId, sessionId, spaceId, view.hasMoreNewer, view.turns]);
   const navigation = useNavigation();
+  const botPeerOf = useCallback((ref: RelatedSessionRef): BotPeer => {
+    const known = botPeers.get(ref.spaceId);
+    if (known) return known;
+    const related = lookupSession(ref.sessionId);
+    return { name: related ? displaySessionTitle(related) : t("turn.related.otherChat"), avatarUrl: null };
+  }, [botPeers, lookupSession, t]);
   const openRelatedSession = useCallback((ref: RelatedSessionRef) => {
     // Going back to the Chat underneath keeps its scroll position and avoids ping-pong stacks.
     const stack = navigation.getState();
@@ -1563,12 +1574,21 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const sequenceTurns = item.role === "user" && sequence !== null ? turnsBySequence.get(sequence) : undefined;
     const newer = messages[index + 1];
     const endsForkPrefix = forkOrigin !== null && sequence === forkOrigin.sequence && (newer ? turnSequenceForMessage(newer) : null) !== sequence;
+    // A Bot Chat reads like messaging: who sent a message sits on its bubble, and steps stay out of the thread.
+    const botSource = bot && sequenceTurns?.[0] ? sentFrom(sequenceTurns[0]) : null;
+    const botRow = bot ? <>
+      {botSource ? <BotIncomingBubble message={item} sender={botPeerOf(botSource)} source={botSource} onOpen={openRelatedSession} availableWidth={listWidth || paneWidth} />
+        : item.role === "assistant" && !compactionFromMessage(item) ? <BotReplyBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
+        : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} compactionDivider />}
+      {sequenceTurns?.map((entry) => <View key={entry.id}><BotTurnTalk sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} live={isActiveTurnStatus(entry.status) || entry.id === streamTurnId} availableWidth={listWidth || paneWidth} /><BotHandoffList sessions={sentSessions(entry, spaceId)} peerOf={botPeerOf} onOpen={openRelatedSession} /></View>)}
+      {item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}
+    </> : null;
     // Rows keep their renderItem closure across prepends and window jumps (messages is
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={!bot && messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} compactionDivider={bot} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}{bot ? <BotTurnTalk sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} live={isActiveTurnStatus(entry.status) || entry.id === streamTurnId} availableWidth={listWidth || paneWidth} /> : null}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot={bot} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? botRow : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot={false} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
+  }, [arrivalBaseline, bot, botPeerOf, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1596,6 +1616,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           ref={timelineRef}
           sessionId={sessionId}
           bot={bot}
+          botPeers={botPeers}
           spaceId={spaceId}
           client={client}
           messages={messages}
@@ -1775,9 +1796,15 @@ function LiveReply({ sessionId, bot, showStream, pending, processInRow, availabl
     const turn = stream?.turnId ? state.sessionViews[sessionId]?.turns.find((item) => item.id === stream.turnId) : undefined;
     return turn ? turn.startedAt ?? turn.createdAt : null;
   });
+  if (bot) {
+    if (showStream && stream) return <View testID="chat-live-reply">
+      {!processInRow ? <BotTurnTalk sessionId={sessionId} turn={null} client={null} spaceId="" live availableWidth={availableWidth} /> : null}
+      <BotStreamBubble content={stream.contentBlocks} status={stream.status} availableWidth={availableWidth} />
+    </View>;
+    return pending ? <BotStreamBubble content={[]} status="pending" availableWidth={availableWidth} /> : null;
+  }
   if (showStream && stream) return <View testID="chat-live-reply">
     {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
-    {bot && !processInRow ? <BotTurnTalk sessionId={sessionId} turn={null} client={null} spaceId="" live availableWidth={availableWidth} /> : null}
     <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={stream.outputAt ?? streamStartedAt} availableWidth={availableWidth} />
   </View>;
   return pending ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;

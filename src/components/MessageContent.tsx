@@ -39,7 +39,7 @@ export function formatTokenCount(value: number) {
   return String(value);
 }
 
-const BubbleContext = createContext<{ onUser: boolean; spaceId: string | null }>({ onUser: false, spaceId: null });
+export const BubbleContext = createContext<{ onUser: boolean; spaceId: string | null }>({ onUser: false, spaceId: null });
 
 /**
  * Resolves a message URL into an in-app route or system browser. Sandbox file

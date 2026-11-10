@@ -7,13 +7,13 @@ import { useRelativeTime } from "@/src/data/use-relative-time";
 import { useTranslation } from "@/src/i18n";
 import { Avatar } from "@/src/ui";
 import { Loader } from "@/src/ui/Loader";
-import { LIST_AVATAR_SIZE, ListRow, Tag } from "@/src/ui/ListRow";
+import { LIST_AVATAR_SIZE, ListRow } from "@/src/ui/ListRow";
 import { displaySpaceName, previewText } from "@/src/utils";
 
-/** A Bot as a contact: its last message, and whether it is working, waiting on the user, or has news. */
+/** A Bot as a contact: its last message, and whether it is working or has news. */
 export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord, SessionRecord>; onPress: () => void }) {
   const { t } = useTranslation();
-  const { space, session, running, needsYou } = entry;
+  const { space, session, running } = entry;
   const name = displaySpaceName(space);
   const age = useRelativeTime(session ? session.lastMessageAt ?? session.updatedAt : space.lastActivityAt);
   // Read state is the device's record of when this Bot's Chat was last open, as for any Chat.
@@ -24,10 +24,9 @@ export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord, Sessio
     title={name}
     meta={age}
     subtitle={preview || undefined}
-    trailing={needsYou ? <Tag label={t("bots.needsYou")} /> : null}
     accessory={running ? <Loader accessibilityLabel={t("bots.running")} /> : null}
     unread={unread}
-    accessibilityLabel={[t("ui.openNamed", { name }), running ? t("bots.running") : null, needsYou ? t("bots.needsYou") : null, unread ? t("session.unread") : null].filter(Boolean).join(", ")}
+    accessibilityLabel={[t("ui.openNamed", { name }), running ? t("bots.running") : null, unread ? t("session.unread") : null].filter(Boolean).join(", ")}
     onPress={onPress}
   />;
 }
