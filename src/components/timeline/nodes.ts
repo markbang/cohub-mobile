@@ -486,8 +486,6 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
-const BOT_AVATAR_SIZE = 28;
-
 /** `BotAvatar`: the Avatar shape, for another Bot beside its message. */
 function botAvatar(ctx: NodeContext, peer: BotPeer, size: number): TimelineNode {
   const shape = { width: size, height: size, borderRadius: size * 0.3 };
@@ -542,33 +540,25 @@ export function botStreamNode(ctx: NodeContext, input: { content: ContentBlock[]
   return botRow([...bubble, ...status]);
 }
 
-/** `BotNoteBubble`: a note the Bot wrote into its Chat, faintly naming the other Bot it came from. */
-export function botNoteNode(ctx: NodeContext, message: MessageRecord, from: string | null, sandboxImages: SandboxImages): TimelineNode | null {
-  const { theme, t } = ctx;
+/** `BotEventRow`: a prompt an agent sent here, as a faint line that opens to the words that were sent. */
+export function botEventNode(ctx: NodeContext, key: string, label: string, message: MessageRecord): TimelineNode {
+  const { theme } = ctx;
+  const id = `event:${key}`;
+  const expanded = ctx.expanded.has(id);
+  const width = ctx.width - 48 - 24;
   const body = hasRenderableContent(message.content)
-    ? botBody(ctx, message.id, message.content, { sandboxImages })
-    : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, getBubbleMaxWidth(ctx.width) - BUBBLE_PADDING_X * 2, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
-  if (body.length === 0) return null;
-  const sender = from ? [text(t("bots.note.from", { name: from }), textStyle("micro", theme.colors.textFaint), { numberOfLines: 1 })] : [];
-  return botRow([botBubble(ctx, [...sender, ...body, ...botClock(ctx, formatMessageClock(message.createdAt))])]);
-}
-
-/** `BotIncomingBubble`: a message another Bot sent here, with who sent it; the name opens where it came from. */
-export function botIncomingNode(ctx: NodeContext, message: MessageRecord, sender: BotPeer, source: { spaceId: string; sessionId: string; turnId: string } | null): TimelineNode {
-  const { theme, t } = ctx;
-  const tint = theme.colors.assistantBubbleText;
-  const maxWidth = getBubbleMaxWidth(ctx.width) - BOT_AVATAR_SIZE - 8;
-  const width = maxWidth - BUBBLE_PADDING_X * 2;
-  const body = hasRenderableContent(message.content)
-    ? contentNodes(ctx, message.id, message.content, { width, color: tint, onSurface: true })
-    : message.text?.trim() ? [markdown(ctx, message.text, { color: tint, onSurface: true })] : [];
-  const nameStyle = textStyle("caption", theme.colors.accent, { fontWeight: "600" });
-  const name = source
-    ? pressable({ action: "openSession", payload: source, accessibilityRole: "link", accessibilityLabel: t("turn.related.open", { title: sender.name }), style: { alignSelf: "flex-start", minHeight: 22, justifyContent: "center" }, children: [text(sender.name, nameStyle, { numberOfLines: 1 })] })
-    : text(sender.name, nameStyle, { numberOfLines: 1 });
+    ? contentNodes(ctx, message.id, message.content, { width, color: ctx.theme.colors.textSecondary, onSurface: true })
+    : message.text?.trim() ? [markdown(ctx, message.text, { color: ctx.theme.colors.textSecondary, onSurface: true })] : [];
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: 3, flexDirection: "row", alignItems: "flex-end", gap: 8 },
-    children: [botAvatar(ctx, sender, BOT_AVATAR_SIZE), botBubble(ctx, [name, ...body, ...botClock(ctx, formatMessageClock(message.createdAt))], maxWidth)],
+    type: "view", style: { width: "100%", alignItems: "center", paddingHorizontal: 24 },
+    children: [
+      pressable({
+        action: "toggle", payload: { id }, accessibilityLabel: label, accessibilityState: { expanded },
+        style: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4 },
+        children: [text(label, textStyle("caption", theme.colors.textFaint), { numberOfLines: 1, style: { flexShrink: 1 } }), icon(expanded ? "chevron-down" : "chevron-right", 12, theme.colors.textFaint)],
+      }),
+      ...(expanded && body.length ? [{ type: "view" as const, style: { width: "100%", marginBottom: 8, gap: 4, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.surface), paddingHorizontal: 12, paddingVertical: 8 }, children: body }] : []),
+    ],
   };
 }
 
@@ -578,7 +568,7 @@ export function botHandoffNode(ctx: NodeContext, sessions: readonly { spaceId: s
   const rows = sessions.flatMap((session) => {
     const peer = peerOf(session);
     if (!peer) return [];
-    const label = t("turn.related.sentTo", { title: peer.name });
+    const label = t("bots.handoff", { name: peer.name });
     return [pressable({
       id: `${session.spaceId}:${session.sessionId}`, action: "openSession", payload: session, accessibilityRole: "link", accessibilityLabel: label,
       style: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 4 },

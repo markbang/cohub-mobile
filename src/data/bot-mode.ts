@@ -1,4 +1,5 @@
-import type { ContentBlock, MessageRecord, SessionRecord, SessionTurnRecord, SpaceRecord } from "@neta-art/cohub";
+import type { ContentBlock, SessionRecord, SpaceRecord } from "@neta-art/cohub";
+import type { Translate } from "@/src/i18n";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
 /**
@@ -10,16 +11,12 @@ export function botDirectory<E>(directory: { entries: E[]; loading: boolean; err
   return { entries: directory.entries, known: !directory.loading && !directory.error, error: directory.error?.message ?? null };
 }
 
-/** Which other Bot a note came from, when its origin names one; the Bot's own notes (check-ins) and unknown senders name none. */
-export function noteSender(source: { spaceId: string } | null, ownSpaceId: string, peers: ReadonlyMap<string, BotPeer> | undefined): string | null {
-  return source && source.spaceId !== ownSpaceId ? peers?.get(source.spaceId)?.name ?? null : null;
-}
-
-/** A note (`spaces prompt --note`) is recorded as a user message with no reply; in a Bot's Chat it is the Bot speaking. */
-export function isNoteMessage(message: Pick<MessageRecord, "role" | "meta">, turn: Pick<SessionTurnRecord, "executionKind"> | null | undefined) {
-  if (message.role !== "user") return false;
-  const recorded = message.meta?.turn;
-  return turn?.executionKind === "note" || (typeof recorded === "object" && recorded !== null && (recorded as { executionKind?: unknown }).executionKind === "note");
+/**
+ * A prompt an agent sent into a Bot's Chat (its Turn has an origin in another Chat), not words the user typed.
+ * From the Bot's own Space it is a check-in; from another Space, a Bot reporting back, named when it is a known Bot.
+ */
+export function botEventLabel(t: Translate, source: { spaceId: string }, ownSpaceId: string, peers: ReadonlyMap<string, BotPeer> | undefined): string {
+  return source.spaceId === ownSpaceId ? t("bots.event.checkIn") : t("bots.event.report", { name: peers?.get(source.spaceId)?.name ?? t("bots.event.otherBot") });
 }
 
 export type BotSpace = Pick<SpaceRecord, "id" | "slug"> & Partial<Pick<SpaceRecord, "name" | "title" | "publicProfile" | "lastActivityAt" | "updatedAt">>;

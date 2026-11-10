@@ -1,5 +1,5 @@
 import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { BubbleContentWidth } from "@/src/components/BubbleText";
 import { BubbleContext, MessageContent } from "@/src/components/MessageContent";
@@ -13,8 +13,6 @@ import { AppIcon, Avatar, MascotLoader } from "@/src/ui";
 import { BUBBLE_PADDING_X, getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 import { hasRenderableContent } from "@/src/utils";
-
-const AVATAR_SIZE = 28;
 
 /** The incoming side of a messaging thread; `nodes.ts` draws the same bubble for the native timeline. */
 function BotBubble({ children, maxWidth, spaceId = null }: { children: ReactNode; maxWidth: number; spaceId?: string | null }) {
@@ -75,34 +73,17 @@ export function BotStreamBubble({ content, status, availableWidth }: { content: 
   </BotRow>;
 }
 
-/** A note the Bot wrote into its Chat (a report back, a check-in): its own words, faintly naming the other Bot it came from. */
-export function BotNoteBubble({ message, from, spaceId, availableWidth }: { message: MessageRecord; from: string | null; spaceId: string | null; availableWidth?: number }) {
+/** A prompt an agent sent here, as a faint line in the thread; it opens to the words that were sent. */
+export function BotEventRow({ label, message }: { label: string; message: MessageRecord }) {
   const theme = useAppTheme();
-  const { t } = useTranslation();
-  const maxWidth = useBubbleWidth(availableWidth);
+  const [open, setOpen] = useState(false);
   const content: ContentBlock[] = hasRenderableContent(message.content) ? message.content : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
-  if (content.length === 0) return null;
-  return <BotRow><BotBubble maxWidth={maxWidth} spaceId={spaceId}>
-    {from ? <Text numberOfLines={1} className="text-micro text-fg-faint">{t("bots.note.from", { name: from })}</Text> : null}
-    <MessageContent content={content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} sandboxImages />
-    <Clock value={message.createdAt} />
-  </BotBubble></BotRow>;
-}
-
-/** A message another Bot sent here, with who sent it; the name opens where it came from. */
-export function BotIncomingBubble({ message, sender, source, onOpen, availableWidth }: { message: MessageRecord; sender: BotPeer; source: RelatedSessionRef; onOpen: (ref: RelatedSessionRef) => void; availableWidth?: number }) {
-  const theme = useAppTheme();
-  const { t } = useTranslation();
-  const maxWidth = useBubbleWidth(availableWidth) - AVATAR_SIZE - 8;
-  return <View className="w-full flex-row items-end gap-2 px-3 py-0.5">
-    <Avatar name={sender.name} uri={sender.avatarUrl} size={AVATAR_SIZE} />
-    <BotBubble maxWidth={maxWidth}>
-      <Pressable accessibilityRole="link" accessibilityLabel={t("turn.related.open", { title: sender.name })} onPress={() => onOpen(source)} hitSlop={{ top: 8, bottom: 4 }} className="self-start active:opacity-55">
-        <Text numberOfLines={1} className="text-caption font-semibold text-accent">{sender.name}</Text>
-      </Pressable>
-      {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} /> : message.text?.trim() ? <MessageContent content={[{ type: "text", text: message.text }]} color={theme.colors.assistantBubbleText} /> : null}
-      <Clock value={message.createdAt} />
-    </BotBubble>
+  return <View className="w-full items-center px-6">
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }} onPress={() => setOpen((value) => !value)} className="min-h-11 flex-row items-center gap-1 active:opacity-55">
+      <Text numberOfLines={1} className="shrink text-caption text-fg-faint">{label}</Text>
+      <AppIcon name={open ? "chevron-down" : "chevron-right"} size={12} tone="faint" />
+    </Pressable>
+    {open && content.length ? <View className="mb-2 w-full rounded-md bg-surface px-3 py-2" style={{ borderCurve: "continuous" }}><MessageContent content={content} color={theme.colors.textSecondary} /></View> : null}
   </View>;
 }
 
@@ -112,7 +93,7 @@ export function BotHandoffList({ sessions, peerOf, onOpen }: { sessions: readonl
   if (sessions.length === 0) return null;
   return <View className="w-full px-3">{sessions.map((session) => {
     const peer = peerOf(session);
-    const label = t("turn.related.sentTo", { title: peer.name });
+    const label = t("bots.handoff", { name: peer.name });
     return <Pressable key={`${session.spaceId}:${session.sessionId}`} accessibilityRole="link" accessibilityLabel={label} onPress={() => onOpen(session)} className="min-h-9 flex-row items-center gap-1.5 self-start px-1 active:opacity-55">
       <Avatar name={peer.name} uri={peer.avatarUrl} size={18} />
       <Text numberOfLines={1} className="shrink text-caption text-fg-muted">{label}</Text>

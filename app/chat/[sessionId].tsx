@@ -50,7 +50,7 @@ import { useChatScrollTrace, useTraceTouches } from "@/src/components/use-chat-s
 import { useChatVisibleRows } from "@/src/components/use-chat-visible-rows";
 import { isCatchUpArrival, useChatCatchUp } from "@/src/components/use-chat-catch-up";
 import { markChatEntry } from "@/src/data/chat-entry-trace";
-import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQueueItem, queuedFollowupTurns, steerQueuedFollowup } from "@/src/data/followup-queue";
+import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQueueItem, queuedFollowupTurns, steerQueuedFollowup, steerSentFollowup } from "@/src/data/followup-queue";
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
 import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
@@ -76,9 +76,9 @@ import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BotHandoffList, BotIncomingBubble, BotNoteBubble, BotReplyBubble, BotStreamBubble } from "@/src/components/BotBubbles";
+import { BotEventRow, BotHandoffList, BotReplyBubble, BotStreamBubble } from "@/src/components/BotBubbles";
 import { BotTurnTalk } from "@/src/components/BotTurnTalk";
-import { isBotSpace, isNoteMessage, noteSender, type BotPeer } from "@/src/data/bot-mode";
+import { botEventLabel, isBotSpace, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
@@ -631,7 +631,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
   const queuedFollowupIds = useMemo(() => new Set(queuedFollowups.map((turn) => turn.id)), [queuedFollowups]);
-  const queueItems = useMemo(() => followupQueueItems(view.turns, view.stream?.turnId, view.messages), [view.turns, view.stream?.turnId, view.messages]);
+  // A Bot takes what the user says mid-run right away: this device's sends being steered in never show as queued.
+  const [steering, setSteering] = useState<ReadonlySet<string>>(() => new Set());
+  const queueItems = useMemo(() => {
+    const items = followupQueueItems(view.turns, view.stream?.turnId, view.messages);
+    return items.filter((item) => !item.clientMessageId || !steering.has(item.clientMessageId));
+  }, [steering, view.turns, view.stream?.turnId, view.messages]);
   const transitionQueueItem = sendTransition ? queueItems.find((item) => isSendQueueItem(item, sendTransition.message)) ?? null : null;
   const queueTransitionActive = sendTransition !== null && transitionQueueItem !== null;
   useEffect(() => {
@@ -645,10 +650,11 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const history = messagesFromTurns(view.turns);
     return messagesInWindow(withTurnSequences(
       mergeDisplayMessages(history.length > 0 ? history : view.messages, history.length > 0 ? view.messages : [])
-        .filter((message) => !isOptimisticFollowup(message) && !isAssistantIntermediate(message) && hasRenderableMessage(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId))),
+        // A send being steered into a Bot's run is already the user's message in the thread, not a queued one.
+        .filter((message) => (isSteered(steering, message) || (!isOptimisticFollowup(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId)))) && !isAssistantIntermediate(message) && hasRenderableMessage(message)),
       view.turns,
     ), { turns: view.turns, hasMoreNewer: view.hasMoreNewer });
-  }, [pendingNew, queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
+  }, [pendingNew, queuedFollowupIds, steering, view.hasMoreNewer, view.messages, view.turns]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
@@ -1046,6 +1052,18 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       setPendingFollowupAction(null);
     }
   };
+  // A refused steer leaves the send queued as in any Chat, so its row comes back with one line saying why.
+  const steerSent = async (clientMessageId: string) => {
+    if (!client || !spaceId) return;
+    try {
+      if (!(await steerSentFollowup(client, spaceId, sessionId, getAppState().sessionViews[sessionId]?.turns ?? [], clientMessageId))) return;
+    } catch {
+      setSteering(withMember(clientMessageId, false));
+      showToast({ title: t("bots.steerFailed"), tone: "danger" });
+      return;
+    }
+    void refreshSession(sessionId).catch(() => undefined);
+  };
   const shareChat = async () => {
     const title = session ? displaySessionTitle(session) : t("chat.title");
     if (!spaceId) {
@@ -1349,7 +1367,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const flight = createSendFlight((message, source) => {
       if (token !== sendTokenRef.current || generation !== sendGenerationRef.current) return;
       recordDebugEvent("chat.send_transition.source_measured", { ...source });
-      setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) ? "queue" : "bubble" });
+      setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) && !bot ? "queue" : "bubble" });
     });
     if (reducedMotion) flight.expire();
     else {
@@ -1444,6 +1462,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
     recordDebugEvent("chat.send.composer_cleared");
     let optimisticCreated = false;
+    let steerId: string | null = null;
     sendMessage(sessionId, text, files, {
       model: activeModel,
       harness,
@@ -1451,14 +1470,20 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       ...(execution ? { execution } : {}),
       onOptimistic: (message) => {
         optimisticCreated = true;
+        steerId = autoSteerId(bot, message);
+        if (steerId) setSteering(withMember(steerId, true));
         flight.inserted(message);
-        if (!isOptimisticFollowup(message)) {
+        if (!isOptimisticFollowup(message) || steerId) {
           cancelTurnScroll();
           setFollowingTail(true);
           requestFollowTail(!reducedMotion);
         }
       },
-    }).then(showSent, (error: unknown) => {
+    }).then(() => {
+      showSent();
+      if (steerId) void steerSent(steerId);
+    }, (error: unknown) => {
+      if (steerId) setSteering(withMember(steerId, false));
       // Once the bubble exists it carries the failure and its retry.
       if (optimisticCreated) return;
       restoreComposer(text, files);
@@ -1480,6 +1505,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     if (!getAppState().sessionViews[sessionId]?.historyLoaded) return;
     haptics.commit();
     let replaced = false;
+    let steerId: string | null = null;
     sendMessage(sessionId, draft.text, draft.attachments, {
       model: draft.model,
       contextWindow: bot ? BOT_CONTEXT_WINDOW : undefined,
@@ -1487,12 +1513,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       retryOf: message,
       onOptimistic: (optimistic) => {
         replaced = true;
-        if (isOptimisticFollowup(optimistic)) return;
+        steerId = autoSteerId(bot, optimistic);
+        if (steerId) setSteering(withMember(steerId, true));
+        if (isOptimisticFollowup(optimistic) && !steerId) return;
         cancelTurnScroll();
         setFollowingTail(true);
         requestFollowTail(!reducedMotion);
       },
-    }).catch((error: unknown) => {
+    }).then(() => { if (steerId) void steerSent(steerId); }, (error: unknown) => {
+      if (steerId) setSteering(withMember(steerId, false));
       if (!replaced) showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
     });
   };
@@ -1574,11 +1603,11 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const sequenceTurns = item.role === "user" && sequence !== null ? turnsBySequence.get(sequence) : undefined;
     const newer = messages[index + 1];
     const endsForkPrefix = forkOrigin !== null && sequence === forkOrigin.sequence && (newer ? turnSequenceForMessage(newer) : null) !== sequence;
-    // A Bot Chat reads like messaging: who sent a message sits on its bubble, and steps stay out of the thread.
+    // A Bot Chat reads like messaging and steps stay out of the thread. A prompt an agent sent (its Turn has an
+    // origin in another Chat: a report back, a check-in) is not the user speaking, so it is a faint line instead.
     const botSource = bot && sequenceTurns?.[0] ? sentFrom(sequenceTurns[0]) : null;
     const botRow = bot ? <>
-      {isNoteMessage(item, messageTurn) ? <BotNoteBubble message={item} from={noteSender(botSource, spaceId, botPeers)} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
-        : botSource ? <BotIncomingBubble message={item} sender={botPeerOf(botSource)} source={botSource} onOpen={openRelatedSession} availableWidth={listWidth || paneWidth} />
+      {botSource ? <BotEventRow key={item.id} label={botEventLabel(t, botSource, spaceId, botPeers)} message={item} />
         : item.role === "assistant" && !compactionFromMessage(item) ? <BotReplyBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
         : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} compactionDivider />}
       {sequenceTurns?.map((entry) => <View key={entry.id}><BotTurnTalk sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} live={isActiveTurnStatus(entry.status) || entry.id === streamTurnId} availableWidth={listWidth || paneWidth} /><BotHandoffList sessions={sentSessions(entry, spaceId)} peerOf={botPeerOf} onOpen={openRelatedSession} /></View>)}
@@ -1589,7 +1618,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
     return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? botRow : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot={false} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botPeerOf, botPeers, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+  }, [arrivalBaseline, bot, botPeerOf, botPeers, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, t, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1777,6 +1806,24 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     /></MenuPresence>
     </GlassBackdrop>
   </Screen>;
+}
+
+/** A Bot Chat's send made while a Turn runs, to be steered into it instead of waiting behind it. */
+function autoSteerId(bot: boolean, message: MessageRecord): string | null {
+  return bot && isOptimisticFollowup(message) && typeof message.meta?.clientMessageId === "string" ? message.meta.clientMessageId : null;
+}
+
+function isSteered(steering: ReadonlySet<string>, message: MessageRecord) {
+  return typeof message.meta?.clientMessageId === "string" && steering.has(message.meta.clientMessageId);
+}
+
+function withMember(id: string, member: boolean) {
+  return (current: ReadonlySet<string>): ReadonlySet<string> => {
+    const next = new Set(current);
+    if (member) next.add(id);
+    else next.delete(id);
+    return next;
+  };
 }
 
 /**

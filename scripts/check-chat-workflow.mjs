@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { botDirectory, botEntries, intermediateBlocks, isBotSpace, isNoteMessage, newerSession, noteSender, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
+import { botDirectory, botEntries, botEventLabel, intermediateBlocks, isBotSpace, newerSession, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -53,7 +53,7 @@ import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, 
 import { createSpaceRealtime } from "../src/data/space-realtime.ts";
 import { spaceRealtimeChange, userSessionRealtimeChange } from "../src/data/space-realtime-events.ts";
 import { DEFAULT_SESSION_FILTER_MINUTES, getSessionStatus, sessionListStatus, hasMoreRecentSessions, isSessionInFilterWindow, latestTurn, loadSessionLatestTurns, parseSessionFilterMinutes, reconcileLatestTurn, reconcileTurnStatusPatch, sessionFilterCutoff, sessionPageState } from "../src/data/session-status.ts";
-import { createSendQueue, followupPreviewText, queuedFollowupTurns, followupQueueItems, isOptimisticFollowup, isSendQueueItem, shouldQueueFollowup } from "../src/data/followup-queue.ts";
+import { createSendQueue, followupPreviewText, queuedFollowupTurns, followupQueueItems, isOptimisticFollowup, isSendQueueItem, shouldQueueFollowup, steerSentFollowup } from "../src/data/followup-queue.ts";
 import { classifySaveConflict, isEditableTextFile, isFileConflictError, isMarkdownFile } from "../src/data/code-file.ts";
 import { detectCodeLanguage, resolveCodeLanguage } from "../src/data/code-language.ts";
 import { StreamingCodeTokenizer } from "../src/data/code-highlight-stream.ts";
@@ -4029,26 +4029,22 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
 }
 {
   const turn = { id: "turn-a", status: "completed", meta: {} };
-  const botScope = (bot, meta = {}, kind = "agent") => compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta, executionKind: kind }]]]), turnsById: new Map([["turn-a", { ...turn, meta, executionKind: kind }]]), isNoteMessage, noteSender, BotNoteBubble: "BotNoteBubble", botPeers: new Map([[relatedId(7), { name: "Writer", avatarUrl: null }]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotIncomingBubble: "BotIncomingBubble", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Writer", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
-  const botNodes = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta, kind) => chromeNodes(botScope(bot, meta, kind)({ item, index: 0 }));
+  const botScope = (bot, meta = {}) => compileRenderMessage({ ...liveRowScope, bot, spaceId: relatedId(5), client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta }]]]), botEventLabel, t: (key, values) => values?.name ? `${key}:${values.name}` : key, BotEventRow: "BotEventRow", botPeers: new Map([[relatedId(7), { name: "Research", avatarUrl: null }]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Research", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+  const botNodes = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta) => chromeNodes(botScope(bot, meta)({ item, index: 0 }));
   const botRow = (...args) => botNodes(...args).map((node) => node.type);
-  const shown = ["TurnProcess", "BotTurnTalk", "SentToList", "SentFromLink", "BotHandoffList", "BotIncomingBubble", "BotReplyBubble", "MessageBubble"];
-  assert.deepEqual(botRow(true).filter((type) => shown.includes(type)), ["MessageBubble", "BotTurnTalk", "BotHandoffList"], "a Bot Turn shows what the Bot said, never its steps");
+  const shown = ["TurnProcess", "BotTurnTalk", "SentToList", "SentFromLink", "BotHandoffList", "BotEventRow", "BotReplyBubble", "MessageBubble"];
+  assert.deepEqual(botRow(true).filter((type) => shown.includes(type)), ["MessageBubble", "BotTurnTalk", "BotHandoffList"], "the user's own message stays a user bubble; a Bot Turn shows what the Bot said, never its steps");
   assert.deepEqual(botRow(true, { id: "reply", role: "assistant", meta: { turnSequence: 1 } }).filter((type) => shown.includes(type)), ["BotReplyBubble"], "a Bot's reply is a bubble without the reply meta");
-  assert.deepEqual(botRow(true, undefined, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).filter((type) => shown.includes(type)), ["BotIncomingBubble", "BotTurnTalk", "BotHandoffList"], "a message another Bot sent shows as that Bot's bubble");
   assert.ok(!botRow(false).includes("BotTurnTalk") && botRow(false).includes("TurnProcess"), "other Chats are unchanged");
-  // A note (`spaces prompt --note`) is stored as a user message; in a Bot's Chat it is the Bot speaking.
-  const note = (bot, meta) => botNodes(bot, { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1, turnId: "turn-a" } }, meta, "note");
-  const ownNote = note(true).find((node) => node.type === "BotNoteBubble");
-  assert.ok(ownNote && !note(true).some((node) => node.type === "MessageBubble"), "a note sits on the Bot's side, not the user's");
-  assert.equal(ownNote.props.from, null, "a note with no other Bot behind it names no sender");
-  const relayed = note(true, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).find((node) => node.type === "BotNoteBubble");
-  assert.equal(relayed?.props.from, "Writer", "a report from another Bot names it");
-  assert.ok(note(false).some((node) => node.type === "MessageBubble") && !note(false).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows a note as before");
-  assert.equal(isNoteMessage({ role: "user", meta: { turn: { executionKind: "note" } } }, null), true, "a note recorded on the message itself counts too");
-  assert.equal(isNoteMessage({ role: "assistant", meta: {} }, { executionKind: "note" }), false);
-  assert.equal(noteSender({ spaceId: "self" }, "self", new Map([["self", { name: "Me", avatarUrl: null }]])), null, "the Bot's own check-in notes name no sender");
-  assert.equal(noteSender({ spaceId: "unknown" }, "self", new Map()), null, "an origin that is not a Bot names no sender");
+  // A prompt an agent sent here (its Turn has an origin in another Chat) is not the user speaking.
+  const origin = (spaceId) => ({ origin: { kind: "prompt", spaceId, sessionId: relatedId(8), turnId: relatedId(9) } });
+  const event = (bot, spaceId) => botNodes(bot, undefined, origin(spaceId));
+  const report = event(true, relatedId(7)).find((node) => node.type === "BotEventRow");
+  assert.ok(report && !event(true, relatedId(7)).some((node) => node.type === "MessageBubble"), "an agent's prompt in a Bot Chat is a faint event line, not a user bubble");
+  assert.equal(report.props.label, "bots.event.report:Research", "a report back names the Bot it came from");
+  assert.equal(event(true, relatedId(6)).find((node) => node.type === "BotEventRow").props.label, "bots.event.report:bots.event.otherBot", "an unknown sender reads as another Bot");
+  assert.equal(event(true, relatedId(5)).find((node) => node.type === "BotEventRow").props.label, "bots.event.checkIn", "a prompt from the Bot's own Space is a check-in");
+  assert.ok(event(false, relatedId(7)).some((node) => node.type === "MessageBubble") && !event(false, relatedId(7)).some((node) => node.type === "BotEventRow"), "an ordinary Chat shows an agent's prompt as before");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5835,6 +5831,23 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(processTexts(blocks, "Done: the fix is in.\n"), ["Looking at the repo.", "Found it."], "tools, results, and thinking stay in the steps; text repeating the final reply shows once");
   assert.deepEqual(processTexts(blocks, ""), ["Looking at the repo.", "Found it.", "Done: the fix is in."]);
   assert.deepEqual(processTexts([{ type: "text", text: "   " }], "x"), []);
+}
+
+// In a Bot Chat, what the user says while a Turn runs is steered into it instead of waiting in the queue.
+{
+  const steered = [];
+  const client = { space: (spaceId) => ({ session: (sessionId) => ({ steerTurn: async (turnId) => { steered.push([spaceId, sessionId, turnId]); } }) }) };
+  const turns = [{ id: "running", status: "running", meta: {} }, { id: "sent", status: "queued", meta: { clientMessageId: "mine" } }];
+  assert.equal(await steerSentFollowup(client, "space", "chat", turns, "mine"), true);
+  assert.deepEqual(steered, [["space", "chat", "sent"]], "the queued Turn the send became is steered, as Send now does");
+  assert.equal(await steerSentFollowup(client, "space", "chat", [{ id: "sent", status: "running", meta: { clientMessageId: "mine" } }], "mine"), false, "a send that already started has nothing to steer");
+  assert.equal(steered.length, 1);
+  const autoSteerId = loadChromeComponent("../app/chat/[sessionId].tsx", "autoSteerId", { isOptimisticFollowup });
+  const queued = { role: "user", meta: { optimistic: true, queuedFollowup: true, clientMessageId: "mine" } };
+  assert.equal(autoSteerId(true, queued), "mine", "a Bot Chat send made mid-run is steered");
+  assert.equal(autoSteerId(false, queued), null, "an ordinary Chat's send keeps waiting in the queue");
+  assert.equal(autoSteerId(true, { ...queued, meta: { ...queued.meta, queuedFollowup: false } }), null, "a send with nothing running is not steered");
+  assert.ok(chatSource.includes("steerId = autoSteerId(bot, message)") && chatSource.includes("if (steerId) void steerSent(steerId)"), "the composer send wires both");
 }
 
 console.log("Chat workflow checks passed");
