@@ -20,6 +20,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Cohub uses the camera to attach references to a Chat, and lets Works you approve use it.",
         "NSMicrophoneUsageDescription": "Cohub uses the microphone for voice input, and lets Works you approve use it.",
+        "NSLocationWhenInUseUsageDescription": "Cohub lets Works you approve use your location while you have them open.",
         "NSPhotoLibraryUsageDescription": "Cohub uses your photo library to attach references to a Chat.",
         "UISupportedInterfaceOrientations~ipad": [
           "UIInterfaceOrientationPortrait",
@@ -58,7 +59,9 @@
       "permissions": [
         "POST_NOTIFICATIONS",
         "VIBRATE",
-        "REQUEST_INSTALL_PACKAGES"
+        "REQUEST_INSTALL_PACKAGES",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [

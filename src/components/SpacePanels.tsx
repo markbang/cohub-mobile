@@ -20,7 +20,7 @@ import { edgeChrome, useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSessionSearchHit, type SessionNavigationTarget } from "@/src/data/session-search";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
-import { invalidateScopes, useScreenQuery } from "@/src/data/query";
+import { invalidateScopes, usePagedQuery, useScreenQuery } from "@/src/data/query";
 import { useSpaceDirectory } from "@/src/data/use-space-directory";
 import { useQueryClient } from "@tanstack/react-query";
 import { reconcileSessionHead } from "@/src/data/session-list-sync";
@@ -324,7 +324,8 @@ type ChatPanelItem =
 type ChatListFilter =
   | { kind: "all" }
   | { kind: "source"; source: SessionSourceGroup }
-  | { kind: "label"; label: SessionLabel; ref: string };
+  | { kind: "label"; label: SessionLabel; ref: string }
+  | { kind: "archived" };
 
 type PanelScope = { sessions: UserSessionListItem[]; cursor: string | null; hasMore: boolean; tailLoaded: boolean };
 const EMPTY_SESSIONS: UserSessionListItem[] = [];
@@ -383,6 +384,20 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
     intervalMs: 15_000,
   });
   const labelSessionIds = labelMembersQuery.data ?? EMPTY_IDS;
+  // The Space's archive is its own server list: the default one never holds archived Chats.
+  const archivedList = usePagedQuery<UserSessionListItem>({
+    queryKey: [`space:${spaceId}:archived-chats`],
+    enabled: Boolean(client && spaceId) && listFilter.kind === "archived",
+    intervalMs: 15_000,
+    id: (session) => session.id,
+    fetchPage: async (cursor) => {
+      const response = await client!.space(spaceId).sessions.list({ limit: 60, archived: "only", ...(cursor ? { cursor } : {}) });
+      return { items: mergePanelSessions([], response.sessions, spaceId, spaceName), cursor: response.pageInfo?.hasMore ? response.pageInfo.nextCursor ?? null : null };
+    },
+  });
+  const archivedSessions = archivedList.items ?? EMPTY_SESSIONS;
+  const archivedLoading = listFilter.kind === "archived" && archivedList.items === null && !archivedList.query.error;
+  const archivedError = listFilter.kind === "archived" ? (archivedList.loadMoreError ?? archivedList.query.error)?.message || null : null;
   const labelSessionsLoading = labelMembersQuery.isPending && labelMembersQuery.fetchStatus === "fetching";
   const labelSessionsError = labelMembersQuery.error ? labelMembersQuery.error.message || t("labels.loadedLabeledChatsError") : null;
   const reloadLabels = useCallback(() => {
@@ -408,15 +423,15 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
   // Stable across input-free re-renders (focus, the page's menu) so LegendList, which memoizes rows on the item, redraws none.
   const filteredSessions = useMemo(() => {
     const matchesListFilter = (session: UserSessionListItem) => {
-      if (listFilter.kind === "all") return true;
+      if (listFilter.kind === "all" || listFilter.kind === "archived") return true;
       if (listFilter.kind === "source") return sessionSourceGroup(session) === listFilter.source;
       return labelSessionIds.has(session.id);
     };
-    return displaySessions.filter((session) =>
+    return (listFilter.kind === "archived" ? archivedSessions : displaySessions).filter((session) =>
       (!needle || [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false)) &&
       matchesListFilter(session),
     );
-  }, [displaySessions, labelSessionIds, listFilter, needle]);
+  }, [archivedSessions, displaySessions, labelSessionIds, listFilter, needle]);
   const sessionsById = useMemo(() => new Map(displaySessions.map((session) => [session.id, session])), [displaySessions]);
   const sessionForks = state.sessionForks;
   const listItems = useMemo<ChatPanelItem[]>(() => {
@@ -428,7 +443,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
         : { kind: "local", session: entry.session, fork: entry.fork, tree: entry.tree });
     }
     if (!trimmedQuery) return filteredSessions.map(flatSession);
-    const remoteSessions = remoteQueryMatches
+    const remoteSessions = remoteQueryMatches && listFilter.kind !== "archived"
       ? remoteSearch.sessions.filter((hit) => {
         const session = sessionsById.get(hit.sessionId);
         if (listFilter.kind === "all") return true;
@@ -471,9 +486,21 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
       setLoadingMore(false);
     }
   };
-  const showLoadMore = Boolean(client && !trimmedQuery && (!scopeInitialized || scopeHasMore || loadMoreError));
-  const emptyLoading = (remoteQueryMatches && remoteSearch.loading) || labelSessionsLoading;
-  const emptyLabel = listFilter.kind === "label"
+  const archivedView = listFilter.kind === "archived";
+  const showLoadMore = archivedView
+    ? Boolean(client && !trimmedQuery && (archivedList.hasMore || archivedError))
+    : Boolean(client && !trimmedQuery && (!scopeInitialized || scopeHasMore || loadMoreError));
+  const footerError = archivedView ? archivedError : loadMoreError;
+  const footerLoading = archivedView ? archivedList.loadingMore : loadingMore;
+  const pressLoadMore = () => {
+    if (!archivedView) { void loadMore(); return; }
+    if (archivedList.hasMore) void archivedList.loadMore().catch(() => undefined);
+    else void archivedList.query.refetch();
+  };
+  const emptyLoading = (remoteQueryMatches && remoteSearch.loading) || labelSessionsLoading || archivedLoading;
+  const emptyLabel = archivedView
+    ? t("space.panel.empty.archived")
+    : listFilter.kind === "label"
     ? t("space.panel.empty.labeled", { name: listFilter.label.name })
     : listFilter.kind === "source"
       ? listFilter.source === "web" ? t("space.panel.empty.web") : t("space.panel.empty.other")
@@ -485,6 +512,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
     { key: "web", label: t("space.panel.filter.webApp"), icon: "globe", filter: { kind: "source", source: "web" } },
     { key: "other", label: t("space.panel.filter.other"), icon: "globe", filter: { kind: "source", source: "other" } },
     ...labels.map((label) => ({ key: `label:${label.id}`, label: label.name, filter: { kind: "label" as const, label, ref: formatLabelRef(label) } })),
+    { key: "archived", label: t("chats.archived"), icon: "archive", filter: { kind: "archived" } },
   ];
   const chipRow = <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
     {filterChips.map((chip) => (
@@ -492,7 +520,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
         key={chip.key}
         label={chip.label}
         icon={chip.icon}
-        selected={chip.filter.kind === "all" ? listFilter.kind === "all" : chip.filter.kind === "source" ? listFilter.kind === "source" && listFilter.source === chip.filter.source : listFilter.kind === "label" && listFilter.label.id === chip.filter.label.id}
+        selected={chip.filter.kind === "all" || chip.filter.kind === "archived" ? listFilter.kind === chip.filter.kind : chip.filter.kind === "source" ? listFilter.kind === "source" && listFilter.source === chip.filter.source : listFilter.kind === "label" && listFilter.label.id === chip.filter.label.id}
         onPress={() => setListFilter(chip.filter)}
       />
     ))}
@@ -525,9 +553,9 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
           : <SessionRow session={item.session} fork={item.fork} tree={item.tree} showSpace={false} onPress={() => onOpenSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} onLongPress={client ? () => openLabelSheet(item.session) : undefined} />}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24, flexGrow: listItems.length === 0 ? 1 : undefined }}
-        ListFooterComponent={showLoadMore ? <View>{loadMoreError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{loadMoreError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={loadingMore} onPress={() => void loadMore()} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{loadingMore ? <Loader /> : <Text className="text-caption text-accent">{loadMoreError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
+        ListFooterComponent={showLoadMore ? <View>{footerError ? <Text selectable className="text-micro font-semibold text-danger mx-4 mt-2">{footerError}</Text> : null}<Pressable accessibilityRole="button" accessibilityLabel={footerError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")} disabled={footerLoading} onPress={pressLoadMore} className="min-h-10 mx-4 mt-2 rounded-sm items-center justify-center active:bg-surface-pressed">{footerLoading ? <Loader /> : <Text className="text-caption text-accent">{footerError ? t("space.panel.retryLoadMore") : t("space.panel.loadMore")}</Text>}</Pressable></View> : null}
         ListHeaderComponent={remoteQueryMatches && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
-        ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={28} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
+        ListEmptyComponent={emptyLoading ? <LoadingState label={trimmedQuery ? t("chats.searching") : undefined} /> : <View className="flex-1 min-h-45 items-center justify-center p-6"><AppIcon name={archivedView ? "archive" : listFilter.kind === "label" ? "tag" : trimmedQuery ? "search" : "messages"} size={28} tone="muted" /><Text className="text-body text-fg-muted mt-2 text-center">{emptyLabel}</Text></View>}
       />
       {labelSheetSession && client ? <SessionLabelSheet client={client} spaceId={spaceId} session={labelSheetSession} labels={labels} labelsError={labelsError} onLabelsReload={reloadLabels} onClose={closeLabelSheet} onChanged={reloadLabels} /> : null}
     </KeyboardAvoidingView>

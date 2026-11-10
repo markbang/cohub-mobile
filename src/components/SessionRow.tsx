@@ -60,7 +60,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
       spaceAvatarUrl: canonicalSpace?.publicProfile?.avatarUrl ?? session.space?.publicProfile?.avatarUrl ?? null,
     };
   }, shallowEqual);
-  const { markSessionSeen, markSessionUnread } = useAppActions();
+  const { markSessionSeen, markSessionUnread, setSessionArchived } = useAppActions();
   const toast = useToast();
   const unreadMark = useAppSelector((app) => isSessionUnread(session, app.sessionSeen));
   // The running label shows elapsed minutes, which used to advance only with unrelated app re-renders.
@@ -122,9 +122,17 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const readAction = unread
     ? { icon: "check-check", title: t("session.markRead"), onPress: toggleRead } as const
     : { icon: "message-square", title: t("session.markUnread"), onPress: toggleRead } as const;
-  const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }, readAction] as const;
-  // Mail toggles read from the leading edge; the label stays short to fit the action.
+  const archived = Boolean(session.archivedAt);
+  // The server refuses to archive a running Chat; restoring one is always allowed.
+  const canToggleArchive = archived || status !== "running";
+  const toggleArchive = () => {
+    void setSessionArchived(session, !archived).catch((error: unknown) => toast({ title: t("session.archive.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
+  };
+  const archiveAction = { icon: "archive", title: archived ? t("session.unarchive") : canToggleArchive ? t("session.archive") : t("session.archive.running"), disabled: !canToggleArchive, onPress: toggleArchive } as const;
+  const actions = [{ icon: "arrow-right", title: t("common.open"), onPress }, readAction, archiveAction] as const;
+  // Mail toggles read from the leading edge and archives from the trailing one; labels stay short to fit.
   const readSwipe = swipeToRead ? [{ icon: readAction.icon, label: unread ? t("session.read") : t("session.unread"), tone: "accent", onPress: toggleRead } as const] : [];
+  const archiveSwipe = swipeToRead && canToggleArchive ? [{ icon: "archive", label: archived ? t("session.unarchive.short") : t("session.archive.short"), tone: "neutral", onPress: toggleArchive } as const] : [];
   const peekPreview = { title, subtitle: showSpace ? spaceName : undefined, body: previewText(latestTurn?.assistantText || turnText || session.latestMessageText, 600) || detail || undefined, footnote: statusLabel ?? age };
   const row = <ListRow
     leading={leading}
@@ -139,16 +147,16 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     unread={unread}
     selected={selected}
     accessibilityLabel={[t("ui.openNamed", { name: title }), unread ? t("session.unread") : null, statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
-    accessibilityActions={[{ name: "toggleRead", label: readAction.title }]}
-    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "toggleRead") toggleRead(); }}
+    accessibilityActions={[{ name: "toggleRead", label: readAction.title }, ...(canToggleArchive ? [{ name: "toggleArchive", label: archiveAction.title }] : [])]}
+    onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "toggleRead") toggleRead(); else if (event.nativeEvent.actionName === "toggleArchive") toggleArchive(); }}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}
     onPressIn={onPressIn}
     onLongPress={!peek ? onLongPress : nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
   />;
   if (!peek) return onLongPress ? <SwipeActions trailing={[{ icon: "tag", label: t("labels.title"), tone: "neutral", onPress: onLongPress }]}>{row}</SwipeActions> : row;
-  if (nativeContextMenus) return <SwipeActions leading={readSwipe}><NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu></SwipeActions>;
+  if (nativeContextMenus) return <SwipeActions leading={readSwipe} trailing={archiveSwipe}><NativeContextMenu menu="session-row" actions={actions} preview={peekPreview}>{row}</NativeContextMenu></SwipeActions>;
   return <>
-    <SwipeActions leading={readSwipe}>{row}</SwipeActions>
+    <SwipeActions leading={readSwipe} trailing={archiveSwipe}>{row}</SwipeActions>
     {menuAt ? <ContextMenu visible x={menuAt.x} y={menuAt.y} onClose={() => setMenuAt(null)} preview={peekPreview} actions={[...actions]} /> : null}
   </>;
 }

@@ -1,15 +1,21 @@
-import type { SpaceWalletActivity } from "@neta-art/cohub";
+import { resolveWebBaseUrl, type SpaceRecord, type SpaceWalletActivity } from "@neta-art/cohub";
+import * as Clipboard from "expo-clipboard";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { useAppSelector } from "@/src/data/context";
+import { GroupRow, GroupSlot, GroupTile } from "@/src/components/GroupRow";
+import { useToast } from "@/src/components/Toast";
+import { config } from "@/src/config";
+import { useAppActions, useAppSelector } from "@/src/data/context";
+import { useScreenQuery } from "@/src/data/query";
 import { formatUsd, walletProductBalanceUsd } from "@/src/data/space-wallet";
 import { useSpaceWallet } from "@/src/data/use-space-wallet";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { useAppTheme } from "@/src/theme";
-import { AppIcon, DataError, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
+import { AppIcon, AppSwitch, DataError, IconButton, Loader, LoadingSections, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 
 const ACTIVITY_LABELS: Record<SpaceWalletActivity["kind"], TranslationKey> = {
@@ -19,6 +25,7 @@ const ACTIVITY_LABELS: Record<SpaceWalletActivity["kind"], TranslationKey> = {
   expire: "space.wallet.activity.expire",
   revoke: "space.wallet.activity.revoke",
   adjust: "space.wallet.activity.adjust",
+  reversal: "space.wallet.activity.reversal",
 };
 
 export default function SpaceWalletScreen() {
@@ -30,6 +37,31 @@ export default function SpaceWalletScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const space = useAppSelector((app) => app.state.spaces.find((item) => item.id === spaceId));
   const money = (amount: number, digits?: number) => formatUsd(amount, digits);
+  const { client, upsertSpace } = useAppActions();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  // Space details carry who may edit and whether guests may fund; list rows do not.
+  const detailKey = [`space:${spaceId}:wallet`, "space"];
+  const detail = useScreenQuery({ queryKey: detailKey, queryFn: (): Promise<SpaceRecord> => client!.spaces.get(spaceId), enabled: Boolean(client && spaceId) }).data ?? null;
+  const canEdit = detail?.access?.permissions.includes("space.edit") === true;
+  const publicFunding = detail?.publicProfile?.fundingEnabled === true;
+  const [savingFunding, setSavingFunding] = useState(false);
+  const setPublicFunding = async (enabled: boolean) => {
+    if (!client || savingFunding) return;
+    setSavingFunding(true);
+    try {
+      const { space: next } = await client.space(spaceId).profile({ fundingEnabled: enabled });
+      queryClient.setQueryData(detailKey, next);
+      upsertSpace(next);
+    } catch (caught) {
+      toast({ title: t("wallet.publicFunding.failed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
+    } finally {
+      setSavingFunding(false);
+    }
+  };
+  const copyFundLink = () => void Clipboard.setStringAsync(`${resolveWebBaseUrl({ env: config.environment })}/spaces/${encodeURIComponent(spaceId)}/fund`)
+    .then(() => toast({ title: t("wallet.fund.linkCopied"), tone: "success" }))
+    .catch(() => undefined);
   const canRecharge = Boolean(catalog?.supported && catalog.paymentAvailable && summary?.usable !== false && catalog.products.length);
 
   const refresh = async () => {
@@ -75,6 +107,11 @@ export default function SpaceWalletScreen() {
           >{wallet.buying === product.key ? <Loader /> : null}</SettingsRow>)}
       </SettingsGroup>
       <Text className="-mt-4 mb-6 px-8 text-caption text-fg-muted">{wallet.checkoutError ? <Text className="text-danger">{t("space.wallet.checkoutFailed")} </Text> : null}{t("space.wallet.rechargeNote")}</Text>
+      <SettingsGroup footer={canEdit ? t("wallet.publicFunding.hint") : undefined}>
+        <GroupRow leading={<GroupTile icon="wallet" accent />} title={t("wallet.fund.fromBalance")} titleClassName="text-accent" onPress={() => router.push({ pathname: "/space/[spaceId]/fund", params: { spaceId } })} last={!canEdit} />
+        {canEdit ? <GroupRow leading={savingFunding ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="globe" />} title={t("wallet.publicFunding")} trailing={<AppSwitch value={publicFunding} disabled={savingFunding} onValueChange={(value) => void setPublicFunding(value)} accessibilityLabel={t("wallet.publicFunding")} />} last={!publicFunding} /> : null}
+        {canEdit && publicFunding ? <GroupRow leading={<GroupTile icon="link" accent />} title={t("wallet.fund.linkCopy")} titleClassName="text-accent" onPress={copyFundLink} last /> : null}
+      </SettingsGroup>
       <SettingsGroup label={t("space.wallet.activity")}>
         {!activity ? (errors.activity ? <InlineRetry message={errors.activity} onRetry={wallet.reload} /> : <View className="min-h-13 items-center justify-center"><Loader /></View>)
           : activity.items.length === 0 ? <Text className="p-4 text-subhead text-fg-muted">{t("space.wallet.noActivity")}</Text>

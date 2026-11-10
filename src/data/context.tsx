@@ -1,4 +1,5 @@
 import type {
+  ApprovalMode,
   CohubClient,
   ContentBlock,
   HarnessKind,
@@ -462,9 +463,9 @@ function preferNewerSession(current: SessionRecord | null | undefined, incoming:
   if (!current) return incoming;
   const currentTime = Date.parse(current.updatedAt);
   const incomingTime = Date.parse(incoming.updatedAt);
-  return Number.isFinite(currentTime) && Number.isFinite(incomingTime) && currentTime > incomingTime
-    ? current
-    : incoming;
+  if (Number.isFinite(currentTime) && Number.isFinite(incomingTime) && currentTime > incomingTime) return current;
+  // Turn pages return the Session without resolving its archive; the last known state stands until one does.
+  return incoming.archivedAt === undefined && current.archivedAt !== undefined ? { ...incoming, archivedAt: current.archivedAt } : incoming;
 }
 
 function mergeSessionItem(current: UserSessionListItem | undefined, incoming: UserSessionListItem) {
@@ -502,6 +503,10 @@ function placeRunningSession(state: AppState, sessionId: string, found?: UserSes
   return changed ? runningSessions : state.runningSessions;
 }
 
+function isListedSession(session: Pick<SessionRecord, "archivedAt">) {
+  return !session.archivedAt;
+}
+
 function preserveSpacePin(current: SpaceRecord | undefined, incoming: SpaceRecord) {
   return incoming.isPinned === undefined && current?.isPinned !== undefined
     ? { ...incoming, isPinned: current.isPinned }
@@ -514,7 +519,7 @@ function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         spaces: sortByRecent(action.spaces),
-        sessions: sortByRecent(action.sessions),
+        sessions: sortByRecent(action.sessions.filter(isListedSession)),
         sessionForks: mergeSessionForks(state.sessionForks, action.forks),
         booting: false,
       };
@@ -605,9 +610,9 @@ function reducer(state: AppState, action: Action): AppState {
       const runningSessions = { ...state.runningSessions };
       for (const source of ["all", "web", "other"] as const) {
         const current = runningSessions[source];
-        if (current) runningSessions[source] = { ...current, sessions: sortByRecent(current.sessions.map(patch)) };
+        if (current) runningSessions[source] = { ...current, sessions: sortByRecent(current.sessions.map(patch).filter(isListedSession)) };
       }
-      return { ...state, sessions: sortByRecent(state.sessions.map(patch)), runningSessions };
+      return { ...state, sessions: sortByRecent(state.sessions.map(patch).filter(isListedSession)), runningSessions };
     }
     case "sessions-head-error":
       return { ...state, sessionsError: action.message };
@@ -938,6 +943,8 @@ function reducer(state: AppState, action: Action): AppState {
     case "stream-clear":
       return updateView(state, action.sessionId, { stream: null });
     case "session-upsert": {
+      // Lists hold what the server lists by default; an archived Chat leaves them.
+      if (!isListedSession(action.session)) return state.sessions.some((session) => session.id === action.session.id) ? { ...state, sessions: state.sessions.filter((session) => session.id !== action.session.id) } : state;
       const exists = state.sessions.some((session) => session.id === action.session.id);
       return {
         ...state,
@@ -980,6 +987,9 @@ export type AppSnapshot = {
   sessionSeen: SessionSeenState;
 };
 
+/** How a local Harness runs a Turn; absent fields leave the Harness's own settings. */
+export type LocalExecution = { approvalMode?: ApprovalMode; serviceTier?: string };
+
 /** Provider operations and session-scoped handles; identities change only with the client or user. */
 export type AppActions = {
   client: CohubClient | null;
@@ -1007,9 +1017,9 @@ export type AppActions = {
   /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
   /** Inserts the bubble before returning; resolves once the server accepts the send. */
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
   /** `onOptimistic` receives the pending bubble synchronously; it has no Chat until the server answers. */
-  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
+  sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
   discardFailedSend: (sessionId: string, messageId: string) => void;
   loadComposerDraft: (spaceId: string, scope: ComposerDraftScope) => Promise<string>;
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
@@ -1026,6 +1036,8 @@ export type AppActions = {
   toggleSpacePin: (spaceId: string) => Promise<boolean>;
   upsertSpace: (space: SpaceRecord) => void;
   renameSession: (sessionId: string, title: string) => Promise<void>;
+  /** Archives for every member of the Space; lists drop the Chat at once and restore it if the server refuses. */
+  setSessionArchived: (session: SessionRecord & { space?: UserSessionListItem["space"] }, archived: boolean) => Promise<void>;
   forkSession: (spaceId: string, sessionId: string, turn: Pick<SessionTurnRecord, "id" | "sourceTurnId">) => Promise<SessionRecord>;
   rememberSessionForks: (forks: SessionListFork[]) => void;
   clearCache: () => Promise<void>;
@@ -2244,7 +2256,7 @@ export function AppProvider({
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2308,6 +2320,7 @@ export function AppProvider({
             ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
             ...(options.harness ? { harness: options.harness } : {}),
             ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+            ...options.execution,
           });
           const upsert = (response: Awaited<typeof request>) => {
             if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
@@ -2363,7 +2376,7 @@ export function AppProvider({
       spaceId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2391,6 +2404,7 @@ export function AppProvider({
         ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
         ...(options.harness ? { harness: options.harness } : {}),
         ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+        ...options.execution,
       }).catch(unclaim);
       attachmentUploads?.forget(uploadTarget, attachments);
       if (result.mode !== "immediate" || !result.session) {
@@ -2598,6 +2612,47 @@ export function AppProvider({
     [client, dispatch, queryClient, stateRef],
   );
 
+  const setSessionArchived = useCallback(
+    async (target: SessionRecord & { space?: UserSessionListItem["space"] }, archived: boolean) => {
+      if (!client) throw new Error(translate("data.stillConnecting"));
+      const sessionId = target.id;
+      const previousView = stateRef.current.sessionViews[sessionId];
+      const previousSummary = stateRef.current.sessions.find((item) => item.id === sessionId);
+      const viewSpace = previousView?.space;
+      const space = previousSummary?.space ?? target.space ?? (viewSpace ? { id: viewSpace.id, name: displaySpaceName(viewSpace), slug: viewSpace.slug, publicProfile: viewSpace.publicProfile ?? null } : null);
+      const apply = (session: SessionRecord) => {
+        dispatch({ type: "session-upsert", session: { ...session, space } });
+        if (stateRef.current.sessionViews[sessionId]?.session) dispatch({ type: "session-meta", sessionId, session, space: stateRef.current.sessionViews[sessionId]?.space });
+      };
+      const base = previousView?.session ?? previousSummary ?? target;
+      const stamp = archived ? new Date().toISOString() : null;
+      apply({ ...base, archivedAt: stamp });
+      // Archiving moves a Chat between these lists either way, so it leaves the one it is in; the refetch below settles them.
+      queryClient.setQueriesData<{ sessions?: UserSessionListItem[]; items?: UserSessionListItem[] }>(
+        { predicate: (query) => { const key = String(query.queryKey[0]); return key.startsWith("chats:source:") || key.endsWith(":chat-panel") || key.endsWith(":archived-chats"); } },
+        (data) => data && {
+          ...data,
+          ...(data.sessions ? { sessions: data.sessions.filter((item) => item.id !== sessionId) } : {}),
+          ...(data.items ? { items: data.items.filter((item) => item.id !== sessionId) } : {}),
+        },
+      );
+      try {
+        const sessionClient = client.space(target.spaceId).session(sessionId);
+        const result = await (archived ? sessionClient.archive() : sessionClient.unarchive());
+        const session = result.session.archivedAt === undefined ? { ...result.session, archivedAt: stamp } : result.session;
+        apply(session);
+        void saveSessions(userKey, [{ ...session, space }]).catch(() => undefined);
+      } catch (error) {
+        dispatch({ type: "session-upsert", session: previousSummary ?? { ...base, space } });
+        if (previousView?.session) dispatch({ type: "session-meta", sessionId, session: previousView.session, space: previousView.space });
+        throw error;
+      } finally {
+        void queryClient.invalidateQueries();
+      }
+    },
+    [client, dispatch, queryClient, stateRef, userKey],
+  );
+
   const loadSessionReadSequenceForUser = useCallback(
     (sessionId: string) => loadSessionReadSequence(userKey, sessionId),
     [userKey],
@@ -2665,6 +2720,7 @@ export function AppProvider({
       toggleSpacePin,
       upsertSpace,
       renameSession,
+      setSessionArchived,
       forkSession,
       rememberSessionForks,
       clearCache,
@@ -2715,6 +2771,7 @@ export function AppProvider({
       refreshSessionStatuses,
       refreshSession,
       renameSession,
+      setSessionArchived,
       forkSession,
       rememberSessionForks,
       sendMessage,

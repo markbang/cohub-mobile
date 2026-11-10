@@ -48,7 +48,10 @@ export function sessionActivity(session: Pick<UserSessionListItem, "activeTurn" 
   }
 
   if (status === "failed" || status === "stopped") {
-    const reason = (options.latestTurn?.errorMessage ?? session.lastTurnIssue?.errorMessage)?.replace(/\s+/g, " ").trim();
+    const issue = session.lastTurnIssue;
+    // A Turn stopped for an empty balance names why; the server leaves its error empty.
+    if (status === "stopped" && issue?.reason === "billing" && (!options.latestTurn || options.latestTurn.id === issue.turnId) && !options.latestTurn?.errorMessage) return { text: t("session.activity.billingStopped"), tone: "muted" };
+    const reason = (options.latestTurn?.errorMessage ?? issue?.errorMessage)?.replace(/\s+/g, " ").trim();
     const label = t(status === "failed" ? "ui.status.failed" : "ui.status.stopped");
     return { text: reason ? `${label} · ${reason}` : label, tone: status === "failed" ? "danger" : "muted" };
   }

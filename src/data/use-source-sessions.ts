@@ -33,21 +33,24 @@ function errorMessage(error: unknown) {
 
 type SourcePages = { sessions: UserSessionListItem[]; cursor: string | null; boundary: SessionPageBoundary | null; hasMore: boolean; pagesLoaded: number };
 
+/** Every source, or only the Chats archived in their Space. */
+export type ChatsListFilter = SessionSourceFilter | "archived";
+
 /**
- * Server-filtered global Chats list for a source filter. The shared home list stays
+ * Server-filtered global Chats list for a source filter or the archive. The shared home list stays
  * unfiltered for cache hydration and cross-screen lookups, so this keeps its own
  * pages and cursor. `all` resolves to the empty state; callers use the home list.
  */
-export function useSourceSessions(client: CohubClient | null, filter: SessionSourceFilter) {
-  const keys = sessionSourceFilterKeys(filter);
-  const enabled = filter !== "all" && Boolean(client && keys);
+export function useSourceSessions(client: CohubClient | null, filter: ChatsListFilter) {
+  const scope = useMemo(() => filter === "archived" ? { archived: "only" as const } : { source: sessionSourceFilterKeys(filter) ?? undefined }, [filter]);
+  const enabled = filter !== "all" && Boolean(client);
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => [`chats:source:${filter}`], [filter]);
   const query = useScreenQuery({
     queryKey,
     queryFn: async (): Promise<SourcePages> => {
       const requestStartedAt = Date.now();
-      const response = await withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, source: keys! }));
+      const response = await withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, ...scope }));
       const loaded = queryClient.getQueryData<SourcePages>(queryKey);
       const page = sessionPageState(response, null, loaded?.boundary ?? null);
       if (!loaded) return { sessions: response.sessions ?? [], cursor: page.cursor, boundary: page.boundary, hasMore: page.hasMore, pagesLoaded: 1 };
@@ -70,7 +73,7 @@ export function useSourceSessions(client: CohubClient | null, filter: SessionSou
     loadingMoreRef.current = true;
     setLoadingMore(true);
     setLoadMoreError(null);
-    void withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, cursor: start.cursor, source: keys! })).then((response) => {
+    void withTimeout(client!.user.listSessions({ limit: PAGE_SIZE, cursor: start.cursor, ...scope })).then((response) => {
       queryClient.setQueryData<SourcePages>(queryKey, (current) => {
         if (!current || current.cursor !== start.cursor) return current;
         const page = sessionPageState(response, start.cursor, current.boundary);
@@ -80,7 +83,7 @@ export function useSourceSessions(client: CohubClient | null, filter: SessionSou
       loadingMoreRef.current = false;
       setLoadingMore(false);
     });
-  }, [client, enabled, keys, queryClient, queryKey]);
+  }, [client, enabled, scope, queryClient, queryKey]);
 
   const refetch = query.refetch;
   const reload = useCallback(() => { setLoadMoreError(null); void refetch(); }, [refetch]);

@@ -38,6 +38,7 @@ import FingerprintPattern from "lucide-react-native/icons/fingerprint-pattern";
 import Folder from "lucide-react-native/icons/folder";
 import FolderOpen from "lucide-react-native/icons/folder-open";
 import Gift from "lucide-react-native/icons/gift";
+import Heart from "lucide-react-native/icons/heart";
 import GitFork from "lucide-react-native/icons/git-fork";
 import Globe from "lucide-react-native/icons/globe";
 import Images from "lucide-react-native/icons/images";
@@ -133,6 +134,8 @@ export const icons = {
   gift: Gift,
   "git-fork": GitFork,
   globe: Globe,
+  heart: Heart,
+  "heart-fill": Heart,
   images: Images,
   info: Info,
   layers: Layers2,

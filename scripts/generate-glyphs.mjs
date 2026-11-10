@@ -56,6 +56,8 @@ const GLYPHS = {
   "git-compare": "arrow_right_arrow_left",
   "git-fork": "arrow_branch",
   globe: "globe",
+  heart: "heart",
+  "heart-fill": "heart_fill",
   history: "arrow_counterclockwise",
   images: "photo_on_rectangle",
   info: "info_circle",

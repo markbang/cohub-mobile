@@ -1,4 +1,4 @@
-import { isLocalHarness, LOCAL_HARNESSES, type HarnessKind, type RuntimeCapabilities, type RuntimeStatus } from "@neta-art/cohub";
+import { isAgentTurn, isApprovalMode, isLocalHarness, LOCAL_HARNESSES, STANDARD_SERVICE_TIER, type ApprovalMode, type HarnessKind, type RuntimeCapabilities, type RuntimeStatus, type SessionTurnRecord } from "@neta-art/cohub";
 
 export type RuntimeHarness = HarnessKind;
 export type LocalRuntimeModel = Omit<RuntimeCapabilities["models"][number], "harness" | "isDefault">;
@@ -35,4 +35,36 @@ export function localModelsForHarness(status: SpaceRuntimeStatus | null, harness
 export function runtimeHarnessFromTurn(turn: { meta?: Record<string, unknown> | null; harness?: string | null } | null | undefined): RuntimeHarness {
   const harness = turn?.meta?.harness ?? turn?.harness;
   return isLocalHarness(harness) ? harness : "cohub";
+}
+
+/** Approval modes the Runtime enforces for a Harness; none for Cohub or an offline Runtime. */
+export function approvalModesFor(status: SpaceRuntimeStatus | null, harness: RuntimeHarness): ApprovalMode[] {
+  if (harness === "cohub" || status?.kind !== "local" || !status.online) return [];
+  return status.capabilities?.approvalModes?.[harness] ?? [];
+}
+
+/** The last approval mode a Turn sent for this Harness; a Turn without one left the thread's settings as they were. */
+export function approvalModeFromTurns(turns: readonly { executionKind?: SessionTurnRecord["executionKind"]; meta?: Record<string, unknown> | null; harness?: string | null }[], harness: RuntimeHarness): ApprovalMode | null {
+  const mode = turns.findLast((turn) => isAgentTurn(turn) && runtimeHarnessFromTurn(turn) === harness && isApprovalMode(turn.meta?.approvalMode))?.meta?.approvalMode;
+  return isApprovalMode(mode) ? mode : null;
+}
+
+/** The tier the Fast switch selects (Codex `priority`); models without it show no switch. */
+export const FAST_SERVICE_TIER = "priority";
+
+/** The model a local Turn runs: the chosen one, or the Harness default when none is chosen. */
+export function runtimeModelFor(status: SpaceRuntimeStatus | null, harness: RuntimeHarness, id: string | null | undefined): RuntimeCapabilities["models"][number] | null {
+  if (harness === "cohub" || !status?.online) return null;
+  const models = (status.capabilities?.models ?? []).filter((model) => model.harness === harness);
+  return (id ? models.find((model) => model.id === id) : models.find((model) => model.isDefault)) ?? null;
+}
+
+export function supportsFast(model: RuntimeCapabilities["models"][number] | null): boolean {
+  return Boolean(model?.serviceTiers?.some((tier) => tier.id === FAST_SERVICE_TIER));
+}
+
+/** Off only needs saying where Fast is the model's default. */
+export function fastServiceTier(model: RuntimeCapabilities["models"][number] | null, fast: boolean): string | undefined {
+  if (fast) return FAST_SERVICE_TIER;
+  return model?.defaultServiceTier === FAST_SERVICE_TIER ? STANDARD_SERVICE_TIER : undefined;
 }

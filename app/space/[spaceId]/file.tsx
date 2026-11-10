@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import type { SpaceFsFileResponse } from "@neta-art/cohub";
+import { isSpaceFsSymlink, type SpaceFsFileResponse, type SpaceFsSymlink } from "@neta-art/cohub";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,15 +43,18 @@ export default function FileScreen() {
   const ready = Boolean(client && spaceId && path);
   const fileQuery = useScreenQuery({
     queryKey: fileKey,
-    queryFn: async (): Promise<SpaceFsFileResponse> => {
+    queryFn: async (): Promise<SpaceFsFileResponse | SpaceFsSymlink> => {
       const result = await client!.space(spaceId).files.read(path);
+      // A link reads as itself, never its target; it also has no `content`, so it is checked first.
+      if (isSpaceFsSymlink(result)) return result;
       if (!("content" in result)) throw new Error(t("file.preparing"));
       return result;
     },
     // An open draft pins its base revision; a background read must not move the conflict baseline.
     enabled: ready && draft === null,
   });
-  const file = fileQuery.data ?? null;
+  const link = fileQuery.data && isSpaceFsSymlink(fileQuery.data) ? fileQuery.data : null;
+  const file = fileQuery.data && !isSpaceFsSymlink(fileQuery.data) ? fileQuery.data : null;
   const url = file?.delivery === "url" && file.url ? file.url : null;
   const loading = ready && fileQuery.isPending;
   const error = !spaceId ? t("file.spaceUnavailable") : !path ? t("file.pathMissing") : !client ? t("file.connect") : fileQuery.error ? fileQuery.error.message || t("file.openError") : null;
@@ -136,7 +139,7 @@ export default function FileScreen() {
       } catch (caught) {
         if (force || !isFileConflictError(caught)) throw caught;
         const fresh = await client.space(spaceId).files.read(path);
-        if (!("content" in fresh)) throw caught;
+        if (isSpaceFsSymlink(fresh) || !("content" in fresh)) throw caught;
         const resolution = classifySaveConflict(fresh, file.content, content);
         if (resolution === "already-saved") {
           saved = { size: fresh.size, mtimeMs: fresh.mtimeMs };
@@ -167,7 +170,7 @@ export default function FileScreen() {
     setSaveError(null);
     try {
       const fresh = await client.space(spaceId).files.read(path);
-      if (!("content" in fresh)) throw new Error(t("file.preparing"));
+      if (isSpaceFsSymlink(fresh) || !("content" in fresh)) throw new Error(t("file.preparing"));
       queryClient.setQueryData(fileKey, fresh);
       setDraft(fresh.kind === "text" && fresh.delivery !== "url" ? fresh.content : null);
       setConflict(false);
@@ -239,6 +242,8 @@ export default function FileScreen() {
           onRetry={() => void fileQuery.refetch()}
           onBack={() => router.back()}
         />
+      ) : link ? (
+        <FileLink link={link} onOpen={link.targetPath ? () => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path: link.targetPath! } }) : undefined} />
       ) : showWebView && previewUrl && file ? (
         <UrlFilePreview url={previewUrl} path={path} mimeType={file.mimeType} />
       ) : file ? (
@@ -323,6 +328,21 @@ function SaveBanner({
           </Pressable>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Links are shown as links: the target is named, and opened as its own file when it stays inside the workspace. */
+function FileLink({ link, onOpen }: { link: SpaceFsSymlink; onOpen?: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <View className="flex-1 items-center justify-center p-6">
+      <View className="w-13 h-13 rounded-md items-center justify-center bg-surface-raised">
+        <AppIcon name="external-link" size={28} tone="secondary" />
+      </View>
+      <Text className="text-headline font-semibold text-fg text-center mt-4">{t("space.file.symlink")}</Text>
+      <Text selectable className="text-body text-fg-muted text-center mt-2 max-w-80">{onOpen ? t("file.symlink.target", { target: link.targetPath ?? link.target }) : t("file.symlink.outside", { target: link.target })}</Text>
+      {onOpen ? <PrimaryButton label={t("file.symlink.open")} icon="arrow-right" onPress={onOpen} className="min-h-11 px-4 mt-4" /> : null}
     </View>
   );
 }

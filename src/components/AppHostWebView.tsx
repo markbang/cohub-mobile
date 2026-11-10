@@ -16,7 +16,7 @@ import { useAppTheme, type AppTheme } from "@/src/theme";
 import { AppIcon, EmptyState, LoadingState, PrimaryButton } from "@/src/ui";
 
 const CLOSED_DIALOG: AppBridgeDialogState = { authOpen: false, pendingAuth: null, authError: null, authSaving: false, selectedSpaceId: null, canChangeSpace: false };
-const DEVICE_LABELS: Record<AppDevice, TranslationKey> = { camera: "app.host.device.camera", microphone: "app.host.device.microphone", screen: "app.host.device.screen" };
+const DEVICE_LABELS: Record<AppDevice, TranslationKey> = { camera: "app.host.device.camera", microphone: "app.host.device.microphone", screen: "app.host.device.screen", location: "app.host.device.location" };
 /** A page that keeps killing its web process is shown as failed instead of being reloaded in a loop. */
 const AUTO_RECOVER_INTERVAL_MS = 30_000;
 
@@ -194,6 +194,8 @@ export function AppHostWebView({ detail, contentUrl }: { detail: AppDetailRespon
       mediaPlaybackRequiresUserAction={false}
       // iOS asks WebKit per capture; nothing is captured before the viewer allows the device here.
       mediaCapturePermissionGrantType={granted.length ? "grantIfSameHostElseDeny" : "deny"}
+      // The page's own wrapper refuses location until the viewer allows it here; the system then asks once for Cohub.
+      geolocationEnabled={granted.includes("location")}
       onShouldStartLoadWithRequest={(request) => {
         try {
           const url = new URL(request.url);
