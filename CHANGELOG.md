@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.3.13](https://github.com/markbang/cohub-mobile/compare/v2.3.12...v2.3.13) (2026-11-10)
+
+
+### Features
+
+* align with Cohub 13.16 ([#224](https://github.com/markbang/cohub-mobile/issues/224)) ([f49bb01](https://github.com/markbang/cohub-mobile/commit/f49bb013be89694c75162778dd466b1e0c111124))
+* **android:** reuse warmed glass renderers and fade a select's menu in from its value ([#223](https://github.com/markbang/cohub-mobile/issues/223)) ([d90f50f](https://github.com/markbang/cohub-mobile/commit/d90f50fdada7eb617be295adb71b8c6371c6eaab))
+
+
+### Fixes
+
+* **android:** grow the select menu from its chevron, and end menus whose screen leaves view ([#219](https://github.com/markbang/cohub-mobile/issues/219)) ([6e62fc6](https://github.com/markbang/cohub-mobile/commit/6e62fc6a72416c2ec2aca9464d8c709a434de507))
+* **android:** let taps through while a select menu closes ([#217](https://github.com/markbang/cohub-mobile/issues/217)) ([bab5c48](https://github.com/markbang/cohub-mobile/commit/bab5c48ec8363917171f93971514cd12887a3641))
+* **android:** open selects as the screen's own menu instead of a Modal ([#222](https://github.com/markbang/cohub-mobile/issues/222)) ([566c8bc](https://github.com/markbang/cohub-mobile/commit/566c8bc2af894045aad244ff0982f4c594cbc8d8))
+* **android:** warm the glass up after launch and stop drawing a disc on select menus ([#221](https://github.com/markbang/cohub-mobile/issues/221)) ([ce63fd5](https://github.com/markbang/cohub-mobile/commit/ce63fd5138929980bbf0a7b6671b897747e70878))
+
 ## [2.3.12](https://github.com/markbang/cohub-mobile/compare/v2.3.11...v2.3.12) (2026-11-09)
 
 
