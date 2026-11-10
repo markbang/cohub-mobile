@@ -309,6 +309,7 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <SplitStack.Screen name="debug/list" options={{ title: t("route.longList") }} />
             <SplitStack.Screen name="debug/ui" options={{ title: "UI Catalog" }} />
             <SplitStack.Screen name="debug/chat" options={{ title: "Chat Fixtures" }} />
+            <SplitStack.Screen name="debug/bot" options={{ title: "主 Bot" }} />
           </SplitStack>
           <AppUpdateBanner />
         </View>

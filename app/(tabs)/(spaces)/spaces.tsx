@@ -16,6 +16,8 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { normalizeSearchQuery, useRemoteSearch, type RemoteSpaceSearchHit } from "@/src/data/session-search";
 import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { selectSpaceList, type SpaceListSpace, type SpaceFilter } from "@/src/data/space-list";
+import { isBotSpace } from "@/src/data/bot-mode";
+import { useBotMode } from "@/src/data/bot-mode-preference";
 import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, usePersonalSpaceActivity, useSpaceList } from "@/src/data/context";
 import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type DeviceFolderListing, type DeviceRuntimeInstance } from "@/src/data/device-runtime";
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
@@ -95,16 +97,19 @@ export default function SpacesScreen() {
   const placementReady = !onDevice || (folder !== null && !linkedRunning);
   const remoteSearch = useRemoteSearch(client, query, { enabled: filter !== "pinned" && filter !== "device", types: SPACE_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
+  // Bot mode lists Bots in Chats, so their Spaces leave this list.
+  const botMode = useBotMode(userUuid).enabled;
+  const hiddenIds = useMemo(() => new Set(botMode ? state.spaces.filter(isBotSpace).map((space) => space.id) : []), [botMode, state.spaces]);
   const spaces = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
     const listFilter = filter === "device" || (filter === "recent" && trimmedQuery) ? "all" : filter;
     const candidates = selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now });
-    return candidates.filter((space) => !needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [filter, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits, trimmedQuery]);
+    return candidates.filter((space) => !hiddenIds.has(space.id) && (!needle || [displaySpaceName(space), space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false)));
+  }, [filter, hiddenIds, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits, trimmedQuery]);
   const filterCounts = useMemo<Record<SpacesTabFilter, number | null>>(() => {
-    const count = (listFilter: SpaceFilter) => selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now }).length;
-    return { recent: count("recent"), all: count("all"), pinned: count("pinned"), device: deviceInstances ? deviceInstances.length : null };
-  }, [deviceInstances, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits]);
+    const count = (listFilter: SpaceFilter) => selectSpaceList({ spaces: state.spaces, sessions: state.sessions, overview: spaceList.overview, visits: spaceList.visits, personalActivity, filter: listFilter, now }).filter((space) => !hiddenIds.has(space.id)).length;
+    return { recent: count("recent"), all: count("all"), pinned: count("pinned"), device: deviceInstances ? deviceInstances.filter((instance) => !hiddenIds.has(instance.spaceId)).length : null };
+  }, [deviceInstances, hiddenIds, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   const visibleSpaceKeyRef = useRef("");
   const onViewableItemsChanged = useCallback((info: { viewableItems: ViewToken<SpaceListItem>[] }) => {
@@ -122,7 +127,7 @@ export default function SpacesScreen() {
     if (filter === "device") {
       const needle = trimmedQuery.toLowerCase();
       const known = new Map<string, SpaceListSpace>(state.spaces.map((space) => [space.id, space]));
-      return (deviceInstances ?? []).flatMap((instance) => {
+      return (deviceInstances ?? []).filter((instance) => !hiddenIds.has(instance.spaceId)).flatMap((instance) => {
         const space = known.get(instance.spaceId) ?? null;
         const matches = !needle || [space ? displaySpaceName(space) : null, space?.description, instance.label].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false);
         return matches ? [{ kind: "device" as const, instance, space }] : [];
@@ -130,13 +135,13 @@ export default function SpacesScreen() {
     }
     if (!trimmedQuery) return spaces.map((space) => ({ kind: "local", space }));
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
-    const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
+    const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces.filter((hit) => !hiddenIds.has(hit.spaceId)) : [];
     const remoteIds = new Set(remoteSpaces.map((hit) => hit.spaceId));
     return [
       ...remoteSpaces.map((hit) => ({ kind: "remote" as const, hit })),
       ...spaces.filter((space) => !remoteIds.has(space.id)).map((space) => ({ kind: "local" as const, space })),
     ];
-  }, [deviceInstances, filter, remoteSearch.query, remoteSearch.spaces, spaces, state.spaces, trimmedQuery]);
+  }, [deviceInstances, filter, hiddenIds, remoteSearch.query, remoteSearch.spaces, spaces, state.spaces, trimmedQuery]);
   const emptyFill = useEmptyListFill(listItems.length === 0);
 
   // LegendList memoizes each row on [item, extraData]; async counts and pin state are

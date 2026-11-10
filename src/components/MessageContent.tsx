@@ -344,6 +344,16 @@ function SystemNoteRow({ block }: { block: Extract<ContentBlock, { type: "system
   </View>;
 }
 
+/** One continuous conversation shows only that earlier turns were folded in, with no details to open. */
+function CompactionDivider() {
+  const { t } = useTranslation();
+  return <View accessible accessibilityLabel={t("bots.compaction")} className="w-full flex-row items-center gap-3 px-6 py-3">
+    <View className="h-px flex-1 bg-border" />
+    <Text className="text-micro text-fg-faint">{t("bots.compaction")}</Text>
+    <View className="h-px flex-1 bg-border" />
+  </View>;
+}
+
 /**
  * Compaction is runtime metadata, not a reply: it renders as a boundary card
  * (mirroring the Web "Context compacted" notice) instead of an empty bubble.
@@ -619,7 +629,7 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean }) {
+export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, compactionDivider = false }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A Bot's Chat marks compaction with a quiet divider instead of the summary card. */ compactionDivider?: boolean }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const width = usePaneWidth();
@@ -638,7 +648,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   const isUser = message.role === "user";
   const bubbleEnvironment = useMemo(() => ({ onUser: isUser, spaceId }), [isUser, spaceId]);
   const compaction = compactionFromMessage(message);
-  if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return <CompactionNotice info={compaction} />;
+  if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return compactionDivider ? <CompactionDivider /> : <CompactionNotice info={compaction} />;
   if (!hasRenderableMessage(message)) return null;
   if (message.role === "system") return <View className="items-center px-6 py-2"><Text className="text-caption text-fg-faint text-center">{message.text || t("chat.systemUpdate")}</Text></View>;
   const rowWidth = availableWidth ?? width;

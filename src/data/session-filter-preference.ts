@@ -2,11 +2,14 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import type { SessionSourceFilter } from "./session-source";
 
+/** The Bots view sits in the source menu while Bot mode is on; it is not a server source filter. */
+export type ChatsSource = SessionSourceFilter | "bots";
+
 const SOURCE_STORAGE_KEY = "cohub:mobile:session-filter-source:v1";
-let source: SessionSourceFilter = "all";
+let source: ChatsSource = "all";
 let sourceLoaded = false;
 let sourceError: string | null = null;
-let sourceRequest: Promise<SessionSourceFilter> | null = null;
+let sourceRequest: Promise<ChatsSource> | null = null;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -14,11 +17,11 @@ function notify() {
 }
 
 /** Anything other than a known source filter is treated as the unfiltered default. */
-export function parseSessionSourceFilter(raw: string | null): SessionSourceFilter {
-  return raw === "web" || raw === "other" ? raw : "all";
+export function parseSessionSourceFilter(raw: string | null): ChatsSource {
+  return raw === "web" || raw === "other" || raw === "bots" ? raw : "all";
 }
 
-export function loadSessionSourcePreference(): Promise<SessionSourceFilter> {
+export function loadSessionSourcePreference(): Promise<ChatsSource> {
   if (sourceLoaded) return Promise.resolve(source);
   if (sourceRequest) return sourceRequest;
   sourceRequest = AsyncStorage.getItem(SOURCE_STORAGE_KEY).then((raw) => {
@@ -36,7 +39,7 @@ export function loadSessionSourcePreference(): Promise<SessionSourceFilter> {
   return sourceRequest;
 }
 
-export async function saveSessionSourcePreference(next: SessionSourceFilter): Promise<void> {
+export async function saveSessionSourcePreference(next: ChatsSource): Promise<void> {
   await AsyncStorage.setItem(SOURCE_STORAGE_KEY, next);
   source = next;
   sourceLoaded = true;
@@ -44,7 +47,7 @@ export async function saveSessionSourcePreference(next: SessionSourceFilter): Pr
   notify();
 }
 
-export function useSessionSourcePreference(): { filter: SessionSourceFilter; loaded: boolean; error: string | null } {
+export function useSessionSourcePreference(): { filter: ChatsSource; loaded: boolean; error: string | null } {
   const [value, setValue] = useState({ filter: source, loaded: sourceLoaded, error: sourceError });
   useEffect(() => {
     const listener = () => setValue({ filter: source, loaded: sourceLoaded, error: sourceError });

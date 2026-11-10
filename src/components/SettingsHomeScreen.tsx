@@ -1,7 +1,7 @@
 import { useRouter, useScrollToTop } from "expo-router";
 import { haptics } from "@/src/platform/haptics";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useCurrentUser } from "@/src/auth/current-user";
 import { useProfileSession } from "@/src/auth/profile-session";
 import { useFloatingTabBarInset } from "@/src/components/FloatingTabBar";
@@ -12,13 +12,17 @@ import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { useToast } from "@/src/components/Toast";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { useAppActions } from "@/src/data/context";
+import { saveBotMode, useBotMode } from "@/src/data/bot-mode-preference";
+import { ensurePrimaryBot } from "@/src/data/primary-bot";
+import { saveSessionSourcePreference } from "@/src/data/session-filter-preference";
 import { settingsMenu } from "@/src/data/settings-navigation";
 import { useTranslation, type LocalePreference } from "@/src/i18n";
 import { getInstalledAppVersion } from "@/src/platform/app-updates";
 import { uiSnapshots } from "@/src/config";
 import { currentUpdateChannel } from "@/src/platform/update-channel";
 import { useThemePreference } from "@/src/theme";
-import { AppIcon, Avatar, Screen, SettingsGroup } from "@/src/ui";
+import { AppIcon, AppSwitch, Avatar, Screen, SettingsGroup } from "@/src/ui";
+import { Loader } from "@/src/ui/Loader";
 import { NAVIGATION_BAR_INSETS, nativeHeaders } from "@/src/ui/NativeHeader";
 import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
@@ -38,7 +42,9 @@ export function SettingsHomeScreen() {
   const router = useRouter();
   const { signOut } = useProfileSession();
   const { name, email, avatar } = useCurrentUser();
-  const { clearCache } = useAppActions();
+  const { client, userUuid, clearCache, refreshHome } = useAppActions();
+  const botMode = useBotMode(userUuid);
+  const [botModeBusy, setBotModeBusy] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +74,35 @@ export function SettingsHomeScreen() {
     } finally {
       setSigningOut(false);
     }
+  };
+
+  // Turning Bot mode on first makes sure the primary Bot exists; turning it off only hides Bot screens.
+  const toggleBotMode = async (next: boolean) => {
+    if (!next) {
+      await saveBotMode(userUuid, false).catch(() => showToast({ title: t("settings.botMode.saveFailed"), tone: "danger" }));
+      return;
+    }
+    if (!client) return;
+    setBotModeBusy(true);
+    const result = await ensurePrimaryBot(client);
+    setBotModeBusy(false);
+    if (result.status === "conflict") {
+      Alert.alert(t("settings.botMode.conflict"));
+      return;
+    }
+    if (result.status === "error") {
+      showToast({ title: t("settings.botMode.failed"), tone: "danger" });
+      return;
+    }
+    try {
+      await saveBotMode(userUuid, true);
+      await saveSessionSourcePreference("bots");
+    } catch {
+      showToast({ title: t("settings.botMode.saveFailed"), tone: "danger" });
+      return;
+    }
+    // A Bot created just now reaches the Space list, and so the Bots view, with the next home read.
+    void refreshHome({ silent: true }).catch(() => undefined);
   };
 
   const detailFor = (href: string) => {
@@ -143,6 +178,17 @@ export function SettingsHomeScreen() {
           })}
         </SettingsGroup>)}
       </View>
+      <SettingsGroup>
+        <SettingsRow icon="sparkles" title={t("settings.botMode.title")} value={t("settings.botMode.body")} last>
+          {botModeBusy ? <Loader accessibilityLabel={t("common.loading")} /> : null}
+          <AppSwitch
+            accessibilityLabel={t("settings.botMode.title")}
+            value={botMode.enabled}
+            disabled={botModeBusy || !client || (!botMode.loaded && !botMode.error)}
+            onValueChange={(value) => void toggleBotMode(value)}
+          />
+        </SettingsRow>
+      </SettingsGroup>
       <SettingsGroup>
         <Pressable
           accessibilityRole="button"

@@ -378,6 +378,16 @@ export function systemMessageNode(ctx: NodeContext, message: MessageRecord): Tim
   return { type: "view", style: { alignItems: "center", paddingHorizontal: 24, paddingVertical: 8 }, children: [text(message.text || ctx.t("chat.systemUpdate"), textStyle("caption", ctx.theme.colors.textFaint, { textAlign: "center" }))] };
 }
 
+/** `CompactionDivider`: a Bot's Chat marks compaction with a quiet line and no details. */
+export function compactionDividerNode(ctx: NodeContext): TimelineNode {
+  const { theme, t } = ctx;
+  const rule: TimelineNode = { type: "view", style: { flex: 1, height: 1, backgroundColor: color(theme.colors.border) } };
+  return {
+    type: "view", accessibilityLabel: t("bots.compaction"), style: { width: "100%", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 24, paddingVertical: 12 },
+    children: [rule, text(t("bots.compaction"), textStyle("micro", theme.colors.textFaint)), rule],
+  };
+}
+
 export function compactionNode(ctx: NodeContext, key: string, info: CompactionInfo): TimelineNode {
   const { theme, t } = ctx;
   const id = `compaction:${key}`;
@@ -473,6 +483,19 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   if (messages.length) children.push(...(content.length ? contentNodes(ctx, turnId, content, { width }) : thinking.length ? [] : [text(ctx.t("turn.none"), textStyle("caption", ctx.theme.colors.textMuted))]));
   if (thinking.length) children.push(...contentNodes(ctx, `${turnId}:thinking`, thinking, { width, active: true }));
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
+}
+
+/** `BotTurnTalk`: each thing a Bot said between steps as its own reply, above the final one. */
+export function processTalkNode(ctx: NodeContext, turnId: string, texts: readonly string[]): TimelineNode | null {
+  if (texts.length === 0) return null;
+  const contentWidth = getReplyContentWidth(ctx.width);
+  return {
+    type: "view",
+    children: texts.map((value, index) => ({
+      type: "view" as const, style: { width: "100%", maxWidth: getReplyRowWidth(ctx.width), paddingHorizontal: REPLY_INSET_X, paddingVertical: 6 },
+      children: replyMarkdown(ctx, value, NO_SANDBOX_IMAGES, contentWidth, { color: ctx.theme.colors.assistantBubbleText, id: `talk:${turnId}:${index}` }),
+    })),
+  };
 }
 
 function liveDot(ctx: NodeContext): TimelineNode {

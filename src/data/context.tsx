@@ -1017,7 +1017,7 @@ export type AppActions = {
   /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
   /** Inserts the bubble before returning; resolves once the server accepts the send. */
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; contextWindow?: number; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
   /** `onOptimistic` receives the pending bubble synchronously; it has no Chat until the server answers. */
   sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
   discardFailedSend: (sessionId: string, messageId: string) => void;
@@ -2256,7 +2256,7 @@ export function AppProvider({
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; contextWindow?: number; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2320,6 +2320,7 @@ export function AppProvider({
             ...(options.model ? { model: options.model.id, provider: options.model.provider } : {}),
             ...(options.harness ? { harness: options.harness } : {}),
             ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
+            ...(options.contextWindow ? { contextWindow: options.contextWindow } : {}),
             ...options.execution,
           });
           const upsert = (response: Awaited<typeof request>) => {

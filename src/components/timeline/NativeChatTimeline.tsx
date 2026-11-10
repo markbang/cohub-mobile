@@ -8,7 +8,9 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, compactionDividerNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, processTalkNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { turnReplyText } from "@/src/components/BotTurnTalk";
+import { intermediateBlocks, processTexts } from "@/src/data/bot-mode";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
@@ -91,6 +93,8 @@ type Props = {
   /** iOS pulls to refresh natively; Android wraps the view in `BrandRefreshArea`. */
   refreshing: boolean;
   onRefresh: () => void;
+  /** A Bot Chat shows what the Bot said between steps as replies. */
+  bot?: boolean;
 };
 
 type Cached = { deps: unknown[]; spec: TimelineRowSpec };
@@ -121,7 +125,7 @@ function expandedIn(expanded: ReadonlySet<string>, scopes: readonly string[]) {
  * scrolls, follows the tail, and animates. Only rows whose description changed cross to native.
  */
 export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(function NativeChatTimeline(props, ref) {
-  const { sessionId, spaceId, client, messages, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession } = props;
+  const { sessionId, spaceId, client, messages, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession, bot = false } = props;
   const NativeView = ChatTimelineView!;
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -163,7 +167,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     isActiveTurn: (turn) => isActiveTurnStatus(turn.status),
     hasMoreOlder: props.hasMoreOlder,
     hasMoreNewer: props.hasMoreNewer,
-  }), [forkOrigin?.sequence, messages, props.hasMoreNewer, props.hasMoreOlder, replyAnchor, streamTurnId, turnsBySequence]);
+    talk: bot,
+  }), [bot, forkOrigin?.sequence, messages, props.hasMoreNewer, props.hasMoreOlder, replyAnchor, streamTurnId, turnsBySequence]);
   const rowsRef = useRef<TimelineRow[]>(rows);
   rowsRef.current = rows;
 
@@ -198,6 +203,19 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     stepsByTurn.set(turn.id, { status: query.data ? "ready" : query.error && !query.isFetching ? "error" : "loading", content: query.data ?? null, error: query.error?.message ?? null });
   });
   const stepsSignature = expandedTurns.map((turn) => `${turn.id}:${stepsByTurn.get(turn.id)?.status}:${stepsByTurn.get(turn.id)?.content?.length ?? -1}`).join("|");
+
+  // A Bot's archived Turns read their steps once their message scrolls into view; the read is shared with the steps disclosure.
+  const [visibleOwners, setVisibleOwners] = useState<ReadonlySet<string>>(() => new Set());
+  const talkTurns = useMemo(() => rows.flatMap((row) => row.kind === "talk" && !row.live && row.turn.intermediateSummary?.messageCount && row.turn.intermediateIndex?.messagesObjectKey ? [{ turn: row.turn, owner: row.owner }] : []), [rows]);
+  const talkQueries = useQueries({ queries: talkTurns.map(({ turn, owner }) => ({ ...turnStepsQuery(client, spaceId, turn), enabled: Boolean(client) && visibleOwners.has(owner) })) });
+  const talkByTurn = new Map<string, string[]>();
+  talkTurns.forEach(({ turn }, index) => {
+    const data = talkQueries[index]?.data;
+    if (data) talkByTurn.set(turn.id, processTexts(data, turnReplyText(turn)));
+  });
+  const talkSignature = talkTurns.map(({ turn }, index) => `${turn.id}:${talkQueries[index]?.dataUpdatedAt ?? 0}`).join("|");
+  const liveTalk = useMemo(() => bot && stream ? processTexts(intermediateBlocks(stream.intermediateMessages), contentText(liveAnswer)) : [], [bot, liveAnswer, stream]);
+  const liveTalkKey = liveTalk.join("\u0000");
 
   const ctx = useMemo<NodeContext>(() => ({ theme, t, width: rowWidth, fontScale, reducedMotion: props.reducedMotion, expanded }), [expanded, fontScale, props.reducedMotion, rowWidth, t, theme]);
   const cacheRef = useRef(new Map<string, Cached>());
@@ -256,13 +274,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           } else {
             const turnId = typeof message.meta?.turnId === "string" ? message.meta.turnId : null;
             const turn = turnId ? turnsById.get(turnId) ?? null : null;
-            const canFork = Boolean(turn && isTerminalTurnStatus(turn.status));
+            const canFork = !bot && Boolean(turn && isTerminalTurnStatus(turn.status));
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
             const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images], () => {
+            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, bot], () => {
               const compaction = compactionFromMessage(message);
-              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
+              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: bot ? compactionDividerNode(ctx) : compactionNode(ctx, row.key, compaction) };
               if (!hasRenderableMessage(message)) return { type: "empty", node: null };
               if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
               return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };
@@ -301,14 +319,25 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           }
           break;
         }
+        case "talk": {
+          const turn = row.turn;
+          if (row.live && stream?.turnId === turn.id) build([liveTalkKey, "live"], () => ({ type: "talk", node: processTalkNode(ctx, turn.id, liveTalk) }));
+          else {
+            const texts = talkByTurn.get(turn.id) ?? [];
+            build([texts.join("\u0000")], () => ({ type: "talk", node: processTalkNode(ctx, turn.id, texts) }));
+          }
+          break;
+        }
         case "live": {
           const show = props.liveStream && stream;
-          build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
+          const talk = bot && !row.processInRow ? liveTalkKey : "";
+          build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"]), talk], () => {
             if (show) {
               const live = stream.status === "pending" || stream.status === "streaming";
               const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: stream.outputAt ?? streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
               const process = row.processInRow ? null : streamingProcessNode(ctx, stream.turnId ?? "live", stream.intermediateMessages, thinkingBlocks(stream.contentBlocks));
-              return { type: "live", node: { type: "view", children: process ? [process, card] : [card] } };
+              const talkNode = talk ? processTalkNode(ctx, stream.turnId ?? "live", liveTalk) : null;
+              return { type: "live", node: { type: "view", children: [process, talkNode, card].filter((node): node is TimelineNode => node !== null) } };
             }
             return { type: "live", node: pendingReply ? streamCardNode(ctx, { content: [], status: "pending", runtimePhase: null, runtimeModel: null, startedAt: firstSeenAt, streamingText: null }) : null };
           });
@@ -320,7 +349,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: rows.map((row) => row.key), rows: out };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
+  }, [rows, ctx, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, talkSignature, liveTalkKey, bot, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());
@@ -489,7 +518,11 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       detached={props.hasMoreNewer}
       keyboard={keyboard}
       onRowAction={handleAction}
-      onVisibleRows={({ nativeEvent }) => onVisibleMessages(visibleTimelineMessages(rowsRef.current, nativeEvent.keys))}
+      onVisibleRows={({ nativeEvent }) => {
+        const visible = visibleTimelineMessages(rowsRef.current, nativeEvent.keys);
+        if (bot) setVisibleOwners((current) => visible.every((item) => current.has(item.key)) ? current : new Set([...current, ...visible.map((item) => item.key)]));
+        onVisibleMessages(visible);
+      }}
       onFollowingChange={({ nativeEvent }) => onFollowingChange(nativeEvent.following)}
       onNearEdge={({ nativeEvent }) => onNearEdge(nativeEvent.edge)}
       onTimelineLoad={() => onLoad()}
