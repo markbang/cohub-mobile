@@ -157,7 +157,6 @@ export const zh: Record<TranslationKey, string> = {
   "chats.source.saveFailed": "无法保存对话来源筛选，请重试。",
   "chats.source.bots": "Bot",
   "chats.source.bots.detail": "你的 Bot",
-  "bots.needsYou": "需要你",
   "bots.running": "运行中",
   "bots.empty": "还没有 Bot",
   "bots.newBot": "新建 Bot",

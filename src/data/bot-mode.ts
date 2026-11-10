@@ -1,10 +1,17 @@
 import type { ContentBlock, SessionRecord, SpaceRecord } from "@neta-art/cohub";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
-export const NEEDS_YOU_LABEL = "needs-you";
 
 export type BotSpace = Pick<SpaceRecord, "id" | "slug"> & Partial<Pick<SpaceRecord, "name" | "title" | "publicProfile" | "lastActivityAt" | "updatedAt">>;
 export type BotSession = Pick<SessionRecord, "id" | "spaceId" | "title" | "latestMessageText" | "lastMessageAt" | "updatedAt">;
+
+/** Who another Bot is, as a message from it shows them. */
+export type BotPeer = { name: string; avatarUrl: string | null };
+
+/** A Bot's Chat reads like messaging: only what the Bot wrote and showed, never its tools or notes. */
+export function botReplyBlocks(content: readonly ContentBlock[] | null | undefined): ContentBlock[] {
+  return (content ?? []).filter((block) => (block.type === "text" && block.text.trim().length > 0) || block.type === "image");
+}
 
 /** A Bot is a Space with the bot mod; its slug is how the app recognizes it without reading mods. */
 export function isBotSpace(space: { slug?: string | null } | null | undefined) {
@@ -23,11 +30,11 @@ function activityAt(space: BotSpace, session: Pick<BotSession, "lastMessageAt" |
   return Date.parse(space.lastActivityAt ?? space.updatedAt ?? "") || 0;
 }
 
-export type BotEntry<P extends BotSpace, S extends BotSession> = { space: P; session: S | null; running: boolean; needsYou: boolean };
+export type BotEntry<P extends BotSpace, S extends BotSession> = { space: P; session: S | null; running: boolean };
 
 /** One row per Bot, its Chat the only one it has: the primary Bot first, the rest by latest activity. */
-export function botEntries<P extends BotSpace, S extends BotSession>(spaces: readonly P[], sessions: ReadonlyMap<string, S | null>, needsYou: ReadonlySet<string>, running: ReadonlySet<string>): BotEntry<P, S>[] {
-  return spaces.map((space) => ({ space, session: sessions.get(space.id) ?? null, running: running.has(space.id), needsYou: needsYou.has(space.id) }))
+export function botEntries<P extends BotSpace, S extends BotSession>(spaces: readonly P[], sessions: ReadonlyMap<string, S | null>, running: ReadonlySet<string>): BotEntry<P, S>[] {
+  return spaces.map((space) => ({ space, session: sessions.get(space.id) ?? null, running: running.has(space.id) }))
     .sort((left, right) => {
       const primary = Number(right.space.slug === PRIMARY_BOT_SLUG) - Number(left.space.slug === PRIMARY_BOT_SLUG);
       return primary || activityAt(right.space, right.session) - activityAt(left.space, left.session);

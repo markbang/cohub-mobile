@@ -160,7 +160,6 @@ export const en = {
   "chats.source.saveFailed": "Could not save the Chat source filter. Try again.",
   "chats.source.bots": "Bots",
   "chats.source.bots.detail": "Your Bots",
-  "bots.needsYou": "Needs you",
   "bots.running": "Running",
   "bots.empty": "No Bots yet",
   "bots.newBot": "New Bot",

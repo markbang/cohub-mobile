@@ -1,7 +1,7 @@
 import type { SessionRecord } from "@neta-art/cohub";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
-import { botEntries, isBotSpace, NEEDS_YOU_LABEL, newerSession } from "@/src/data/bot-mode";
+import { botEntries, isBotSpace, newerSession } from "@/src/data/bot-mode";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { ensureBotSession, readBotSession } from "@/src/data/primary-bot";
 import { sessionListStatus } from "@/src/data/session-status";
@@ -29,15 +29,6 @@ export function useBots(enabled: boolean) {
     enabled: active,
     refetchInterval: POLL_MS,
   })) });
-  const needsYouQueries = useQueries({ subscribed: visible, queries: spaces.map((space, index) => {
-    const sessionId = sessionQueries[index]?.data?.id;
-    return {
-      queryKey: [`chats:bots:${space.id}:needs-you:${sessionId}`],
-      queryFn: async (): Promise<boolean> => (await client!.space(space.id).labels.getResourceLabels("session", sessionId!)).labels.some((label) => label.name === NEEDS_YOU_LABEL),
-      enabled: active && Boolean(sessionId),
-      refetchInterval: POLL_MS,
-    };
-  }) });
 
   const listed = sessionQueries.map((query) => query.data ?? null);
   const listedKey = sessionQueries.map((query) => query.dataUpdatedAt).join(",");
@@ -51,13 +42,9 @@ export function useBots(enabled: boolean) {
     if (active && mains.length) void refreshSessionStatuses(mains, { silent: true });
   }, [active, mains, refreshSessionStatuses]);
   const running = useAppSelector(({ state }) => mains.filter((session) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running").map((session) => session.spaceId), shallowEqual);
-  const needsYou = spaces.filter((_, index) => needsYouQueries[index]?.data === true).map((space) => space.id);
-  const needsYouKey = needsYou.join(",");
 
-  const entries = useMemo(() => botEntries(spaces, sessions, new Set(needsYou), new Set(running)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [spaces, sessions, needsYouKey, running]);
-  const failed = [...sessionQueries, ...needsYouQueries].find((query) => query.error)?.error;
+  const entries = useMemo(() => botEntries(spaces, sessions, new Set(running)), [spaces, sessions, running]);
+  const failed = sessionQueries.find((query) => query.error)?.error;
 
   /** A Bot without a recorded Chat (an older or hand-made one) gets it on first open, by the same rule as the primary Bot. */
   const openSession = useCallback(async (spaceId: string): Promise<string> => {
@@ -73,6 +60,6 @@ export function useBots(enabled: boolean) {
     loading: sessionQueries.some((query) => query.isPending && query.isFetching),
     error: failed ? failed.message : null,
     openSession,
-    refetch: () => Promise.all([...sessionQueries, ...needsYouQueries].map((query) => query.refetch())).then(() => undefined),
+    refetch: () => Promise.all(sessionQueries.map((query) => query.refetch())).then(() => undefined),
   };
 }
