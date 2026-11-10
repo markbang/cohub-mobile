@@ -32,6 +32,17 @@ function writePersona(client: CohubClient, spaceId: string) {
   return client.space(spaceId).files.write({ path: BOT_PERSONA_PATH, content: PRIMARY_BOT_PERSONA, encoding: "utf-8" });
 }
 
+/** Best effort: the list stays in the bot mod, which the sub-Bot creation skill also reads. */
+async function setRandomAvatar(client: CohubClient, spaceId: string) {
+  try {
+    const file = await client.space(BOT_MOD_SPACE_ID).files.read("avatars.json");
+    const urls = JSON.parse("content" in file ? file.content : "") as string[];
+    await client.space(spaceId).profile({ avatarUrl: urls[Math.floor(Math.random() * urls.length)] });
+  } catch {
+    return;
+  }
+}
+
 async function settleExisting(client: CohubClient, spaceId: string): Promise<PrimaryBotResult> {
   const { items } = await client.space(spaceId).mods.list();
   const mod = items.find((item) => item.modSpaceId === BOT_MOD_SPACE_ID);
@@ -66,6 +77,7 @@ export async function ensurePrimaryBot(client: CohubClient): Promise<PrimaryBotR
       if (!raced) throw error;
       return await settleExisting(client, raced.id);
     }
+    await setRandomAvatar(client, spaceId);
     await writePersona(client, spaceId);
     return { status: "created", spaceId };
   } catch (error) {

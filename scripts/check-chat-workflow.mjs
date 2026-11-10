@@ -5646,6 +5646,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
           read: async (path) => { calls.push(["read", spaceId, path]); if (path in files) return { path, content: files[path] }; throw httpError(404, "File not found."); },
           write: async (input) => { calls.push(["write", spaceId, input]); files[input.path] = input.content; return { path: input.path }; },
         },
+        profile: async (body) => { calls.push(["profile", spaceId, body]); return { space: { id: spaceId } }; },
       }),
     };
     return { client, calls, files };
@@ -5653,18 +5654,25 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const botMod = (enabled = true) => ({ modSpaceId: BOT_MOD, enabled });
   const personaWrite = (spaceId) => ["write", spaceId, { path: ".agents/APPEND_SYSTEM.md", content: primaryBot.PRIMARY_BOT_PERSONA, encoding: "utf-8" }];
 
-  const fresh = botClient({ owned: [httpError(404)] });
+  const avatar = "https://cca.neta.art/avatars/webp/a.webp";
+  const fresh = botClient({ owned: [httpError(404)], files: { "avatars.json": JSON.stringify([avatar]) } });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot" });
   assert.deepEqual(fresh.calls, [
     ["get", "cohubbot"],
     ["create", { name: "Cohub", slug: "cohubbot", mods: [{ modSpaceId: BOT_MOD, mountSlug: "cohubbot" }] }],
+    ["read", BOT_MOD, "avatars.json"],
+    ["profile", "new-bot", { avatarUrl: avatar }],
     personaWrite("new-bot"),
-  ], "a missing Bot is created with the bot mod and its persona");
+  ], "a missing Bot is created with the bot mod, an avatar from the bot mod's list, and its persona");
+
+  const noAvatars = botClient({ owned: [httpError(404)] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(noAvatars.client), { status: "created", spaceId: "new-bot" }, "an unreadable avatar list still creates the Bot");
   assert.ok(primaryBot.PRIMARY_BOT_PERSONA.startsWith("# Cohub\n\nRole: primary\n"));
 
-  const existing = botClient({ owned: [{ id: "bot" }], mods: [{ modSpaceId: "other", enabled: true }, botMod(false)] });
+  const existing = botClient({ owned: [{ id: "bot" }], mods: [{ modSpaceId: "other", enabled: true }, botMod(false)], files: { "avatars.json": JSON.stringify([avatar]) } });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(existing.client), { status: "ready", spaceId: "bot", modEnabled: false }, "a disabled bot mod is reported, not changed");
   assert.deepEqual(existing.calls.at(-1), personaWrite("bot"), "a Bot missing its persona gets one");
+  assert.ok(!existing.calls.some(([kind]) => kind === "profile"), "an existing Bot keeps its avatar");
 
   const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom" } });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", modEnabled: true });
