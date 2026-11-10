@@ -6,7 +6,6 @@ import Animated, { FadeOut } from "react-native-reanimated";
 import { useScreenQuery } from "@/src/data/query";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
 import { motion } from "@/src/motion";
-import { typography } from "@/src/theme";
 import { AppIcon, PrimaryButton } from "@/src/ui";
 
 const DECISIONS: Record<ApprovalDecision, { label: TranslationKey; variant: "primary" | "secondary" | "danger" }> = {
@@ -14,6 +13,8 @@ const DECISIONS: Record<ApprovalDecision, { label: TranslationKey; variant: "pri
   accept_for_session: { label: "runtime.approval.acceptForSession", variant: "secondary" },
   decline: { label: "runtime.approval.decline", variant: "danger" },
 };
+
+const MONO = { fontFamily: "SpaceMono" } as const;
 
 type Approvals = { approvals: SessionApproval[]; canDecide: boolean };
 
@@ -67,8 +68,8 @@ export function SessionApprovals({ client, spaceId, sessionId, running, harnessO
           <AppIcon name={approval.kind === "command" ? "terminal" : "file-text"} size={16} tone="muted" />
           <Text className="min-w-0 flex-1 text-subhead font-semibold text-fg">{title}</Text>
         </View>
-        {approval.command ? <ScrollView style={{ maxHeight: 96 }} className="rounded-sm bg-surface px-2.5 py-1.5"><Text selectable className="text-fg-secondary" style={typography.code}>{approval.command}</Text></ScrollView> : null}
-        {approval.paths?.length ? <ScrollView style={{ maxHeight: 72 }}>{approval.paths.map((path) => <Text key={path} selectable numberOfLines={1} ellipsizeMode="middle" className="text-fg-secondary" style={typography.code}>{path}</Text>)}</ScrollView> : null}
+        {approval.command ? <ScrollView style={{ maxHeight: 96 }} className="rounded-sm bg-surface px-2.5 py-1.5"><Text selectable className="text-code text-fg-secondary" style={MONO}>{approval.command}</Text></ScrollView> : null}
+        {approval.paths?.length ? <ScrollView style={{ maxHeight: 72 }}>{approval.paths.map((path) => <Text key={path} selectable numberOfLines={1} ellipsizeMode="middle" className="text-code text-fg-secondary" style={MONO}>{path}</Text>)}</ScrollView> : null}
         {approval.reason || approval.cwd ? <Text selectable className="text-caption text-fg-muted">{[approval.reason, approval.cwd].filter(Boolean).join(" · ")}</Text> : null}
         {query.data?.canDecide
           ? <View className="flex-row flex-wrap gap-2">{approval.decisions.map((decision) => <PrimaryButton key={decision} label={t(DECISIONS[decision].label)} variant={DECISIONS[decision].variant} loading={deciding === approval.id && decision === "accept"} disabled={deciding !== null} onPress={() => void decide(approval, decision)} className="min-h-11 px-3" />)}</View>
