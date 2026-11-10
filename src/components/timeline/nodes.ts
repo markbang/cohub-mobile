@@ -378,6 +378,16 @@ export function systemMessageNode(ctx: NodeContext, message: MessageRecord): Tim
   return { type: "view", style: { alignItems: "center", paddingHorizontal: 24, paddingVertical: 8 }, children: [text(message.text || ctx.t("chat.systemUpdate"), textStyle("caption", ctx.theme.colors.textFaint, { textAlign: "center" }))] };
 }
 
+/** `CompactionDivider`: a Bot's Chat marks compaction with a quiet line and no details. */
+export function compactionDividerNode(ctx: NodeContext): TimelineNode {
+  const { theme, t } = ctx;
+  const rule: TimelineNode = { type: "view", style: { flex: 1, height: 1, backgroundColor: color(theme.colors.border) } };
+  return {
+    type: "view", accessibilityLabel: t("bots.compaction"), style: { width: "100%", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 24, paddingVertical: 12 },
+    children: [rule, text(t("bots.compaction"), textStyle("micro", theme.colors.textFaint)), rule],
+  };
+}
+
 export function compactionNode(ctx: NodeContext, key: string, info: CompactionInfo): TimelineNode {
   const { theme, t } = ctx;
   const id = `compaction:${key}`;

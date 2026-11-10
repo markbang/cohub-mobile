@@ -4439,6 +4439,16 @@ function sendHarness({ view = {}, prompt, buildPromptContent = async (text) => [
   return { send, state, actions, prompts, queue, update, row, readers };
 }
 const acceptedTurn = (body, sequence, status = "running") => ({ mode: "immediate", turn: queuedFollowup(`accepted-${body.clientMessageId}`, sequence, { status, meta: { clientMessageId: body.clientMessageId } }) });
+// A Bot's Chat asks for the Bot context window on every send and retry; other Chats send none.
+{
+  for (const contextWindow of [400_000, undefined]) {
+    const harness = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
+    await harness.send("fixture", "Hi", [], contextWindow ? { contextWindow } : {});
+    assert.equal(harness.prompts[0].contextWindow, contextWindow);
+    assert.equal("contextWindow" in harness.prompts[0], Boolean(contextWindow), "an ordinary send leaves the field out");
+  }
+  assert.equal(chatSource.split("contextWindow: bot ? BOT_CONTEXT_WINDOW : undefined").length - 1, 2, "a Bot Chat's composer send and a failed send's retry both carry it");
+}
 for (const busy of [false, true]) {
   for (const [text, attachments] of [["Hello", []], ["", [photoDraft]], ["", [fileDraft]], ["Review these", [photoDraft, fileDraft]]]) {
     const uploads = Promise.withResolvers();

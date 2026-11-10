@@ -37,6 +37,12 @@ export const defaultEnvironment = buildEnvironment;
 /** The Space whose mod turns a Space into a Bot. */
 export const BOT_MOD_SPACE_ID = "20b54a5b-dc39-44a1-93e1-1b5225ed4795";
 
+/**
+ * A Bot's Chat is one conversation that compacts itself: its sends ask for this window, which the
+ * server keeps for the Chat from then on (delegated and scheduled messages included) and caps at the platform limit.
+ */
+export const BOT_CONTEXT_WINDOW = 400_000;
+
 /** A debug build captured by `scripts/ui-snapshots.mjs`, which sets this when it starts Metro. */
 export const uiSnapshots = process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1";
 

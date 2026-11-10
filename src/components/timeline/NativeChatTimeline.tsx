@@ -8,7 +8,7 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, processTalkNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, compactionDividerNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, processTalkNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { turnReplyText } from "@/src/components/BotTurnTalk";
 import { intermediateBlocks, processTexts } from "@/src/data/bot-mode";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
@@ -278,9 +278,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
             const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images], () => {
+            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, bot], () => {
               const compaction = compactionFromMessage(message);
-              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
+              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: bot ? compactionDividerNode(ctx) : compactionNode(ctx, row.key, compaction) };
               if (!hasRenderableMessage(message)) return { type: "empty", node: null };
               if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
               return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };

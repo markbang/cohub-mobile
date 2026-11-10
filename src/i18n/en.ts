@@ -171,6 +171,7 @@ export const en = {
   "bots.profile.memory": "Memory",
   "bots.profile.schedules": "Schedules",
   "bots.profile.files": "Files",
+  "bots.compaction": "Earlier conversation summarized",
   "settings.botMode.title": "Bot mode",
   "settings.botMode.body": "Show Bots in Chats and hide their Spaces",
   "settings.botMode.conflict": "A Space named cohubbot already exists without the bot mod, so nothing was changed.",

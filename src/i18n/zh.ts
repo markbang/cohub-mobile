@@ -168,6 +168,7 @@ export const zh: Record<TranslationKey, string> = {
   "bots.profile.memory": "记忆",
   "bots.profile.schedules": "定时任务",
   "bots.profile.files": "文件",
+  "bots.compaction": "已整理较早的对话",
   "settings.botMode.title": "Bot 模式",
   "settings.botMode.body": "在对话里显示 Bot，并隐藏它们的 Space",
   "settings.botMode.conflict": "已有名为 cohubbot 的 Space，未挂 bot mod，没有做任何改动。",
