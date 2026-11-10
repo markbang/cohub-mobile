@@ -1725,6 +1725,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       </Animated.View></ScreenBlurTarget>
     </SpacePanels>
     </View>
+    {/* The header hides the timeline under it, so its menus refract the whole screen rather than that hidden text. */}
+    <GlassBackdrop target={screenBlurTarget}>
     <MenuPresence open={titleMenuOpen}><AnchoredActionMenu
       anchorRef={titleRef}
       title={session ? displaySessionTitle(session) : t("chat.title")}
@@ -1739,6 +1741,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       onClose={closeMore}
       sections={chatSections}
     /></MenuPresence>
+    </GlassBackdrop>
   </Screen>;
 }
 
