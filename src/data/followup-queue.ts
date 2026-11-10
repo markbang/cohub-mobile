@@ -64,17 +64,6 @@ export async function steerQueuedFollowup(client: CohubClient, spaceId: string, 
   return client.space(spaceId).session(sessionId).steerTurn(turnId);
 }
 
-/**
- * Steers the queued Turn a send became into the running one, as the queue row's "send now" does.
- * Returns false when the send is no longer waiting (the run ended first), so there is nothing to steer.
- */
-export async function steerSentFollowup(client: CohubClient, spaceId: string, sessionId: string, turns: readonly SessionTurnRecord[], clientMessageId: string): Promise<boolean> {
-  const turn = turns.find((item) => item.meta?.clientMessageId === clientMessageId);
-  if (turn?.status !== "queued") return false;
-  await steerQueuedFollowup(client, spaceId, sessionId, turn.id);
-  return true;
-}
-
 export async function cancelQueuedFollowup(client: CohubClient, spaceId: string, sessionId: string, turnId: string) {
   return client.space(spaceId).session(sessionId).cancelTurn(turnId);
 }

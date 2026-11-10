@@ -23,8 +23,7 @@ import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess"
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
 import { latestMessageId } from "@/src/data/chat-read-state";
 import { forkPoint } from "@/src/data/session-fork";
-import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
-import { compactionFromMessage } from "@/src/data/compaction";
+import type { RelatedSessionRef } from "@/src/data/related-sessions";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { HarnessPicker, harnessMenuSections } from "@/src/components/ExecutionHarnessMenu";
 import { AttachmentMenu } from "@/src/components/AttachmentMenu";
@@ -37,6 +36,8 @@ import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useModelCatalog, useSession, useSessionStream } from "@/src/data/context";
 import { useScreenQuery, useSyncQuery } from "@/src/data/query";
+import { useQuery } from "@tanstack/react-query";
+import { sessionListStatus } from "@/src/data/session-status";
 import type { ComposerDraftScope } from "@/src/data/local-db";
 import { createNewChatDraft } from "@/src/data/new-chat-draft";
 import { useComposerMentions } from "@/src/data/use-composer-mentions";
@@ -50,7 +51,7 @@ import { useChatScrollTrace, useTraceTouches } from "@/src/components/use-chat-s
 import { useChatVisibleRows } from "@/src/components/use-chat-visible-rows";
 import { isCatchUpArrival, useChatCatchUp } from "@/src/components/use-chat-catch-up";
 import { markChatEntry } from "@/src/data/chat-entry-trace";
-import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQueueItem, queuedFollowupTurns, steerQueuedFollowup, steerSentFollowup } from "@/src/data/followup-queue";
+import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQueueItem, queuedFollowupTurns, steerQueuedFollowup } from "@/src/data/followup-queue";
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
 import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
@@ -65,7 +66,7 @@ import { harnessLabel, HttpError, isAgentTurn, type ApprovalMode, resolveWebBase
 import { appendVoiceText as appendDictation } from "@/src/data/voice-append";
 import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, isSubmittingSend, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
-import { BOT_CONTEXT_WINDOW, config } from "@/src/config";
+import { config } from "@/src/config";
 import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
@@ -75,11 +76,12 @@ import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistan
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
+import { BotNoteBubble, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BotEventRow, BotHandoffList, BotReplyBubble, BotStreamBubble } from "@/src/components/BotBubbles";
-import { BotTurnTalk } from "@/src/components/BotTurnTalk";
-import { botEventLabel, isBotSpace, type BotPeer } from "@/src/data/bot-mode";
+import { isBotSaid, isBotSpace, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
+import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
+import { botFileQuery } from "@/src/data/use-bots";
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
@@ -87,7 +89,7 @@ import { previewLocalFile } from "@/src/platform/file-preview";
 import { takeIncomingShare } from "@/src/platform/incoming-share";
 import { usePaneWidth } from "@/src/ui/pane";
 
-type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[]; shared?: string | string[] };
+type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[]; shared?: string | string[]; log?: string | string[] };
 const NEW_COMPOSER_DRAFT_SCOPE = { kind: "new" } as const;
 const messageViewabilityConfig = { itemVisiblePercentThreshold: 20 };
 /** Only used to estimate the destination of a jump the list cannot resolve on its own. */
@@ -113,7 +115,6 @@ function footerRowEntering() {
   };
 }
 const TURN_START_STYLE = { paddingTop: 8 } as const;
-const NO_SPACES: SpaceRecord[] = [];
 const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
 const FOOTER_MENU = { marginHorizontal: 12, marginBottom: 4 } as const;
 
@@ -178,7 +179,7 @@ export default function ChatScreen() {
   if (!sessionId) return <MissingChat />;
   if (draft) return <ChatContent sessionId={sessionId === "new" ? null : sessionId} draft={draft} onCreated={onCreated} initialTurnSequence={null} initialTurnId={null} />;
   if (sessionId === "new") return <MissingChat />;
-  return <ChatContent key={sessionId} sessionId={sessionId} initialTurnSequence={initialTurnSequence} initialTurnId={initialTurnId} />;
+  return <ChatContent key={sessionId} sessionId={sessionId} initialTurnSequence={initialTurnSequence} initialTurnId={initialTurnId} workLog={(Array.isArray(params.log) ? params.log[0] : params.log) === "1"} />;
 }
 
 // iOS swipe-back is silently cancelled when the SpacePanels pager wins the horizontal drag; the
@@ -222,7 +223,7 @@ type NewChatStart = { pending: MessageRecord | null } | { sessionId: string };
  * One Chat surface. With `draft` it starts as a new Chat in that Space: the first send shows its
  * bubble here at once, and when the server creates the Chat this same component carries on with it.
  */
-function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initialTurnSequence, initialTurnId }: { sessionId: string | null; draft?: ChatDraft | null; onCreated?: (sessionId: string) => void; initialTurnSequence: number | null; initialTurnId: string | null }) {
+function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initialTurnSequence, initialTurnId, workLog = false }: { sessionId: string | null; draft?: ChatDraft | null; onCreated?: (sessionId: string) => void; initialTurnSequence: number | null; initialTurnId: string | null; /** A Bot's working Chat opened from its profile, shown as an ordinary Chat. */ workLog?: boolean }) {
   // A new Chat's first message (sending, or failed with retry) is held until the server creates it.
   const [newChat, setNewChat] = useState<NewChatStart>({ pending: null });
   const createdSessionId = "sessionId" in newChat ? newChat.sessionId : null;
@@ -241,7 +242,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client, userUuid, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, setSessionArchived, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft } = useAppActions();
+  const { client, userUuid, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, setSessionArchived, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft, refreshSessionStatuses } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -622,21 +623,27 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   useSpaceRealtime(spaceId ? [spaceId] : []);
   const spaceName = draftSpace ? displaySpaceName(draftSpace) : view.space ? displaySpaceName(view.space) : sessionSummary?.space?.name || t("space.fallbackName");
   const listedSpaceAvatarUrl = useAppSelector((app) => (spaceId ? app.state.spaces.find((item) => item.id === spaceId)?.publicProfile?.avatarUrl : undefined));
+  // In Bot mode a Bot's page is the Chat its `bot.json` names for the user: what the Bot `say`s and what the user
+  // writes. Every other Chat, including the one the Bot works in, renders as an ordinary Chat.
   const listedSpaceSlug = useAppSelector((app) => (spaceId ? app.state.spaces.find((item) => item.id === spaceId)?.slug : undefined));
-  // A Bot's Chat runs on Cohub and shows what the Bot says between steps; only while Bot mode is on.
-  const bot = useBotMode(userUuid).enabled && isBotSpace({ slug: listedSpaceSlug ?? view.space?.slug ?? draftSpace?.slug });
-  const spaceAvatarUrl = listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl ?? draftSpace?.publicProfile?.avatarUrl;
-  const botSpaces = useAppSelector((app) => bot ? app.state.spaces.filter(isBotSpace) : NO_SPACES, shallowEqual);
-  const botPeers = useMemo(() => new Map<string, BotPeer>(botSpaces.map((item) => [item.id, { name: displaySpaceName(item), avatarUrl: item.publicProfile?.avatarUrl ?? null }])), [botSpaces]);
+  const botSpace = useBotMode(userUuid).enabled && isBotSpace({ slug: listedSpaceSlug ?? view.space?.slug ?? draftSpace?.slug });
+  const botFile = useQuery({ ...botFileQuery(client, spaceId), enabled: botSpace && Boolean(client && spaceId) });
+  const botChats = botSpace ? botFile.data ?? null : null;
+  const spaceAvatarUrl = listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl ?? null;
+  const bot = useMemo<BotPeer | null>(() => botChats?.chat?.id === sessionId ? { name: spaceName, avatarUrl: spaceAvatarUrl } : null, [botChats?.chat?.id, sessionId, spaceAvatarUrl, spaceName]);
+  // A notification for the Chat a Bot works in lands on the Bot's page; its work log opens it as a Chat.
+  const botPageId = !workLog && botChats?.session?.id === sessionId ? botChats.chat?.id ?? null : null;
+  useEffect(() => { if (botPageId) router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: botPageId } }); }, [botPageId, router]);
+  const botWork = bot ? botChats?.session ?? null : null;
+  useEffect(() => { if (botWork) void refreshSessionStatuses([botWork], { silent: true }); }, [botWork, refreshSessionStatuses]);
+  // The Bot is typing while its working Chat runs.
+  const botWorking = useAppSelector(({ state }) => botWork ? sessionListStatus(state.sessions.find((item) => item.id === botWork.id) ?? botWork, state.sessionLatestTurns[botWork.id], state.sessionTurnStatuses) === "running" : false);
+  // The user's message reaches the Bot in two steps; one whose second step failed stays here marked failed.
+  const [relayFailed, setRelayFailed] = useState<ReadonlySet<string>>(() => new Set());
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
   const queuedFollowupIds = useMemo(() => new Set(queuedFollowups.map((turn) => turn.id)), [queuedFollowups]);
-  // A Bot takes what the user says mid-run right away: this device's sends being steered in never show as queued.
-  const [steering, setSteering] = useState<ReadonlySet<string>>(() => new Set());
-  const queueItems = useMemo(() => {
-    const items = followupQueueItems(view.turns, view.stream?.turnId, view.messages);
-    return items.filter((item) => !item.clientMessageId || !steering.has(item.clientMessageId));
-  }, [steering, view.turns, view.stream?.turnId, view.messages]);
+  const queueItems = useMemo(() => followupQueueItems(view.turns, view.stream?.turnId, view.messages), [view.turns, view.stream?.turnId, view.messages]);
   const transitionQueueItem = sendTransition ? queueItems.find((item) => isSendQueueItem(item, sendTransition.message)) ?? null : null;
   const queueTransitionActive = sendTransition !== null && transitionQueueItem !== null;
   useEffect(() => {
@@ -645,16 +652,16 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     return () => cancelAnimationFrame(frame);
   }, [completeSendTransition, sendTransition, transitionQueueItem]);
   useEffect(() => { recordDebugEvent("chat.queue.state", { count: queuedFollowups.length, ids: queuedFollowups.map((turn) => chatScrollTrace.alias("turn", turn.id)) }); }, [queuedFollowups]);
-  const messages = useMemo(() => {
+  const threadMessages = useMemo(() => {
     if (pendingNew) return [pendingNew];
     const history = messagesFromTurns(view.turns);
     return messagesInWindow(withTurnSequences(
       mergeDisplayMessages(history.length > 0 ? history : view.messages, history.length > 0 ? view.messages : [])
-        // A send being steered into a Bot's run is already the user's message in the thread, not a queued one.
-        .filter((message) => (isSteered(steering, message) || (!isOptimisticFollowup(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId)))) && !isAssistantIntermediate(message) && hasRenderableMessage(message)),
+        .filter((message) => !isOptimisticFollowup(message) && !isAssistantIntermediate(message) && hasRenderableMessage(message) && !(typeof message.meta?.turnId === "string" && queuedFollowupIds.has(message.meta.turnId))),
       view.turns,
     ), { turns: view.turns, hasMoreNewer: view.hasMoreNewer });
-  }, [pendingNew, queuedFollowupIds, steering, view.hasMoreNewer, view.messages, view.turns]);
+  }, [pendingNew, queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
+  const messages = useMemo(() => relayFailed.size ? threadMessages.map((message) => relayFailed.has(clientMessageIdOf(message) ?? "") ? relayFailedMessage(message, t("bots.relayFailed")) : message) : threadMessages, [relayFailed, t, threadMessages]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
@@ -740,7 +747,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // Each send is tracked on its own row; none of them blocks the composer.
   const submitting = view.messages.some(isSubmittingSend);
   const starting = pendingNew !== null && !isFailedSend(pendingNew);
-  const pendingReply = starting || submitting;
+  // A note on a Bot's page gets no reply in this Chat; the Bot answers with `say`, shown as typing meanwhile.
+  const pendingReply = (starting || submitting) && !bot;
   const retryDisabled = Boolean(sessionId) && !view.historyLoaded;
   const timelineReady = messages.length > 0 || view.historyLoaded || Boolean(liveStream) || submitting;
   // The list stays invisible until it has settled on the tail, so the opening state covers that too.
@@ -1052,18 +1060,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       setPendingFollowupAction(null);
     }
   };
-  // A refused steer leaves the send queued as in any Chat, so its row comes back with one line saying why.
-  const steerSent = async (clientMessageId: string) => {
-    if (!client || !spaceId) return;
-    try {
-      if (!(await steerSentFollowup(client, spaceId, sessionId, getAppState().sessionViews[sessionId]?.turns ?? [], clientMessageId))) return;
-    } catch {
-      setSteering(withMember(clientMessageId, false));
-      showToast({ title: t("bots.steerFailed"), tone: "danger" });
-      return;
-    }
-    void refreshSession(sessionId).catch(() => undefined);
-  };
   const shareChat = async () => {
     const title = session ? displaySessionTitle(session) : t("chat.title");
     if (!spaceId) {
@@ -1341,12 +1337,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     return { sequence: point.sequence, ref: { spaceId, sessionId: parentSessionId ?? point.sessionId, turnId: point.turnId } };
   }, [parentSessionId, sessionId, spaceId, view.hasMoreNewer, view.turns]);
   const navigation = useNavigation();
-  const botPeerOf = useCallback((ref: RelatedSessionRef): BotPeer => {
-    const known = botPeers.get(ref.spaceId);
-    if (known) return known;
-    const related = lookupSession(ref.sessionId);
-    return { name: related ? displaySessionTitle(related) : t("turn.related.otherChat"), avatarUrl: null };
-  }, [botPeers, lookupSession, t]);
   const openRelatedSession = useCallback((ref: RelatedSessionRef) => {
     // Going back to the Chat underneath keeps its scroll position and avoids ping-pong stacks.
     const stack = navigation.getState();
@@ -1367,7 +1357,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const flight = createSendFlight((message, source) => {
       if (token !== sendTokenRef.current || generation !== sendGenerationRef.current) return;
       recordDebugEvent("chat.send_transition.source_measured", { ...source });
-      setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) && !bot ? "queue" : "bubble" });
+      setSendTransition({ message, text, source, attachments: files, destination: isOptimisticFollowup(message) ? "queue" : "bubble" });
     });
     if (reducedMotion) flight.expire();
     else {
@@ -1436,6 +1426,19 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     });
   };
 
+  // Step two of a send on a Bot's page: the note's words, as the server stored them, go to the Chat the Bot works in.
+  const relayToBotChat = async (clientMessageId: string) => {
+    setRelayFailed(withMember(clientMessageId, false));
+    const note = getAppState().sessionViews[sessionId]?.turns.find((turn) => turn.meta?.clientMessageId === clientMessageId);
+    try {
+      if (!client || !botChats?.session || !note) throw new Error(t("bots.relayFailed"));
+      const content = note.userContent?.length ? note.userContent : note.userText ? [{ type: "text" as const, text: note.userText }] : [];
+      if (await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel })) showToast({ title: t("bots.busy") });
+    } catch {
+      setRelayFailed(withMember(clientMessageId, true));
+    }
+  };
+
   const submit = () => {
     const text = inputRef.current;
     const files = attachmentsRef.current;
@@ -1462,18 +1465,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
     recordDebugEvent("chat.send.composer_cleared");
     let optimisticCreated = false;
-    let steerId: string | null = null;
+    let noteId: string | null = null;
     sendMessage(sessionId, text, files, {
-      model: activeModel,
-      harness,
-      contextWindow: bot ? BOT_CONTEXT_WINDOW : undefined,
-      ...(execution ? { execution } : {}),
+      // On a Bot's page the words are written here as a note first, then handed to the Bot.
+      ...(bot ? { note: true } : { model: activeModel, harness, ...(execution ? { execution } : {}) }),
       onOptimistic: (message) => {
         optimisticCreated = true;
-        steerId = autoSteerId(bot, message);
-        if (steerId) setSteering(withMember(steerId, true));
+        if (bot) noteId = clientMessageIdOf(message);
         flight.inserted(message);
-        if (!isOptimisticFollowup(message) || steerId) {
+        if (!isOptimisticFollowup(message)) {
           cancelTurnScroll();
           setFollowingTail(true);
           requestFollowTail(!reducedMotion);
@@ -1481,9 +1481,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       },
     }).then(() => {
       showSent();
-      if (steerId) void steerSent(steerId);
+      if (noteId) void relayToBotChat(noteId);
     }, (error: unknown) => {
-      if (steerId) setSteering(withMember(steerId, false));
       // Once the bubble exists it carries the failure and its retry.
       if (optimisticCreated) return;
       restoreComposer(text, files);
@@ -1492,6 +1491,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   };
 
   const retrySend = (message: MessageRecord) => {
+    // Already written here; only handing it to the Bot failed, so only that is redone.
+    const relayId = clientMessageIdOf(message);
+    if (message.meta?.relayFailed === true && relayId) {
+      haptics.commit();
+      void relayToBotChat(relayId);
+      return;
+    }
     const draft = failedSendDraft(message);
     if (!draft) return;
     if (!sessionId) {
@@ -1505,23 +1511,19 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     if (!getAppState().sessionViews[sessionId]?.historyLoaded) return;
     haptics.commit();
     let replaced = false;
-    let steerId: string | null = null;
+    let noteId: string | null = null;
     sendMessage(sessionId, draft.text, draft.attachments, {
-      model: draft.model,
-      contextWindow: bot ? BOT_CONTEXT_WINDOW : undefined,
-      ...(draft.harness ? { harness: draft.harness } : {}),
+      ...(bot ? { note: true } : { model: draft.model, ...(draft.harness ? { harness: draft.harness } : {}) }),
       retryOf: message,
       onOptimistic: (optimistic) => {
         replaced = true;
-        steerId = autoSteerId(bot, optimistic);
-        if (steerId) setSteering(withMember(steerId, true));
-        if (isOptimisticFollowup(optimistic) && !steerId) return;
+        if (bot) noteId = clientMessageIdOf(optimistic);
+        if (isOptimisticFollowup(optimistic)) return;
         cancelTurnScroll();
         setFollowingTail(true);
         requestFollowTail(!reducedMotion);
       },
-    }).then(() => { if (steerId) void steerSent(steerId); }, (error: unknown) => {
-      if (steerId) setSteering(withMember(steerId, false));
+    }).then(() => { if (noteId) void relayToBotChat(noteId); }, (error: unknown) => {
       if (!replaced) showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
     });
   };
@@ -1603,22 +1605,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const sequenceTurns = item.role === "user" && sequence !== null ? turnsBySequence.get(sequence) : undefined;
     const newer = messages[index + 1];
     const endsForkPrefix = forkOrigin !== null && sequence === forkOrigin.sequence && (newer ? turnSequenceForMessage(newer) : null) !== sequence;
-    // A Bot Chat reads like messaging and steps stay out of the thread. A prompt an agent sent (its Turn has an
-    // origin in another Chat: a report back, a check-in) is not the user speaking, so it is a faint line instead.
-    const botSource = bot && sequenceTurns?.[0] ? sentFrom(sequenceTurns[0]) : null;
-    const botRow = bot ? <>
-      {botSource ? <BotEventRow key={item.id} label={botEventLabel(t, botSource, spaceId, botPeers)} message={item} />
-        : item.role === "assistant" && !compactionFromMessage(item) ? <BotReplyBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
-        : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} compactionDivider />}
-      {sequenceTurns?.map((entry) => <View key={entry.id}><BotTurnTalk sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} live={isActiveTurnStatus(entry.status) || entry.id === streamTurnId} availableWidth={listWidth || paneWidth} /><BotHandoffList sessions={sentSessions(entry, spaceId)} peerOf={botPeerOf} onOpen={openRelatedSession} /></View>)}
-      {item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}
-    </> : null;
     // Rows keep their renderItem closure across prepends and window jumps (messages is
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? botRow : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} bot={false} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botPeerOf, botPeers, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, t, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? isBotSaid(sequenceTurns?.[0] ?? messageTurn)
+      ? <BotNoteBubble message={item} bot={bot} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
+      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={item.meta?.relayFailed === true ? undefined : discardSend} spaceId={spaceId || null} />
+      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
+  }, [arrivalBaseline, bot, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1632,7 +1627,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     <SpacePanels edgeToEdge key={spaceId || sessionId} chatPanel={!bot} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <ScreenBlurTarget attach={attachScreenBlurTarget}><Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        {/* A Bot is one continuous Chat: its bar is the Bot alone, and opens its profile. */}
+        {/* A Bot's page is the Bot alone: its face and name, which open its profile, and no Chat actions. */}
         {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
@@ -1646,7 +1641,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           ref={timelineRef}
           sessionId={sessionId}
           bot={bot}
-          botPeers={botPeers}
           spaceId={spaceId}
           client={client}
           messages={messages}
@@ -1727,7 +1721,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           onContentSizeChange={handleContentSizeChange}
           {...pullRefresh.listProps}
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
-          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} bot={bot} showStream={liveStream} pending={pendingReply} processInRow={false} availableWidth={listWidth || paneWidth} /> : null}</View>}
+          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={false} availableWidth={listWidth || paneWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
         </RenderErrorBoundary>
         {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
@@ -1738,6 +1732,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
         {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
+        {bot && botWorking ? <BotTyping bot={bot} /> : null}
         {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
@@ -1808,13 +1803,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   </Screen>;
 }
 
-/** A Bot Chat's send made while a Turn runs, to be steered into it instead of waiting behind it. */
-function autoSteerId(bot: boolean, message: MessageRecord): string | null {
-  return bot && isOptimisticFollowup(message) && typeof message.meta?.clientMessageId === "string" ? message.meta.clientMessageId : null;
-}
-
-function isSteered(steering: ReadonlySet<string>, message: MessageRecord) {
-  return typeof message.meta?.clientMessageId === "string" && steering.has(message.meta.clientMessageId);
+function clientMessageIdOf(message: MessageRecord) {
+  return typeof message.meta?.clientMessageId === "string" ? message.meta.clientMessageId : null;
 }
 
 function withMember(id: string, member: boolean) {
@@ -1838,19 +1828,12 @@ function LiveTurnProcess({ sessionId, turn, client, spaceId }: { sessionId: stri
   return <TurnProcess turn={turn} client={client} spaceId={spaceId} />;
 }
 
-function LiveReply({ sessionId, bot, showStream, pending, processInRow, availableWidth }: { sessionId: string; bot: boolean; showStream: boolean; pending: boolean; processInRow: boolean; availableWidth: number }) {
+function LiveReply({ sessionId, showStream, pending, processInRow, availableWidth }: { sessionId: string; showStream: boolean; pending: boolean; processInRow: boolean; availableWidth: number }) {
   const stream = useSessionStream(sessionId);
   const streamStartedAt = useAppSelector(({ state }) => {
     const turn = stream?.turnId ? state.sessionViews[sessionId]?.turns.find((item) => item.id === stream.turnId) : undefined;
     return turn ? turn.startedAt ?? turn.createdAt : null;
   });
-  if (bot) {
-    if (showStream && stream) return <View testID="chat-live-reply">
-      {!processInRow ? <BotTurnTalk sessionId={sessionId} turn={null} client={null} spaceId="" live availableWidth={availableWidth} /> : null}
-      <BotStreamBubble content={stream.contentBlocks} status={stream.status} availableWidth={availableWidth} />
-    </View>;
-    return pending ? <BotStreamBubble content={[]} status="pending" availableWidth={availableWidth} /> : null;
-  }
   if (showStream && stream) return <View testID="chat-live-reply">
     {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
     <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={stream.outputAt ?? streamStartedAt} availableWidth={availableWidth} />

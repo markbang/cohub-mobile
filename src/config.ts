@@ -38,8 +38,8 @@ export const defaultEnvironment = buildEnvironment;
 export const BOT_MOD_SPACE_ID = "20b54a5b-dc39-44a1-93e1-1b5225ed4795";
 
 /**
- * A Bot's Chat is one conversation that compacts itself: its sends ask for this window, which the
- * server keeps for the Chat from then on (delegated and scheduled messages included) and caps at the platform limit.
+ * The Chat a Bot works in is one conversation that compacts itself: what the user hands it asks for this window,
+ * which the server keeps for that Chat from then on (delegated and scheduled prompts included) and caps at the platform limit.
  */
 export const BOT_CONTEXT_WINDOW = 400_000;
 

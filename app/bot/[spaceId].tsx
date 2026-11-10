@@ -1,8 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { botDirectory } from "@/src/data/bot-mode";
 import { useAppActions, useAppSelector } from "@/src/data/context";
+import { botFileQuery } from "@/src/data/use-bots";
 import { useSpaceDirectory } from "@/src/data/use-space-directory";
 import { useTranslation } from "@/src/i18n";
 import { Avatar, Screen, SettingsGroup, TopBar } from "@/src/ui";
@@ -29,6 +31,8 @@ export default function BotProfileScreen() {
   const memoryFiles = memory.entries.filter((entry) => entry.type !== "dir");
   const openFile = (path: string) => router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } });
   const none = (known: boolean) => known ? t("bots.profile.none") : undefined;
+  const file = useQuery({ ...botFileQuery(client, spaceId), enabled: Boolean(client && spaceId) });
+  const workChat = file.data?.session ?? null;
   const failure = root.error ?? agents.error ?? memory.error;
   return <Screen>
     <TopBar title={name} onBack={() => router.back()} />
@@ -48,6 +52,8 @@ export default function BotProfileScreen() {
         {memoryFiles.length === 0 && memory.known ? <Text className="bg-surface px-4 py-3 text-caption text-fg-muted">{t("bots.profile.memory.empty")}</Text> : null}
       </SettingsGroup>
       <SettingsGroup>
+        {/* The Chat the Bot works in, as an ordinary Chat: its steps, tools, and raw replies. */}
+        <SettingsRow icon="list-tree" title={t("bots.profile.workLog")} onPress={workChat ? () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: workChat.id, log: "1" } }) : undefined} />
         <SettingsRow icon="clock" title={t("bots.profile.schedules")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId } })} />
         <SettingsRow icon="folder-open" title={t("bots.profile.files")} onPress={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } })} last />
       </SettingsGroup>

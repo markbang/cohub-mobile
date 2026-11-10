@@ -318,7 +318,7 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
       },
       ...(failed ? [{
         type: "view" as const, style: { flexDirection: "row", alignItems: "center", marginRight: -8 },
-        children: [action("discard", t("chat.sendFailed.delete"), "trash", theme.colors.textMuted), action("retry", t("common.retry"), "refresh", theme.colors.accent, options.retryDisabled)],
+        children: [...(message.meta?.relayFailed === true ? [] : [action("discard", t("chat.sendFailed.delete"), "trash", theme.colors.textMuted)]), action("retry", t("common.retry"), "refresh", theme.colors.accent, options.retryDisabled)],
       }] : []),
     ],
   };
@@ -377,16 +377,6 @@ export function assistantMessageNode(ctx: NodeContext, key: string, message: Mes
 
 export function systemMessageNode(ctx: NodeContext, message: MessageRecord): TimelineNode {
   return { type: "view", style: { alignItems: "center", paddingHorizontal: 24, paddingVertical: 8 }, children: [text(message.text || ctx.t("chat.systemUpdate"), textStyle("caption", ctx.theme.colors.textFaint, { textAlign: "center" }))] };
-}
-
-/** `CompactionDivider`: a Bot's Chat marks compaction with a quiet line and no details. */
-export function compactionDividerNode(ctx: NodeContext): TimelineNode {
-  const { theme, t } = ctx;
-  const rule: TimelineNode = { type: "view", style: { flex: 1, height: 1, backgroundColor: color(theme.colors.border) } };
-  return {
-    type: "view", accessibilityLabel: t("bots.compaction"), style: { width: "100%", flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 24, paddingVertical: 12 },
-    children: [rule, text(t("bots.compaction"), textStyle("micro", theme.colors.textFaint)), rule],
-  };
 }
 
 export function compactionNode(ctx: NodeContext, key: string, info: CompactionInfo): TimelineNode {
@@ -486,96 +476,36 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
-/** `BotAvatar`: the Avatar shape, for another Bot beside its message. */
+const BOT_AVATAR_SIZE = 28;
+
+/** `Avatar`'s shape, for the Bot beside what it says. */
 function botAvatar(ctx: NodeContext, peer: BotPeer, size: number): TimelineNode {
   const shape = { width: size, height: size, borderRadius: size * 0.3 };
   if (peer.avatarUrl) return { type: "image", uri: imageThumbnailUrl(peer.avatarUrl, size, PixelRatio.get()), fallbackUri: peer.avatarUrl, style: { ...shape, backgroundColor: color(ctx.theme.colors.surfaceRaised) } };
   return { type: "view", style: { ...shape, alignItems: "center", justifyContent: "center", backgroundColor: color(ctx.theme.colors.accentSoft) }, children: [text(initials(peer.name), textStyle("micro", ctx.theme.colors.accent, { fontWeight: "600" }))] };
 }
 
-/** `BotBubble`: the incoming side of a messaging thread. */
-function botBubble(ctx: NodeContext, children: TimelineNode[], maxWidth = getBubbleMaxWidth(ctx.width)): TimelineNode {
-  return { type: "view", style: { maxWidth, minWidth: 0, borderRadius: ctx.theme.radius.md, backgroundColor: color(ctx.theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 }, children };
-}
-
-function botRow(children: TimelineNode[], paddingTop = 3): TimelineNode {
-  return { type: "view", style: { width: "100%", paddingHorizontal: 12, paddingTop, paddingBottom: 3, alignItems: "flex-start" }, children };
-}
-
-function botClock(ctx: NodeContext, clock: string | undefined): TimelineNode[] {
-  return clock ? [text(clock, textStyle("micro", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { alignSelf: "flex-end", marginTop: 2 } })] : [];
-}
-
-function botBody(ctx: NodeContext, scope: string, content: ContentBlock[], options: { active?: boolean; streamingText?: string | null; sandboxImages: SandboxImages }): TimelineNode[] {
-  const width = getBubbleMaxWidth(ctx.width) - BUBBLE_PADDING_X * 2;
-  return contentNodes(ctx, scope, content, { width, color: ctx.theme.colors.assistantBubbleText, onSurface: true, ...options });
-}
-
-/** `BotReplyBubble`: a Bot's reply is only what it wrote; its steps, model, and usage stay out of the thread. */
-export function botReplyNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages): TimelineNode | null {
-  const blocks = botReplyBlocks(message.content);
-  const body = blocks.length ? botBody(ctx, message.id, blocks, { sandboxImages }) : thinkingBlocks(message.content).length === 0 && message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, getBubbleMaxWidth(ctx.width) - BUBBLE_PADDING_X * 2, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
-  const error = message.errorMessage ? [text(message.errorMessage, textStyle("caption", ctx.theme.colors.danger), { selectable: true })] : [];
-  if (body.length === 0 && error.length === 0) return null;
-  return botRow([botBubble(ctx, [...body, ...error, ...botClock(ctx, formatMessageClock(message.createdAt))])]);
-}
-
-/** `BotTurnTalk`: each thing a Bot said between steps, as its own bubble above the final one. */
-export function botTalkNode(ctx: NodeContext, turnId: string, texts: readonly string[]): TimelineNode | null {
-  if (texts.length === 0) return null;
-  const width = getBubbleMaxWidth(ctx.width) - BUBBLE_PADDING_X * 2;
-  return { type: "view", children: texts.map((value, index) => botRow([botBubble(ctx, replyMarkdown(ctx, value, NO_SANDBOX_IMAGES, width, { color: ctx.theme.colors.assistantBubbleText, onSurface: true, id: `talk:${turnId}:${index}` }))])) };
-}
-
-/** `BotStreamBubble`: the reply as it is written, or a typing bubble until the first words arrive. */
-export function botStreamNode(ctx: NodeContext, input: { content: ContentBlock[]; status: string; streamingText: string | null }): TimelineNode {
-  const { theme, t } = ctx;
-  const blocks = botReplyBlocks(input.content);
-  const live = input.status === "pending" || input.status === "streaming";
-  const statusLabel = input.status === "failed" ? t("message.stream.failed") : input.status === "interrupted" ? t("message.stream.stopped") : null;
-  const bubble = blocks.length
-    ? [botBubble(ctx, botBody(ctx, "live", blocks, { active: live, streamingText: input.streamingText, sandboxImages: NO_SANDBOX_IMAGES }))]
-    : live ? [botBubble(ctx, [mascotLoader(ctx, 22, t("message.stream.starting"))])] : [];
-  const status = statusLabel ? [text(statusLabel, textStyle("caption", input.status === "failed" ? theme.colors.danger : theme.colors.textMuted), { style: { paddingHorizontal: 4, paddingTop: 2 } })] : [];
-  return botRow([...bubble, ...status]);
-}
-
-/** `BotEventRow`: a prompt an agent sent here, as a faint line that opens to the words that were sent. */
-export function botEventNode(ctx: NodeContext, key: string, label: string, message: MessageRecord): TimelineNode {
+/** `BotNoteBubble`: what the Bot said with `say`, its words and images beside its face. */
+export function botNoteNode(ctx: NodeContext, message: MessageRecord, bot: BotPeer, sandboxImages: SandboxImages): TimelineNode | null {
   const { theme } = ctx;
-  const id = `event:${key}`;
-  const expanded = ctx.expanded.has(id);
-  const width = ctx.width - 48 - 24;
-  const body = hasRenderableContent(message.content)
-    ? contentNodes(ctx, message.id, message.content, { width, color: ctx.theme.colors.textSecondary, onSurface: true })
-    : message.text?.trim() ? [markdown(ctx, message.text, { color: ctx.theme.colors.textSecondary, onSurface: true })] : [];
+  const maxWidth = getBubbleMaxWidth(ctx.width) - BOT_AVATAR_SIZE - 8;
+  const width = maxWidth - BUBBLE_PADDING_X * 2;
+  const blocks = botReplyBlocks(message.content);
+  const body = blocks.length
+    ? contentNodes(ctx, message.id, blocks, { width, color: ctx.theme.colors.assistantBubbleText, onSurface: true, sandboxImages })
+    : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, width, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
+  if (body.length === 0) return null;
+  const clock = formatMessageClock(message.createdAt);
   return {
-    type: "view", style: { width: "100%", alignItems: "center", paddingHorizontal: 24 },
+    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: 3, flexDirection: "row", alignItems: "flex-end", gap: 8 },
     children: [
-      pressable({
-        action: "toggle", payload: { id }, accessibilityLabel: label, accessibilityState: { expanded },
-        style: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4 },
-        children: [text(label, textStyle("caption", theme.colors.textFaint), { numberOfLines: 1, style: { flexShrink: 1 } }), icon(expanded ? "chevron-down" : "chevron-right", 12, theme.colors.textFaint)],
-      }),
-      ...(expanded && body.length ? [{ type: "view" as const, style: { width: "100%", marginBottom: 8, gap: 4, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.surface), paddingHorizontal: 12, paddingVertical: 8 }, children: body }] : []),
+      botAvatar(ctx, bot, BOT_AVATAR_SIZE),
+      {
+        type: "view", style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
+        children: [...body, ...(clock ? [text(clock, textStyle("micro", theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { alignSelf: "flex-end", marginTop: 2 } })] : [])],
+      },
     ],
   };
-}
-
-/** `BotHandoffList`: where this Bot passed work on, as the other Bots it went to. */
-export function botHandoffNode(ctx: NodeContext, sessions: readonly { spaceId: string; sessionId: string; turnId: string }[], peerOf: (session: { spaceId: string; sessionId: string }) => BotPeer | null): TimelineNode | null {
-  const { theme, t } = ctx;
-  const rows = sessions.flatMap((session) => {
-    const peer = peerOf(session);
-    if (!peer) return [];
-    const label = t("bots.handoff", { name: peer.name });
-    return [pressable({
-      id: `${session.spaceId}:${session.sessionId}`, action: "openSession", payload: session, accessibilityRole: "link", accessibilityLabel: label,
-      style: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 4 },
-      children: [botAvatar(ctx, peer, 18), text(label, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } }), icon("chevron-right", 12, theme.colors.textFaint)],
-    })];
-  });
-  return rows.length ? { type: "view", style: { width: "100%", paddingHorizontal: 12 }, children: rows } : null;
 }
 
 function liveDot(ctx: NodeContext): TimelineNode {

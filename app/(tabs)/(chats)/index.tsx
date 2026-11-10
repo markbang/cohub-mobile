@@ -40,7 +40,7 @@ type ChatListItem =
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit }
   | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean }
-  | { kind: "bot"; entry: BotEntry<import("@neta-art/cohub").SpaceRecord, import("@neta-art/cohub").SessionRecord> };
+  | { kind: "bot"; entry: BotEntry<import("@neta-art/cohub").SpaceRecord> };
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 /** How long the row order stays held after a drag or fling settles, so a follow-up tap lands on the row it aimed at. */
 const ORDER_SETTLE_MS = 800;
@@ -219,11 +219,11 @@ export default function ChatsScreen() {
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
     openChat({ sessionId, turn: target?.turn != null ? String(target.turn) : undefined, turnId: target?.turnId || undefined });
   };
-  // A Bot is one continuous Chat: its row always opens that Chat, recording it first if the Bot has none yet.
+  // A Bot row always opens the user's Chat with that Bot, making it first if the Bot has none yet.
   const openBot = async (spaceId: string, prefill?: string) => {
     let sessionId: string;
     try {
-      sessionId = await bots.openSession(spaceId);
+      sessionId = await bots.openChat(spaceId);
     } catch (error) {
       toast({ title: t("bots.openFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
       return;
