@@ -34,6 +34,9 @@ const buildEnvironment = readEnvironment(
 /** Environment resolved at build time; the sign-in screen can override it and remembers the choice. */
 export const defaultEnvironment = buildEnvironment;
 
+/** The Space whose mod turns a Space into a Bot. */
+export const BOT_MOD_SPACE_ID = "20b54a5b-dc39-44a1-93e1-1b5225ed4795";
+
 /** A debug build captured by `scripts/ui-snapshots.mjs`, which sets this when it starts Metro. */
 export const uiSnapshots = process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1";
 

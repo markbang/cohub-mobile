@@ -5620,4 +5620,67 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   hooks.unmount();
 }
 
+// The primary Bot is created once, adopted when it already exists, and never touches a same-slug Space without the bot mod.
+{
+  const BOT_MOD = "bot-mod-space";
+  const source = ts.transpileModule(readFileSync(new URL("../src/data/primary-bot.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const primaryBot = {};
+  new Function("require", "exports", source)((name) => {
+    if (name === "@/src/config") return { BOT_MOD_SPACE_ID: BOT_MOD };
+    throw new Error(`Unexpected primary-bot dependency: ${name}`);
+  }, primaryBot);
+  const httpError = (status, message = `HTTP ${status}`) => Object.assign(new Error(message), { status });
+  const botClient = ({ owned = [], mods = [], files = {}, createError = null } = {}) => {
+    const calls = [];
+    const lookups = [...owned];
+    const client = {
+      spaces: {
+        getOwnedBySlug: async (slug) => { calls.push(["get", slug]); const next = lookups.shift(); if (next instanceof Error) throw next; return next; },
+        create: async (input) => { calls.push(["create", input]); if (createError) throw createError; return { space: { id: "new-bot" }, taskRunId: "task" }; },
+      },
+      space: (spaceId) => ({
+        mods: { list: async () => { calls.push(["mods", spaceId]); return { items: mods }; } },
+        files: {
+          read: async (path) => { calls.push(["read", spaceId, path]); if (path in files) return { path, content: files[path] }; throw httpError(404, "File not found."); },
+          write: async (input) => { calls.push(["write", spaceId, input]); files[input.path] = input.content; return { path: input.path }; },
+        },
+      }),
+    };
+    return { client, calls, files };
+  };
+  const botMod = (enabled = true) => ({ modSpaceId: BOT_MOD, enabled });
+  const personaWrite = (spaceId) => ["write", spaceId, { path: ".agents/APPEND_SYSTEM.md", content: primaryBot.PRIMARY_BOT_PERSONA, encoding: "utf-8" }];
+
+  const fresh = botClient({ owned: [httpError(404)] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot" });
+  assert.deepEqual(fresh.calls, [
+    ["get", "cohubbot"],
+    ["create", { name: "Cohub", slug: "cohubbot", mods: [{ modSpaceId: BOT_MOD, mountSlug: "cohubbot" }] }],
+    personaWrite("new-bot"),
+  ], "a missing Bot is created with the bot mod and its persona");
+  assert.ok(primaryBot.PRIMARY_BOT_PERSONA.startsWith("# Cohub\n\nRole: primary\n"));
+
+  const existing = botClient({ owned: [{ id: "bot" }], mods: [{ modSpaceId: "other", enabled: true }, botMod(false)] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(existing.client), { status: "ready", spaceId: "bot", modEnabled: false }, "a disabled bot mod is reported, not changed");
+  assert.deepEqual(existing.calls.at(-1), personaWrite("bot"), "a Bot missing its persona gets one");
+
+  const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom" } });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", modEnabled: true });
+  assert.equal(kept.files[".agents/APPEND_SYSTEM.md"], "# Custom", "an existing persona is never overwritten");
+
+  const conflict = botClient({ owned: [{ id: "mine" }], mods: [{ modSpaceId: "other", enabled: true }] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(conflict.client), { status: "conflict", spaceId: "mine" });
+  assert.deepEqual(conflict.calls, [["get", "cohubbot"], ["mods", "mine"]], "a same-slug Space without the bot mod is left untouched");
+
+  const raced = botClient({ owned: [httpError(404), { id: "other-device" }], mods: [botMod()], createError: httpError(409, "space slug already exists") });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(raced.client), { status: "ready", spaceId: "other-device", modEnabled: true }, "a slug conflict on create adopts the Space another device made");
+  assert.deepEqual(raced.calls.at(-1), personaWrite("other-device"));
+
+  const failed = botClient({ owned: [httpError(500, "server down")] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(failed.client), { status: "error", message: "server down" });
+  assert.deepEqual(failed.calls, [["get", "cohubbot"]], "other lookup errors create nothing");
+}
+
 console.log("Chat workflow checks passed");

@@ -57,6 +57,7 @@ export default function DebugMenuScreen() {
         <DebugRow icon="globe" title="深链测试" detail="解析并打开 cohub:// / web / 文件 / 外部链接" onPress={() => router.push("/debug/links")} />
         <DebugRow icon="type" title="语言 / i18n" detail="当前语言、key 检索、中英文对照" onPress={() => router.push("/debug/i18n")} />
         <DebugRow icon="fingerprint" title="身份与令牌" detail="claims、令牌存在性/过期（不显示明文）" onPress={() => router.push("/debug/identity")} />
+        <DebugRow icon="zap" title="主 Bot" detail="确保 cohubbot Space，进入主 Bot 对话" onPress={() => router.push("/debug/bot")} />
       </View>
 
       <SectionHeader title="环境信息" />
