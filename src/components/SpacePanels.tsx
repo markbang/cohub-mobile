@@ -56,6 +56,8 @@ type SpacePanelsProps = {
   onOpenFilesPage: () => void;
   children: ReactNode;
   edgeToEdge?: boolean;
+  /** Off for a Bot, which has one Chat: the swipe reaches only the files panel. */
+  chatPanel?: boolean;
 };
 
 const PANEL_WIDTH_RATIO = 0.86;
@@ -71,7 +73,7 @@ const PANEL_SWIPE_SPRING = { duration: 300, dampingRatio: 1, overshootClamping: 
  * see NestedHorizontalScrollView in modules/react-native-enriched-markdown) cancel the pan. Do not disable the pager for messages
  * containing a fence — that blocks the swipe on almost every reply.
  */
-export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false }: SpacePanelsProps) {
+export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, client, activePanel, onActivePanelChange, onOpenSession, onNewChat, onOpenFile, onOpenFilesPage, children, edgeToEdge = false, chatPanel = true }: SpacePanelsProps) {
   const { t } = useTranslation();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
@@ -81,6 +83,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
   const centerOffset = panelWidth;
   // The right panel aligns to the viewport's right edge, not its left edge.
   const filesOffset = 2 * panelWidth;
+  const minOffset = chatPanel ? 0 : centerOffset;
   // The transform alone positions the pages; the native scroll offset stays at 0. Android
   // repaints a scrolled view a frame after its scroll event, while Reanimated applies styles
   // inside that event, so pairing a scroll with a transform flashed a panel for one frame.
@@ -210,16 +213,16 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
       swipePhase.set("dragging");
     })
     .onUpdate((event) => {
-      pagerOffset.set(Math.min(filesOffset, Math.max(0, swipeOrigin.get() - event.translationX)));
+      pagerOffset.set(Math.min(filesOffset, Math.max(minOffset, swipeOrigin.get() - event.translationX)));
     })
     .onEnd((event) => {
-      const offset = Math.min(filesOffset, Math.max(0, swipeOrigin.get() - event.translationX));
-      const target = panelSwipeTarget(swipeStart.get(), offset, event.velocityX, panelWidth);
+      const offset = Math.min(filesOffset, Math.max(minOffset, swipeOrigin.get() - event.translationX));
+      const target = Math.max(minOffset, panelSwipeTarget(swipeStart.get(), offset, event.velocityX, panelWidth));
       pagerOffset.set(withSpring(target, { ...PANEL_SWIPE_SPRING, velocity: -event.velocityX, reduceMotion: ReduceMotion.System }, (finished) => {
         if (finished) swipePhase.set("settled");
       }));
       swipePhase.set("released");
-    }), [filesOffset, pagerHeaderTouchHeight, pagerOffset, pagerSwipeEnabled, panelWidth, swipeOrigin, swipePhase, swipeStart]);
+    }), [filesOffset, minOffset, pagerHeaderTouchHeight, pagerOffset, pagerSwipeEnabled, panelWidth, swipeOrigin, swipePhase, swipeStart]);
   const handleChipsTouchChange = useCallback((touching: boolean) => {
     setPagerSwipeEnabled(!touching);
   }, []);

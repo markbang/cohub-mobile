@@ -19,7 +19,7 @@ export default function DebugBotScreen() {
   };
 
   const spaceId = result && "spaceId" in result ? result.spaceId : null;
-  const chatSpaceId = result?.status === "created" || result?.status === "ready" ? result.spaceId : null;
+  const sessionId = result?.status === "created" || result?.status === "ready" ? result.sessionId : null;
 
   return (
     <Screen scroll>
@@ -27,18 +27,19 @@ export default function DebugBotScreen() {
       <View className="mx-4 border rounded-md overflow-hidden border-border bg-surface">
         <Row label="状态" value={result?.status ?? "—"} />
         <Row label="Space id" value={spaceId ?? "—"} />
+        {sessionId ? <Row label="主 Chat" value={sessionId} /> : null}
         {result?.status === "ready" ? <Row label="bot mod" value={result.modEnabled ? "enabled" : "disabled"} /> : null}
         {result?.status === "conflict" ? <Note text="已有名为 cohubbot 的 Space，未挂 bot mod，没有改动" /> : null}
         {result?.status === "error" ? <Note text={result.message} danger /> : null}
       </View>
       <View className="mx-4 mt-4 gap-2">
         <PrimaryButton label="运行" icon="play" loading={running} disabled={!client} onPress={() => void run()} />
-        {chatSpaceId ? (
+        {sessionId ? (
           <PrimaryButton
-            label="新建 Chat"
-            icon="square-pen"
+            label="打开主 Chat"
+            icon="messages"
             variant="ghost"
-            onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: chatSpaceId } })}
+            onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId } })}
           />
         ) : null}
       </View>

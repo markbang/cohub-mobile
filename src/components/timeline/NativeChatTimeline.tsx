@@ -274,7 +274,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           } else {
             const turnId = typeof message.meta?.turnId === "string" ? message.meta.turnId : null;
             const turn = turnId ? turnsById.get(turnId) ?? null : null;
-            const canFork = Boolean(turn && isTerminalTurnStatus(turn.status));
+            const canFork = !bot && Boolean(turn && isTerminalTurnStatus(turn.status));
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
             const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");

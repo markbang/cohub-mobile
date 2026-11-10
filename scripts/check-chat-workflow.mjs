@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { botEntries, botSessionsBySpace, intermediateBlocks, isBotSpace, needsYouItems, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
+import { botEntries, intermediateBlocks, isBotSpace, newerSession, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -407,7 +407,7 @@ const chromeScope = {
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   // Bot mode is off unless a check turns it on, so every other screen renders as before.
   useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
-  useBots: () => ({ entries: [], needsYou: [], loading: false, error: null, refetch: async () => {} }), BotRow: "BotRow", NeedsYouRow: "NeedsYouRow", BotTitle: "BotTitle", BotTurnTalk: "BotTurnTalk",
+  useBots: () => ({ entries: [], loading: false, error: null, openSession: async () => "", refetch: async () => {} }), BotRow: "BotRow", BotTitle: "BotTitle", BotTurnTalk: "BotTurnTalk",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
@@ -1847,6 +1847,41 @@ try {
   assert.equal(list().props.data[1].tree.depth, 1);
   screen.unmount();
 } finally { mock.timers.reset(); }
+// Bot mode in Chats: the Bots view is one row per Bot, each opening its one Chat; Bot Chats leave the other views.
+{
+  const screen = createScreenHooks();
+  const opened = [];
+  const chat = (id, spaceId) => ({ id, spaceId, title: id });
+  const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-old", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
+  let filter = "bots";
+  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, session: chat("main", "bot"), running: false, needsYou: false };
+  const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
+    ...chromeScope, ...screen.hooks,
+    useRouter: () => ({ push: () => {} }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
+    useOpenChat: () => (target) => opened.push(target.sessionId),
+    useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
+    ...appHooks(() => ({ state, client: {}, userUuid: "user", connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {}, loadComposerDraft: async () => "", saveComposerDraft: async () => {} })),
+    useBotMode: () => ({ enabled: true, loaded: true, error: null }), isBotSpace,
+    useBots: () => ({ entries: [entry], loading: false, error: null, openSession: async (spaceId) => spaceId === "bot" ? "main" : "", refetch: async () => {} }),
+    displaySpaceName: (space) => space.name ?? "",
+    useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
+    useSourceSessions: () => ({ sessions: [], loading: false, loadingMore: false, error: null, initialized: true, loadMore: () => {}, reload: () => {} }),
+    useSessionSourcePreference: () => ({ filter, error: null }), saveSessionSourcePreference: async () => {}, loadSessionSourcePreference: async () => filter,
+    useToast: () => () => {}, normalizeSearchQuery, buildSessionForkTree, sessionListStatus, CHAT_SEARCH_TYPES: ["chat", "space"],
+    Screen: "Screen", LegendList: "LegendList", DataError: "DataError", EmptyState: "EmptyState", LoadingRows: "LoadingRows", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader",
+    nativeMenus: false, AnchoredActionMenu: "AnchoredActionMenu", MenuPresence: "MenuPresence", MenuAnchor: "MenuAnchor",
+  });
+  const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
+  assert.deepEqual(list().props.data.map((item) => [item.kind, item.entry?.space.id]), [["bot", "bot"]], "the Bots view lists Bots, not Chats");
+  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] }))[0];
+  assert.equal(row.type, "BotRow");
+  row.props.onPress();
+  await flushSync();
+  assert.deepEqual(opened, ["main"], "a Bot opens its one Chat");
+  filter = "all";
+  assert.deepEqual(list().props.data.map((item) => item.session.id), ["plain"], "with Bot mode on, Bot Chats leave the other views");
+  screen.unmount();
+}
 const fadeAnimation = { duration: () => fadeAnimation };
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
 assert.equal(renderConnectionBanner({ visible: false }), null, "routine connection states must not show a banner");
@@ -5632,6 +5667,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
 }
 
 // The primary Bot is created once, adopted when it already exists, and never touches a same-slug Space without the bot mod.
+// Each Bot is one Chat, named in `.agents/bot.json`; a missing file or a deleted Chat gets a new one, nothing else is rewritten.
 {
   const BOT_MOD = "bot-mod-space";
   const source = ts.transpileModule(readFileSync(new URL("../src/data/primary-bot.ts", import.meta.url), "utf8"), {
@@ -5644,9 +5680,12 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
     throw new Error(`Unexpected primary-bot dependency: ${name}`);
   }, primaryBot);
   const httpError = (status, message = `HTTP ${status}`) => Object.assign(new Error(message), { status });
-  const botClient = ({ owned = [], mods = [], files = {}, createError = null } = {}) => {
+  const BOT_JSON = ".agents/bot.json";
+  const botClient = ({ owned = [], mods = [], files = {}, chats = [], readErrors = {}, createError = null } = {}) => {
     const calls = [];
     const lookups = [...owned];
+    const known = new Set(chats);
+    let created = 0;
     const client = {
       spaces: {
         getOwnedBySlug: async (slug) => { calls.push(["get", slug]); const next = lookups.shift(); if (next instanceof Error) throw next; return next; },
@@ -5655,8 +5694,17 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
       space: (spaceId) => ({
         mods: { list: async () => { calls.push(["mods", spaceId]); return { items: mods }; } },
         files: {
-          read: async (path) => { calls.push(["read", spaceId, path]); if (path in files) return { path, content: files[path] }; throw httpError(404, "File not found."); },
+          read: async (path) => {
+            calls.push(["read", spaceId, path]);
+            if (readErrors[path]) throw readErrors[path];
+            if (path in files) return { path, content: files[path] };
+            throw httpError(404, "File not found.");
+          },
           write: async (input) => { calls.push(["write", spaceId, input]); files[input.path] = input.content; return { path: input.path }; },
+        },
+        sessions: {
+          list: async (options) => { calls.push(["chats", spaceId, options.ids]); return { sessions: options.ids.filter((id) => known.has(id)).map((id) => ({ id, spaceId })) }; },
+          create: async () => { const id = `chat-${++created}`; known.add(id); calls.push(["chat", spaceId]); return { ok: true, session: { id, spaceId } }; },
         },
         profile: async (body) => { calls.push(["profile", spaceId, body]); return { space: { id: spaceId } }; },
       }),
@@ -5665,45 +5713,65 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   };
   const botMod = (enabled = true) => ({ modSpaceId: BOT_MOD, enabled });
   const personaWrite = (spaceId) => ["write", spaceId, { path: ".agents/APPEND_SYSTEM.md", content: primaryBot.PRIMARY_BOT_PERSONA, encoding: "utf-8" }];
+  const botJsonWrite = (spaceId, session) => ["write", spaceId, { path: BOT_JSON, content: `${JSON.stringify({ session })}\n`, encoding: "utf-8" }];
+  const writes = (calls) => calls.filter(([kind]) => kind === "write" || kind === "chat");
 
   const avatar = "https://cca.neta.art/avatars/webp/a.webp";
   const fresh = botClient({ owned: [httpError(404)], files: { "avatars.json": JSON.stringify([avatar]) } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot" });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1" });
   assert.deepEqual(fresh.calls, [
     ["get", "cohubbot"],
     ["create", { name: "Cohub", slug: "cohubbot", mods: [{ modSpaceId: BOT_MOD, mountSlug: "cohubbot" }] }],
     ["read", BOT_MOD, "avatars.json"],
     ["profile", "new-bot", { avatarUrl: avatar }],
     personaWrite("new-bot"),
-  ], "a missing Bot is created with the bot mod, an avatar from the bot mod's list, and its persona");
-
-  const noAvatars = botClient({ owned: [httpError(404)] });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(noAvatars.client), { status: "created", spaceId: "new-bot" }, "an unreadable avatar list still creates the Bot");
+    ["chat", "new-bot"],
+    botJsonWrite("new-bot", "chat-1"),
+  ], "a missing Bot is created with the bot mod, an avatar from the bot mod's list, its persona, and its one Chat");
   assert.ok(primaryBot.PRIMARY_BOT_PERSONA.startsWith("# Cohub\n\nRole: primary\n"));
 
+  const noAvatars = botClient({ owned: [httpError(404)] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(noAvatars.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1" }, "an unreadable avatar list still creates the Bot");
+
   const existing = botClient({ owned: [{ id: "bot" }], mods: [{ modSpaceId: "other", enabled: true }, botMod(false)], files: { "avatars.json": JSON.stringify([avatar]) } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(existing.client), { status: "ready", spaceId: "bot", modEnabled: false }, "a disabled bot mod is reported, not changed");
-  assert.deepEqual(existing.calls.at(-1), personaWrite("bot"), "a Bot missing its persona gets one");
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(existing.client), { status: "ready", spaceId: "bot", sessionId: "chat-1", modEnabled: false }, "a disabled bot mod is reported, not changed");
+  assert.deepEqual(writes(existing.calls), [["chat", "bot"], botJsonWrite("bot", "chat-1"), personaWrite("bot")], "a Bot missing its persona and bot.json gets both");
   assert.ok(!existing.calls.some(([kind]) => kind === "profile"), "an existing Bot keeps its avatar");
 
-  const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom" } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", modEnabled: true });
-  assert.equal(kept.files[".agents/APPEND_SYSTEM.md"], "# Custom", "an existing persona is never overwritten");
+  const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "main" }) }, chats: ["main"] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", sessionId: "main", modEnabled: true });
+  assert.deepEqual(writes(kept.calls), [], "an existing persona and a bot.json naming a live Chat are never rewritten");
+  assert.equal(kept.files[".agents/APPEND_SYSTEM.md"], "# Custom");
+
+  const gone = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "deleted" }) } });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(gone.client), { status: "ready", spaceId: "bot", sessionId: "chat-1", modEnabled: true });
+  assert.deepEqual(writes(gone.calls), [["chat", "bot"], botJsonWrite("bot", "chat-1")], "a bot.json naming a deleted Chat points at a new one");
+
+  const unreadable = botClient({ owned: [{ id: "bot" }], mods: [botMod()], readErrors: { [BOT_JSON]: httpError(503, "sandbox offline") } });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(unreadable.client), { status: "error", message: "sandbox offline" });
+  assert.deepEqual(writes(unreadable.calls), [], "a bot.json read failure creates and writes nothing, not even a missing persona");
+
+  const malformed = botClient({ files: { [BOT_JSON]: "{\"chat\":1}" } });
+  await assert.rejects(primaryBot.ensureBotSession(malformed.client, "sub"), /does not name a Chat/);
+  assert.deepEqual(writes(malformed.calls), [], "a bot.json someone else wrote is never overwritten");
+
+  const sub = botClient({ chats: ["older"] });
+  assert.equal((await primaryBot.ensureBotSession(sub.client, "sub")).id, "chat-1", "a sub-Bot without bot.json gets its Chat on first open");
+  assert.deepEqual(writes(sub.calls), [["chat", "sub"], botJsonWrite("sub", "chat-1")]);
 
   const conflict = botClient({ owned: [{ id: "mine" }], mods: [{ modSpaceId: "other", enabled: true }] });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(conflict.client), { status: "conflict", spaceId: "mine" });
   assert.deepEqual(conflict.calls, [["get", "cohubbot"], ["mods", "mine"]], "a same-slug Space without the bot mod is left untouched");
 
-  const raced = botClient({ owned: [httpError(404), { id: "other-device" }], mods: [botMod()], createError: httpError(409, "space slug already exists") });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(raced.client), { status: "ready", spaceId: "other-device", modEnabled: true }, "a slug conflict on create adopts the Space another device made");
-  assert.deepEqual(raced.calls.at(-1), personaWrite("other-device"));
+  const raced = botClient({ owned: [httpError(404), { id: "other-device" }], mods: [botMod()], createError: httpError(409, "space slug already exists"), files: { ".agents/APPEND_SYSTEM.md": "# Cohub", [BOT_JSON]: JSON.stringify({ session: "theirs" }) }, chats: ["theirs"] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(raced.client), { status: "ready", spaceId: "other-device", sessionId: "theirs", modEnabled: true }, "a slug conflict on create adopts the Bot and the Chat another device made");
 
   const failed = botClient({ owned: [httpError(500, "server down")] });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(failed.client), { status: "error", message: "server down" });
   assert.deepEqual(failed.calls, [["get", "cohubbot"]], "other lookup errors create nothing");
 }
 
-// Bot mode: which Spaces are Bots, how their Chats merge and order, what waits on the user, and what a Bot said between steps.
+// Bot mode: which Spaces are Bots, one row per Bot ordered with the primary first, and what a Bot said between steps.
 {
   assert.equal(isBotSpace({ slug: "cohubbot" }), true);
   assert.equal(isBotSpace({ slug: "cohubbot-writer" }), true);
@@ -5711,27 +5779,21 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(isBotSpace({ slug: "my-cohubbot" }), false);
   assert.equal(isBotSpace({ slug: null }), false);
 
-  const chat = (id, spaceId, at, extra = {}) => ({ id, spaceId, title: id, latestMessageText: null, lastMessageAt: at, updatedAt: at, ...extra });
-  const cached = [chat("cached-a", "writer", "2026-11-01T00:00:00Z"), chat("cached-b", "primary", "2026-11-02T00:00:00Z"), chat("elsewhere", "space", "2026-11-09T00:00:00Z")];
-  const loaded = new Map([["writer", [chat("old", "writer", "2026-11-03T00:00:00Z"), chat("new", "writer", "2026-11-05T00:00:00Z")]]]);
-  const bySpace = botSessionsBySpace(["primary", "writer", "idle"], cached, loaded);
-  assert.deepEqual(bySpace.get("writer").map((item) => item.id), ["new", "old"], "a Bot's server list replaces its cached rows, newest first");
-  assert.deepEqual(bySpace.get("primary").map((item) => item.id), ["cached-b"], "until its read lands, a Bot paints from the cached home list");
-  assert.deepEqual(bySpace.get("idle"), []);
-  const renamed = botSessionsBySpace(["writer"], [chat("old", "writer", "2026-11-03T00:00:00Z", { updatedAt: "2026-11-07T00:00:00Z", latestMessageText: "newer" })], loaded).get("writer");
-  assert.deepEqual(renamed.map((item) => [item.id, item.latestMessageText]), [["old", "newer"], ["new", null]], "a home row updated after the Bot's list wins for that Chat, and the Chat updated last opens first");
+  const chat = (id, at, extra = {}) => ({ id, spaceId: "space", title: id, latestMessageText: null, lastMessageAt: at, lastMessageId: null, updatedAt: at, ...extra });
+  const listed = chat("main", "2026-11-03T00:00:00Z", { latestMessageText: "old" });
+  assert.equal(newerSession(listed, chat("main", "2026-11-07T00:00:00Z", { latestMessageText: "new" })).latestMessageText, "new", "a home row updated after the Bot's read wins");
+  assert.equal(newerSession(listed, chat("main", "2026-11-01T00:00:00Z")).latestMessageText, "old");
+  assert.equal(newerSession(null, listed), listed);
 
   const spaces = [
     { id: "writer", slug: "cohubbot-writer", updatedAt: "2026-10-01T00:00:00Z" },
     { id: "idle", slug: "cohubbot-idle", lastActivityAt: "2026-11-04T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" },
     { id: "primary", slug: "cohubbot", updatedAt: "2026-10-01T00:00:00Z" },
   ];
-  const waiting = new Map([["writer", [chat("ask", "writer", "2026-11-06T00:00:00Z")]], ["idle", [chat("older-ask", "idle", "2026-11-02T00:00:00Z")]]]);
-  const entries = botEntries(spaces, bySpace, waiting, new Set(["writer"]));
-  assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow their latest activity");
-  assert.deepEqual(entries.map((entry) => [entry.latest?.id ?? null, entry.running, entry.needsYou]), [["cached-b", false, false], ["new", true, true], [null, false, true]], "a Bot shows running while any of its Chats runs");
-  assert.deepEqual(needsYouItems(spaces, waiting).map((item) => [item.space.id, item.session.id]), [["writer", "ask"], ["idle", "older-ask"]], "Chats waiting on the user group across Bots, newest first");
-  assert.deepEqual(needsYouItems(spaces, new Map()), [], "with nothing waiting the group is empty and hidden");
+  const mains = new Map([["writer", chat("w", "2026-11-05T00:00:00Z")], ["idle", null], ["primary", chat("p", "2026-11-02T00:00:00Z")]]);
+  const entries = botEntries(spaces, mains, new Set(["idle"]), new Set(["writer"]));
+  assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow their Chat's activity, or the Space's before it has one");
+  assert.deepEqual(entries.map((entry) => [entry.session?.id ?? null, entry.running, entry.needsYou]), [["p", false, false], ["w", true, false], [null, false, true]], "each row reflects only its Bot's one Chat");
 
   const blocks = intermediateBlocks([
     { content: [{ type: "text", text: "Looking at the repo." }, { type: "tool_use", id: "t1", name: "bash", input: {} }] },

@@ -14,7 +14,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField, SectionHeader } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference, type ChatsSource } from "@/src/data/session-filter-preference";
 import { useSourceSessions, type ChatsListFilter } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
@@ -28,11 +28,11 @@ import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLarge
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
-import { BotRow, NeedsYouRow } from "@/src/components/BotRow";
-import { PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
+import { BotRow } from "@/src/components/BotRow";
+import { isBotSpace, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBots } from "@/src/data/use-bots";
-import { displaySessionTitle, displaySpaceName } from "@/src/utils";
+import { displaySpaceName } from "@/src/utils";
 
 type ChatListItem =
   | { kind: "local-session"; session: import("@neta-art/cohub").UserSessionListItem; fork: import("@neta-art/cohub").SessionListFork | null; tree: SessionTreePosition | null }
@@ -40,8 +40,6 @@ type ChatListItem =
   | { kind: "local-space"; space: import("@neta-art/cohub").SpaceRecord }
   | { kind: "remote-space"; hit: RemoteSpaceSearchHit }
   | { kind: "fork-toggle"; rootId: string; hidden: number; expanded: boolean }
-  | { kind: "bots-section"; id: "needs-you" | "bots" }
-  | { kind: "needs-you"; space: import("@neta-art/cohub").SpaceRecord; session: import("@neta-art/cohub").SessionRecord }
   | { kind: "bot"; entry: BotEntry<import("@neta-art/cohub").SpaceRecord, import("@neta-art/cohub").SessionRecord> };
 const CHAT_SEARCH_TYPES = ["chat", "space"] as const;
 /** How long the row order stays held after a drag or fling settles, so a follow-up tap lands on the row it aimed at. */
@@ -105,7 +103,7 @@ export default function ChatsScreen() {
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
-    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" || item.kind === "bots-section" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" || item.kind === "needs-you" ? item.space.id : item.kind === "bot" ? item.entry.space.id : item.hit.spaceId]))].slice(0, 10);
+    const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.kind === "bot" ? item.entry.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
   useSyncQuery("chats", refreshChats, 15_000, listFilter === "all" && !state.booting);
@@ -117,16 +115,19 @@ export default function ChatsScreen() {
     void refreshSessionStatuses(sourceSessionList, { silent: true });
   }, [refreshSessionStatuses, listFilter, sourceSessionList]);
 
+  // In Bot mode a Bot is reached only as a Bot: its Spaces' Chats leave the other views and search.
+  const botSpaceIds = useMemo(() => new Set(botMode ? state.spaces.filter(isBotSpace).map((space) => space.id) : []), [botMode, state.spaces]);
   const localSessions = useMemo(() => {
     const needle = trimmedQuery.toLowerCase();
-    if (!needle) return baseSessions;
-    return baseSessions.filter((session) => [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [baseSessions, trimmedQuery]);
+    const shown = baseSessions.filter((session) => !botSpaceIds.has(session.spaceId));
+    if (!needle) return shown;
+    return shown.filter((session) => [session.title, session.latestMessageText, session.space?.name].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
+  }, [baseSessions, botSpaceIds, trimmedQuery]);
   const localSpaces = useMemo(() => {
     if (listFilter !== "all" || !trimmedQuery) return [];
     const needle = trimmedQuery.toLowerCase();
-    return state.spaces.filter((space) => [space.name, space.title, space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
-  }, [listFilter, state.spaces, trimmedQuery]);
+    return state.spaces.filter((space) => !botSpaceIds.has(space.id) && [space.name, space.title, space.description].some((value) => value ? normalizeSearchQuery(value).toLowerCase().includes(needle) : false));
+  }, [botSpaceIds, listFilter, state.spaces, trimmedQuery]);
   const countSpaceIds = useMemo(() => localSpaces.filter((space) => !space.description?.trim()).map((space) => space.id), [localSpaces]);
   // Search results reuse already-probed counts; they do not fan out probes of their own.
   const spaceSessionCounts = useSpaceSessionCounts(client, countSpaceIds, { probe: false });
@@ -135,13 +136,7 @@ export default function ChatsScreen() {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
     if (botsView) {
       const needle = trimmedQuery.toLowerCase();
-      const matches = (...values: string[]) => !needle || values.some((value) => normalizeSearchQuery(value).toLowerCase().includes(needle));
-      const waiting = bots.needsYou.filter((item) => matches(displaySpaceName(item.space), displaySessionTitle(item.session)));
-      const entries = bots.entries.filter((entry) => matches(displaySpaceName(entry.space)));
-      return [
-        ...(waiting.length ? [{ kind: "bots-section" as const, id: "needs-you" as const }, ...waiting.map((item) => ({ kind: "needs-you" as const, ...item })), ...(entries.length ? [{ kind: "bots-section" as const, id: "bots" as const }] : [])] : []),
-        ...entries.map((entry) => ({ kind: "bot" as const, entry })),
-      ];
+      return bots.entries.filter((entry) => !needle || normalizeSearchQuery(displaySpaceName(entry.space)).toLowerCase().includes(needle)).map((entry) => ({ kind: "bot" as const, entry }));
     }
     if (!trimmedQuery && listFilter === "all") {
       const running = new Set(runningIds);
@@ -152,8 +147,8 @@ export default function ChatsScreen() {
     }
     if (!trimmedQuery || listFilter !== "all") return localSessions.map(flatSession);
     const remoteQueryMatches = remoteSearch.query === trimmedQuery;
-    const remoteSessions = remoteQueryMatches ? remoteSearch.sessions : [];
-    const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces : [];
+    const remoteSessions = remoteQueryMatches ? remoteSearch.sessions.filter((hit) => !botSpaceIds.has(hit.spaceId)) : [];
+    const remoteSpaces = remoteQueryMatches ? remoteSearch.spaces.filter((hit) => !botSpaceIds.has(hit.spaceId)) : [];
     const remoteSessionIds = new Set(remoteSessions.map((hit) => hit.sessionId));
     const remoteSpaceIds = new Set(remoteSpaces.map((hit) => hit.spaceId));
     return [
@@ -162,7 +157,7 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [bots.entries, bots.needsYou, botsView, expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
+  }, [botSpaceIds, bots.entries, botsView, expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.
@@ -224,24 +219,20 @@ export default function ChatsScreen() {
   const openSearchSession = (sessionId: string, target?: SessionNavigationTarget) => {
     openChat({ sessionId, turn: target?.turn != null ? String(target.turn) : undefined, turnId: target?.turnId || undefined });
   };
-  const newBotChat = (spaceId: string) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } });
-  const openBot = (entry: (typeof bots.entries)[number]) => {
-    if (entry.latest) openSearchSession(entry.latest.id);
-    else newBotChat(entry.space.id);
+  // A Bot is one continuous Chat: its row always opens that Chat, recording it first if the Bot has none yet.
+  const openBot = async (spaceId: string, prefill?: string) => {
+    let sessionId: string;
+    try {
+      sessionId = await bots.openSession(spaceId);
+    } catch (error) {
+      toast({ title: t("bots.openFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
+      return;
+    }
+    // Opening never waits on the prefill: a local draft failure still lands on the Bot.
+    if (prefill) await loadComposerDraft(spaceId, { kind: "session", sessionId }).then((draft) => draft.trim() ? undefined : saveComposerDraft(spaceId, { kind: "session", sessionId }, prefill)).catch(() => undefined);
+    openSearchSession(sessionId);
   };
   const primaryBot = bots.entries.find((entry) => entry.space.slug === PRIMARY_BOT_SLUG) ?? null;
-  // Opens the primary Bot's Chat with the request typed in, unless the user already left a draft there.
-  const newBot = async () => {
-    if (!primaryBot) return;
-    const spaceId = primaryBot.space.id;
-    const scope = primaryBot.latest ? { kind: "session" as const, sessionId: primaryBot.latest.id } : { kind: "new" as const };
-    try {
-      if (!(await loadComposerDraft(spaceId, scope)).trim()) await saveComposerDraft(spaceId, scope, t("bots.newBot.prompt"));
-    } catch {
-      toast({ title: t("bots.newBot.draftFailed"), tone: "danger" });
-    }
-    openBot(primaryBot);
-  };
 
   const sourceOptions: readonly { value: ChatsSource; label: string; detail?: string; icon: NativeMenuAction["icon"] }[] = [
     { value: "all", label: t("chats.source.all"), icon: "messages" },
@@ -257,7 +248,7 @@ export default function ChatsScreen() {
   ];
   const hasActiveFilter = Boolean(trimmedQuery) || listFilter !== "all" || botsView;
   const newAction = botsView
-    ? { label: t("bots.newBot"), icon: "plus" as const, disabled: !primaryBot, onPress: () => void newBot() }
+    ? { label: t("bots.newBot"), icon: "plus" as const, disabled: !primaryBot, onPress: () => { if (primaryBot) void openBot(primaryBot.space.id, t("bots.newBot.prompt")); } }
     : { label: t("chats.action.newChat"), icon: "square-pen" as const, disabled: false, onPress: () => router.push("/new-chat") };
   const pullRefresh = useBrandRefresh({ refreshing: pullRefreshing, onRefresh: refreshOnPull });
   useNativeHeader({
@@ -311,9 +302,7 @@ export default function ChatsScreen() {
           if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
           if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
           if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
-          if (item.kind === "bots-section") return <SectionHeader title={item.id === "needs-you" ? t("bots.needsYou") : t("bots.title")} />;
-          if (item.kind === "needs-you") return <NeedsYouRow space={item.space} session={item.session} onPress={() => openSearchSession(item.session.id)} />;
-          if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => openBot(item.entry)} onNewChat={() => newBotChat(item.entry.space.id)} />;
+          if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} />;
           if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
           return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
         }}
@@ -354,8 +343,6 @@ export default function ChatsScreen() {
 }
 
 function chatItemKey(item: ChatListItem) {
-  if (item.kind === "bots-section") return `bots-section:${item.id}`;
-  if (item.kind === "needs-you") return `needs-you:${item.session.id}`;
   if (item.kind === "bot") return `bot:${item.entry.space.id}`;
   return item.kind === "remote-session" ? `remote-session:${item.hit.sessionId}` : item.kind === "local-session" ? `session:${item.session.id}` : item.kind === "fork-toggle" ? `forks:${item.rootId}` : item.kind === "remote-space" ? `remote-space:${item.hit.spaceId}` : `space:${item.space.id}`;
 }
