@@ -542,6 +542,17 @@ export function botStreamNode(ctx: NodeContext, input: { content: ContentBlock[]
   return botRow([...bubble, ...status]);
 }
 
+/** `BotNoteBubble`: a note the Bot wrote into its Chat, faintly naming the other Bot it came from. */
+export function botNoteNode(ctx: NodeContext, message: MessageRecord, from: string | null, sandboxImages: SandboxImages): TimelineNode | null {
+  const { theme, t } = ctx;
+  const body = hasRenderableContent(message.content)
+    ? botBody(ctx, message.id, message.content, { sandboxImages })
+    : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, getBubbleMaxWidth(ctx.width) - BUBBLE_PADDING_X * 2, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
+  if (body.length === 0) return null;
+  const sender = from ? [text(t("bots.note.from", { name: from }), textStyle("micro", theme.colors.textFaint), { numberOfLines: 1 })] : [];
+  return botRow([botBubble(ctx, [...sender, ...body, ...botClock(ctx, formatMessageClock(message.createdAt))])]);
+}
+
 /** `BotIncomingBubble`: a message another Bot sent here, with who sent it; the name opens where it came from. */
 export function botIncomingNode(ctx: NodeContext, message: MessageRecord, sender: BotPeer, source: { spaceId: string; sessionId: string; turnId: string } | null): TimelineNode {
   const { theme, t } = ctx;

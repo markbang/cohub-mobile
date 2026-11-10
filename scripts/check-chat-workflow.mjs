@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { botEntries, intermediateBlocks, isBotSpace, newerSession, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
+import { botDirectory, botEntries, intermediateBlocks, isBotSpace, isNoteMessage, newerSession, noteSender, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4029,13 +4029,26 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
 }
 {
   const turn = { id: "turn-a", status: "completed", meta: {} };
-  const botScope = (bot, meta = {}) => compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta }]]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotIncomingBubble: "BotIncomingBubble", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Writer", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
-  const botRow = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta) => chromeNodes(botScope(bot, meta)({ item, index: 0 })).map((node) => node.type);
+  const botScope = (bot, meta = {}, kind = "agent") => compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta, executionKind: kind }]]]), turnsById: new Map([["turn-a", { ...turn, meta, executionKind: kind }]]), isNoteMessage, noteSender, BotNoteBubble: "BotNoteBubble", botPeers: new Map([[relatedId(7), { name: "Writer", avatarUrl: null }]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotIncomingBubble: "BotIncomingBubble", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Writer", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+  const botNodes = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta, kind) => chromeNodes(botScope(bot, meta, kind)({ item, index: 0 }));
+  const botRow = (...args) => botNodes(...args).map((node) => node.type);
   const shown = ["TurnProcess", "BotTurnTalk", "SentToList", "SentFromLink", "BotHandoffList", "BotIncomingBubble", "BotReplyBubble", "MessageBubble"];
   assert.deepEqual(botRow(true).filter((type) => shown.includes(type)), ["MessageBubble", "BotTurnTalk", "BotHandoffList"], "a Bot Turn shows what the Bot said, never its steps");
   assert.deepEqual(botRow(true, { id: "reply", role: "assistant", meta: { turnSequence: 1 } }).filter((type) => shown.includes(type)), ["BotReplyBubble"], "a Bot's reply is a bubble without the reply meta");
   assert.deepEqual(botRow(true, undefined, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).filter((type) => shown.includes(type)), ["BotIncomingBubble", "BotTurnTalk", "BotHandoffList"], "a message another Bot sent shows as that Bot's bubble");
   assert.ok(!botRow(false).includes("BotTurnTalk") && botRow(false).includes("TurnProcess"), "other Chats are unchanged");
+  // A note (`spaces prompt --note`) is stored as a user message; in a Bot's Chat it is the Bot speaking.
+  const note = (bot, meta) => botNodes(bot, { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1, turnId: "turn-a" } }, meta, "note");
+  const ownNote = note(true).find((node) => node.type === "BotNoteBubble");
+  assert.ok(ownNote && !note(true).some((node) => node.type === "MessageBubble"), "a note sits on the Bot's side, not the user's");
+  assert.equal(ownNote.props.from, null, "a note with no other Bot behind it names no sender");
+  const relayed = note(true, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).find((node) => node.type === "BotNoteBubble");
+  assert.equal(relayed?.props.from, "Writer", "a report from another Bot names it");
+  assert.ok(note(false).some((node) => node.type === "MessageBubble") && !note(false).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows a note as before");
+  assert.equal(isNoteMessage({ role: "user", meta: { turn: { executionKind: "note" } } }, null), true, "a note recorded on the message itself counts too");
+  assert.equal(isNoteMessage({ role: "assistant", meta: {} }, { executionKind: "note" }), false);
+  assert.equal(noteSender({ spaceId: "self" }, "self", new Map([["self", { name: "Me", avatarUrl: null }]])), null, "the Bot's own check-in notes name no sender");
+  assert.equal(noteSender({ spaceId: "unknown" }, "self", new Map()), null, "an origin that is not a Bot names no sender");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5793,6 +5806,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(isBotSpace({ slug: "cohubbots" }), false, "only the exact slug or a cohubbot- prefix marks a Bot");
   assert.equal(isBotSpace({ slug: "my-cohubbot" }), false);
   assert.equal(isBotSpace({ slug: null }), false);
+  const missing = Object.assign(new Error("File or directory not found."), { status: 404 });
+  assert.deepEqual(botDirectory({ entries: [], loading: false, error: missing }), { entries: [], known: true, error: null }, "a folder a Bot has not written yet reads as empty");
+  assert.deepEqual(botDirectory({ entries: [], loading: false, error: new Error("sandbox offline") }), { entries: [], known: false, error: "sandbox offline" }, "other failures still show, and nothing is called empty");
 
   const chat = (id, at, extra = {}) => ({ id, spaceId: "space", title: id, latestMessageText: null, lastMessageAt: at, lastMessageId: null, updatedAt: at, ...extra });
   const listed = chat("main", "2026-11-03T00:00:00Z", { latestMessageText: "old" });

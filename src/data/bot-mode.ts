@@ -1,6 +1,26 @@
-import type { ContentBlock, SessionRecord, SpaceRecord } from "@neta-art/cohub";
+import type { ContentBlock, MessageRecord, SessionRecord, SessionTurnRecord, SpaceRecord } from "@neta-art/cohub";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
+/**
+ * A folder a Bot has not written yet is empty, not an error. `known` is false while loading or after
+ * a failure, so nothing is called empty that could not be checked.
+ */
+export function botDirectory<E>(directory: { entries: E[]; loading: boolean; error: Error | null }): { entries: E[]; known: boolean; error: string | null } {
+  if ((directory.error as { status?: unknown } | null)?.status === 404) return { entries: [], known: true, error: null };
+  return { entries: directory.entries, known: !directory.loading && !directory.error, error: directory.error?.message ?? null };
+}
+
+/** Which other Bot a note came from, when its origin names one; the Bot's own notes (check-ins) and unknown senders name none. */
+export function noteSender(source: { spaceId: string } | null, ownSpaceId: string, peers: ReadonlyMap<string, BotPeer> | undefined): string | null {
+  return source && source.spaceId !== ownSpaceId ? peers?.get(source.spaceId)?.name ?? null : null;
+}
+
+/** A note (`spaces prompt --note`) is recorded as a user message with no reply; in a Bot's Chat it is the Bot speaking. */
+export function isNoteMessage(message: Pick<MessageRecord, "role" | "meta">, turn: Pick<SessionTurnRecord, "executionKind"> | null | undefined) {
+  if (message.role !== "user") return false;
+  const recorded = message.meta?.turn;
+  return turn?.executionKind === "note" || (typeof recorded === "object" && recorded !== null && (recorded as { executionKind?: unknown }).executionKind === "note");
+}
 
 export type BotSpace = Pick<SpaceRecord, "id" | "slug"> & Partial<Pick<SpaceRecord, "name" | "title" | "publicProfile" | "lastActivityAt" | "updatedAt">>;
 export type BotSession = Pick<SessionRecord, "id" | "spaceId" | "title" | "latestMessageText" | "lastMessageAt" | "updatedAt">;

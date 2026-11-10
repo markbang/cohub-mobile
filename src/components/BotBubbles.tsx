@@ -75,6 +75,20 @@ export function BotStreamBubble({ content, status, availableWidth }: { content: 
   </BotRow>;
 }
 
+/** A note the Bot wrote into its Chat (a report back, a check-in): its own words, faintly naming the other Bot it came from. */
+export function BotNoteBubble({ message, from, spaceId, availableWidth }: { message: MessageRecord; from: string | null; spaceId: string | null; availableWidth?: number }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const maxWidth = useBubbleWidth(availableWidth);
+  const content: ContentBlock[] = hasRenderableContent(message.content) ? message.content : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
+  if (content.length === 0) return null;
+  return <BotRow><BotBubble maxWidth={maxWidth} spaceId={spaceId}>
+    {from ? <Text numberOfLines={1} className="text-micro text-fg-faint">{t("bots.note.from", { name: from })}</Text> : null}
+    <MessageContent content={content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} sandboxImages />
+    <Clock value={message.createdAt} />
+  </BotBubble></BotRow>;
+}
+
 /** A message another Bot sent here, with who sent it; the name opens where it came from. */
 export function BotIncomingBubble({ message, sender, source, onOpen, availableWidth }: { message: MessageRecord; sender: BotPeer; source: RelatedSessionRef; onOpen: (ref: RelatedSessionRef) => void; availableWidth?: number }) {
   const theme = useAppTheme();
