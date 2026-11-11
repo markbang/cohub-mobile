@@ -96,6 +96,12 @@ export function botModelFrom(raw: Record<string, unknown> | null | undefined): C
   };
 }
 
+/** The context window saved in a Bot's `bot.json`; null is no choice, so the default applies. */
+export function botContextWindowFrom(raw: Record<string, unknown> | null | undefined): number | null {
+  const value = raw?.contextWindow;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
 /** The model a Turn ran with, for a Bot page with no saved choice: its working Chat is the truth. */
 export function turnModelSelection(turn: { provider?: string | null; model?: string | null; meta?: unknown } | null | undefined): ChatModelSelection | null {
   if (!turn?.model) return null;
