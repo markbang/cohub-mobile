@@ -1,5 +1,7 @@
+type SessionOpenOptions = { notesOnly?: boolean };
+
 type SessionLifecycleOptions = {
-  load: (sessionId: string) => Promise<void>;
+  load: (sessionId: string, options?: SessionOpenOptions) => Promise<void>;
   release: (sessionId: string) => void;
   releaseDelayMs: number;
 };
@@ -25,7 +27,7 @@ export function createSessionLifecycle(options: SessionLifecycleOptions) {
   };
 
   return {
-    open(sessionId: string): Promise<void> {
+    open(sessionId: string, loadOptions?: SessionOpenOptions): Promise<void> {
       const existing = sessions.get(sessionId);
       if (existing) {
         if (existing.timer !== null) clearTimeout(existing.timer);
@@ -33,14 +35,14 @@ export function createSessionLifecycle(options: SessionLifecycleOptions) {
         existing.readers += 1;
         return existing.task;
       }
-      const task = options.load(sessionId);
+      const task = options.load(sessionId, loadOptions);
       sessions.set(sessionId, { readers: 1, task, timer: null });
       return task;
     },
     /** Start the load on press-in without taking a reader; `open` reuses the in-flight task. */
-    prime(sessionId: string): void {
+    prime(sessionId: string, loadOptions?: SessionOpenOptions): void {
       if (sessions.has(sessionId)) return;
-      const entry: SessionEntry = { readers: 0, task: options.load(sessionId), timer: null };
+      const entry: SessionEntry = { readers: 0, task: options.load(sessionId, loadOptions), timer: null };
       sessions.set(sessionId, entry);
       scheduleRelease(sessionId, entry);
     },

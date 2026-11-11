@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botMessageSpace, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botMessageSpace, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -1100,7 +1100,7 @@ for (const [tab, component, expectedRequests] of [
   findRefresh(source); assert.ok(callback);
   let loads = 0;
   const scope = {
-    useCallback: (fn) => fn, client: {}, dispatch: () => {}, userKey: "user",
+    useCallback: (fn) => fn, client: {}, dispatch: () => {}, userKey: "user", queryClient: { setQueryData: () => undefined },
     stateRef: { current: { sessionViews: {}, sessions: [] } },
     sessionLoadRef: { current: async (id) => { assert.equal(id, "uncached"); loads++; } },
   };
@@ -3621,7 +3621,7 @@ assert.equal(messageContent.includes("usePanelGestureBlocker"), false, "Message 
 assert.equal(messageContent.includes("holdsPanelGesture"), false, "Message markdown must not blanket-block the panel swipe");
 assert.ok(panelsSource.text.includes("prefetchSession"), "opening a Chat from the space panel starts the load on press-in");
 assert.ok(readFileSync(new URL("../app/(tabs)/(chats)/index.tsx", import.meta.url), "utf8").includes("prefetchSession"), "opening a Chat from Chats starts the load on press-in");
-assert.match(readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8"), /useLayoutEffect\(\(\) => \{\s*\/\/ [^\n]*\n\s*if \(!sessionId\) return;\s*void openSession\(sessionId\);/, "Chat open must attach before paint so a prefetch can win the first frame");
+assert.match(readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8"), /useLayoutEffect\(\(\) => \{\s*\/\/ [^\n]*\n\s*if \(!sessionId\) return;\s*void openSession\(sessionId, \{ notesOnly \}\);/, "Chat open must attach before paint so a prefetch can win the first frame");
 
 // Space Chat counts come from a cached probe of the Space's first page.
 const countListCalls = [];
@@ -3960,6 +3960,8 @@ assert.deepEqual(measureMountedView({}), measuredRect, "a mounted view still rep
 assert.ok(CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD >= 1, "a streamed card can grow more than 10% of the screen in one layout");
 assert.ok(CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD > CHAT_TAIL_THRESHOLD, "the smooth pin has room to catch a few lines before snapping");
 const chatSource = readFileSync(new URL("../app/chat/[sessionId].tsx", import.meta.url), "utf8");
+assert.match(chatSource, /abortSession\(bot && botWork \? botWork\.id : sessionId/, "Stop on a Bot's page ends the Chat the Bot works in");
+assert.match(chatSource, /bot \? botWorking : running/, "the Bot's Stop button follows its working Chat");
 assert.ok(chatSource.includes("offsetDelta"), "the pin catching up is distinguished from scrolling toward older messages");
 assert.ok(chatSource.includes("chatTailStalled"), "content growth must run the stall fallback so an opened-while-streaming chat recovers without a manual nudge");
 assert.ok(chatSource.includes("chatTailDisplaced"), "a non-user scroll away from a followed tail must re-pin instead of hiding the jump-to-latest control");
@@ -4715,6 +4717,28 @@ assert.deepEqual(
     void open("session");
     await flushSync();
     assert.deepEqual(deleted, ["local-killed"], "the claimed failed row is removed from the cache, so later cold starts do not flash it");
+  }
+  {
+    // A Bot's page reads only what arrived after its cached notes, instead of the last page again.
+    const calls = [];
+    const cachedNote = { id: "turn-40:user", role: "user", sequence: 79, meta: { turnId: "turn-40", turnSequence: 40 } };
+    const fresh = turnRange(41, 41)[0];
+    const actions = [];
+    const scope = {
+      client: { space: () => ({ session: () => ({ turns: { listPaginated: (options) => { calls.push(options); return Promise.resolve({ turns: [fresh], session: { id: "session", spaceId: "space" }, hasMore: false }); } } }) }) },
+      openTokens: { current: new Map() },
+      stateRef: { current: { sessions: [{ id: "session", spaceId: "space" }], spaces: [{ id: "space", name: "Space" }], sessionViews: { session: { messages: [cachedNote], session: { id: "session", spaceId: "space" }, space: { id: "space", name: "Space" } } } } },
+      dispatch: (action) => actions.push(action), loadMessages: async () => [], settleInterruptedSends, claimedFailedSends, mergeDisplayMessages,
+      deleteMessages: async () => {}, isLocalSend, isFailedSend, sendQueueRef: { current: createSendQueue() }, cachedTurnRange,
+      userKey: "test-user", recordSpaceVisit: () => {}, attachSessionRealtime: () => {}, refreshSession: async () => {},
+      messagesFromTurns, isLiveMessage: () => false, saveMessages: async () => {}, markChatEntry: () => {}, translate: (key) => key,
+      withTimeout: (promise) => promise, displaySpaceName: (space) => space.name, queryClient: { setQueryData: () => undefined },
+    };
+    const open = new Function(...Object.keys(scope), ts.transpileModule(`return (${sessionCallbacks.loadSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
+    await open("session", { notesOnly: true });
+    assert.deepEqual(calls, [{ cursor: 40, direction: "newer", limit: 100 }], "a cached Bot page asks only for notes after its tail");
+    const success = actions.find((action) => action.type === "session-success");
+    assert.deepEqual([success?.turns.length, success?.hasMoreOlder, success?.messages.some((message) => message.id === cachedNote.id)], [1, true, true], "the delta joins the cached notes and still pages older history");
   }
   // A process killed mid-send leaves its row marked in flight; the next cold open settles it.
   const inFlight = { id: "local-a", role: "user", sequence: 9, errorMessage: null, meta: { optimistic: true, clientMessageId: "a", turnSequence: 5, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } };
