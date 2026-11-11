@@ -1,7 +1,8 @@
 import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
-import { Text, TextInput, View } from "react-native";
+import { type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
+import { Text, View } from "react-native";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import type { NativeMenuAction } from "@/src/components/NativeMenu";
@@ -14,7 +15,7 @@ import { useSpaceSessionCounts } from "@/src/data/space-session-counts";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen } from "@/src/ui";
 import { loadSessionSourcePreference, saveSessionSourcePreference, useSessionSourcePreference, type ChatsSource } from "@/src/data/session-filter-preference";
 import { useSourceSessions, type ChatsListFilter } from "@/src/data/use-source-sessions";
 import { useSyncQuery } from "@/src/data/query";
@@ -24,10 +25,11 @@ import { SpaceRow } from "@/src/components/SpaceRow";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, LargeTitleSearchLift, useLargeTitleSearch, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
+import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
 import { BotRow } from "@/src/components/BotRow";
 import { isBotSpace, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
@@ -57,17 +59,18 @@ export default function ChatsScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
   const titleScroll = largeTitleScroll(true);
-  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks }), shallowEqual);
   // Rows read their own status; the list only needs which Chats run, so a Turn update re-renders one row, not every row.
   const runningIds = useAppSelector(({ state }) => state.sessions.filter((session) => sessionListStatus(session, state.sessionLatestTurns[session.id], state.sessionTurnStatuses) === "running").map((session) => session.id), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
-  const searchRef = useRef<TextInput>(null);
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);
   const [query, setQuery] = useState("");
+  const search = useLargeTitleSearch({ onQueryChange: setQuery, scrollY, scrollRef, headerHeight });
+  // An active search pins its field; the bar does not snap under it.
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders && !search.held);
   const sourcePreference = useSessionSourcePreference();
   const botMode = useBotMode(userUuid).enabled;
   // The Bots view is not a server source; with Bot mode off a saved choice of it reads as every source.
@@ -102,7 +105,9 @@ export default function ChatsScreen() {
   const baseSessions = listFilter === "all" ? state.sessions : sourceSessionList;
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   useSpaceRealtime(visibleSpaceIds);
+  const visibleRowsRef = useRef<(keys: readonly string[]) => void>(() => undefined);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
+    visibleRowsRef.current(viewableItems.filter((token) => token.isViewable).map((token) => token.key));
     const ids = [...new Set(viewableItems.filter((token) => token.isViewable).flatMap(({ item }) => item.kind === "fork-toggle" ? [] : [item.kind === "local-session" ? item.session.spaceId : item.kind === "local-space" ? item.space.id : item.kind === "bot" ? item.entry.space.id : item.hit.spaceId]))].slice(0, 10);
     setVisibleSpaceIds((previous) => previous.join(",") === ids.join(",") ? previous : ids);
   }, []);
@@ -170,7 +175,18 @@ export default function ChatsScreen() {
   const holdLimitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingRef = useRef(false);
   const shownItems = useMemo(() => heldOrder?.context === orderContext ? holdOrder(listItems, heldOrder.keys) : listItems, [heldOrder, listItems, orderContext]);
+  const rowMotion = useListContinuity({
+    items: shownItems,
+    keyOf: chatItemKey,
+    list: botsView ? "bots" : listFilter,
+    query: trimmedQuery,
+    // A held order is a finger on the list; the rows it frees afterwards do move.
+    quiet: () => heldOrder !== null || pullRefreshing || state.booting,
+    scrollY,
+    contentInset: nativeHeaders ? 0 : headerHeight,
+  });
   const emptyFill = useEmptyListFill(shownItems.length === 0);
+  useEffect(() => { visibleRowsRef.current = rowMotion.setVisibleKeys; });
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
   const clearOrderTimers = useCallback(() => {
     if (releaseTimerRef.current) clearTimeout(releaseTimerRef.current);
@@ -268,9 +284,18 @@ export default function ChatsScreen() {
         ? <EmptyState icon="sparkles" title={t("bots.empty")} />
       : <EmptyState icon={hasActiveFilter ? "search" : "messages"} title={hasActiveFilter ? t("chats.empty.matching.title") : t("chats.empty.none.title")} action={hasActiveFilter ? { icon: "x", label: t("chats.action.clearFilters"), onPress: () => { setQuery(""); if (!botsView) selectSource("all"); } } : undefined} />;
 
+  const renderChatRow = (item: ChatListItem) => {
+    if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
+    if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
+    if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
+    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} />;
+    if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
+    return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
+  };
+
   return (
     <Screen edgeToEdge blurTarget={blurTarget}>
-      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
+      {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge} hidden={search}>
       <LargeTitleBar title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
         <MenuAnchor ref={sourceButtonRef} open={sourceMenuOpen}>
           <IconButton name={archivedView ? "archive" : "filter"} label={`${t("chats.source.filter")}, ${sourceLabel}`} tone={listFilter !== "all" || botsView ? "active" : "default"} onPress={() => setSourceMenuOpen(true)} testID="chats-source-menu-button" />
@@ -281,8 +306,10 @@ export default function ChatsScreen() {
       {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
       </EdgeHeader>}
       <EdgeBlurTarget attach={attachBlurTarget}>
+      <LargeTitleSearchLift search={nativeHeaders ? undefined : search}>
       <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
-      <LegendList
+      <ListContinuityProvider rows={rowMotion.rows}>
+      <AnimatedLegendList
         ref={listRef}
         refScrollView={scrollRef}
         onScroll={(event) => { pullRefresh.onScroll(event); if (!draggingRef.current && releaseTimerRef.current) releaseRowOrder(); }}
@@ -291,21 +318,15 @@ export default function ChatsScreen() {
         onMomentumScrollBegin={titleSnap.onMomentumScrollBegin}
         onMomentumScrollEnd={(event) => { draggingRef.current = false; releaseRowOrder(); titleSnap.onMomentumScrollEnd?.(event); }}
         scrollEventThrottle={16}
-        data={shownItems}
+        data={rowMotion.data}
+        itemLayoutAnimation={rowMotion.itemLayoutAnimation}
         extraData={rowExtraData}
         estimatedItemSize={80}
         // Recent-activity reordering must not scroll the list to follow an old row.
         maintainVisibleContentPosition={false}
         onViewableItemsChanged={onViewableItemsChanged}
         keyExtractor={chatItemKey}
-        renderItem={({ item }) => {
-          if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
-          if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
-          if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
-          if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} />;
-          if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
-          return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
-        }}
+        renderItem={({ item }) => <ListContinuityRow rowKey={chatItemKey(item)}>{renderChatRow(item)}</ListContinuityRow>}
         keyboardShouldPersistTaps="handled"
         // UI captures hide the scroll bar, which Android leaves up after a tab switch.
         showsVerticalScrollIndicator={!uiSnapshots}
@@ -314,11 +335,12 @@ export default function ChatsScreen() {
         onEndReachedThreshold={0.7}
         {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
         contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
-        onLayout={emptyFill.onLayout}
-        ListHeaderComponent={<View>
+        onLayout={(event) => { emptyFill.onLayout?.(event); rowMotion.onListLayout(event); }}
+        ListHeaderComponentStyle={search.listHeaderStyle}
+        ListHeaderComponent={<View onLayout={rowMotion.onHeaderLayout}>
           {pullRefresh.header}
-          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} />}
-          {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY}><SearchField value={query} onChangeText={setQuery} inputRef={searchRef} /></LargeTitleSearch>}
+          {nativeHeaders ? null : <LargeTitle title={t("tabs.chats")} scrollY={scrollY} hold={titleScroll.hold} search={search} />}
+          {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY} field={{ value: query, onChangeText: setQuery }} search={search} />}
           <View className="px-3">
           {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}</> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
@@ -328,7 +350,9 @@ export default function ChatsScreen() {
         ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (botsView && bots.loading) || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (listFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
+      </ListContinuityProvider>
       </BrandRefreshArea>
+      </LargeTitleSearchLift>
       </EdgeBlurTarget>
       <MenuPresence open={sourceMenuOpen}><AnchoredActionMenu
         anchorRef={sourceButtonRef}

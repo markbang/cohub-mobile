@@ -1,24 +1,28 @@
 import { Link, usePreventZoomTransitionDismissal, useRouter } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, Platform, Pressable, Text, View, useWindowDimensions, type AccessibilityActionEvent } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityActionEvent, type ImageLoadEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withDecay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withDecay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
-import { clearImageViewerPayload, getImageViewerPayload, imageViewerPanBounds, imageViewerReleasePage, imageViewerShouldDismiss } from "@/src/data/image-viewer";
+import { clearImageViewerPayload, getImageViewerPayload, imageViewerFlightStart, imageViewerOriginUsable, imageViewerPanBounds, imageViewerReleasePage, imageViewerShouldDismiss, type ImageViewerRect } from "@/src/data/image-viewer";
 import { useTranslation } from "@/src/i18n";
-import { motion, springs } from "@/src/motion";
+import { continuity, curves, motion, springs } from "@/src/motion";
 import { AppIcon, Loader } from "@/src/ui";
 
 const MAX_SCALE = 4;
 const MIN_DOUBLE_TAP_SCALE = 2;
 const EDGE_RESISTANCE = 0.3;
-const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+const EASE_OUT = Easing.bezier(...curves.easeOut);
+const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
 const SETTLE = { ...springs.sheet, overshootClamping: true };
 
 type Mode = "idle" | "pan" | "page" | "dismiss" | "none" | "pinch";
 type Size = { width: number; height: number };
+type Flight = ReturnType<typeof imageViewerFlightStart>;
+type Look = "wait" | "flight" | "fade";
 
 function resist(value: number, limit: number) {
   "worklet";
@@ -40,8 +44,10 @@ function fitInside(box: Size, natural: Size | undefined): Size {
 }
 
 /**
- * Full-screen image viewer. Opened as a Link with an Apple zoom source, so on iOS 18+
- * the tapped thumbnail grows into this screen and can be dismissed interactively.
+ * Full-screen image viewer. Opened from the JS list's Link with an Apple zoom source, the tapped thumbnail
+ * grows into this screen on iOS 18+ and the system dismisses it. Opened anywhere else, the screen draws its
+ * own transitions: from a measured thumbnail (`origin`) the image grows out of it and shrinks back into it;
+ * without one, or under Reduce Motion, it fades.
  */
 export default function ImageViewerScreen() {
   const router = useRouter();
@@ -55,6 +61,11 @@ export default function ImageViewerScreen() {
   const [sizes, setSizes] = useState<Record<number, Size>>({});
   // The system zoom-back only lands right from the page it opened on; elsewhere the viewer's own swipe dismisses.
   const zoomTransition = payload?.zoom === true && index === payload.index && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
+  // Everything but the iOS zoom route is presented without a system animation (`app/_layout.tsx`), so this screen animates in and out.
+  const ownTransition = !(payload?.zoom === true && Platform.OS === "ios");
+  const reducedMotion = useReducedMotion();
+  // Fixed at open: under Reduce Motion the viewer fades instead of travelling.
+  const [origin] = useState(() => ownTransition && !reducedMotion ? payload?.origin : undefined);
 
   // One-shot payload: a deep link or restored state must not reopen the last gallery.
   useEffect(() => clearImageViewerPayload, []);
@@ -71,6 +82,8 @@ export default function ImageViewerScreen() {
   const box = useMemo(() => ({ width: width - 24, height: height * 0.82 }), [height, width]);
   const natural = sizes[index];
   const fit = useMemo(() => fitInside(box, natural), [box, natural]);
+  const originNatural = payload ? sizes[payload.index] : undefined;
+  const originFit = useMemo(() => fitInside(box, originNatural), [box, originNatural]);
 
   // Page position in pages, not points, so a rotation or resize keeps the current page.
   const page = useSharedValue(index);
@@ -86,6 +99,50 @@ export default function ImageViewerScreen() {
   const start = useSharedValue({ scale: 1, x: 0, y: 0, focalX: 0, focalY: 0 });
   const fitSize = useSharedValue(fit);
   useEffect(() => { fitSize.set(fit); }, [fit, fitSize]);
+  const originFitSize = useSharedValue(originFit);
+  useEffect(() => { originFitSize.set(originFit); }, [originFit, originFitSize]);
+  // 0 before the screen has come in, 1 once it is in. `look` says how: waiting for the image's size, growing out of
+  // the thumbnail along `flight`, or fading. It lives on the UI thread so a switch never shows a frame of the old look.
+  const enter = useSharedValue(ownTransition ? 0 : 1);
+  const look = useSharedValue<Look>(origin ? "wait" : "fade");
+  const flight = useSharedValue<Flight | null>(null);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  // A released drag that dismisses leaves in its direction unless the image can fly back.
+  const dismissDirection = useSharedValue(0);
+
+  const flightFrom = useCallback((rect: ImageViewerRect) => origin && originNatural
+    ? imageViewerFlightStart({ rect, radius: origin.radius, fit: origin.fit }, originFit.width, originFit.height, width, height)
+    : null, [height, origin, originFit, originNatural, width]);
+  // The thumbnail is measured under this screen as it opens; one gone or off screen sends the viewer to a fade.
+  const [openRect, setOpenRect] = useState<ImageViewerRect | "none" | null>(null);
+  useEffect(() => {
+    if (!origin) return;
+    let live = true;
+    void origin.measure().then((rect) => { if (live) setOpenRect(imageViewerOriginUsable(rect, width, height) ? rect : "none"); }, () => { if (live) setOpenRect("none"); });
+    return () => { live = false; };
+  }, [height, origin, width]);
+  // Fixed once the opening image's size arrives; a later rotation does not restart the entrance.
+  const [openFrom, setOpenFrom] = useState<Flight | null>(null);
+  const [waited, setWaited] = useState(false);
+  const flightReady = openRect && openRect !== "none" ? flightFrom(openRect) : null;
+  if (flightReady && !openFrom && !waited) setOpenFrom(flightReady);
+  // The image grows out of the thumbnail once its frame and size are known. A remote one slower than `imageWait`
+  // fades in instead; a local one (a data or file URI) has no network to wait on, so only a failure gives up on it.
+  const entrance: Look = !origin || openRect === "none" || (waited && !openFrom) ? "fade" : openFrom ? "flight" : "wait";
+  const entered = !ownTransition || entrance !== "wait";
+  const localOrigin = origin ? LOCAL_IMAGE.test(origin.thumbnail) : false;
+  useEffect(() => {
+    if (entrance !== "wait" || localOrigin) return;
+    const timer = setTimeout(() => setWaited(true), continuity.imageWait);
+    return () => clearTimeout(timer);
+  }, [entrance, localOrigin]);
+  useEffect(() => {
+    if (!ownTransition || entrance === "wait" || closingRef.current) return;
+    look.set(entrance);
+    if (entrance === "flight" && openFrom) flight.set(openFrom);
+    enter.set(withTiming(1, entrance === "flight" ? { duration: continuity.imageOpen.duration, easing: EASE_OUT } : { duration: motion.fade.duration, easing: EASE_OUT }));
+  }, [enter, entrance, flight, look, openFrom, ownTransition]);
   // A rotated or resized window invalidates the pan bounds; the page itself is kept by `page`.
   const windowKey = `${width}x${height}`;
   const [zoomedWindow, setZoomedWindow] = useState(windowKey);
@@ -104,6 +161,47 @@ export default function ImageViewerScreen() {
     setIndex(next);
     page.set(withSpring(next, SETTLE));
   }, [page, settled]);
+
+  /**
+   * Every exit (button, system back, Escape, a drag) leaves through navigation, which holds the route until
+   * the exit has run. From the page it opened on, the image shrinks back into its thumbnail while that is
+   * still on screen; otherwise a released drag carries on off screen and anything else fades.
+   */
+  const leave = useCallback(async (proceed: () => void) => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    // A fade still coming in has no thumbnail geometry to turn into; once in, both looks rest on the fitted image.
+    const flyBack = origin && settled.get() === payload?.index && (look.get() === "flight" || (look.get() === "fade" && enter.get() >= 1));
+    const rect = flyBack ? await origin.measure().catch(() => null) : null;
+    const from = rect && imageViewerOriginUsable(rect, width, height) ? flightFrom(rect) : null;
+    const done = (finished?: boolean) => {
+      "worklet";
+      if (finished) scheduleOnRN(proceed);
+    };
+    if (from) {
+      const back = { duration: continuity.imageClose.duration, easing: EASE_IN_OUT };
+      flight.set(from);
+      look.set("flight");
+      // A zoomed or dragged image returns from where it is drawn.
+      scale.set(withTiming(1, back));
+      tx.set(withTiming(0, back));
+      ty.set(withTiming(0, back));
+      dragX.set(withTiming(0, back));
+      dragY.set(withTiming(0, back));
+      enter.set(withTiming(0, back, done));
+      return;
+    }
+    look.set("fade");
+    const direction = dismissDirection.get();
+    if (direction) {
+      dragY.set(withTiming(direction * height, { duration: motion.settle.duration, easing: EASE_OUT }, done));
+      return;
+    }
+    enter.set(withTiming(0, { duration: motion.fadeOut.duration, easing: EASE_OUT }, done));
+  }, [dismissDirection, dragX, dragY, enter, flight, flightFrom, height, look, origin, payload?.index, scale, settled, tx, ty, width]);
+  // Released once leaving: the exit then navigates through `repeat`, and a second back skips the rest of it.
+  usePreventRemove(ownTransition && !closing, ({ repeat }) => { void leave(repeat); });
 
   const gesture = useMemo(() => {
     const resetZoom = (velocity = 0) => {
@@ -206,9 +304,14 @@ export default function ImageViewerScreen() {
         } else if (current === "dismiss") {
           if (imageViewerShouldDismiss(event.translationY, event.velocityY)) {
             const direction = event.translationY === 0 ? Math.sign(event.velocityY) || 1 : Math.sign(event.translationY);
-            dragY.set(withTiming(direction * height, { duration: motion.settle.duration, easing: EASE_OUT }, (finished) => {
-              if (finished) scheduleOnRN(close);
-            }));
+            if (ownTransition) {
+              dismissDirection.set(direction);
+              scheduleOnRN(close);
+            } else {
+              dragY.set(withTiming(direction * height, { duration: motion.settle.duration, easing: EASE_OUT }, (finished) => {
+                if (finished) scheduleOnRN(close);
+              }));
+            }
           } else {
             dragX.set(withSpring(0, { ...springs.sheetThrown, velocity: event.velocityX }));
             dragY.set(withSpring(0, { ...springs.sheetThrown, velocity: event.velocityY }));
@@ -231,16 +334,41 @@ export default function ImageViewerScreen() {
         scheduleOnRN(setZoomed, true);
       });
 
-    return Gesture.Simultaneous(pinch, pan, doubleTap);
-  }, [close, count, dragX, dragY, fitSize, height, mode, page, pageFrom, scale, settled, start, tx, ty, width, zoomTransition, zoomed]);
+    // Gestures wait for the screen to come in and stop once it starts to leave.
+    const live = entered && !closing;
+    return Gesture.Simultaneous(pinch.enabled(live), pan.enabled(live), doubleTap.enabled(live));
+  }, [close, closing, count, dismissDirection, dragX, ownTransition, dragY, entered, fitSize, height, mode, page, pageFrom, scale, settled, start, tx, ty, width, zoomTransition, zoomed]);
 
   const dismissProgress = (y: number) => {
     "worklet";
     return Math.min(Math.abs(y) / (height * 0.4), 1);
   };
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: 1 - dismissProgress(dragY.get()) }));
-  const chromeStyle = useAnimatedStyle(() => ({ opacity: interpolate(dismissProgress(dragY.get()), [0, 0.3], [1, 0], "clamp") }));
-  const pagerStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -page.get() * width }] }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: enter.get() * (1 - dismissProgress(dragY.get())) }));
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: enter.get() * interpolate(dismissProgress(dragY.get()), [0, 0.3], [1, 0], "clamp") }));
+  // Pages show once a flight has its start, or come in with the backdrop when fading.
+  const pagerStyle = useAnimatedStyle(() => {
+    const current = look.get();
+    return { opacity: current === "wait" ? 0 : current === "fade" ? enter.get() : 1, transform: [{ translateX: -page.get() * width }] };
+  });
+  // The clip around the opening page: the thumbnail's frame and corners at 0, the fitted image at 1.
+  const flightClipStyle = useAnimatedStyle(() => {
+    const from = look.get() === "flight" ? flight.get() : null;
+    const fitNow = originFitSize.get();
+    if (!from) return { width: fitNow.width, height: fitNow.height, borderRadius: 0, transform: [{ translateX: 0 }, { translateY: 0 }] };
+    const progress = enter.get();
+    const rest = 1 - progress;
+    return {
+      width: from.clipWidth + (fitNow.width - from.clipWidth) * progress,
+      height: from.clipHeight + (fitNow.height - from.clipHeight) * progress,
+      borderRadius: from.radius * rest,
+      transform: [{ translateX: from.dx * rest }, { translateY: from.dy * rest }],
+    };
+  });
+  const flightImageStyle = useAnimatedStyle(() => {
+    const from = look.get() === "flight" ? flight.get() : null;
+    return { transform: [{ scale: from ? from.scale + (1 - from.scale) * enter.get() : 1 }] };
+  });
+  const unavailableStyle = useAnimatedStyle(() => ({ opacity: enter.get() }));
   const currentStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: tx.get() + dragX.get() },
@@ -269,14 +397,14 @@ export default function ImageViewerScreen() {
 
   if (!payload || count === 0) {
     return (
-      <View style={{ flex: 1, backgroundColor: VIEWER.background }} onAccessibilityEscape={close}>
+      <Animated.View style={[{ flex: 1, backgroundColor: VIEWER.background }, unavailableStyle]} onAccessibilityEscape={close}>
         <StatusBar style="light" />
         <View className="flex-1 items-center justify-center gap-3 px-8">
           <AppIcon name="images" size={32} color={VIEWER.muted} />
           <Text className="text-center text-subhead" style={{ color: VIEWER.foreground }}>{t("imageViewer.unavailable")}</Text>
         </View>
         {closeButton}
-      </View>
+      </Animated.View>
     );
   }
 
@@ -298,6 +426,19 @@ export default function ImageViewerScreen() {
               // The opening page stays too, off screen: it carries the zoom target the native dismissal returns to.
               if (Math.abs(itemIndex - index) > 1 && itemIndex !== payload.index) return null;
               const current = itemIndex === index;
+              const image = (
+                <ViewerImage
+                  uri={uri}
+                  placeholder={itemIndex === payload.index ? origin?.thumbnail : undefined}
+                  box={box}
+                  zoomTarget={itemIndex === payload.index && Platform.OS === "ios"}
+                  label={pageLabel}
+                  pageable={count > 1}
+                  onAccessibilityAction={onAccessibilityAction}
+                  onSize={(size, exact) => setSizes((previous) => previous[itemIndex] && !exact ? previous : { ...previous, [itemIndex]: size })}
+                  onFail={itemIndex === payload.index ? () => setWaited(true) : undefined}
+                />
+              );
               return (
                 <View
                   key={`${uri}-${itemIndex}`}
@@ -306,15 +447,9 @@ export default function ImageViewerScreen() {
                   style={{ position: "absolute", top: 0, left: itemIndex * width, width, height, alignItems: "center", justifyContent: "center" }}
                 >
                   <Animated.View style={current ? currentStyle : undefined}>
-                    <ViewerImage
-                      uri={uri}
-                      box={box}
-                      zoomTarget={itemIndex === payload.index && Platform.OS === "ios"}
-                      label={pageLabel}
-                      pageable={count > 1}
-                      onAccessibilityAction={onAccessibilityAction}
-                      onSize={(size) => setSizes((previous) => previous[itemIndex] ? previous : { ...previous, [itemIndex]: size })}
-                    />
+                    {origin && itemIndex === payload.index
+                      ? <Animated.View style={[FLIGHT_CLIP, flightClipStyle]}><Animated.View style={flightImageStyle}>{image}</Animated.View></Animated.View>
+                      : image}
                   </Animated.View>
                 </View>
               );
@@ -332,10 +467,16 @@ export default function ImageViewerScreen() {
   );
 }
 
-function ViewerImage({ uri, box, zoomTarget, label, pageable, onAccessibilityAction, onSize }: { uri: string; box: Size; zoomTarget: boolean; label: string; pageable: boolean; onAccessibilityAction: (event: AccessibilityActionEvent) => void; onSize: (size: Size) => void }) {
+/** `placeholder` (the thumbnail's image) stands in while `uri` loads; it reports its size as an estimate, `uri` as exact. */
+function ViewerImage({ uri, placeholder, box, zoomTarget, label, pageable, onAccessibilityAction, onSize, onFail }: { uri: string; placeholder?: string; box: Size; zoomTarget: boolean; label: string; pageable: boolean; onAccessibilityAction: (event: AccessibilityActionEvent) => void; onSize: (size: Size, exact: boolean) => void; onFail?: () => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
+  const [standIn, setStandIn] = useState(false);
+  const reportSize = (event: ImageLoadEvent, exact: boolean) => {
+    const { width, height } = event.nativeEvent.source;
+    if (width > 0 && height > 0) onSize({ width, height }, exact);
+  };
   const image = (
     <Image
       key={attempt}
@@ -344,14 +485,25 @@ function ViewerImage({ uri, box, zoomTarget, label, pageable, onAccessibilityAct
       style={box}
       onLoad={(event) => {
         setStatus("loaded");
-        const { width, height } = event.nativeEvent.source;
-        if (width > 0 && height > 0) onSize({ width, height });
+        reportSize(event, true);
       }}
-      onError={() => setStatus("error")}
+      onError={() => {
+        setStatus("error");
+        onFail?.();
+      }}
     />
   );
   return (
     <View style={box}>
+      {placeholder && placeholder !== uri && status === "loading" ? <Image
+        source={{ uri: placeholder }}
+        resizeMode="contain"
+        style={[StyleSheet.absoluteFill, box]}
+        onLoad={(event) => {
+          setStandIn(true);
+          reportSize(event, false);
+        }}
+      /> : null}
       {/* Adjustable so VoiceOver and TalkBack page with a vertical swipe, which the pager's own pan cannot get. */}
       <View
         accessible
@@ -362,7 +514,7 @@ function ViewerImage({ uri, box, zoomTarget, label, pageable, onAccessibilityAct
       >
         {zoomTarget ? <Link.AppleZoomTarget>{image}</Link.AppleZoomTarget> : image}
       </View>
-      {status === "loading" ? (
+      {status === "loading" && !standIn ? (
         <View pointerEvents="none" style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" }}>
           <Loader color={VIEWER.foreground} accessibilityLabel={t("imageViewer.loading")} />
         </View>
@@ -385,6 +537,11 @@ function ViewerImage({ uri, box, zoomTarget, label, pageable, onAccessibilityAct
     </View>
   );
 }
+
+const LOCAL_IMAGE = /^(data|file):/i;
+
+// The clip centers the larger image box on itself and crops what spills past it.
+const FLIGHT_CLIP = { alignItems: "center", justifyContent: "center", overflow: "hidden" } as const;
 
 // design-system: the photo viewer is black in every theme so images read true; its controls are white on black.
 const VIEWER = { background: "#000000", foreground: "#ffffff", muted: "rgba(255,255,255,0.6)", control: "rgba(255,255,255,0.14)" } as const;

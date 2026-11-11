@@ -23,7 +23,7 @@ import { KeyboardAvoidingView, KeyboardEvents } from "react-native-keyboard-cont
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ClaudeCode, CodeBuddy, Codex, Cursor, Pi } from "@lobehub/icons-rn";
 import { harnessLabel as labelForHarness, type HarnessKind, type LocalHarness } from "@neta-art/cohub";
-import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import type { IconName } from "@/src/icons";
 import Svg, { Path } from "react-native-svg";
 import { Glyph } from "@/src/ui/Glyph";
@@ -428,17 +428,42 @@ export function PrimaryButton({ label, onPress, icon, loading = false, disabled 
   );
 }
 
-export function SearchField({ value, onChangeText, placeholder, inputRef }: Pick<TextInputProps, "value" | "onChangeText" | "placeholder"> & { inputRef?: React.RefObject<TextInput | null> }) {
+/**
+ * Room at the field's trailing end for a button beside it (`LargeTitleSearch`'s Cancel): the capsule's end
+ * slides in by `inset` as `progress` runs to 1, and while `held` the text and clear button stop short of it.
+ */
+export type SearchFieldTrailing = { inset: number; progress: SharedValue<number>; held: boolean };
+
+export function SearchField({ value, onChangeText, placeholder, inputRef, onFocus, trailing }: Pick<TextInputProps, "value" | "onChangeText" | "placeholder" | "onFocus"> & { inputRef?: React.RefObject<TextInput | null>; trailing?: SearchFieldTrailing }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  return (
-    // The iOS 26 search field: a 44 pt capsule on the system fill, a black glyph, the text 58 pt in.
-    <View className="min-h-11 flex-row items-center gap-2 rounded-full bg-control-track px-4">
-      <AppIcon name="search" size={18} tone="fg" />
-      <TextInput ref={inputRef} value={value} onChangeText={onChangeText} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
-      {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={CLEAR_SLOP} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
-    </View>
-  );
+  const content = <>
+    <AppIcon name="search" size={18} tone="fg" />
+    <TextInput ref={inputRef} value={value} onChangeText={onChangeText} onFocus={onFocus} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
+    {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={CLEAR_SLOP} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
+  </>;
+  // The iOS 26 search field: a 44 pt capsule on the system fill, a black glyph, the text 58 pt in.
+  if (!trailing) return <View className="min-h-11 flex-row items-center gap-2 rounded-full bg-control-track px-4">{content}</View>;
+  return <View className="min-h-11 flex-row items-center gap-2 px-4" style={trailing.held ? { paddingRight: FIELD_END_PADDING + trailing.inset } : undefined}>
+    <ShrinkingCapsule inset={trailing.inset} progress={trailing.progress} />
+    {content}
+  </View>;
+}
+
+const FIELD_END_PADDING = 16;
+// The sliding end is at least a whole rounded cap, so the two pieces always join into one capsule.
+const CAPSULE_CAP = 44;
+
+/**
+ * A capsule that narrows by `inset` from its trailing end without resizing: a fixed piece already that much
+ * shorter, under a rounded end that slides in over it. Both share one opaque fill, so the overlap never shows.
+ */
+function ShrinkingCapsule({ inset, progress }: { inset: number; progress: SharedValue<number> }) {
+  const endStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -inset * progress.get() }] }));
+  return <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View className="absolute inset-y-0 left-0 rounded-full bg-control-track" style={{ right: inset }} />
+    <Animated.View className="absolute inset-y-0 right-0 rounded-full bg-control-track" style={[{ width: inset + CAPSULE_CAP }, endStyle]} />
+  </View>;
 }
 
 // The field's 16 pt end padding and 44 pt height leave room for the slop inside it.

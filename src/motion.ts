@@ -9,6 +9,22 @@ export const motion = {
   sendBubble: { duration: 360, dampingRatio: 1 },
 } as const;
 
+/**
+ * Continuity: what the user touched or is watching becomes its next state instead of leaving and coming back.
+ * The image viewer grows out of the tapped thumbnail and shrinks back into it; list rows slide to new places,
+ * fade where they stand when they leave, and fade in when they arrive; Android's search field rises into the bar.
+ */
+export const continuity = {
+  imageOpen: motion.glide,
+  imageClose: motion.settle,
+  /** The viewer waits this long for the image's size before growing out of the thumbnail; a slower image fades in. */
+  imageWait: 300,
+  rowMove: motion.settle,
+  rowLeave: motion.fadeOut,
+  rowEnter: motion.fade,
+  search: motion.settle,
+} as const;
+
 /** Cubic-bezier control points; spread into Reanimated's `Easing.bezier`. Nothing on screen eases in. */
 export const curves = {
   /** Entering and exiting. */

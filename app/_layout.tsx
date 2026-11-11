@@ -4,6 +4,8 @@ import { LogtoProvider, useLogto } from "@logto/rn";
 import type { UnauthorizedContext } from "@neta-art/cohub";
 import { useFonts } from "expo-font";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
+// The route param a zoom Link pushes with; `SplitStack` reads its no-animation sibling the same way.
+import { INTERNAL_EXPO_ROUTER_ZOOM_TRANSITION_SOURCE_ID_PARAM_NAME } from "expo-router/build/navigationParams";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -282,9 +284,9 @@ function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {
             <SplitStack.Screen name="space/[spaceId]/files" />
             <SplitStack.Screen name="space/[spaceId]/file" />
             <SplitStack.Screen name="work/[appId]" />
-            {/* Android has no zoom transition, so the viewer floats over the Chat and its own backdrop fades as it is dragged away. */}
+            {/* The viewer floats over the screen it opened from and animates itself in and out; only the iOS zoom Link keeps the system zoom. */}
             {/* design-system: the photo viewer is black in every theme so images read true. */}
-          <SplitStack.Screen name="image-viewer" options={Platform.OS === "android" ? { presentation: "transparentModal", animation: "fade", contentStyle: { backgroundColor: "transparent" } } : { contentStyle: { backgroundColor: "#000000" } }} />
+          <SplitStack.Screen name="image-viewer" options={({ route }) => Platform.OS === "ios" && (route.params as Record<string, unknown> | undefined)?.[INTERNAL_EXPO_ROUTER_ZOOM_TRANSITION_SOURCE_ID_PARAM_NAME] ? { contentStyle: { backgroundColor: "#000000" } } : { presentation: "transparentModal", animation: "none", contentStyle: { backgroundColor: "transparent" } }} />
             <SplitStack.Screen name="new-chat" options={{ title: t("route.newChat"), presentation: "modal", animation: Platform.OS === "ios" ? "default" : "slide_from_bottom" }} />
             <SplitStack.Screen name="appearance" options={{ title: t("route.appearance") }} />
             <SplitStack.Screen name="language" options={{ title: t("route.language") }} />

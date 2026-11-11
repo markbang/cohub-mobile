@@ -192,16 +192,23 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
   return { type: "view", id, style: { width, overflow: "hidden" }, children };
 }
 
+/** A gallery thumbnail's corner; the image viewer starts from it. */
+export const GALLERY_THUMB_RADIUS = 12;
+
 function gallery(ctx: NodeContext, uris: string[], maxWidth: number, idPrefix = "image"): TimelineNode {
   const size = Math.max(0, Math.min(164, ctx.width * 0.42, maxWidth));
   const scale = PixelRatio.get();
   // Android's image covers this glyph with its background until both sources have failed.
   const failed: TimelineNode[] = Platform.OS === "android" ? [{ type: "view", style: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" }, children: [icon("images", 22, ctx.theme.colors.textMuted)] }] : [];
-  const thumb = (uri: string, index: number): TimelineNode => pressable({
-    id: `${idPrefix}:${index}`, action: "openImage", payload: { uris, index }, accessibilityLabel: ctx.t("message.openImage", { index: index + 1, total: uris.length }), pressedOpacity: 0.78,
-    style: { width: size, height: size, borderRadius: 12, overflow: "hidden", backgroundColor: color(ctx.theme.colors.surfaceRaised) },
-    children: [...failed, { type: "image", uri: imageThumbnailUrl(uri, size, scale), fallbackUri: uri, style: { width: size, height: size, borderRadius: 12, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
-  });
+  const thumb = (uri: string, index: number): TimelineNode => {
+    const thumbnail = imageThumbnailUrl(uri, size, scale);
+    return pressable({
+      // `thumbnail` lets the image viewer stand the drawn image in while the full one loads.
+      id: `${idPrefix}:${index}`, action: "openImage", payload: { uris, index, thumbnail }, accessibilityLabel: ctx.t("message.openImage", { index: index + 1, total: uris.length }), pressedOpacity: 0.78,
+      style: { width: size, height: size, borderRadius: GALLERY_THUMB_RADIUS, overflow: "hidden", backgroundColor: color(ctx.theme.colors.surfaceRaised) },
+      children: [...failed, { type: "image", uri: thumbnail, fallbackUri: uri, style: { width: size, height: size, borderRadius: GALLERY_THUMB_RADIUS, backgroundColor: color(ctx.theme.colors.surfaceRaised) } }],
+    });
+  };
   if (uris.length === 1) return thumb(uris[0]!, 0);
   // No fixed height: Yoga skips the measure function of a node sized on both axes, and Android lays
   // out a scroll view's content only there, so the thumbnails would be 0×0.

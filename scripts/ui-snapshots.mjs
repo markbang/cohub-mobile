@@ -56,6 +56,7 @@ const BROWSER_VALUE = "(System|In-app) browser";
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
   { name: "catalog-rows", ready: "Settings rows", link: "cohub://debug/ui?section=rows" },
+  { name: "catalog-list", ready: "List continuity", link: "cohub://debug/ui?section=list" },
   { name: "catalog-controls", ready: "Buttons", link: "cohub://debug/ui?section=controls" },
   { name: "catalog-states", ready: "No files yet", link: "cohub://debug/ui?section=states" },
   { name: "chats", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }] },
@@ -149,6 +150,14 @@ export const MOTIONS = [
   { name: "motion-scroll-settings", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }, { swipe: "down" }] },
   { name: "motion-chat", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }, { swipe: "up" }] },
   { name: "motion-space", link: "cohub://spaces", setup: [{ tapPoint: FIRST_ROW }], steps: [{ swipe: "up" }, { swipe: "down" }] },
+  // Continuity: the viewer grows out of the tapped thumbnail and back into it; a list closes the gap a row leaves
+  // and slides a moved row; the search field rises into the bar and back. Search runs last: iOS's system search
+  // may show no Cancel, and an active search would cover the next recording's bar.
+  // The viewer's Close sits in a zero-height bar that Android's accessibility tree skips, so it is tapped by position.
+  { name: "motion-image", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=media", steps: [{ tapOn: "Open image 1 of 2" }, { tapPoint: { ios: "91%, 10%", android: "91%, 10%" } }] },
+  { name: "motion-list", ready: "List continuity", link: "cohub://debug/ui?section=list", steps: [{ tapOn: "Archive first" }, { tapOn: "Move last up" }, { tapOn: "Restore" }] },
+  // Chats keeps its offset across recordings; a drag down brings its search field back first.
+  { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
 ];
 
 function parseArgs(argv) {
@@ -375,7 +384,7 @@ function pushSteps(lines, platform, steps = []) {
       if (platform === "ios" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", `      notVisible: ${yamlString(step.tapOn)}`, "    commands:", "      - tapOn:", "          point: 13%, 94%", "      - waitForAnimationToEnd:", "          timeout: 5000");
       // A link that switched tabs expands the bar itself, so the bubble may be gone by the time it is tapped.
       if (platform === "android" && TAB_LABELS.has(step.tapOn)) lines.push("- runFlow:", "    when:", "      visible:", "        id: \"tab-bar-expand\"", "    commands:", "      - tapOn:", "          id: \"tab-bar-expand\"", "          optional: true", "      - waitForAnimationToEnd:", "          timeout: 5000");
-      lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, SETTLE);
+      lines.push("- tapOn:", `    text: ${yamlString(step.tapOn)}`, ...(step.optional ? ["    optional: true"] : []), SETTLE);
     }
     lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
   }

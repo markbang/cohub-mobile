@@ -128,18 +128,22 @@ function SoftEdge({ target }: { target: RefObject<View | null> }) {
  * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's blurred bar material; elsewhere,
  * and under Reduce Transparency, content stays solid-veiled under the whole bar and a strip below it fades.
  */
-export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange = DEFAULT_EDGE_RANGE }: {
+export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange = DEFAULT_EDGE_RANGE, hidden }: {
   children: ReactNode;
   onLayout: (event: LayoutChangeEvent) => void;
   scrollY?: SharedValue<number>;
   blurTarget?: RefObject<View | null>;
   edgeRange?: readonly [number, number];
+  /** Fades the header out by `progress` and stops its touches while `active`, as an active search takes the bar. */
+  hidden?: { progress: SharedValue<number>; active: boolean };
 }) {
   const insets = useSafeAreaInsets();
   const reduce = useReduceTransparency();
   const soft = androidBlur && !reduce && blurTarget;
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: scrollY ? interpolate(scrollY.get(), edgeRange, [0, 1], "clamp") : 1 }));
-  return <View pointerEvents="box-none" onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
+  const hiding = hidden?.progress;
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: (scrollY ? interpolate(scrollY.get(), edgeRange, [0, 1], "clamp") : 1) * (1 - (hiding ? hiding.get() : 0)) }));
+  const contentStyle = useAnimatedStyle(() => ({ opacity: 1 - (hiding ? hiding.get() : 0) }));
+  return <View pointerEvents={hidden?.active ? "none" : "box-none"} onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? BAR_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
       {soft
         ? <SoftEdge target={blurTarget} />
@@ -147,7 +151,7 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
           ? <><View className="flex-1 bg-background" /><View style={TOP_FADE_STRIP}><EdgeScrim edge="top" /></View></>
           : <EdgeScrim edge="top" solid={insets.top} />}
     </Animated.View>
-    {children}
+    {hidden ? <Animated.View pointerEvents="box-none" accessibilityElementsHidden={hidden.active} importantForAccessibility={hidden.active ? "no-hide-descendants" : "auto"} style={contentStyle}>{children}</Animated.View> : children}
   </View>;
 }
 
