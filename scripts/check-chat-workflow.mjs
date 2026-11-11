@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botPlacements, isBotSaid, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botPlacements, isBotSaid, isBotSaidMessage, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4013,7 +4013,7 @@ const liveRowScope = {
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
-  bot: null, botLayout: null, isBotSaid, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
+  bot: null, botLayout: null, isBotSaidMessage, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -4056,7 +4056,7 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
     if (ts.isVariableDeclaration(node) && node.name.getText(timelineAst) === "botSaid") botSaidSource = node.initializer.arguments[0].getText(timelineAst);
     ts.forEachChild(node, find);
   })(timelineAst);
-  const nativeBotSaid = (bot) => new Function("bot", "turnsById", "isBotSaid", ts.transpileModule(`return (${botSaidSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(bot, new Map([[said.id, said], [typed.id, typed]]), isBotSaid);
+  const nativeBotSaid = (bot) => new Function("bot", "turnsById", "isBotSaidMessage", ts.transpileModule(`return (${botSaidSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(bot, new Map([[said.id, said], [typed.id, typed]]), isBotSaidMessage);
   const note = (turn) => ({ id: `${turn.id}:user`, role: "user", meta: { turnId: turn.id } });
   assert.deepEqual([nativeBotSaid(bot)(note(said)), nativeBotSaid(bot)(note(typed))], [true, false], "the native timeline draws only the `say` note as the Bot's");
   assert.equal(nativeBotSaid(null)(note(said)), false, "an ordinary Chat's native timeline draws no Bot notes");
@@ -5951,7 +5951,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
     const turnsById = new Map(view.turns.map((turn) => [turn.id, turn]));
     const turnsBySequence = new Map(view.turns.map((turn) => [turn.sequence, [turn]]));
     const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
-    const nativeSaid = compileCallback(botSaidSource, { bot: peer, turnsById, isBotSaid });
+    const nativeSaid = compileCallback(botSaidSource, { bot: peer, turnsById, isBotSaidMessage });
     return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble"), nativeSaid(item)]);
   };
   const expected = [["hi", false, false], ["Hi, I'm here.", true, true], ["Are you our new engineer?", false, false], ["Sort of — the engineer in this Space.", true, true]];
@@ -5959,6 +5959,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(page(live, bot), expected, "a `say` that arrives live is the Bot's bubble in both timelines, after the question it answers");
   const patched = reducer({ sessions: [], sessionTurnStatuses: {}, sessionLatestTurns: {}, sessionViews: { fixture: live } }, { type: "turn-patch", sessionId: "fixture", turn: { id: "t4", status: "completed", updatedAt: "2026-11-11T04:40:00Z" } }).sessionViews.fixture;
   assert.deepEqual(page(patched, bot), expected, "a later Turn update without meta keeps the Bot's origin");
+  // Opening the page paints the cache before any Turn loads; the Bot's words stay on its side.
+  const cached = JSON.parse(JSON.stringify(messagesFromTurns([...history, said])));
+  assert.deepEqual(page({ ...scope.emptyView(), messages: cached, historyLoaded: false }, bot), expected, "cached rows alone place the Bot's notes on its side, in order");
   assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
   const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
   assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");

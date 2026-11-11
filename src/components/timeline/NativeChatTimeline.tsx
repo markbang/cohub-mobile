@@ -10,7 +10,7 @@ import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { arrivalAnimations, assistantMessageNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { BOT_BUBBLE_INSET, botPlacements, isBotSaid, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botPlacements, isBotSaidMessage, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
@@ -181,7 +181,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   }, [forkOrigin, rows, spaceId]);
   const relatedView = useRelatedSessions(client, relatedRefs, lookupSession);
 
-  const botSaid = useCallback((message: MessageRecord) => Boolean(bot) && isBotSaid(typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null), [bot, turnsById]);
+  const botSaid = useCallback((message: MessageRecord) => Boolean(bot) && isBotSaidMessage(message, typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null), [bot, turnsById]);
   const imagePaths = useMemo(() => {
     const paths = new Set<string>();
     for (const row of rows) if (row.kind === "message" && (row.message.role !== "user" || botSaid(row.message))) for (const path of replyImagePaths(row.message)) paths.add(path);
