@@ -1,6 +1,7 @@
 import { useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { LegendList, type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type LegendListRef, type ViewToken } from "@legendapp/list/react-native";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
@@ -23,13 +24,14 @@ import { deviceFolderName, deviceRuntimeRefusalKey, isDeviceRuntimeRunning, type
 import { deviceRuntimeSupported, startDeviceRuntime, useDeviceRuntimeInstances } from "@/src/platform/device-runtime";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
-import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen, SearchField } from "@/src/ui";
+import { AppIcon, ConnectionBanner, DataError, EmptyState, Field, FIELD_INPUT_CLASS, IconButton, ListEdgeLoader, LoadingRows, LoadingState, Screen } from "@/src/ui";
 import { displaySpaceName } from "@/src/utils";
 import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
-import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, useLargeTitleSnap } from "@/src/ui/LargeTitle";
+import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, LargeTitleSearchLift, useLargeTitleSearch, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 import { useScreenVisibleEffect } from "@/src/ui/pane";
+import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
 
 type SpaceListItem =
   | { kind: "local"; space: SpaceListSpace }
@@ -39,6 +41,10 @@ type SpaceListItem =
 type SpacesTabFilter = SpaceFilter | "device";
 const SPACE_SEARCH_TYPES = ["space"] as const;
 
+function spaceItemKey(item: SpaceListItem) {
+  return item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`;
+}
+
 export default function SpacesScreen() {
   const router = useRouter();
   const theme = useAppTheme();
@@ -46,7 +52,6 @@ export default function SpacesScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
   const titleScroll = largeTitleScroll(true);
-  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders);
   const { client, refreshHome, createSpace, toggleSpacePin, userUuid } = useAppActions();
   const state = useAppSelector((app) => ({ error: app.state.error, spacesError: app.state.spacesError, spaces: app.state.spaces, sessions: app.state.sessions, booting: app.state.booting }), shallowEqual);
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
@@ -75,6 +80,9 @@ export default function SpacesScreen() {
   const [query, setQuery] = useState("");
   const listRef = useRef<LegendListRef>(null);
   useScrollToTop(listRef);
+  const search = useLargeTitleSearch({ onQueryChange: setQuery, scrollY, scrollRef, headerHeight });
+  // An active search pins its field; the bar does not snap under it.
+  const titleSnap = useLargeTitleSnap(scrollRef, titleScroll, !nativeHeaders && !search.held);
   const [filter, setFilter] = useState<SpacesTabFilter>("recent");
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterButtonRef = useRef<View>(null);
@@ -112,7 +120,9 @@ export default function SpacesScreen() {
   }, [deviceInstances, hiddenIds, now, personalActivity, state.spaces, state.sessions, spaceList.overview, spaceList.visits]);
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
   const visibleSpaceKeyRef = useRef("");
+  const visibleRowsRef = useRef<(keys: readonly string[]) => void>(() => undefined);
   const onViewableItemsChanged = useCallback((info: { viewableItems: ViewToken<SpaceListItem>[] }) => {
+    visibleRowsRef.current(info.viewableItems.filter((token) => token.isViewable).map((token) => token.key));
     const ids = info.viewableItems.flatMap((token) => (token.item?.kind === "local" ? [token.item.space.id] : []));
     const key = ids.join(",");
     if (key === visibleSpaceKeyRef.current) return;
@@ -143,6 +153,18 @@ export default function SpacesScreen() {
     ];
   }, [deviceInstances, filter, hiddenIds, remoteSearch.query, remoteSearch.spaces, spaces, state.spaces, trimmedQuery]);
   const emptyFill = useEmptyListFill(listItems.length === 0);
+  // Rows change in place while a finger or a fling moves the list.
+  const scrollingRef = useRef({ dragging: false, momentum: false });
+  const rowMotion = useListContinuity({
+    items: listItems,
+    keyOf: spaceItemKey,
+    list: filter,
+    query: trimmedQuery,
+    quiet: () => scrollingRef.current.dragging || scrollingRef.current.momentum || pullRefreshing || listLoading,
+    scrollY,
+    contentInset: nativeHeaders ? 0 : headerHeight,
+  });
+  useEffect(() => { visibleRowsRef.current = rowMotion.setVisibleKeys; });
 
   // LegendList memoizes each row on [item, extraData]; async counts and pin state are
   // read by renderItem but never change `listItems`, so they must flow through extraData.
@@ -253,7 +275,7 @@ export default function SpacesScreen() {
     ],
   });
   return <Screen edgeToEdge blurTarget={blurTarget}>
-    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge}>
+    {nativeHeaders ? null : <EdgeHeader onLayout={onHeaderLayout} scrollY={scrollY} blurTarget={blurTarget} edgeRange={titleScroll.edge} hidden={search}>
     <LargeTitleBar title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} actions={<>
       <MenuAnchor ref={filterButtonRef} open={filterMenuOpen}>
         <IconButton name="filter" label={`${t("spaces.filter.label")}, ${filterLabel}`} tone={filter !== "recent" ? "active" : "default"} onPress={() => setFilterMenuOpen(true)} testID="spaces-filter-menu-button" />
@@ -264,30 +286,38 @@ export default function SpacesScreen() {
     {dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}
     </EdgeHeader>}
     <EdgeBlurTarget attach={attachBlurTarget}>
+    <LargeTitleSearchLift search={nativeHeaders ? undefined : search}>
     <BrandRefreshArea refresh={pullRefresh} top={headerHeight}>
-    <LegendList
+    <ListContinuityProvider rows={rowMotion.rows}>
+    <AnimatedLegendList
       {...titleSnap}
       ref={listRef}
       refScrollView={scrollRef}
       onScroll={(event) => pullRefresh.onScroll(event)}
-      onScrollBeginDrag={pullRefresh.onScrollBeginDrag}
+      // A new drag also ends a fling iOS stopped without reporting its end.
+      onScrollBeginDrag={(event) => { scrollingRef.current = { dragging: true, momentum: false }; pullRefresh.onScrollBeginDrag(event); }}
+      onScrollEndDrag={(event) => { scrollingRef.current.dragging = false; titleSnap.onScrollEndDrag?.(event); }}
+      onMomentumScrollBegin={() => { scrollingRef.current.momentum = true; titleSnap.onMomentumScrollBegin?.(); }}
+      onMomentumScrollEnd={(event) => { scrollingRef.current.momentum = false; titleSnap.onMomentumScrollEnd?.(event); }}
       scrollEventThrottle={16}
-      data={listItems}
+      data={rowMotion.data}
+      itemLayoutAnimation={rowMotion.itemLayoutAnimation}
       extraData={rowExtraData}
       estimatedItemSize={80}
-      keyExtractor={(item) => item.kind === "remote" ? `remote-space:${item.hit.spaceId}` : item.kind === "device" ? `device-space:${item.instance.spaceId}` : `space:${item.space.id}`}
-      renderItem={({ item }) => item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id, displaySpaceName(item.space)) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}
+      keyExtractor={spaceItemKey}
+      renderItem={({ item }) => <ListContinuityRow rowKey={spaceItemKey(item)}>{item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id, displaySpaceName(item.space)) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}</ListContinuityRow>}
       {...pullRefresh.listProps}
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       keyboardShouldPersistTaps="handled"
       {...(nativeHeaders ? NAVIGATION_BAR_INSETS : { contentInsetAdjustmentBehavior: "never", scrollIndicatorInsets: { top: headerHeight, bottom: tabBarInset } })}
       contentContainerStyle={{ paddingTop: nativeHeaders ? 0 : headerHeight, paddingBottom: tabBarInset, ...emptyFill.style }}
-        onLayout={emptyFill.onLayout}
-      ListHeaderComponent={<View>
+      onLayout={(event) => { emptyFill.onLayout?.(event); rowMotion.onListLayout(event); }}
+      ListHeaderComponentStyle={search.listHeaderStyle}
+      ListHeaderComponent={<View onLayout={rowMotion.onHeaderLayout}>
         {pullRefresh.header}
-        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} />}
-        {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY}><SearchField value={query} onChangeText={setQuery} placeholder={t("spaces.search.placeholder")} /></LargeTitleSearch>}
+        {nativeHeaders ? null : <LargeTitle title={t("tabs.spaces")} scrollY={scrollY} hold={titleScroll.hold} search={search} />}
+        {nativeHeaders ? null : <LargeTitleSearch scrollY={scrollY} field={{ value: query, onChangeText: setQuery, placeholder: t("spaces.search.placeholder") }} search={search} />}
         <View className="px-3">
         {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
@@ -297,7 +327,9 @@ export default function SpacesScreen() {
       </View>}
       ListEmptyComponent={listLoading ? <LoadingRows count={4} /> : emptyError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : searchEmpty}
     />
+    </ListContinuityProvider>
     </BrandRefreshArea>
+    </LargeTitleSearchLift>
     </EdgeBlurTarget>
     <MenuPresence open={filterMenuOpen}><AnchoredActionMenu anchorRef={filterButtonRef} title={t("spaces.filter.label")} heading={filterLabel} testID="spaces-filter-menu" onClose={() => setFilterMenuOpen(false)} actions={filterActions} /></MenuPresence>
     {/* A short form: sized to its fields on both platforms rather than a full-height page. */}

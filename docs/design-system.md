@@ -181,17 +181,55 @@ SwiftUI sheet sized to their content (`@expo/ui` `BottomSheet`); longer ones sta
 
 ### 2.5 Motion
 
-`src/motion.ts` holds the timings and the spring presets (`springs`). Anything that moves in
-response to a touch or a choice uses a spring, so an interrupted motion continues from where it is:
+`src/motion.ts` holds the timings, curves, and spring presets. Nothing eases in: entrances and exits
+use `curves.easeOut`, moves between two on-screen places `curves.easeInOut`. Gestures and their
+releases use springs, so an interrupted motion continues from where it is; motions with a fixed
+start and end use timings.
 
 - Sheets use UIKit's sheet spring (mass 3, stiffness 1000, critically damped). A release closes
   the sheet when its projected position (UIScrollView's fast deceleration) passes half its height;
   a throw back up keeps its speed and lands with slight overshoot.
-- Menus and popovers spring out of their anchor with a small bounce (`PopoverSurface`, from 0.5
-  scale; the slash and mention menus, which reappear while typing, from 0.92) and close at once.
+- Popovers open from just under full size (`popover`: 0.97 wide, 0.95 tall) over 200 ms with an
+  ease-out, without bounce, and fade back over 150 ms; the slash and mention menus, which reappear
+  while typing, grow uniformly from 0.98. Drawn menus morph out of their trigger and back
+  (`menuMorph`).
 - The `Segmented` thumb slides on `springs.indicator`. The tab bar's lens uses UIKit's measured
-  tab-bar springs (`springs.dock*`); a tab's icon pops when it becomes selected.
-- Composer glyphs that change (send, stop, sent; add, close) pop in instead of swapping.
+  tab-bar springs (`springs.dock*`); the tab icons themselves do not move.
+- Composer glyphs that change (send, stop, sent; add, close) cross-fade with a hint of scale
+  (`glyphSwap`, from 0.9), without bounce.
+
+**Continuity** (`continuity`): what the user touched or is watching becomes its next state instead
+of disappearing and coming back. Only transforms and opacity animate, except where a crop must clip;
+under Reduce Motion nothing travels, things fade or land in place.
+
+- Image viewer: opened from a thumbnail it can measure (the native Chat timeline's galleries, a
+  generation's image), the image grows out of that thumbnail's frame to its fitted size; the
+  crop opens from the thumbnail's square to the full image, its corners go from 12 to 0, and the
+  black backdrop fades in with it. The thumbnail's own image (a cached variant with the same
+  proportions) stands in until the full image loads. The viewer waits up to `imageWait` (300 ms)
+  for either to give a remote image's size (a local one only fails); past that, or from a thumbnail
+  it cannot measure, it fades in. Closing (button, system back, a released drag) from the page it opened on shrinks the image,
+  zoomed or not, back into the thumbnail if that is still wholly on screen; otherwise it fades, or
+  a drag carries on off screen. The clip animates
+  its size and corner radius because transforms would distort the corners. The JS list's thumbnails
+  keep iOS's system zoom.
+- Chats and Spaces lists: rows that stay slide to their new places (a Chat moved up by a new
+  message, a Space pinned), rows that leave fade where they stood while the rows below close the
+  gap (archived, deleted, filtered out by a search), rows that arrive fade in; a fork group's rows
+  fade in and out under their parent while the rows below make room. A row slides only when it
+  starts and ends on screen. Remote search results landing only fade. Nothing moves for the first
+  rows, a page appended at the end, a pull to refresh, a change of source or of the archive view,
+  or while a finger or a fling holds the order. Rows move by a transform on LegendList's own row
+  containers; those do not clip, so a fork's rows fade rather than slide out from under their
+  parent, which they would cross. A row laid out again in place mid-slide (a new measurement)
+  carries on from where it is drawn; one moved again mid-slide (the next keystroke) starts its new
+  slide from its laid-out place.
+- Android search (Chats, Spaces): focusing the field fades the bar and the Large Title, lifts the
+  list until the field sits where the bar was, and slides a Cancel in beside it as the field
+  narrows; the results scroll under the pinned field. Cancel or system back clears the query,
+  drops the keyboard, and runs it back. It uses a timing, not a spring; touches follow the
+  search's state, not the animation; the lift is measured once, so the keyboard cannot move the
+  field. iOS uses the system search bar.
 
 **Haptics** go through `src/platform/haptics.ts` only, on the same frame as the visual: `selection`
 when a drawn control's value changes (system controls bring their own), `commit` when a send, steer,

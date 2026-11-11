@@ -8,7 +8,7 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { BOT_BUBBLE_INSET, botPlacements, isBotSaidMessage, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
@@ -17,7 +17,7 @@ import { timelineRows, timelineTargetKey, visibleTimelineMessages, type Timeline
 import { compactionFromMessage } from "@/src/data/compaction";
 import { useAppSelector, useSessionStream } from "@/src/data/context";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
-import { setImageViewerPayload } from "@/src/data/image-viewer";
+import { setImageViewerPayload, type ImageViewerOrigin, type ImageViewerRect } from "@/src/data/image-viewer";
 import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
 import { useRelatedSessions } from "@/src/data/use-related-session";
 import { useSandboxImageUrls } from "@/src/data/use-message-images";
@@ -136,6 +136,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   // Whole points: the measured width differs from the pane width by a fraction, which would rebuild every row once.
   const rowWidth = Math.round(width || paneWidth);
   const nativeRef = useRef<ChatTimelineViewRef>(null);
+  const frameRef = useRef<View>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   useEffect(() => {
@@ -377,9 +378,25 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     });
   }, [specs, resend]);
 
+  /**
+   * A row node's frame in the window: the view reports it in its own coordinates. Android's frame leaves out
+   * the list's lift over the keyboard (it is a translation), so that comes off here.
+   */
+  const measureInWindow = useCallback(async (key: string, nodeId: string): Promise<ImageViewerRect | null> => {
+    const view = nativeRef.current;
+    const frame = frameRef.current;
+    if (!view || !frame) return null;
+    const [node, offset, lift] = await Promise.all([
+      view.measureNode(key, nodeId),
+      new Promise<{ x: number; y: number }>((resolve) => frame.measureInWindow((x, y) => resolve({ x, y }))),
+      Platform.OS === "android" ? view.getState().then((state) => state.keyboardLift) : 0,
+    ]);
+    return node ? { x: offset.x + node.x, y: offset.y + node.y - lift, width: node.width, height: node.height } : null;
+  }, []);
+
   const { onCopy, onRetry, onDiscard, onFork, onOpenRelated, onLoadOlder, onLoadNewer } = props;
-  const handleAction = useCallback(({ nativeEvent }: { nativeEvent: { key: string | null; action: string; payload: Record<string, unknown> | null } }) => {
-    const { key, action, payload } = nativeEvent;
+  const handleAction = useCallback(({ nativeEvent }: { nativeEvent: { key: string | null; action: string; nodeId: string | null; payload: Record<string, unknown> | null } }) => {
+    const { key, action, nodeId, payload } = nativeEvent;
     const row = key ? rowsRef.current.find((item) => item.key === key) : undefined;
     const message = row?.kind === "message" ? row.message : undefined;
     switch (action) {
@@ -422,7 +439,12 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         return;
       case "openImage":
         if (Array.isArray(payload?.uris) && typeof payload.index === "number") {
-          setImageViewerPayload({ uris: payload.uris as string[], index: payload.index, zoom: false });
+          const uris = payload.uris as string[];
+          // The viewer grows out of the thumbnail it was opened from; one it cannot measure opens with a fade.
+          const origin: ImageViewerOrigin | undefined = key && nodeId
+            ? { radius: GALLERY_THUMB_RADIUS, fit: "cover", thumbnail: typeof payload.thumbnail === "string" ? payload.thumbnail : uris[payload.index] ?? "", measure: () => measureInWindow(key, nodeId).catch(() => null) }
+            : undefined;
+          setImageViewerPayload({ uris, index: payload.index, zoom: false, origin });
           router.push("/image-viewer");
         }
         return;
@@ -438,7 +460,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         }
         return;
     }
-  }, [onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenRelated, onRetry, openLink, router, sessionId]);
+  }, [measureInWindow, onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenRelated, onRetry, openLink, router, sessionId]);
 
   useImperativeHandle(ref, () => ({
     scrollToEnd: (animated) => { void nativeRef.current?.scrollToEnd(animated); },
@@ -490,7 +512,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   const thresholds = useMemo(() => ({ follow: CHAT_TAIL_THRESHOLD, leave: CHAT_TAIL_LEAVE_THRESHOLD, page: CHAT_PAGE_THRESHOLD, visibleFraction: 0.2, scrollEventThrottle: 100 }), []);
   const keyboard = useMemo(() => ({ enabled: !props.keyboardFrozen, coveredInset: props.keyboardCoveredInset }), [props.keyboardCoveredInset, props.keyboardFrozen]);
 
-  return <View className="flex-1" onLayout={handleLayout} collapsable={false}>
+  return <View ref={frameRef} className="flex-1" onLayout={handleLayout} collapsable={false}>
     <NativeView
       ref={nativeRef}
       style={{ flex: 1 }}

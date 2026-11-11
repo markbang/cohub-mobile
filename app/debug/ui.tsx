@@ -1,7 +1,9 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { getLoadedFonts, isLoaded, loadAsync } from "expo-font";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 import { ScrollView, Text, TextInput, View } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { AnchoredActionMenu } from "@/src/components/AnchoredActionMenu";
@@ -13,6 +15,8 @@ import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { EdgeBlurTarget, useBlurTarget } from "@/src/ui/EdgeChrome";
+import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
+import { ListRow } from "@/src/ui/ListRow";
 import { useAppTheme } from "@/src/theme";
 import { PLATFORM_FONT_FAMILIES } from "@/src/ui/platform-fonts";
 import {
@@ -38,7 +42,7 @@ import {
  * open their overlay on mount because a screenshot cannot wait on a tap, unless `?open=0` asks for the
  * closed state a screen recording starts from.
  */
-const SECTIONS = ["type", "rows", "controls", "states", "menu", "sheet", "page", "confirm"] as const;
+const SECTIONS = ["type", "rows", "list", "controls", "states", "menu", "sheet", "page", "confirm"] as const;
 type Section = (typeof SECTIONS)[number];
 
 function isSection(value: unknown): value is Section {
@@ -67,6 +71,7 @@ export default function DebugUiCatalogScreen() {
       <ScrollView className="flex-1" contentContainerStyle={{ paddingTop: 8, paddingBottom: insets.bottom + 32 }}>
         {show("type") ? <TypeSection /> : null}
         {show("rows") ? <RowsSection /> : null}
+        {show("list") ? <ListSection /> : null}
         {show("controls") ? <ControlsSection /> : null}
         {show("states") ? <StatesSection /> : null}
         {show("menu") ? <MenuSection anchorRef={menuAnchorRef} open={menuOpen} onOpen={() => setMenuOpen(true)} /> : null}
@@ -166,6 +171,46 @@ function RowsSection() {
     </>
   );
 }
+
+const LIST_ROWS = [
+  { id: "sheet", title: "Fix the Android sheet height", subtitle: "Mobile · Two rows take the whole screen" },
+  { id: "tablet", title: "Tablet split layout", subtitle: "Mobile · The right pane keeps its Chat" },
+  { id: "search", title: "Search the archive", subtitle: "Server · Matches titles and messages" },
+  { id: "icons", title: "Icon audit", subtitle: "Design · 14 glyphs left" },
+] as const;
+type ListRowFixture = (typeof LIST_ROWS)[number];
+const listRowKey = (row: ListRowFixture) => row.id;
+
+/** `useListContinuity` over fixed rows: archiving one closes the gap, moving one slides the rest. */
+function ListSection() {
+  const [rows, setRows] = useState<readonly ListRowFixture[]>(LIST_ROWS);
+  const scrollY = useSharedValue(0);
+  const continuity = useListContinuity({ items: rows, keyOf: listRowKey, list: "catalog", query: "", quiet: () => false, scrollY, contentInset: 0 });
+  return (
+    <Block label="List continuity">
+      <View className="flex-row flex-wrap gap-2">
+        <PrimaryButton label="Archive first" variant="secondary" disabled={rows.length === 0} onPress={() => setRows((current) => current.slice(1))} />
+        <PrimaryButton label="Move last up" variant="secondary" disabled={rows.length < 2} onPress={() => setRows((current) => [current[current.length - 1]!, ...current.slice(0, -1)])} />
+        <PrimaryButton label="Restore" variant="secondary" onPress={() => setRows(LIST_ROWS)} />
+      </View>
+      <ListContinuityProvider rows={continuity.rows}>
+        <AnimatedLegendList
+          data={continuity.data}
+          keyExtractor={listRowKey}
+          itemLayoutAnimation={continuity.itemLayoutAnimation}
+          onLayout={continuity.onListLayout}
+          onViewableItemsChanged={({ viewableItems }) => continuity.setVisibleKeys(viewableItems.map((token) => token.key))}
+          estimatedItemSize={72}
+          scrollEnabled={false}
+          style={LIST_HEIGHT}
+          renderItem={({ item }) => <ListContinuityRow rowKey={item.id}><ListRow title={item.title} subtitle={item.subtitle} accessibilityLabel={item.title} /></ListContinuityRow>}
+        />
+      </ListContinuityProvider>
+    </Block>
+  );
+}
+
+const LIST_HEIGHT = { height: LIST_ROWS.length * 76 } as const;
 
 function ControlsSection() {
   const [segment, setSegment] = useState<"all" | "mine" | "shared">("all");

@@ -22,7 +22,8 @@ import { incomingShareFromItems, isShareIntentPath } from "../src/data/incoming-
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
 import { chatOpenAction, focusedRouteKeys, leftPaneWidth, selectedChatId, showsPaneBack, splitMode, splitRoutes } from "../src/data/split-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
-import { imageViewerPageIndex } from "../src/data/image-viewer.ts";
+import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
+import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
 import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
@@ -389,6 +390,7 @@ const chatItemGroups = loadChromeComponent(chatsRoute, "chatItemGroups", { chatI
 const holdOrder = loadChromeComponent(chatsRoute, "holdOrder", { chatItemKey, chatItemGroups });
 const ORDER_SETTLE_MS = loadChromeComponent(chatsRoute, "ORDER_SETTLE_MS", {});
 const ORDER_HOLD_MAX_MS = loadChromeComponent(chatsRoute, "ORDER_HOLD_MAX_MS", {});
+const spaceItemKey = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "spaceItemKey", {});
 const chromeScope = {
   MAX_FONT_SCALE: { control: 1.3, badge: 1.15, glyph: 1 },
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
@@ -411,6 +413,11 @@ const chromeScope = {
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
+  useLargeTitleSearch: () => ({ active: false, held: false, listHeaderStyle: undefined, progress: { get: () => 0 }, lift: 0, inputRef: { current: null }, begin() {}, cancel() {}, onRowLayout() {} }),
+  LargeTitleSearchLift: "LargeTitleSearchLift", spaceItemKey,
+  // Rows pass through unchanged; the continuity rules themselves are checked on `src/data/list-continuity.ts`.
+  useListContinuity: ({ items }) => ({ data: items, rows: { leaving: new Set(), arriving: new Set() }, itemLayoutAnimation: undefined, onHeaderLayout() {}, onListLayout() {}, setVisibleKeys() {} }),
+  ListContinuityProvider: "ListContinuityProvider", ListContinuityRow: "ListContinuityRow", AnimatedLegendList: "LegendList",
   BrandRefreshArea: "BrandRefreshArea",
   useBrandRefresh: ({ refreshing, onRefresh }) => ({ listProps: { refreshControl: { type: "AppRefreshControl", props: { refreshing, onRefresh } } }, header: null, onScroll: () => {}, onScrollBeginDrag: () => {} }),
   useTranslation: () => ({ t: (key) => key, locale: "en" }),
@@ -1752,14 +1759,14 @@ for (const [path, labels, chips] of [
   deviceAction().onPress();
   assert.equal(deviceAction().checked, true);
   assert.deepEqual(list().props.data.map((item) => [item.kind, item.instance.spaceId, item.space?.name ?? null]), [["device", "space-a", "Field notes"], ["device", "space-gone", null]], "only served Spaces are listed; an unloaded one stays manageable");
-  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] }))[0];
+  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] })).find((node) => node.type !== "ListContinuityRow");
   assert.equal(row.type, "DeviceSpaceRow");
   row.props.onPress();
   assert.deepEqual(pushes.splice(0), [{ pathname: "/space/[spaceId]", params: { spaceId: "space-a" } }]);
-  const searchField = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "SearchField");
-  searchField().props.onChangeText("old");
+  const searchField = () => chromeNodes(list().props.ListHeaderComponent).find((node) => node.type === "LargeTitleSearch").props.field;
+  searchField().onChangeText("old");
   assert.deepEqual(list().props.data.map((item) => item.instance.spaceId), ["space-gone"], "a query also matches the folder");
-  searchField().props.onChangeText("");
+  searchField().onChangeText("");
   instances = [];
   const empty = list().props.ListEmptyComponent;
   assert.equal(empty.props.title, "spaces.empty.device.title");
@@ -1873,7 +1880,7 @@ try {
   });
   const list = () => chromeNodes(screen.render(() => renderChats())).find((node) => node.type === "LegendList");
   assert.deepEqual(list().props.data.map((item) => [item.kind, item.entry?.space.id]), [["bot", "bot"]], "the Bots view lists Bots, not Chats");
-  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] }))[0];
+  const row = chromeNodes(list().props.renderItem({ item: list().props.data[0] })).find((node) => node.type !== "ListContinuityRow");
   assert.equal(row.type, "BotRow");
   row.props.onPress();
   await flushSync();
@@ -1965,6 +1972,50 @@ assert.equal(imageViewerPageIndex(5000, 402, 3), 2, "a rubber-band offset stays 
 assert.equal(imageViewerPageIndex(NaN, 402, 3), null, "a missing offset leaves the page alone");
 assert.equal(imageViewerPageIndex(402, 0, 3), null, "a page width is required before deriving the page");
 assert.equal(imageViewerPageIndex(402, 402, 0), null);
+// The viewer grows out of a cropped thumbnail: its first frame is the thumbnail's frame and corners, with the
+// image scaled to cover it around the same center; a letterboxed tile starts around the image it shows.
+{
+  const thumb = { x: 20, y: 300, width: 164, height: 164 };
+  const cover = imageViewerFlightStart({ rect: thumb, radius: 12, fit: "cover" }, 378, 600, 402, 874);
+  assert.equal(cover.clipWidth, 164);
+  assert.equal(cover.clipHeight, 164);
+  assert.equal(cover.radius, 12);
+  assert.equal(cover.scale, 164 / 378, "a portrait image covers a square by its width");
+  assert.ok(378 * cover.scale >= 164 && 600 * cover.scale >= 164, "the scaled image fills the crop");
+  assert.equal(cover.dx, 20 + 82 - 201);
+  assert.equal(cover.dy, 300 + 82 - 437);
+  const contain = imageViewerFlightStart({ rect: { x: 16, y: 100, width: 370, height: 320 }, radius: 12, fit: "contain" }, 378, 600, 402, 874);
+  assert.equal(contain.scale, 320 / 600);
+  assert.equal(contain.clipWidth, 378 * contain.scale, "a letterboxed image starts unclipped");
+  assert.equal(contain.clipHeight, 320);
+  assert.equal(contain.radius, 0);
+  assert.ok(imageViewerOriginUsable(thumb, 402, 874));
+  assert.equal(imageViewerOriginUsable(null, 402, 874), false, "an unmeasured thumbnail falls back to the fade");
+  assert.equal(imageViewerOriginUsable({ ...thumb, y: -100 }, 402, 874), false, "a thumbnail scrolled under the top edge does not fly");
+  assert.equal(imageViewerOriginUsable({ ...thumb, width: 0 }, 402, 874), false);
+  assert.equal(imageViewerOriginUsable({ ...thumb, x: NaN }, 402, 874), false);
+}
+// List continuity: only a change to the same list animates, never its first rows, an appended page, or a change
+// under a finger; rows that left stay where they stood until they have faded.
+{
+  const moving = { sameList: true, quiet: false, fadeOnly: false };
+  assert.equal(listContinuityChange(["a", "b"], ["a", "b"], moving), "instant");
+  assert.equal(listContinuityChange([], ["a", "b"], moving), "instant", "the first rows land in place");
+  assert.equal(listContinuityChange(["a", "b"], ["a", "b", "c"], moving), "instant", "a page appended at the end moves nothing");
+  assert.equal(listContinuityChange(["a", "b"], ["c", "d"], { ...moving, sameList: false }), "instant", "another filter is another list");
+  assert.equal(listContinuityChange(["a", "b"], ["b", "a"], { ...moving, quiet: true }), "instant", "a held or refreshing list changes in place");
+  assert.equal(listContinuityChange(["a", "b"], ["b", "a"], moving), "move");
+  assert.equal(listContinuityChange(["a", "b"], ["a"], moving), "move");
+  assert.equal(listContinuityChange(["a"], ["r", "a"], { ...moving, fadeOnly: true }), "fade", "remote results only fade in");
+  assert.equal(listContinuityChange([], ["r"], { ...moving, fadeOnly: true }), "fade", "remote results fade into an empty search");
+  assert.equal(listContinuityChange(["a"], ["a", "r"], { ...moving, fadeOnly: true }), "fade", "remote results after the local rows fade in");
+  const key = (item) => item.id;
+  const left = withLeavingRows([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], [{ id: "d" }, { id: "a" }], key);
+  assert.deepEqual(left.items.map(key), ["d", "a", "b", "c"], "rows that left follow the row above them");
+  assert.deepEqual([...left.leaving], ["b", "c"]);
+  assert.deepEqual(withLeavingRows([{ id: "a" }, { id: "b" }], [{ id: "b" }], key).items.map(key), ["a", "b"], "a first row that left keeps the top");
+  assert.deepEqual([...arrivedKeys(["a"], ["b", "a", "c"])], ["b", "c"]);
+}
 for (const viewport of [240, 320, 360, 390, 768]) {
   assert.ok(getBubbleMaxWidth(viewport) <= viewport - 24);
   for (const scale of [1, 1.3, 2]) {
@@ -3946,7 +3997,7 @@ assert.ok(!timelineRows({ ...timelineInput, hasMoreNewer: true }).some((row) => 
 // Gallery thumbnails: CDN variant with the original as fallback, data: URIs as is, and on Android a glyph the image covers until it fails.
 for (const OS of ["android", "ios"]) {
   const pressable = loadChromeComponent("../src/components/timeline/nodes.ts", "pressable", {});
-  const gallery = loadChromeComponent("../src/components/timeline/nodes.ts", "gallery", { pressable, Platform: { OS }, PixelRatio: { get: () => 3 }, color: (value) => value, icon: (name) => ({ type: "vector", name }), imageThumbnailUrl: (uri) => uri.startsWith("https:") ? `${uri}?variant` : uri });
+  const gallery = loadChromeComponent("../src/components/timeline/nodes.ts", "gallery", { pressable, GALLERY_THUMB_RADIUS: 12, Platform: { OS }, PixelRatio: { get: () => 3 }, color: (value) => value, icon: (name) => ({ type: "vector", name }), imageThumbnailUrl: (uri) => uri.startsWith("https:") ? `${uri}?variant` : uri });
   const uris = ["https://cdn.example/a.png", "data:image/png;base64,AAAA"];
   const frame = gallery({ width: 375, t: (key) => key, theme: { colors: { surfaceRaised: "raised", textMuted: "muted" } } }, uris, 300);
   assert.equal(frame.style.overflow, "hidden", "a multi-image strip sits in a clipping frame, so scrolled thumbnails stay inside the bubble");

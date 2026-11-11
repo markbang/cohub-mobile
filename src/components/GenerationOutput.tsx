@@ -1,7 +1,8 @@
 import type { GenerationContentBlock } from "@neta-art/cohub";
 import { useRouter } from "expo-router";
+import { useRef } from "react";
 import { Image, PixelRatio, Pressable, Text, View } from "react-native";
-import { setImageViewerPayload } from "@/src/data/image-viewer";
+import { setImageViewerPayload, type ImageViewerRect } from "@/src/data/image-viewer";
 import { imageThumbnailUrl, modelFormat, videoPosterUrl } from "@/src/data/media";
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
@@ -9,6 +10,11 @@ import { AppIcon, type IconName } from "@/src/ui";
 import { usePaneWidth } from "@/src/ui/pane";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
+
+function measureInWindow(view: View | null): Promise<ImageViewerRect | null> {
+  if (!view) return Promise.resolve(null);
+  return new Promise((resolve) => view.measureInWindow((x, y, width, height) => resolve({ x, y, width, height })));
+}
 
 function sourceUrl(block: Exclude<GenerationContentBlock, { type: "text" }>): string | null {
   if (block.source.type === "url") return block.source.url;
@@ -19,13 +25,20 @@ export function GenerationBlock({ block }: { block: GenerationContentBlock }) {
   const router = useRouter();
   const { t } = useTranslation();
   const width = usePaneWidth();
+  const tileRef = useRef<View>(null);
   if (block.type === "text") return <Text selectable className="text-chat text-fg">{block.text}</Text>;
   const url = sourceUrl(block);
   const tileWidth = width - 32;
   if (block.type === "image") {
     if (!url) return null;
-    return <Pressable accessibilityRole="button" accessibilityLabel={t("media.openImage")} onPress={() => { setImageViewerPayload({ uris: [url], index: 0 }); router.push("/image-viewer"); }} className="overflow-hidden rounded-md bg-surface-raised active:opacity-80" style={CONTINUOUS}>
-      <Image source={{ uri: imageThumbnailUrl(url, tileWidth, PixelRatio.get()) }} resizeMode="contain" style={{ width: "100%", height: 320 }} />
+    const thumbnail = imageThumbnailUrl(url, tileWidth, PixelRatio.get());
+    // The viewer grows out of the image letterboxed in this tile, and shrinks back into it.
+    const open = () => {
+      setImageViewerPayload({ uris: [url], index: 0, origin: { radius: 0, fit: "contain", thumbnail, measure: () => measureInWindow(tileRef.current) } });
+      router.push("/image-viewer");
+    };
+    return <Pressable ref={tileRef} accessibilityRole="button" accessibilityLabel={t("media.openImage")} onPress={open} className="overflow-hidden rounded-md bg-surface-raised active:opacity-80" style={CONTINUOUS}>
+      <Image source={{ uri: thumbnail }} resizeMode="contain" style={{ width: "100%", height: 320 }} />
     </Pressable>;
   }
   const playable = url && /^https:\/\//i.test(url) ? url : null;
