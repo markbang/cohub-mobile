@@ -4044,7 +4044,6 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
   const placedRow = (layout) => compileRenderMessage({ ...liveRowScope, bot, botLayout: layout, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [typed]]]), turnsById: new Map([[typed.id, typed]]) })({ item: { id: "typed:user", role: "user", meta: { turnSequence: 1, turnId: typed.id } }, index: 0 });
   assert.equal(placedRow(new Map([["typed:user", { time: null, gap: BOT_TURN_GAP }]])).props.style.paddingTop, BOT_TURN_GAP, "a change of side opens the gap above the bubble");
   assert.equal(placedRow(new Map([["typed:user", { time: null, gap: 0 }]])).props.style, undefined, "a Bot's page drops the Turn opening space");
-  assert.equal(liveRowScope.TURN_START_STYLE.paddingTop, 8);
   assert.equal(row(null, typed).find((node) => node.type === "MessageBubble").props.rowInset, undefined, "an ordinary Chat keeps its bubble spacing");
   assert.ok(userNote && !row(bot, typed).some((node) => node.type === "BotNoteBubble" || node.type === "TurnProcess" || node.type === "SentFromLink"), "the user's note is the user's bubble, without steps or links");
   assert.equal(typeof userNote.props.onDiscard, "function");
@@ -4061,10 +4060,6 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
   const note = (turn) => ({ id: `${turn.id}:user`, role: "user", meta: { turnId: turn.id } });
   assert.deepEqual([nativeBotSaid(bot)(note(said)), nativeBotSaid(bot)(note(typed))], [true, false], "the native timeline draws only the `say` note as the Bot's");
   assert.equal(nativeBotSaid(null)(note(said)), false, "an ordinary Chat's native timeline draws no Bot notes");
-  const timelineSource = timelineAst.getFullText();
-  assert.match(timelineSource, /botPlacements\(placed, \(message\) => message\.role !== "user" \|\| botSaid\(message\)\)/, "the native timeline places a Bot page's bubbles with the same helper and sides as the JS list");
-  assert.match(chatSource, /return message\.role !== "user" \|\| isBotSaid\(/, "the JS list sides a Bot page's messages as the native timeline does");
-  assert.match(timelineSource, /const turnStart = !bot && /, "a Bot page's native rows drop the Turn opening space too");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");

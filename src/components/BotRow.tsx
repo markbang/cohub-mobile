@@ -11,7 +11,7 @@ import { AvatarStatus, ListRow, Tag } from "@/src/ui/ListRow";
 import { displaySpaceName, previewText } from "@/src/utils";
 
 /** Larger than a Chat row's 46, as a messaging app's contacts. */
-export const BOT_ROW_AVATAR_SIZE = 52;
+const BOT_ROW_AVATAR_SIZE = 52;
 
 /** A Bot as a contact: the last thing it said, and whether it is working, waiting on the user, or has news. */
 export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord>; onPress: () => void }) {
@@ -27,10 +27,11 @@ export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord>; onPre
   // Working is the avatar's ring, as on a running Chat's row, and needing the user a chip on the name's line,
   // so the preview keeps the whole second line.
   return <ListRow
-    leading={<View className="flex-1 justify-center"><AvatarStatus status={running ? "running" : null} size={BOT_ROW_AVATAR_SIZE}>
-      <Avatar name={name} uri={space.publicProfile?.avatarUrl} size={BOT_ROW_AVATAR_SIZE} />
+    leading={<View className="flex-1 justify-center"><View>
+      <AvatarStatus status={running ? "running" : null} size={BOT_ROW_AVATAR_SIZE}><Avatar name={name} uri={space.publicProfile?.avatarUrl} size={BOT_ROW_AVATAR_SIZE} /></AvatarStatus>
+      {/* After the running ring, so the ring never crosses the star. */}
       {primary ? <View pointerEvents="none" className="absolute -bottom-1 -right-1 size-5.5 items-center justify-center rounded-full border-2 border-background bg-accent"><AppIcon name="star" size={11} tone="onAccent" fill={theme.colors.accentText} strokeWidth={1.5} /></View> : null}
-    </AvatarStatus></View>}
+    </View></View>}
     title={name}
     titleBadge={needsYou ? <Tag label={t("bots.needsYou")} /> : null}
     meta={age}

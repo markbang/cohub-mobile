@@ -155,12 +155,14 @@ const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height
 type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** A Bot page's `say`, at minutes from today 08:00. */ bot?: boolean; at?: number };
 
 const BOT: BotPeer = { name: "Chief of staff", avatarUrl: null };
+// The origin the server records on a `say` note; it is read only when its ids are UUIDs.
+const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
 
 /** The `say` Turn behind each of the Bot's lines, so both timelines put them on its side. */
 function botSayTurns(messages: readonly MessageRecord[]): ReadonlyMap<string, SessionTurnRecord> {
   return new Map(messages.filter((message) => message.meta?.bot === true).map((message) => {
     const id = String(message.meta?.turnId);
-    return [id, { id, sequence: message.sequence, executionKind: "note", status: "completed", meta: { origin: { kind: "prompt", depth: 1, turnId: "debug-work", spaceId: "debug", sessionId: "debug-work", toolCallId: "debug-say" } } } as unknown as SessionTurnRecord];
+    return [id, { id, sequence: message.sequence, executionKind: "note", status: "completed", meta: { origin: BOT_SAY_ORIGIN } } as unknown as SessionTurnRecord];
   }));
 }
 

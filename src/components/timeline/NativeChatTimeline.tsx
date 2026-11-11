@@ -223,8 +223,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
       if (row.owner) firstOfOwner.add(row.owner);
       const arrival = owner ? isCatchUpArrival(arrivalBaseline, owner) : false;
+      const placement = row.kind === "message" ? placements.get(row.message) : undefined;
       const build = (deps: unknown[], make: () => { type: string; node: TimelineNode | null; flight?: TimelineFlight; anchor?: false }) => {
-        const all = [...base, turnStart, arrival, ...deps];
+        const all = [...base, turnStart, arrival, placement?.time, placement?.gap, ...deps];
         const cached = cache.get(row.key);
         if (cached && sameDeps(cached.deps, all)) {
           next.set(row.key, cached);
@@ -236,7 +237,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         const spec: TimelineRowSpec = {
           type: made.type,
           ...(made.anchor === false ? { anchor: false } : {}),
-          node: turnStart ? { type: "view", style: { paddingTop: TURN_START_PADDING }, children: [node] } : node,
+          node: turnStart ? { type: "view", style: { paddingTop: TURN_START_PADDING }, children: [node] } : placement ? botPlacedNode(ctx, made.node, placement) ?? EMPTY_NODE : node,
           ...(arrival ? { appear } : {}),
           ...(made.flight ? { flight: made.flight } : {}),
         };
@@ -253,14 +254,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         case "message": {
           const message = row.message;
           const sig = expandedIn(expanded, [message.id, row.key]);
-          const placement = placements.get(message);
-          if (placement && botSaid(message)) {
-            build([message, placement.time, placement.gap, sandboxImages], () => ({ type: "botNote", node: botPlacedNode(ctx, botNoteNode(ctx, message, sandboxImages), placement) }));
+          if (bot && botSaid(message)) {
+            build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
           } else if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;
-            build([message, retryDisabled, sig, flies, placement?.time, placement?.gap], () => ({
+            build([message, retryDisabled, sig, flies], () => ({
               type: "user",
-              node: !hasRenderableMessage(message) ? null : placement ? botPlacedNode(ctx, userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0, inset: BOT_BUBBLE_INSET }), placement) : userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0 }),
+              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0, inset: placement ? BOT_BUBBLE_INSET : undefined }) : null,
               flight: flies ? { nodeId: "bubble", ...flies, duration: motion.sendBubble.duration, easing: SEND_FLIGHT_EASING } : undefined,
             }));
           } else {
@@ -270,15 +270,12 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
             const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, placement?.time, placement?.gap], () => {
-              const made = (() => {
-                const compaction = compactionFromMessage(message);
-                if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
-                if (!hasRenderableMessage(message)) return { type: "empty", node: null };
-                if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
-                return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };
-              })();
-              return placement ? { ...made, node: botPlacedNode(ctx, made.node, placement) } : made;
+            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images], () => {
+              const compaction = compactionFromMessage(message);
+              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
+              if (!hasRenderableMessage(message)) return { type: "empty", node: null };
+              if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
+              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };
             });
           }
           break;
