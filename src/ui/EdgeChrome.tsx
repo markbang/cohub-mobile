@@ -95,17 +95,19 @@ export function ScreenBlurTarget({ attach, children }: { attach: (node: View | n
 /**
  * iOS 26's soft scroll edge, fitted on its tab roots in both themes: content under the status bar and the
  * bar fades about 80% into the background behind a light blur, and comes back into focus from the bar's
- * lower third to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the bar's bottom
+ * lower edge to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the bar's bottom
  * edge); later layers blur more and cover less, so the radius steps down the edge. Dimezis blurs the whole
  * target before cropping it to a layer, so the layers meet without seams.
  *
- * Dimezis draws a 15% grain over each layer, which iOS does not; the blur therefore stops where the veil is
- * still 0.8 and hides it. Below that the veil alone stands in for iOS's fading blur.
+ * Dimezis draws a 15% grain over each layer, which iOS does not; the blur therefore ends 8 pt below the bar,
+ * where the veil still mutes it, and the veil alone finishes the tail.
  */
 const SOFT_EDGE_TAIL = 36;
 const SOFT_EDGE_LAYERS = [
-  { bottom: -21, sigma: 1.5 },
-  { bottom: -33, sigma: 2 },
+  { bottom: 8, sigma: 0.6 },
+  { bottom: -4, sigma: 1 },
+  { bottom: -14, sigma: 1.5 },
+  { bottom: -26, sigma: 2 },
 ] as const;
 // Veil opacity down the edge, from 21 pt above the bar's bottom edge to the end of the tail.
 const SOFT_EDGE_VEIL_TOP = 21;
