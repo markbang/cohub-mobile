@@ -93,31 +93,48 @@ export function ScreenBlurTarget({ attach, children }: { attach: (node: View | n
 }
 
 /**
- * iOS 27's navigation bar once content scrolls under it, as captured on its tab roots: a material a little
- * lighter than the page covers the status bar and the bar, letting only a heavy blur of the content through,
- * and fades out over `BAR_EDGE_TAIL` pt below the bar. Dimezis draws a 15% grain over its blur, which iOS
- * does not; the material over it hides that, so the blur stops where the material is still full.
+ * iOS 26's soft scroll edge, fitted on its tab roots in both themes: content under the status bar and the
+ * bar fades about 80% into the background behind a light blur, and comes back into focus from the bar's
+ * lower third to 36 pt below it. Each blur layer reaches from the top to `bottom` (pt from the bar's bottom
+ * edge); later layers blur more and cover less, so the radius steps down the edge. Dimezis blurs the whole
+ * target before cropping it to a layer, so the layers meet without seams.
+ *
+ * Dimezis draws a 15% grain over each layer, which iOS does not; the blur therefore stops where the veil is
+ * still 0.8 and hides it. Below that the veil alone stands in for iOS's fading blur.
  */
-const BAR_EDGE_TAIL = 10;
-const BAR_EDGE_SIGMA = 10;
-const BAR_EDGE_OPACITY = 0.9;
+const SOFT_EDGE_TAIL = 36;
+const SOFT_EDGE_LAYERS = [
+  { bottom: -21, sigma: 1.5 },
+  { bottom: -33, sigma: 2 },
+] as const;
+// Veil opacity down the edge, from 21 pt above the bar's bottom edge to the end of the tail.
+const SOFT_EDGE_VEIL_TOP = 21;
+const SOFT_EDGE_VEIL = [
+  { at: -21, alpha: 0.8 },
+  { at: -9, alpha: 0.5 },
+  { at: 0, alpha: 0.45 },
+  { at: 21, alpha: 0.12 },
+  { at: SOFT_EDGE_TAIL, alpha: 0 },
+] as const;
 
 function SoftEdge({ target }: { target: RefObject<View | null> }) {
   const { colors } = useAppTheme();
-  const material = colorWithOpacity(colors.barMaterial, BAR_EDGE_OPACITY);
+  const span = SOFT_EDGE_VEIL_TOP + SOFT_EDGE_TAIL;
   return <>
-    <BlurView
+    {SOFT_EDGE_LAYERS.map(({ bottom, sigma }) => <BlurView
+      key={bottom}
       blurTarget={target}
       blurMethod="dimezisBlurViewSdk31Plus"
       intensity={1}
-      blurReductionFactor={blurReduction(BAR_EDGE_SIGMA)}
-      style={[StyleSheet.absoluteFill, { bottom: BAR_EDGE_TAIL }]}
-    />
-    <View style={[StyleSheet.absoluteFill, { bottom: BAR_EDGE_TAIL, backgroundColor: material }]} />
+      blurReductionFactor={blurReduction(sigma)}
+      style={[StyleSheet.absoluteFill, { bottom: SOFT_EDGE_TAIL - bottom }]}
+    />)}
+    <View style={[StyleSheet.absoluteFill, { bottom: span, backgroundColor: colorWithOpacity(colors.background, SOFT_EDGE_VEIL[0].alpha) }]} />
     <LinearGradient
       pointerEvents="none"
-      colors={[material, colorWithOpacity(colors.barMaterial, 0)]}
-      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: BAR_EDGE_TAIL }}
+      colors={SOFT_EDGE_VEIL.map(({ alpha }) => colorWithOpacity(colors.background, alpha)) as unknown as readonly [string, string, ...string[]]}
+      locations={SOFT_EDGE_VEIL.map(({ at }) => (at + SOFT_EDGE_VEIL_TOP) / span) as unknown as readonly [number, number, ...number[]]}
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: span }}
     />
   </>;
 }
@@ -125,7 +142,7 @@ function SoftEdge({ target }: { target: RefObject<View | null> }) {
 /**
  * With `scrollY`, the edge shows only once content has scrolled under the header (over `edgeRange`), so
  * nothing is veiled at rest; without it the edge is always on, for screens whose content starts beneath it.
- * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's blurred bar material; elsewhere,
+ * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's soft blurred edge; elsewhere,
  * and under Reduce Transparency, content stays solid-veiled under the whole bar and a strip below it fades.
  */
 export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange = DEFAULT_EDGE_RANGE, hidden }: {
@@ -144,7 +161,7 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: (scrollY ? interpolate(scrollY.get(), edgeRange, [0, 1], "clamp") : 1) * (1 - (hiding ? hiding.get() : 0)) }));
   const contentStyle = useAnimatedStyle(() => ({ opacity: 1 - (hiding ? hiding.get() : 0) }));
   return <View pointerEvents={hidden?.active ? "none" : "box-none"} onLayout={onLayout} className="absolute left-0 right-0 top-0 z-1" style={{ paddingTop: insets.top }}>
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? BAR_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? SOFT_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
       {soft
         ? <SoftEdge target={blurTarget} />
         : Platform.OS === "android"
