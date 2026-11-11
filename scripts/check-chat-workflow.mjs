@@ -11,7 +11,7 @@ import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trac
 import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, chatTimelineSettledOffset, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
-import { formatMessageClock } from "../src/data/chat-format.ts";
+import { formatMessageClock, formatThreadTime } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { botDirectory, botEntries, isBotSaid, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botPlacements, isBotSaid, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4013,7 +4013,7 @@ const liveRowScope = {
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
-  bot: null, isBotSaid, BotNoteBubble: "BotNoteBubble",
+  bot: null, botLayout: null, isBotSaid, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -4032,11 +4032,20 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
 {
   const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN } };
   const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" } };
-  const row = (bot, turn, meta = {}) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
+  const row = (bot, turn, meta = {}, botLayout = null) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, botLayout, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
   const bot = { name: "Cohub", avatarUrl: null };
   const botNote = row(bot, said).find((node) => node.type === "BotNoteBubble");
-  assert.ok(botNote && botNote.props.bot === bot && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, with its face");
+  assert.ok(botNote && !("bot" in botNote.props) && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, without its face");
   const userNote = row(bot, typed).find((node) => node.type === "MessageBubble");
+  assert.equal(userNote.props.rowInset, BOT_BUBBLE_INSET, "the user's bubbles on a Bot's page sit as close as the Bot's");
+  const timed = new Map([["said:user", { time: "2026-11-11T08:00:00Z", gap: 0 }]]);
+  assert.equal(row(bot, said, {}, timed).find((node) => node.type === "BotTimeDivider")?.props.at, "2026-11-11T08:00:00Z", "the time row sits above the message it dates");
+  assert.equal(row(bot, said).some((node) => node.type === "BotTimeDivider"), false);
+  const placedRow = (layout) => compileRenderMessage({ ...liveRowScope, bot, botLayout: layout, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [typed]]]), turnsById: new Map([[typed.id, typed]]) })({ item: { id: "typed:user", role: "user", meta: { turnSequence: 1, turnId: typed.id } }, index: 0 });
+  assert.equal(placedRow(new Map([["typed:user", { time: null, gap: BOT_TURN_GAP }]])).props.style.paddingTop, BOT_TURN_GAP, "a change of side opens the gap above the bubble");
+  assert.equal(placedRow(new Map([["typed:user", { time: null, gap: 0 }]])).props.style, undefined, "a Bot's page drops the Turn opening space");
+  assert.equal(liveRowScope.TURN_START_STYLE.paddingTop, 8);
+  assert.equal(row(null, typed).find((node) => node.type === "MessageBubble").props.rowInset, undefined, "an ordinary Chat keeps its bubble spacing");
   assert.ok(userNote && !row(bot, typed).some((node) => node.type === "BotNoteBubble" || node.type === "TurnProcess" || node.type === "SentFromLink"), "the user's note is the user's bubble, without steps or links");
   assert.equal(typeof userNote.props.onDiscard, "function");
   assert.equal(row(bot, typed, { relayFailed: true }).find((node) => node.type === "MessageBubble").props.onDiscard, undefined, "a message the Bot did not get offers a retry, not a delete: it is already in the Chat");
@@ -4052,6 +4061,10 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
   const note = (turn) => ({ id: `${turn.id}:user`, role: "user", meta: { turnId: turn.id } });
   assert.deepEqual([nativeBotSaid(bot)(note(said)), nativeBotSaid(bot)(note(typed))], [true, false], "the native timeline draws only the `say` note as the Bot's");
   assert.equal(nativeBotSaid(null)(note(said)), false, "an ordinary Chat's native timeline draws no Bot notes");
+  const timelineSource = timelineAst.getFullText();
+  assert.match(timelineSource, /botPlacements\(placed, \(message\) => message\.role !== "user" \|\| botSaid\(message\)\)/, "the native timeline places a Bot page's bubbles with the same helper and sides as the JS list");
+  assert.match(chatSource, /return message\.role !== "user" \|\| isBotSaid\(/, "the JS list sides a Bot page's messages as the native timeline does");
+  assert.match(timelineSource, /const turnStart = !bot && /, "a Bot page's native rows drop the Turn opening space too");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5822,6 +5835,31 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(relayContent([{ type: "text", text: "Plan my week" }, { type: "image", data: "x" }], "<bot_reminder>say</bot_reminder>"), [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }, { type: "image", data: "x" }], "the reminder follows the user's words after a blank line");
   assert.deepEqual(relayContent([{ type: "image", data: "x" }], "r"), [{ type: "image", data: "x" }, { type: "text", text: "r" }]);
   assert.deepEqual(relayContent([{ type: "text", text: "Hi" }], null), [{ type: "text", text: "Hi" }], "without a reminder the words go as typed");
+  const at = (minutes) => new Date(Date.parse("2026-11-11T08:00:00") + minutes * 60_000).toISOString();
+  const thread = [
+    { id: "a", createdAt: at(0), bot: false },
+    { id: "b", createdAt: at(1), bot: true },
+    { id: "c", createdAt: at(2), bot: true },
+    { id: "d", createdAt: at(3), bot: false },
+    { id: "e", createdAt: at(3 + BOT_TIME_GAP_MS / 60_000), bot: false },
+    { id: "f", createdAt: at(24 * 60), bot: true },
+    { id: "g", createdAt: null, bot: true },
+  ];
+  assert.deepEqual(botPlacements(thread, (message) => message.bot), [
+    { time: at(0), gap: 0 },
+    { time: null, gap: BOT_TURN_GAP },
+    { time: null, gap: 0 },
+    { time: null, gap: BOT_TURN_GAP },
+    { time: at(3 + BOT_TIME_GAP_MS / 60_000), gap: 0 },
+    { time: at(24 * 60), gap: 0 },
+    { time: null, gap: 0 },
+  ], "the time shows first, after a long pause, and on a new day; the gap opens only where the side changes");
+  const label = (key, params) => `${key === "bots.time.today" ? "Today" : "Yesterday"} ${params.time}`;
+  const now = Date.parse("2026-11-11T12:00:00");
+  assert.equal(formatThreadTime("2026-11-11T08:00:00", label, "en", now), "Today 08:00");
+  assert.equal(formatThreadTime("2026-11-10T23:59:00", label, "en", now), "Yesterday 23:59");
+  assert.equal(formatThreadTime("2026-11-02T07:05:00", label, "en", now), "Nov 2 07:05");
+  assert.equal(formatThreadTime("2025-11-02T07:05:00", label, "en", now), "Nov 2, 2025 07:05");
   const relayed = relayFailedMessage({ id: "n", role: "user", meta: { turnSequence: 4, clientMessageId: "c" } }, "Not delivered");
   assert.deepEqual([relayed.errorMessage, relayed.meta.sendFailed, relayed.meta.relayFailed, relayed.meta.turnSequence], ["Not delivered", true, true, 4], "a message the Bot did not get stays in place, marked failed");
 }

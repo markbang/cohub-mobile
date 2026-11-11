@@ -67,6 +67,7 @@ import Sun from "lucide-react-native/icons/sun";
 import Moon from "lucide-react-native/icons/moon";
 import Settings from "lucide-react-native/icons/settings";
 import Sparkles from "lucide-react-native/icons/sparkles";
+import Star from "lucide-react-native/icons/star";
 import Tag from "lucide-react-native/icons/tag";
 import Square from "lucide-react-native/icons/square";
 import Wrench from "lucide-react-native/icons/wrench";
@@ -162,6 +163,7 @@ export const icons = {
   moon: Moon,
   settings: Settings,
   sparkles: Sparkles,
+  star: Star,
   tag: Tag,
   "square-pen": SquarePen,
   stop: Square,

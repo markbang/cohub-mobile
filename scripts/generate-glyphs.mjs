@@ -85,6 +85,7 @@ const GLYPHS = {
   shield: "shield",
   smartphone: "device_phone_portrait",
   sparkles: "sparkles",
+  star: "star_fill",
   "square-pen": "square_pencil",
   stop: "stop_fill",
   sun: "sun_max",

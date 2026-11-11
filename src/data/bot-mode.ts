@@ -81,3 +81,25 @@ export function botEntries<P extends BotSpace>(spaces: readonly P[], bots: Reado
       return primary || activityAt(right) - activityAt(left);
     });
 }
+
+/** A Bot's page shows the time again on a new day or after this long without a message. */
+export const BOT_TIME_GAP_MS = 15 * 60_000;
+/** Each bubble row's own top and bottom padding on a Bot's page, so two bubbles from one side sit 4 apart. */
+export const BOT_BUBBLE_INSET = 2;
+/** Added above a bubble whose side differs from the one before it: 4 + 8 = 12 between them. */
+export const BOT_TURN_GAP = 8;
+
+/** Where a message sits on a Bot's page: the time row above it, if any, and the space added above it otherwise. */
+export type BotPlacement = { time: string | null; gap: number };
+
+export function botPlacements<M extends { createdAt?: string | null }>(messages: readonly M[], fromBot: (message: M) => boolean): BotPlacement[] {
+  let previous: { at: number; bot: boolean } | null = null;
+  return messages.map((message) => {
+    const at = Date.parse(message.createdAt ?? "");
+    const bot = fromBot(message);
+    const time = Number.isFinite(at) && (!previous || !Number.isFinite(previous.at) || at - previous.at >= BOT_TIME_GAP_MS || new Date(at).toDateString() !== new Date(previous.at).toDateString()) ? message.createdAt! : null;
+    const gap = time || !previous || previous.bot === bot ? 0 : BOT_TURN_GAP;
+    previous = { at, bot };
+    return { time, gap };
+  });
+}

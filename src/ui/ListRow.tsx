@@ -19,7 +19,7 @@ const FLAT_SEPARATOR_INSET = 16 + 46 + 12;
  * on line 1, context on line 2, state carried by the leading glyph. Lists are flat on both platforms, as in
  * Mail and Messages: full-width rows with a hairline inset past the avatar.
  */
-export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false, unread = false, selected = false }: {
+export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing, accessory, onPress, onPressIn, onLongPress, accessibilityLabel, accessibilityHint, accessibilityActions, onAccessibilityAction, testID, group = "single", compact = false, unread = false, selected = false, divider = true, titleBadge }: {
   leading?: ReactNode;
   title: string;
   titlePrefix?: ReactNode;
@@ -43,6 +43,10 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
   unread?: boolean;
   /** Marks the row whose detail is open beside the list, as Mail does in a split view. */
   selected?: boolean;
+  /** `false` for a list that reads as a messaging app's contacts, spaced rather than ruled. */
+  divider?: boolean;
+  /** A state chip on the title line, before the time, so the second line keeps its width. */
+  titleBadge?: ReactNode;
 }) {
   const body = <>
     {leading ? <View className="justify-center pr-3">{leading}</View> : null}
@@ -51,6 +55,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
         <View className="flex-row items-center gap-2">
           {titlePrefix}
           <Text numberOfLines={1} className="min-w-0 flex-1 text-body font-semibold text-fg">{title}</Text>
+          {titleBadge}
           {meta ? <Text className={`text-caption tabular-nums ${unread ? "text-accent" : "text-fg-faint"}`}>{meta}</Text> : null}
         </View>
         {subtitle || trailing || unread ? <View className="flex-row items-center gap-2">
@@ -65,7 +70,7 @@ export function ListRow({ leading, title, titlePrefix, meta, subtitle, trailing,
     </View>
   </>;
   const shell = `flex-row items-stretch pl-4 ${compact ? "min-h-14" : "min-h-18"}${selected ? " bg-surface-pressed" : ""}`;
-  const separator = group === "single" || group === "last" ? <View className="absolute bottom-0 right-0 bg-border" style={{ left: leading ? FLAT_SEPARATOR_INSET : 16, height: StyleSheet.hairlineWidth }} /> : null;
+  const separator = divider && (group === "single" || group === "last") ? <View className="absolute bottom-0 right-0 bg-border" style={{ left: leading ? FLAT_SEPARATOR_INSET : 16, height: StyleSheet.hairlineWidth }} /> : null;
   if (!onPress) return <View accessible accessibilityLabel={accessibilityLabel} accessibilityActions={accessibilityActions} onAccessibilityAction={onAccessibilityAction} testID={testID} className={shell} style={CONTINUOUS}>{body}{separator}</View>;
   return (
     <Pressable
