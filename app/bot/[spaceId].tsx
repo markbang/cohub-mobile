@@ -6,7 +6,7 @@ import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { SettingsRow } from "@/src/components/SettingsRow";
 import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { BOT_CONTEXT_WINDOWS } from "@/src/config";
-import { botDirectory, turnModelSelection } from "@/src/data/bot-mode";
+import { botContextWindow, botDirectory, turnModelSelection } from "@/src/data/bot-mode";
 import { useBotContextWindow, useBotModel } from "@/src/data/bot-model";
 import { useAppActions, useAppSelector, useModelCatalog } from "@/src/data/context";
 import { botFileQuery } from "@/src/data/use-bots";
@@ -63,9 +63,13 @@ export default function BotProfileScreen() {
     setModelOpen(false);
     void setModel(next).catch(saveFailed);
   };
-  // The three windows on offer, plus one written into bot.json by hand.
-  const [contextWindow, setContextWindow] = useBotContextWindow(client, spaceId);
-  const contextWindows = BOT_CONTEXT_WINDOWS.includes(contextWindow) ? BOT_CONTEXT_WINDOWS : [...BOT_CONTEXT_WINDOWS, contextWindow].sort((left, right) => left - right);
+  // The catalog gives the model's window. The row offers the tiers that fit in it, plus the window in force
+  // when it is none of them: the model's own limit, or one written into bot.json by hand.
+  useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
+  const [savedWindow, setContextWindow] = useBotContextWindow(client, spaceId);
+  const contextWindow = botContextWindow(savedWindow, effectiveModel, models);
+  const fitting = BOT_CONTEXT_WINDOWS.filter((value) => botContextWindow(value, effectiveModel, models) === value);
+  const contextWindows = fitting.includes(contextWindow) ? fitting : [...fitting, contextWindow].sort((left, right) => left - right);
   return <Screen>
     <TopBar title={name} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -87,7 +91,7 @@ export default function BotProfileScreen() {
         {/* The Chat the Bot works in, as an ordinary Chat: its steps, tools, and raw replies. */}
         <SettingsRow icon="list-tree" title={t("bots.profile.workLog")} onPress={workChat ? () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: workChat.id, log: "1" } }) : undefined} />
         <MenuAnchor ref={modelRowRef} open={modelOpen}><SettingsRow icon="zap" title={t("bots.profile.model")} detail={[effectiveModel?.name || effectiveModel?.id, effectiveModel?.thinkingLevel ? formatThinkingLevel(effectiveModel.thinkingLevel) : null].filter(Boolean).join(" · ") || undefined} onPress={openModels} /></MenuAnchor>
-        <SettingsSelectRow icon="layers" title={t("bots.profile.contextWindow")} value={String(contextWindow)} disabled={!file.data} options={contextWindows.map((value) => ({ value: String(value), label: `${value / 1000}k` }))} onChange={(next) => void setContextWindow(Number(next)).catch(saveFailed)} testID="bot-context-window-select" />
+        <SettingsSelectRow icon="layers" title={t("bots.profile.contextWindow")} value={String(contextWindow)} disabled={!file.data} options={contextWindows.map((value) => ({ value: String(value), label: `${Math.round(value / 1000)}k` }))} onChange={(next) => void setContextWindow(Number(next)).catch(saveFailed)} testID="bot-context-window-select" />
         <SettingsRow icon="clock" title={t("bots.profile.schedules")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId } })} />
         <SettingsRow icon="folder-open" title={t("bots.profile.files")} onPress={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } })} last />
       </SettingsGroup>

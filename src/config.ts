@@ -44,8 +44,8 @@ export const BOT_MOD_SPACE_ID = "20b54a5b-dc39-44a1-93e1-1b5225ed4795";
  * in its files, which keeps the default small. The bot mod's `tell` uses the same default.
  */
 export const BOT_CONTEXT_WINDOW = 200_000;
-/** The windows a Bot's profile offers; the choice is saved in its `bot.json` as `contextWindow`. */
-export const BOT_CONTEXT_WINDOWS: readonly number[] = [100_000, 200_000, 400_000];
+/** The windows a Bot's profile offers, up to its model's; the choice is saved in its `bot.json` as `contextWindow`. */
+export const BOT_CONTEXT_WINDOWS: readonly number[] = [100_000, 200_000, 400_000, 500_000, 600_000, 800_000];
 
 /** A debug build captured by `scripts/ui-snapshots.mjs`, which sets this when it starts Metro. */
 export const uiSnapshots = process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1";

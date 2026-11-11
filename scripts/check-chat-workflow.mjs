@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4282,6 +4282,7 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   }
   const module = loadConfig();
   assert.equal(module.defaultEnvironment, "prod");
+  assert.deepEqual([module.BOT_CONTEXT_WINDOW, module.BOT_CONTEXT_WINDOWS], [200_000, [100_000, 200_000, 400_000, 500_000, 600_000, 800_000]], "a Bot's profile offers six windows and starts at 200k");
   assert.equal(module.config.apiOrigin, "https://capi.neta.art");
   assert.equal(module.config.gatewayOrigin, "wss://cgateway.neta.art/ws");
   const reference = module.config;
@@ -5982,6 +5983,13 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(botModelFrom({ model: { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" } }), { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" }, "a Bot's saved model is read from its bot.json");
 assert.equal(botModelFrom({ model: { provider: "cohub" } }), null, "a model without an id is no choice");
 assert.deepEqual([botContextWindowFrom({ contextWindow: 100_000 }), botContextWindowFrom({ contextWindow: "100000" }), botContextWindowFrom({})], [100_000, null, null], "a Bot's window is read from its bot.json; anything else is no choice");
+  const catalog = [{ id: "half", model: { contextWindow: 500_000, contextWindowLimit: 500_000 } }, { id: "lowered", model: { contextWindow: 200_000, contextWindowLimit: 1_000_000 } }, { id: "odd", model: { contextWindow: 272_000 } }, { id: "undeclared", model: { contextWindow: 128_000, contextWindowSource: "default" } }].map((item) => ({ provider: "cohub", ...item }));
+  const windowOn = (saved, id, models = catalog) => botContextWindow(saved, id ? { provider: "cohub", id } : null, models);
+  assert.deepEqual([windowOn(800_000, "half"), windowOn(200_000, "half"), windowOn(400_000, "odd"), windowOn(800_000, "lowered")], [500_000, 200_000, 272_000, 800_000], "a Bot's window is its saved choice, capped at what the platform gives its model");
+  assert.deepEqual([windowOn(800_000, "half", []), windowOn(800_000, "gone"), windowOn(800_000, null), windowOn(800_000, "undeclared")], [800_000, 800_000, 800_000, 800_000], "a model whose window is not known caps nothing");
+  assert.ok(chatSource.includes("contextWindow: botContextWindow(botChats.contextWindow ?? BOT_CONTEXT_WINDOW, activeModel, models)"), "a relay asks for the window the Bot's profile shows");
+  const profileSource = readFileSync(new URL("../app/bot/[spaceId].tsx", import.meta.url), "utf8");
+  assert.ok(profileSource.includes("botContextWindow(savedWindow, effectiveModel, models)") && profileSource.includes("BOT_CONTEXT_WINDOWS.filter((value) => botContextWindow(value, effectiveModel, models) === value)"), "the profile shows that window and offers the tiers the model's window holds");
 assert.deepEqual(turnModelSelection({ provider: "cohub", model: "claude-sonnet-5", meta: { requestedThinkingLevel: "low" } }), { provider: "cohub", id: "claude-sonnet-5", thinkingLevel: "low" }, "an unset Bot page shows the model its working Chat last ran with");
 assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Plan my week" }], reminder, model: null, contextWindow: 200_000 }), false);
   const [spaceId, body] = prompts[0];
