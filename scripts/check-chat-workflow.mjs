@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, pinnedBotEntries, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -409,7 +409,7 @@ const chromeScope = {
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   // Bot mode is off unless a check turns it on, so every other screen renders as before.
   useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
-  useBots: () => ({ entries: [], loading: false, error: null, openChat: async () => "", refetch: async () => {} }), BotRow: "BotRow", BotTitle: "BotTitle",
+  useBots: () => ({ entries: [], loading: false, error: null, openChat: async () => "", refetch: async () => {} }), BotRow: "BotRow", PinnedBots: "PinnedBots", pinnedBotEntries, BotTitle: "BotTitle",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
@@ -1861,15 +1861,18 @@ try {
   const chat = (id, spaceId) => ({ id, spaceId, title: id });
   const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-work", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   let filter = "bots";
-  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, note: null, chatId: "talk", running: false, needsYou: false };
+  const entry = { space: { id: "bot", slug: "cohubbot-bot", name: "Cohub" }, note: null, chatId: "talk", running: false, needsYou: false };
+  const pinned = { space: { id: "pin", slug: "cohubbot-pin", name: "Pinned", isPinned: true }, note: null, chatId: "pin-talk", running: false, needsYou: false };
+  const toggled = [];
+  let watched = [];
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
-    useRouter: () => ({ push: () => {} }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
+    useRouter: () => ({ push: () => {} }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: (ids) => { watched = ids; },
     useOpenChat: () => (target) => opened.push(target.sessionId),
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
-    ...appHooks(() => ({ state, sessionSeen: { baseline: null, entries: {} }, client: {}, userUuid: "user", connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {}, loadComposerDraft: async () => "", saveComposerDraft: async () => {} })),
+    ...appHooks(() => ({ state, sessionSeen: { baseline: null, entries: {} }, client: {}, userUuid: "user", connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {}, loadComposerDraft: async () => "", saveComposerDraft: async () => {}, toggleSpacePin: async (spaceId) => { toggled.push(spaceId); } })),
     useBotMode: () => ({ enabled: true, loaded: true, error: null }), isBotSpace,
-    useBots: () => ({ entries: [entry], loading: false, error: null, openChat: async (spaceId) => spaceId === "bot" ? "talk" : "", refetch: async () => {} }),
+    useBots: () => ({ entries: [entry, pinned], loading: false, error: null, openChat: async (spaceId) => ({ bot: "talk", pin: "pin-talk" })[spaceId] ?? "", refetch: async () => {} }),
     displaySpaceName: (space) => space.name ?? "",
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
     useSourceSessions: () => ({ sessions: [], loading: false, loadingMore: false, error: null, initialized: true, loadMore: () => {}, reload: () => {} }),
@@ -1885,9 +1888,37 @@ try {
   row.props.onPress();
   await flushSync();
   assert.deepEqual(opened, ["talk"], "a Bot opens the user's Chat with it");
+  // A pinned Bot is a face above the rows, not also a row; a search lists it as a row again.
+  const header = () => chromeNodes(list().props.ListHeaderComponent);
+  const faces = () => header().find((node) => node.type === "PinnedBots").props;
+  assert.deepEqual(faces().entries.map((item) => item.space.id), ["pin"]);
+  assert.deepEqual(watched, ["pin"], "a pinned Bot is on screen, so realtime reaches it");
+  faces().onPress(pinned);
+  row.props.onTogglePin();
+  faces().onTogglePin(pinned);
+  await flushSync();
+  assert.deepEqual([opened, toggled], [["talk", "pin-talk"], ["bot", "pin"]], "a face opens its Bot; a row and a face both toggle the Bot's Space pin");
+  entry.space.isPinned = true;
+  assert.equal(list().props.ListEmptyComponent, null, "with every Bot pinned the faces stand alone, not over an empty state");
+  const search = (query) => header().find((node) => node.type === "LargeTitleSearch").props.field.onChangeText(query);
+  search("pin");
+  assert.deepEqual([list().props.data.map((item) => item.entry.space.id), faces().entries], [["pin"], []]);
+  search("");
   filter = "all";
   assert.deepEqual(list().props.data.map((item) => item.session.id), ["plain"], "with Bot mode on, Bot Chats leave the other views");
   screen.unmount();
+}
+{
+  // A Bot's row and pinned face say every state they show, and offer the pin a hold opens as a named action.
+  const toggled = [];
+  const readBot = loadChromeComponent("../src/components/BotRow.tsx", "useBot", { ...chromeScope, ...appHooks(() => ({ sessionSeen: { baseline: 0, entries: {} } })), useState: (initial) => [initial, () => {}], displaySpaceName: (space) => space.name, isSessionUnread, haptics: {}, ContextMenu: "ContextMenu" });
+  const read = (slug) => readBot({ entry: { space: { id: "bot", slug, name: "Cohub", isPinned: true }, note: { messageId: "m", at: "2026-11-11T00:00:00Z" }, chatId: "talk", running: true, needsYou: true }, onPress: () => {}, onTogglePin: () => toggled.push("bot") });
+  const bot = read("cohubbot-bot");
+  assert.equal(bot.press.accessibilityLabel, "ui.openNamed, bots.running, bots.needsYou, session.unread, space.pinned");
+  assert.deepEqual(bot.press.accessibilityActions, [{ name: "togglePin", label: "bots.unpin" }]);
+  bot.press.onAccessibilityAction({ nativeEvent: { actionName: "togglePin" } });
+  assert.deepEqual(toggled, ["bot"]);
+  assert.equal(read(PRIMARY_BOT_SLUG).press.accessibilityActions, undefined, "the primary Bot's place is not a pin, so it offers none");
 }
 const fadeAnimation = { duration: () => fadeAnimation };
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
@@ -5922,6 +5953,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const entries = botEntries(spaces, bots, new Set(["writer"]), new Set(["idle"]));
   assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow the last thing they said");
   assert.deepEqual(entries.map((entry) => [entry.chatId, entry.running, entry.needsYou]), [["p-chat", false, false], ["w-chat", true, false], [null, false, true]]);
+  const pinnedSpaces = [{ ...spaces[0], isPinned: true, createdAt: "2026-09-01T00:00:00Z" }, { ...spaces[1], isPinned: true, createdAt: "2026-08-01T00:00:00Z" }, { ...spaces[2], createdAt: "2026-10-01T00:00:00Z" }, { id: "loose", slug: "cohubbot-loose" }];
+  assert.deepEqual(pinnedBotEntries(botEntries(pinnedSpaces, bots, new Set(), new Set())).map((entry) => entry.space.id), ["primary", "idle", "writer"], "the primary Bot is the first face, pinned or not; pinned Bots follow oldest first, whoever spoke last");
+  assert.deepEqual(pinnedBotEntries(botEntries([spaces[2]], bots, new Set(), new Set())), [], "alone, the primary Bot stays a row, which shows what it last said");
 
   assert.deepEqual(relayContent([{ type: "text", text: "Plan my week" }, { type: "image", data: "x" }], "<bot_reminder>say</bot_reminder>"), [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }, { type: "image", data: "x" }], "the reminder follows the user's words after a blank line");
   assert.deepEqual(relayContent([{ type: "image", data: "x" }], "r"), [{ type: "image", data: "x" }, { type: "text", text: "r" }]);

@@ -12,7 +12,7 @@ export function botDirectory<E>(directory: { entries: E[]; loading: boolean; err
   return { entries: directory.entries, known: !directory.loading && !directory.error, error: directory.error?.message ?? null };
 }
 
-export type BotSpace = Pick<SpaceRecord, "id" | "slug"> & Partial<Pick<SpaceRecord, "name" | "title" | "publicProfile" | "lastActivityAt" | "updatedAt">>;
+export type BotSpace = Pick<SpaceRecord, "id" | "slug"> & Partial<Pick<SpaceRecord, "name" | "title" | "publicProfile" | "lastActivityAt" | "updatedAt" | "createdAt" | "isPinned">>;
 export type BotSession = Pick<SessionRecord, "id" | "spaceId" | "title" | "latestMessageText" | "lastMessageAt" | "updatedAt">;
 
 /** Who a Bot is, as its messages show it. */
@@ -137,6 +137,19 @@ export function botEntries<P extends BotSpace>(spaces: readonly P[], bots: Reado
       const primary = Number(right.space.slug === PRIMARY_BOT_SLUG) - Number(left.space.slug === PRIMARY_BOT_SLUG);
       return primary || activityAt(right) - activityAt(left);
     });
+}
+
+/**
+ * The Bots shown as faces above the list; the rest are its rows. A Bot is a Space, so its pin is the Space's.
+ * The primary Bot is a face once it has company; alone it stays a row, which shows what it last said. It comes
+ * first and the rest oldest first: a face keeps its place while Bots talk, unlike the rows below.
+ */
+export function pinnedBotEntries<P extends BotSpace>(entries: readonly BotEntry<P>[]): BotEntry<P>[] {
+  const createdAt = (entry: BotEntry<P>) => Date.parse(entry.space.createdAt ?? "") || 0;
+  return entries.filter((entry) => entry.space.isPinned === true || (entry.space.slug === PRIMARY_BOT_SLUG && entries.length > 1)).sort((left, right) => {
+    const primary = Number(right.space.slug === PRIMARY_BOT_SLUG) - Number(left.space.slug === PRIMARY_BOT_SLUG);
+    return primary || createdAt(left) - createdAt(right);
+  });
 }
 
 /** A Bot's page shows the time again on a new day or after this long without a message. */

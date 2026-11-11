@@ -95,9 +95,9 @@ export function HarnessIcon({ harness, size = 16 }: { harness: HarnessKind; size
   return <Icon size={size} color={theme.colors.text} />;
 }
 
-/** Avatars are continuous squircles at 30% of their size, so the shape scales with them. `online` marks a live Space runtime. */
-export function Avatar({ name, uri, size = 40, online = false }: { name: string; uri?: string | null; size?: number; online?: boolean }) {
-  const shape = { width: size, height: size, borderRadius: size * 0.3, borderCurve: "continuous" as const };
+/** Avatars are continuous squircles at 30% of their size, so the shape scales with them; `round` is a pinned face's circle. `online` marks a live Space runtime. */
+export function Avatar({ name, uri, size = 40, online = false, round = false }: { name: string; uri?: string | null; size?: number; online?: boolean; round?: boolean }) {
+  const shape = { width: size, height: size, borderRadius: size * (round ? 0.5 : 0.3), borderCurve: "continuous" as const };
   return (
     <View style={{ width: size, height: size }}>
       {uri
