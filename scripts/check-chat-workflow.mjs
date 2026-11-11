@@ -2631,7 +2631,7 @@ let stateSyncHook;
 let timeoutSource;
 const sessionCallbacks = {};
 function inspectPagination(node) {
-  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage", "sendNewMessage", "refreshSession", "loadLatestWindow", "waitForSendHistory", "watchAcceptedTurn"].includes(node.name.getText(contextSource))) {
+  if (ts.isVariableDeclaration(node) && ["openSession", "closeSession", "loadSession", "releaseSession", "sendMessage", "sendNewMessage", "refreshSession", "loadLatestWindow", "waitForSendHistory", "watchAcceptedTurn", "attachSessionRealtime"].includes(node.name.getText(contextSource))) {
     const callback = node.initializer;
     if (ts.isCallExpression(callback) && callback.expression.getText(contextSource) === "useCallback") sessionCallbacks[node.name.getText(contextSource)] = callback.arguments[0].getText(contextSource);
   }
@@ -5906,6 +5906,62 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.ok(!("contextWindow" in ordinary.prompts[0]), "and sends no Bot window");
   assert.ok(chatSource.includes("...(bot ? { note: true } : { model: activeModel, harness, ...(execution ? { execution } : {}) })") && chatSource.includes("if (noteId) void relayToBotChat(noteId);"), "a Bot page send writes the note, then hands it to the Bot");
   assert.ok(/if \(message\.meta\?\.relayFailed === true && relayId\) \{[^}]*void relayToBotChat\(relayId\);\s*return;/.test(chatSource), "retrying a message the Bot did not get only hands it over again");
+}
+
+// A Bot's `say` reaches an open Bot page live, its message before its Turn: it is the Bot's bubble, after the question it answers.
+{
+  const helpers = ["turnClientMessageId", "mergeTurnRecords", "patchTurnRecords", "isLiveMessage", "mergeMessages"].map(contextFunctionSource).join("\n");
+  const scope = {
+    emptyView: () => ({ messages: [], turns: [], hasMoreOlder: false, hasMoreNewer: false, windowGeneration: 0, stream: null }),
+    updateView: (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }),
+    updateLatestTurn: (state) => state, recordDebugEvent: () => {}, sortByRecent: (rows) => rows, preferNewerSession: (_current, incoming) => incoming, reconcileTurnStatusPatch: (_known, turn) => turn,
+    mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage, turnFitsWindow, latestTurn, isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, hasFinalAssistantForTurn, isAwaitingSubmit, isFailedSend, isLocalSend,
+  };
+  const { reducer, mergeMessages } = new Function(...Object.keys(scope), ts.transpileModule(`${helpers}\n${contextFunctionSource("reducer")}\nreturn { reducer, mergeMessages };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
+  const note = (id, sequence, text, meta) => ({ id, sessionId: "fixture", sequence, executionKind: "note", status: "completed", intent: "followup", userUuid: "user", userContent: [{ type: "text", text }], userText: text, assistantContent: null, assistantText: null, provider: null, model: null, stopReason: null, errorMessage: null, finalUsage: null, meta, startedAt: null, completedAt: `2026-11-11T04:3${sequence}:00Z`, durationMs: 0, createdAt: `2026-11-11T04:3${sequence}:00Z`, updatedAt: `2026-11-11T04:3${sequence}:00Z` });
+  const said = note("t4", 4, "Sort of — the engineer in this Space.", { origin: BOT_SAY_ORIGIN, clientMessageId: "bot-4", userMessageId: "m4" });
+  // The server's note message: the session's own message counter, no Turn sequence, no origin.
+  const persisted = { type: "session.message.persisted", payload: { message: { id: "m4", sessionId: "fixture", role: "user", sequence: 4, content: said.userContent, text: said.userText, meta: { turnId: "t4", messageId: "m4", clientMessageId: "bot-4", messageKind: "user", actorUserId: "user" }, createdAt: said.createdAt } } };
+  const created = { type: "session.turn.created", payload: { turn: said } };
+  const history = [note("t1", 1, "hi", { clientMessageId: "c1" }), note("t2", 2, "Hi, I'm here.", { origin: BOT_SAY_ORIGIN }), note("t3", 3, "Are you our new engineer?", { clientMessageId: "c3" })];
+
+  const deliver = (events, view = { turns: history, messages: messagesFromTurns(history), historyLoaded: true }) => {
+    let state = { sessions: [], sessionViews: { fixture: { ...scope.emptyView(), ...view } } };
+    let handlers;
+    const session = { subscribeGeneration: () => () => {}, subscribe: (next) => { handlers = next; return () => {}; } };
+    const attach = compileCallback(sessionCallbacks.attachSessionRealtime, {
+      subscriptions: { current: new Map() }, sessionSpaces: { current: new Map() }, markChatEntry: () => {}, recordDebugEvent: () => {}, debugAlias: (_kind, id) => id,
+      createStreamBatch, liveStreamStatusFromPatch, resyncCoordinatorRef: { current: { request: () => false } }, refreshSession: async () => {}, preferNewerSession: scope.preferNewerSession,
+      dispatch: (action) => { state = reducer(state, action); }, stateRef: { get current() { return state; } }, userKey: "user", saveMessages: async () => {}, saveSessions: async () => {}, mergeMessages,
+    });
+    attach({ space: () => ({ session: () => session }) }, "space", "fixture");
+    for (const event of events) {
+      handlers.event?.(event);
+      if (event.type === "session.message.persisted") handlers.persisted?.(event);
+    }
+    return state.sessionViews.fixture;
+  };
+
+  const callbackSource = (ast, name) => { let found; (function find(node) { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name) found = node.initializer.arguments[0].getText(ast); ts.forEachChild(node, find); })(ast); return found; };
+  const threadSource = callbackSource(chatAst, "threadMessages");
+  const botSaidSource = callbackSource(ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), "botSaid");
+  const bot = { name: "Engineer", avatarUrl: null };
+  const page = (view, peer) => {
+    const messages = compileCallback(threadSource, { pendingNew: null, view, messagesInWindow, withTurnSequences, mergeDisplayMessages, messagesFromTurns, isOptimisticFollowup, isAssistantIntermediate: (message) => message.meta?.messageKind === "assistant_intermediate", hasRenderableMessage: () => true, queuedFollowupIds: new Set() })();
+    const turnsById = new Map(view.turns.map((turn) => [turn.id, turn]));
+    const turnsBySequence = new Map(view.turns.map((turn) => [turn.sequence, [turn]]));
+    const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+    const nativeSaid = compileCallback(botSaidSource, { bot: peer, turnsById, isBotSaid });
+    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble"), nativeSaid(item)]);
+  };
+  const expected = [["hi", false, false], ["Hi, I'm here.", true, true], ["Are you our new engineer?", false, false], ["Sort of — the engineer in this Space.", true, true]];
+  const live = deliver([persisted, created]);
+  assert.deepEqual(page(live, bot), expected, "a `say` that arrives live is the Bot's bubble in both timelines, after the question it answers");
+  const patched = reducer({ sessions: [], sessionTurnStatuses: {}, sessionLatestTurns: {}, sessionViews: { fixture: live } }, { type: "turn-patch", sessionId: "fixture", turn: { id: "t4", status: "completed", updatedAt: "2026-11-11T04:40:00Z" } }).sessionViews.fixture;
+  assert.deepEqual(page(patched, bot), expected, "a later Turn update without meta keeps the Bot's origin");
+  assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
+  const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
+  assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");
 }
 
 console.log("Chat workflow checks passed");
