@@ -1,6 +1,6 @@
 import type { CohubClient, SessionRecord } from "@neta-art/cohub";
 import { BOT_MOD_SPACE_ID } from "@/src/config";
-import { botModelFrom, PRIMARY_BOT_SLUG } from "./bot-mode";
+import { botContextWindowFrom, botModelFrom, PRIMARY_BOT_SLUG } from "./bot-mode";
 import type { ChatModelSelection } from "./types";
 
 const BOT_PERSONA_PATH = ".agents/APPEND_SYSTEM.md";
@@ -50,7 +50,7 @@ async function setRandomAvatar(client: CohubClient, spaceId: string) {
 
 /** The two Chats a Bot keeps: `session` it works in, `chat` the user reads (the Bot's `say` notes land there). */
 export type BotChats = { session: SessionRecord; chat: SessionRecord };
-export type BotFile = { raw: Record<string, unknown>; session: SessionRecord | null; chat: SessionRecord | null; model: ChatModelSelection | null };
+export type BotFile = { raw: Record<string, unknown>; session: SessionRecord | null; chat: SessionRecord | null; model: ChatModelSelection | null; contextWindow: number | null };
 
 function parseBotFile(text: string): Record<string, unknown> {
   let parsed: unknown = null;
@@ -75,7 +75,7 @@ export async function readBotFile(client: CohubClient, spaceId: string): Promise
   const ids = [raw.session, raw.chat].filter((id): id is string => typeof id === "string" && id.length > 0);
   const { sessions } = ids.length ? await client.space(spaceId).sessions.list({ ids, archived: "include" }) : { sessions: [] };
   const live = (id: unknown) => sessions.find((item) => item.id === id) ?? null;
-  return { raw, session: live(raw.session), chat: live(raw.chat), model: botModelFrom(raw) };
+  return { raw, session: live(raw.session), chat: live(raw.chat), model: botModelFrom(raw), contextWindow: botContextWindowFrom(raw) };
 }
 
 /** The hook that turns a reply the Bot never `say`s into one, copied from the bot mod as is; skipped when the template cannot be read. */

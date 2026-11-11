@@ -38,10 +38,14 @@ export const defaultEnvironment = buildEnvironment;
 export const BOT_MOD_SPACE_ID = "20b54a5b-dc39-44a1-93e1-1b5225ed4795";
 
 /**
- * The Chat a Bot works in is one conversation that compacts itself: what the user hands it asks for this window,
+ * The Chat a Bot works in is one conversation that compacts itself: what the user hands it asks for the Bot's window,
  * which the server keeps for that Chat from then on (delegated and scheduled prompts included) and caps at the platform limit.
+ * A wake-up rewrites the whole context once its cache has expired, so the cost follows the window; a Bot's memory is
+ * in its files, which keeps the default small. The bot mod's `tell` uses the same default.
  */
-export const BOT_CONTEXT_WINDOW = 400_000;
+export const BOT_CONTEXT_WINDOW = 200_000;
+/** The windows a Bot's profile offers; the choice is saved in its `bot.json` as `contextWindow`. */
+export const BOT_CONTEXT_WINDOWS: readonly number[] = [100_000, 200_000, 400_000];
 
 /** A debug build captured by `scripts/ui-snapshots.mjs`, which sets this when it starts Metro. */
 export const uiSnapshots = process.env.EXPO_PUBLIC_UI_SNAPSHOTS === "1";

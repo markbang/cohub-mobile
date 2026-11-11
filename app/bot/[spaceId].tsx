@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { SettingsRow } from "@/src/components/SettingsRow";
+import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
+import { BOT_CONTEXT_WINDOWS } from "@/src/config";
 import { botDirectory, turnModelSelection } from "@/src/data/bot-mode";
-import { useBotModel } from "@/src/data/bot-model";
+import { useBotContextWindow, useBotModel } from "@/src/data/bot-model";
 import { useAppActions, useAppSelector, useModelCatalog } from "@/src/data/context";
 import { botFileQuery } from "@/src/data/use-bots";
 import { useSpaceDirectory } from "@/src/data/use-space-directory";
@@ -56,10 +58,14 @@ export default function BotProfileScreen() {
   const showToast = useToast();
   const modelRowRef = useRef<View>(null);
   const openModels = () => { setModelOpen(true); void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); };
+  const saveFailed = (error: unknown) => showToast({ title: t("bots.settings.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
   const chooseModel = (next: Parameters<typeof setModel>[0]) => {
     setModelOpen(false);
-    void setModel(next).catch((error: unknown) => showToast({ title: t("bots.model.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
+    void setModel(next).catch(saveFailed);
   };
+  // The three windows on offer, plus one written into bot.json by hand.
+  const [contextWindow, setContextWindow] = useBotContextWindow(client, spaceId);
+  const contextWindows = BOT_CONTEXT_WINDOWS.includes(contextWindow) ? BOT_CONTEXT_WINDOWS : [...BOT_CONTEXT_WINDOWS, contextWindow].sort((left, right) => left - right);
   return <Screen>
     <TopBar title={name} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -81,6 +87,7 @@ export default function BotProfileScreen() {
         {/* The Chat the Bot works in, as an ordinary Chat: its steps, tools, and raw replies. */}
         <SettingsRow icon="list-tree" title={t("bots.profile.workLog")} onPress={workChat ? () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: workChat.id, log: "1" } }) : undefined} />
         <MenuAnchor ref={modelRowRef} open={modelOpen}><SettingsRow icon="zap" title={t("bots.profile.model")} detail={[effectiveModel?.name || effectiveModel?.id, effectiveModel?.thinkingLevel ? formatThinkingLevel(effectiveModel.thinkingLevel) : null].filter(Boolean).join(" · ") || undefined} onPress={openModels} /></MenuAnchor>
+        <SettingsSelectRow icon="layers" title={t("bots.profile.contextWindow")} value={String(contextWindow)} disabled={!file.data} options={contextWindows.map((value) => ({ value: String(value), label: `${value / 1000}k` }))} onChange={(next) => void setContextWindow(Number(next)).catch(saveFailed)} testID="bot-context-window-select" />
         <SettingsRow icon="clock" title={t("bots.profile.schedules")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId } })} />
         <SettingsRow icon="folder-open" title={t("bots.profile.files")} onPress={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } })} last />
       </SettingsGroup>
