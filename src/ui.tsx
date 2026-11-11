@@ -522,7 +522,7 @@ export const FIELD_INPUT_CLASS = "min-h-12 rounded-sm bg-surface-raised px-3 py-
 
 export type ComposerInputMeasurement = { input: TextInput | null; scrollY: number };
 
-export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelDetail, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; /** Secondary, such as the thinking level; it gives way before the model name does. */ modelDetail?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[] }) {
+export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, onVoice, onModelPress, modelLabel, modelDetail, modelStatus = "unknown", disabled = false, sending = false, sendFeedback = "idle", running = false, voiceActive = false, voiceStarting = false, hasAttachment = false, placeholder, anchorRef, menuSourceRef, measurementRef, attachmentMenuOpen = false, modelMenuOpen = false, showHarnessPicker = false, harness = "cohub", harnessMenuOpen = false, onHarnessPress, onSelectionChange, onFocusChange, onPasteImages, attachmentActions, harnessSections, variant = "chat" }: { value: string; onChangeText: (value: string) => void; onSend: () => void; onStop?: () => void; onAttach: () => void; onVoice?: () => void; onModelPress?: () => void; modelLabel?: string; /** Secondary, such as the thinking level; it gives way before the model name does. */ modelDetail?: string; modelStatus?: "available" | "degraded" | "outage" | "unknown"; disabled?: boolean; sending?: boolean; sendFeedback?: "idle" | "success"; running?: boolean; voiceActive?: boolean; voiceStarting?: boolean; hasAttachment?: boolean; placeholder?: string; anchorRef?: React.RefObject<View | null>; /** Set to the drawn button that opens a composer menu, so the menu grows out of it. */ menuSourceRef?: React.RefObject<View | null>; measurementRef?: React.RefObject<ComposerInputMeasurement>; attachmentMenuOpen?: boolean; modelMenuOpen?: boolean; showHarnessPicker?: boolean; harness?: HarnessKind; harnessMenuOpen?: boolean; onHarnessPress?: () => void; onSelectionChange?: (selection: { start: number; end: number }) => void; onFocusChange?: (focused: boolean) => void; onPasteImages?: (attachments: AttachmentDraft[]) => void; /** With system menus (iOS), the add button opens these itself instead of calling `onAttach`. */ attachmentActions?: readonly AnchoredMenuAction[]; /** With system menus (iOS), the harness chip opens these itself instead of calling `onHarnessPress`. */ harnessSections?: readonly NativeMenuSection[]; /** `bot`: the add button beside one capsule holding the input, voice, and send, as a Bot's page shows it. */ variant?: "chat" | "bot" }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -587,15 +587,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   }
   const resolvedModelLabel = modelLabel ?? t("ui.composer.modelAutomatic");
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
-  return (
-    // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`.
-    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
-      {/* Glyphs pop only when they change, not when the composer first appears. */}
-      <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerSurface}>
-        {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
-        <GlassBackground radius={styles.composerSurface.borderRadius} surface="glassComposer" />
-        <View className="flex-row items-start">
+  const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
             <TextInput
@@ -654,7 +646,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               submitBehavior="newline"
             />
           </PasteImagesInput>
-          <View className="w-11 h-11">
+  </>;
+  const expandButton = <View className="w-11 h-11">
             {layout.showExpandButton ? <Pressable
               testID="chat-composer-expand"
               accessibilityRole="button"
@@ -663,10 +656,44 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               onPress={() => { traceAction("composer_expand", { expanded: !layout.expanded }); setExpanded(!layout.expanded); }}
               className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"
             ><AppIcon name={layout.expanded ? "minimize" : "maximize"} size={18} tone="muted" /></Pressable> : null}
-          </View>
+          </View>;
+  const attachButton = nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <MenuAnchor open={attachmentMenuOpen}><Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full active:opacity-70 ${blocked ? "opacity-45" : ""}`}><GlassBackground radius={22} surface="glassButton" blurTarget={null} /><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable></MenuAnchor>;
+  const voiceButton = onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "active:opacity-70"} ${blocked ? "opacity-45" : ""}`}>{voiceActive ? null : <GlassBackground radius={22} surface="glassButton" blurTarget={null} />}{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={22} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null;
+  const sendButton = <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : queues ? t("ui.composer.queue") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
+            <Animated.View key={glyph} entering={controlIconEntering} exiting={controlIconExiting}>
+              {glyph === "stop" ? <AppIcon name="stop" size={18} color={theme.colors.background} fill={theme.colors.background} /> : glyph === "sent" ? <AppIcon name="check" size={22} tone="onAccent" /> : glyph === "sending" ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
+            </Animated.View>
+          </Pressable>;
+  if (variant === "bot") return (
+    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
+      <LayoutAnimationConfig skipEntering skipExiting>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" className="flex-row items-end gap-2">
+        <View style={styles.botAttach}>{attachButton}</View>
+        <View className={`min-w-0 flex-1 flex-row items-end overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.botCapsule}>
+          <GlassBackground radius={styles.botCapsule.borderRadius} surface="glassComposer" />
+          {inputField}
+          {layout.showExpandButton ? expandButton : null}
+          {voiceButton}
+          {sendButton}
+        </View>
+      </View>
+      </LayoutAnimationConfig>
+    </View>
+  );
+  return (
+    // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`.
+    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
+      {/* Glyphs pop only when they change, not when the composer first appears. */}
+      <LayoutAnimationConfig skipEntering skipExiting>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`gap-2 overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerSurface}>
+        {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
+        <GlassBackground radius={styles.composerSurface.borderRadius} surface="glassComposer" />
+        <View className="flex-row items-start">
+          {inputField}
+          {expandButton}
         </View>
         <View className="h-11 flex-row items-center gap-2">
-          {nativeMenus && attachmentActions ? <NativeMenuButton appearance="control" icon="plus" label={t("ui.composer.addAttachment")} actions={attachmentActions} disabled={blocked} testID="chat-composer-attach" /> : <MenuAnchor open={attachmentMenuOpen}><Pressable ref={attachButtonRef} testID="chat-composer-attach" accessibilityRole="button" accessibilityLabel={t("ui.composer.addAttachment")} accessibilityState={{ expanded: attachmentMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(attachButtonRef); traceAction("composer_attach", { menuOpen: attachmentMenuOpen }); Keyboard.dismiss(); onAttach(); }} className={`size-11 items-center justify-center rounded-full active:opacity-70 ${blocked ? "opacity-45" : ""}`}><GlassBackground radius={22} surface="glassButton" blurTarget={null} /><Animated.View key={attachmentMenuOpen ? "close" : "add"} entering={controlIconEntering} exiting={controlIconExiting}><AppIcon name={attachmentMenuOpen ? "x" : "plus"} size={22} tone="secondary" /></Animated.View></Pressable></MenuAnchor>}
+          {attachButton}
           {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <MenuAnchor open={harnessMenuOpen} className="min-w-0 max-w-26 shrink"><Pressable ref={harnessButtonRef} testID="chat-composer-harness" hitSlop={HARNESS_CHIP_SLOP} accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-sm px-2 bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-50" : ""}`}>
             <HarnessIcon harness={harness} size={16} />
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
@@ -681,12 +708,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable></MenuAnchor> : null}
           <View className="flex-1 min-w-0" />
-          {onVoice ? <Pressable accessibilityRole="button" accessibilityLabel={voiceActive ? t("ui.composer.voiceStop") : t("ui.composer.voiceStart")} accessibilityState={{ disabled: blocked || voiceStarting, selected: voiceActive }} disabled={blocked || voiceStarting} onPress={() => { traceAction("composer_voice", { active: voiceActive, starting: voiceStarting }); onVoice(); }} className={`size-11 items-center justify-center rounded-full ${voiceActive ? "bg-accent-soft active:bg-accent-border" : "active:opacity-70"} ${blocked ? "opacity-45" : ""}`}>{voiceActive ? null : <GlassBackground radius={22} surface="glassButton" blurTarget={null} />}{voiceStarting ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="mic" size={22} tone={voiceActive ? "accent" : "secondary"} />}</Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={canStop ? t("ui.composer.stop") : queues ? t("ui.composer.queue") : t("ui.composer.send")} disabled={!canStop && !canSend} onPress={() => { traceAction(canStop ? "composer_stop" : "composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked }); if (canStop) onStop?.(); else onSend(); }} className={`size-11 items-center justify-center rounded-full ${canStop ? "bg-fg active:bg-fg-secondary" : canSend ? "bg-accent active:bg-accent-pressed" : "bg-surface-raised"}`}>
-            <Animated.View key={glyph} entering={controlIconEntering} exiting={controlIconExiting}>
-              {glyph === "stop" ? <AppIcon name="stop" size={18} color={theme.colors.background} fill={theme.colors.background} /> : glyph === "sent" ? <AppIcon name="check" size={22} tone="onAccent" /> : glyph === "sending" ? <Loader color={theme.colors.accentText} /> : <AppIcon name="arrow-up" size={22} tone={canSend ? "onAccent" : "faint"} />}
-            </Animated.View>
-          </Pressable>
+          {voiceButton}
+          {sendButton}
         </View>
       </View>
       </LayoutAnimationConfig>
@@ -793,4 +816,7 @@ const styles = StyleSheet.create({
   composerSurface: { padding: 8, borderRadius: 30, borderCurve: "continuous" },
   composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
   composerPasteTarget: { flex: 1, minWidth: 0 },
+  // 44 pt controls inset 2 make a 48 pt capsule; the add button rises 2 to share its center line.
+  botCapsule: { padding: 2, paddingLeft: 10, borderRadius: 24, borderCurve: "continuous" },
+  botAttach: { paddingBottom: 2 },
 });

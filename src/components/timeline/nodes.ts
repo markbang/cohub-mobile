@@ -7,7 +7,7 @@ import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icon
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { formatMessageClock } from "@/src/data/chat-format";
+import { formatMessageClock, formatThreadTime } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { imageThumbnailUrl } from "@/src/data/media";
 import { messageMarkdownImages } from "@/src/data/message-links";
@@ -17,13 +17,14 @@ import { toolCallPreview } from "@/src/data/tool-call";
 import type { StreamView } from "@/src/data/types";
 import { BRAND, MASCOT_PATHS } from "@/src/design/brand";
 import type { Translate } from "@/src/i18n";
+import { getActiveLocale } from "@/src/i18n/core";
 import type { IconName } from "@/src/icons";
 import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { curves, loops } from "@/src/motion";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, typography, type AppTheme } from "@/src/theme";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
-import { contentText, hasRenderableContent, initials, messageText } from "@/src/utils";
-import { botReplyBlocks, type BotPeer } from "@/src/data/bot-mode";
+import { contentText, hasRenderableContent, messageText } from "@/src/utils";
+import { BOT_BUBBLE_INSET, botReplyBlocks, type BotPlacement } from "@/src/data/bot-mode";
 
 const MD4C_FLAGS = { underline: false, superscript: false, subscript: false, latexMath: true, highlight: false, hardSoftBreaks: false, preserveBlankLines: false, admonitions: true };
 const TOOL_DETAILS_MAX_HEIGHT = 420;
@@ -291,7 +292,7 @@ function bubbleMeta(ctx: NodeContext, clock: string | undefined, local: boolean,
   };
 }
 
-export function userMessageNode(ctx: NodeContext, message: MessageRecord, options: { local: boolean; retryDisabled: boolean; topPadding: number }): TimelineNode {
+export function userMessageNode(ctx: NodeContext, message: MessageRecord, options: { local: boolean; retryDisabled: boolean; topPadding: number; inset?: number }): TimelineNode {
   const { theme, t } = ctx;
   const maxWidth = getBubbleMaxWidth(ctx.width);
   const inner = maxWidth - BUBBLE_PADDING_X * 2;
@@ -309,7 +310,7 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
     children: [icon(glyph, 14, tone), text(label, textStyle("caption", tone, { fontWeight: "600" }))],
   });
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingTop: 5 + options.topPadding, paddingBottom: 5, alignItems: "flex-end" },
+    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingTop: (options.inset ?? 5) + options.topPadding, paddingBottom: options.inset ?? 5, alignItems: "flex-end" },
     children: [
       {
         type: "view", id: "bubble",
@@ -476,36 +477,30 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
-const BOT_AVATAR_SIZE = 28;
-
-/** `Avatar`'s shape, for the Bot beside what it says. */
-function botAvatar(ctx: NodeContext, peer: BotPeer, size: number): TimelineNode {
-  const shape = { width: size, height: size, borderRadius: size * 0.3 };
-  if (peer.avatarUrl) return { type: "image", uri: imageThumbnailUrl(peer.avatarUrl, size, PixelRatio.get()), fallbackUri: peer.avatarUrl, style: { ...shape, backgroundColor: color(ctx.theme.colors.surfaceRaised) } };
-  return { type: "view", style: { ...shape, alignItems: "center", justifyContent: "center", backgroundColor: color(ctx.theme.colors.accentSoft) }, children: [text(initials(peer.name), textStyle("micro", ctx.theme.colors.accent, { fontWeight: "600" }))] };
-}
-
-/** `BotNoteBubble`: what the Bot said with `say`, its words and images beside its face. */
-export function botNoteNode(ctx: NodeContext, message: MessageRecord, bot: BotPeer, sandboxImages: SandboxImages): TimelineNode | null {
+/** `BotNoteBubble`: what the Bot said with `say`, its words and images on the left. */
+export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages): TimelineNode | null {
   const { theme } = ctx;
-  const maxWidth = getBubbleMaxWidth(ctx.width) - BOT_AVATAR_SIZE - 8;
+  const maxWidth = getBubbleMaxWidth(ctx.width);
   const width = maxWidth - BUBBLE_PADDING_X * 2;
   const blocks = botReplyBlocks(message.content);
   const body = blocks.length
     ? contentNodes(ctx, message.id, blocks, { width, color: ctx.theme.colors.assistantBubbleText, onSurface: true, sandboxImages })
     : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, width, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
   if (body.length === 0) return null;
-  const clock = formatMessageClock(message.createdAt);
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: 3, flexDirection: "row", alignItems: "flex-end", gap: 8 },
-    children: [
-      botAvatar(ctx, bot, BOT_AVATAR_SIZE),
-      {
-        type: "view", style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
-        children: [...body, ...(clock ? [text(clock, textStyle("micro", theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { alignSelf: "flex-end", marginTop: 2 } })] : [])],
-      },
-    ],
+    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, flexDirection: "row" },
+    children: [{
+      type: "view", style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
+      children: body,
+    }],
   };
+}
+
+/** A message on a Bot's page with what `botPlacements` puts above it: `BotTimeDivider`, or the space where the side changes. */
+export function botPlacedNode(ctx: NodeContext, node: TimelineNode | null, placement: BotPlacement): TimelineNode | null {
+  if (!placement.time) return node && placement.gap ? { type: "view", style: { paddingTop: placement.gap }, children: [node] } : node;
+  const label = formatThreadTime(placement.time, ctx.t, getActiveLocale());
+  return { type: "view", children: [text(label, textStyle("caption", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { alignSelf: "center", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 } }), ...(node ? [node] : [])] };
 }
 
 function liveDot(ctx: NodeContext): TimelineNode {

@@ -2,9 +2,12 @@ import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/c
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
+import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { BotTitle } from "@/src/components/BotTitle";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
+import { BOT_BUBBLE_INSET, botPlacements, isBotSaid, type BotPeer } from "@/src/data/bot-mode";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -12,9 +15,9 @@ import { usePaneWidth } from "@/src/ui/pane";
 
 /**
  * The Chat screen's own chrome and native timeline over fixed conversations, so its layout can be
- * captured on both platforms without an account's data. `?fixture=` picks the conversation.
+ * captured on both platforms without an account's data. `?fixture=` picks the conversation; `bot` is a Bot's page.
  */
-const FIXTURES = ["conversation", "tools", "long", "states", "media", "stream"] as const;
+const FIXTURES = ["conversation", "tools", "long", "states", "media", "stream", "bot"] as const;
 type Fixture = (typeof FIXTURES)[number];
 
 const NO_TURNS: ReadonlyMap<string, SessionTurnRecord> = new Map();
@@ -29,6 +32,9 @@ export default function DebugChatScreen() {
   const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
   const messages = useMemo(() => conversation(fixture), [fixture]);
+  const bot = fixture === "bot" ? BOT : null;
+  const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
+  const placements = useMemo(() => botPlacements(messages, (message) => message.role !== "user" || isBotSaid(botTurns.get(String(message.meta?.turnId)))), [botTurns, messages]);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
@@ -60,10 +66,12 @@ export default function DebugChatScreen() {
 
   return <Screen edgeToEdge blurTarget={blurTarget}>
     <EdgeHeader onLayout={onHeaderLayout}>
-      <TopBar transparent title="Fix the Android sheet height" subtitle="Home" onBack={() => router.back()} actions={<>
+      {bot ? <TopBar transparent title={bot.name} onBack={() => router.back()} actions={<IconButton name="list-tree" label="Work log" size={38} onPress={NOOP} />}>
+        <BotTitle name={bot.name} avatarUrl={null} onPress={NOOP} />
+      </TopBar> : <TopBar transparent title="Fix the Android sheet height" subtitle="Home" onBack={() => router.back()} actions={<>
         <IconButton name="list-tree" label="Turns" size={38} onPress={NOOP} />
         <IconButton name="more" label="More" size={38} onPress={NOOP} />
-      </>} />
+      </>} />}
       {params.probe === "1"
         ? <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
         : <View testID="debug-chat-probe" accessible accessibilityLabel={probe} pointerEvents="none" style={PROBE_LABEL} />}
@@ -76,8 +84,9 @@ export default function DebugChatScreen() {
         sessionId={`debug-${fixture}`}
         spaceId=""
         client={null}
+        bot={bot}
         messages={messages}
-        turnsById={NO_TURNS}
+        turnsById={botTurns}
         turnsBySequence={NO_TURN_SEQUENCES}
         streamTurnId={null}
         replyAnchor={null}
@@ -120,7 +129,13 @@ export default function DebugChatScreen() {
         key={fixture}
         data={messages}
         keyExtractor={(message) => message.id}
-        renderItem={({ item }) => <MessageBubble message={item} availableWidth={width} />}
+        renderItem={({ item, index }) => bot
+          // The Chat screen's Bot rows: the time above, the gap where the side changes, then the bubble.
+          ? <View style={placements[index]?.gap ? { paddingTop: placements[index].gap } : undefined}>
+            {placements[index]?.time ? <BotTimeDivider at={placements[index].time} /> : null}
+            {isBotSaid(botTurns.get(String(item.meta?.turnId))) ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
+          </View>
+          : <MessageBubble message={item} availableWidth={width} />}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
         // A reply still being written; the native timeline reads live replies from a Chat's stream, which a fixture has none of.
         ListFooterComponent={fixture === "stream" ? <StreamCard content={STREAM_REPLY} status="streaming" availableWidth={width} /> : null}
@@ -128,7 +143,8 @@ export default function DebugChatScreen() {
     </EdgeBlurTarget>
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
-      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" />
+      {bot ? <BotTyping /> : null}
+      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" {...(bot ? { variant: "bot" as const, onVoice: NOOP, placeholder: `Message ${bot.name}` } : {})} />
     </EdgeFooter>
   </Screen>;
 }
@@ -136,7 +152,19 @@ export default function DebugChatScreen() {
 // Full width: Android's accessibility dump leaves out a view too small to see.
 const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height: 8 } as const;
 
-type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string };
+type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** A Bot page's `say`, at minutes from today 08:00. */ bot?: boolean; at?: number };
+
+const BOT: BotPeer = { name: "Chief of staff", avatarUrl: null };
+// The origin the server records on a `say` note; it is read only when its ids are UUIDs.
+const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
+
+/** The `say` Turn behind each of the Bot's lines, so both timelines put them on its side. */
+function botSayTurns(messages: readonly MessageRecord[]): ReadonlyMap<string, SessionTurnRecord> {
+  return new Map(messages.filter((message) => message.meta?.bot === true).map((message) => {
+    const id = String(message.meta?.turnId);
+    return [id, { id, sequence: message.sequence, executionKind: "note", status: "completed", meta: { origin: BOT_SAY_ORIGIN } } as unknown as SessionTurnRecord];
+  }));
+}
 
 const PNG = (data: string): ContentBlock => ({ type: "image", source: { type: "base64", media_type: "image/png", data } });
 const STREAM_REPLY: ContentBlock[] = [{ type: "text", text: "Three issues are open. The Android sheet height is the oldest; the other two are about the tablet layout and" }];
@@ -174,6 +202,16 @@ const SCRIPTS: Record<Fixture, Line[]> = {
   stream: [
     { role: "user", text: "Summarize the open issues." },
   ],
+  bot: [
+    { role: "user", text: "Remind me about the board deck tomorrow.", at: -11 * 60 },
+    { role: "user", text: "Hey, what needs my attention today?", bot: false, at: -2 },
+    { role: "user", text: "GM! Can I get your approval for the board deck review at 2pm?", bot: true, at: 0 },
+    { role: "user", text: "Updated the numbers based on today's pull from Salesforce, Mercury, QuickBooks, and Hex.", bot: true, at: 0 },
+    { role: "user", text: "Can you add a slide for headcount and pull from Rippling", at: 3 },
+    { role: "user", content: [{ type: "text", text: "Pulled and added" }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC")], bot: true, at: 6 },
+    { role: "user", text: "Looks good, send it to the team", at: 40 },
+    { role: "user", text: "Sent. Overnight there were 41 new emails: 6 needed you and are in your inbox, 3 invoices went to Expense Manager, 2 intros are connected, and 1 bug report went to Bug Triager. Nothing else is waiting on you before the review.", bot: true, at: 41 },
+  ],
   states: [
     { role: "user", text: "A message that sent normally." },
     { role: "assistant", text: "A normal reply." },
@@ -183,6 +221,8 @@ const SCRIPTS: Record<Fixture, Line[]> = {
 
 function conversation(fixture: Fixture): MessageRecord[] {
   const start = Date.parse("2026-09-11T09:00:00Z");
+  const today = new Date();
+  today.setHours(8, 0, 0, 0);
   return SCRIPTS[fixture].map((line, index) => {
     const turn = Math.floor(index / 2) + 1;
     const content = line.content ?? [{ type: "text", text: line.text ?? "" }];
@@ -193,9 +233,9 @@ function conversation(fixture: Fixture): MessageRecord[] {
       model: line.role === "assistant" ? "claude-sonnet" : null,
       stopReason: "stop", errorMessage: line.error ?? null,
       usage: line.role === "assistant" ? { input: 1200, output: 240, cacheRead: 300, cacheWrite: 0, totalTokens: 1740 } : null,
-      meta: { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn }, authorUuid: null, authorProfile: null,
+      meta: line.at === undefined ? { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn } : { turnId: `debug-${fixture}-turn-${index + 1}`, turnSequence: index + 1, bot: line.bot === true }, authorUuid: null, authorProfile: null,
       startedAt: null, completedAt: null, durationMs: 4200,
-      createdAt: new Date(start + index * 60_000).toISOString(),
+      createdAt: new Date(line.at === undefined ? start + index * 60_000 : today.getTime() + line.at * 60_000).toISOString(),
     } as MessageRecord;
   });
 }

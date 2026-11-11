@@ -76,10 +76,11 @@ import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistan
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
-import { BotNoteBubble, BotTyping } from "@/src/components/BotBubbles";
+import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { isBotSaid, isBotSpace, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botPlacements, isBotSaid, isBotSpace, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
+import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
 import { botFileQuery } from "@/src/data/use-bots";
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
@@ -674,6 +675,16 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }
     return map;
   }, [view.turns]);
+  // A Bot's page spaces its bubbles by side and time instead of by Turn; the native timeline places them the same way.
+  const botLayout = useMemo(() => {
+    if (!bot) return null;
+    const fromBot = (message: MessageRecord) => {
+      const sequence = turnSequenceForMessage(message);
+      return message.role !== "user" || isBotSaid((sequence !== null ? turnsBySequence.get(sequence)?.[0] : undefined) ?? (typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null));
+    };
+    const placements = botPlacements(messages, fromBot);
+    return new Map(messages.map((message, index) => [message.id, placements[index]!]));
+  }, [bot, messages, turnsById, turnsBySequence]);
   const transitionMessage = sendTransition
     ? messages.find((item) => isSendBubbleMessage(item, sendTransition.message)) ?? sendTransition.message
     : null;
@@ -716,8 +727,10 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const lastAgentTurn = useMemo(() => turnsNewestFirst.find(isAgentTurn), [turnsNewestFirst]);
   const composerHarness: RuntimeHarness = bot ? "cohub" : selectedHarness ?? runtimeHarnessFromTurn(lastAgentTurn);
   const recordedLocalModel = composerHarness === "cohub" ? null : turnsNewestFirst.find((turn) => runtimeHarnessFromTurn(turn) === composerHarness && turn.model);
+  // A Bot's model is chosen on its profile.
+  const [botModel] = useBotModel(userUuid, spaceId);
   const activeModel = composerHarness === "cohub"
-    ? (modelOverride ? selectedModel : recordedModel)
+    ? (bot && botModel !== undefined ? botModel : modelOverride ? selectedModel : recordedModel)
     : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
@@ -1548,8 +1561,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // LegendList memoizes each row on [item, extraData]; fork/send-transition state renders
   // inside a row but never changes `messages`, so it must flow through extraData to reach it.
   const rowExtraData = useMemo(
-    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, t, theme }),
-    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, t, theme],
+    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, t, theme }),
+    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, t, theme],
   );
   const keyExtractor = useCallback((item: MessageRecord) => messageRowKey(item), []);
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
@@ -1609,11 +1622,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // deliberately outside extraData), so onLayout can arrive with a stale index or an
     // unsized row; skipping is required because throwing inside a native event handler
     // is fatal on the new architecture and freezes the whole screen.
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? isBotSaid(sequenceTurns?.[0] ?? messageTurn)
-      ? <BotNoteBubble message={item} bot={bot} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
-      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={item.meta?.relayFailed === true ? undefined : discardSend} spaceId={spaceId || null} />
+    const placement = botLayout?.get(item.id);
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{isBotSaid(sequenceTurns?.[0] ?? messageTurn)
+      ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
+      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={item.meta?.relayFailed === true ? undefined : discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
       : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+  }, [arrivalBaseline, bot, botLayout, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1627,8 +1641,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     <SpacePanels edgeToEdge key={spaceId || sessionId} chatPanel={!bot} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <ScreenBlurTarget attach={attachScreenBlurTarget}><Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout}>
-        {/* A Bot's page is the Bot alone: its face and name, which open its profile, and no Chat actions. */}
-        {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
+        {/* A Bot's page is the Bot alone: its face and name, which open its profile, and its work log. */}
+        {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<IconButton name="list-tree" label={t("bots.profile.workLog")} size={38} disabled={!botWork} onPress={() => { if (botWork) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: botWork.id, log: "1" } }); }} />}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
         </EdgeHeader>
@@ -1732,7 +1746,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
         {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
-        {bot && botWorking ? <BotTyping bot={bot} /> : null}
+        {bot && botWorking ? <BotTyping /> : null}
         {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>
@@ -1753,7 +1767,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} variant={bot ? "bot" : "chat"} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : bot ? t("bots.composer.placeholder", { name: spaceName }) : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}

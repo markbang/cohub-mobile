@@ -72,6 +72,7 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   moon: "moon",
   settings: "gearshape",
   sparkles: "sparkles",
+  star: "star.fill",
   tag: "tag",
   "square-pen": "square.and.pencil",
   stop: "stop.fill",

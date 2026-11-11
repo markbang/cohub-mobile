@@ -1,47 +1,51 @@
 import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
+import Animated, { useReducedMotion } from "react-native-reanimated";
 import { BubbleContentWidth } from "@/src/components/BubbleText";
 import { BubbleContext, MessageContent } from "@/src/components/MessageContent";
-import { botReplyBlocks, type BotPeer } from "@/src/data/bot-mode";
-import { formatMessageClock } from "@/src/data/chat-format";
+import { BOT_BUBBLE_INSET, botReplyBlocks } from "@/src/data/bot-mode";
+import { formatThreadTime } from "@/src/data/chat-format";
 import { useTranslation } from "@/src/i18n";
+import { getActiveLocale } from "@/src/i18n/core";
+import { loops } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
-import { Avatar, MascotLoader } from "@/src/ui";
 import { BUBBLE_PADDING_X, getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 
-const AVATAR_SIZE = 28;
-
-/** The Bot's side of the thread: its face, then its bubble. `nodes.ts` draws the same row for the native timeline. */
-function BotLine({ bot, availableWidth, spaceId = null, children }: { bot: BotPeer; availableWidth?: number; spaceId?: string | null; children: (maxWidth: number) => ReactNode }) {
+/** What the Bot said with `say`: its words and images, on the left like a messaging app. `nodes.ts` draws the same row for the native timeline. */
+export function BotNoteBubble({ message, spaceId, availableWidth }: { message: MessageRecord; spaceId: string | null; availableWidth?: number }) {
   const theme = useAppTheme();
   const paneWidth = usePaneWidth();
-  const maxWidth = getBubbleMaxWidth(availableWidth ?? paneWidth) - AVATAR_SIZE - 8;
+  const maxWidth = getBubbleMaxWidth(availableWidth ?? paneWidth);
   const environment = useMemo(() => ({ onUser: false, spaceId }), [spaceId]);
-  return <View className="w-full flex-row items-end gap-2 px-3 py-0.5">
-    <Avatar name={bot.name} uri={bot.avatarUrl} size={AVATAR_SIZE} />
+  const blocks = botReplyBlocks(message.content);
+  const content: ContentBlock[] = blocks.length ? blocks : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
+  if (content.length === 0) return null;
+  return <View className="w-full flex-row px-3" style={{ paddingVertical: BOT_BUBBLE_INSET }}>
     <BubbleContext.Provider value={environment}><BubbleContentWidth.Provider value={Math.max(0, maxWidth - BUBBLE_PADDING_X * 2)}>
-      <View className="min-w-0 bg-assistant-bubble" style={{ maxWidth, borderRadius: theme.radius.md, borderCurve: "continuous", paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 }}>{children(maxWidth)}</View>
+      <View className="min-w-0 bg-assistant-bubble" style={{ maxWidth, borderRadius: theme.radius.md, borderCurve: "continuous", paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 }}>
+        <MessageContent content={content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} sandboxImages />
+      </View>
     </BubbleContentWidth.Provider></BubbleContext.Provider>
   </View>;
 }
 
-/** What the Bot said with `say`: its words and images. */
-export function BotNoteBubble({ message, bot, spaceId, availableWidth }: { message: MessageRecord; bot: BotPeer; spaceId: string | null; availableWidth?: number }) {
-  const theme = useAppTheme();
-  const blocks = botReplyBlocks(message.content);
-  const content: ContentBlock[] = blocks.length ? blocks : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
-  if (content.length === 0) return null;
-  const clock = formatMessageClock(message.createdAt);
-  return <BotLine bot={bot} availableWidth={availableWidth} spaceId={spaceId}>{(maxWidth) => <>
-    <MessageContent content={content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} sandboxImages />
-    {clock ? <Text className="mt-0.5 self-end text-micro text-fg-faint tabular-nums">{clock}</Text> : null}
-  </>}</BotLine>;
+/** The centered time above a message on a Bot's page. */
+export function BotTimeDivider({ at }: { at: string }) {
+  const { t } = useTranslation();
+  return <Text className="self-center px-3 pb-2 pt-3 text-caption text-fg-faint tabular-nums">{formatThreadTime(at, t, getActiveLocale())}</Text>;
 }
 
-/** The Bot is working on what it was asked: a typing bubble until it says something. */
-export function BotTyping({ bot }: { bot: BotPeer }) {
+const DOT_BREATH = { "0%": { opacity: 0.35 }, "30%": { opacity: 1 }, "60%": { opacity: 0.35 }, "100%": { opacity: 0.35 } };
+
+/** The Bot is working on what it was asked: three dots on its side until it says something. */
+export function BotTyping() {
   const { t } = useTranslation();
-  return <BotLine bot={bot}>{() => <MascotLoader size={22} accessibilityLabel={t("bots.typing")} />}</BotLine>;
+  const reduced = useReducedMotion();
+  return <View className="w-full flex-row px-3 pb-1">
+    <View accessible accessibilityLabel={t("bots.typing")} className="flex-row items-center gap-1 px-1" style={{ height: 28 }}>
+      {[0, 1, 2].map((index) => <Animated.View key={index} className="size-2 rounded-full bg-fg-muted" style={reduced ? { opacity: 0.6 } : { animationName: DOT_BREATH, animationDuration: loops.typingDots.duration, animationDelay: index * loops.typingDots.stagger, animationIterationCount: "infinite", animationTimingFunction: "ease-in-out" }} />)}
+    </View>
+  </View>;
 }

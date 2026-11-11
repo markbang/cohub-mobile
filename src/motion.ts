@@ -146,4 +146,6 @@ export const loops = {
   glanceMove: { duration: 120 },
   /** One slow breath of a running avatar ring. */
   runningRing: { duration: 2400 },
+  /** One pass of a Bot's typing dots; each dot starts `stagger` after the last. */
+  typingDots: { duration: 1200, stagger: 160 },
 } as const;

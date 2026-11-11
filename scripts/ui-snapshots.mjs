@@ -77,6 +77,10 @@ export const SCREENS = [
   { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
   { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
   { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
+  // A Bot's page and the Bots view over fixed Bots, then the Bot page's JS list.
+  { name: "chat-bot", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot" },
+  { name: "chat-bot-js", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot&native=0" },
+  { name: "bot-list", ready: "Sales Outbound", link: "cohub://debug/bot-list" },
   // The native timeline on the same fixtures, on iOS too, where the Chat screen draws the JS list.
   { name: "chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
   // The first row, by position: the test account's newest Chat changes from run to run.
@@ -111,6 +115,7 @@ export const TABLET_SCREENS = [
   { name: "split-chat-conversation-js", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=0" },
   { name: "split-chat-media-js", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=media&native=0" },
   { name: "split-chat-stream-js", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=stream&native=0" },
+  { name: "split-chat-bot", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot" },
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
   { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ chatsTab: true }, { tapOn: "New Chat" }] },

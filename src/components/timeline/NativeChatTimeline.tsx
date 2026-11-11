@@ -8,9 +8,9 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, botNoteNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { isBotSaid, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botPlacements, isBotSaid, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
@@ -215,13 +215,17 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     const appear = arrivalAnimations(props.reducedMotion);
     const messageByKey = new Map<string, MessageRecord>();
     for (const row of rows) if (row.kind === "message") messageByKey.set(row.key, row.message);
+    // A Bot's page spaces its bubbles by side and time instead of by Turn.
+    const placed = bot ? [...messageByKey.values()] : [];
+    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" || botSaid(message)).map((placement, index) => [placed[index]!, placement]));
     for (const row of rows) {
       const owner = row.owner ? messageByKey.get(row.owner) : undefined;
-      const turnStart = row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
+      const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
       if (row.owner) firstOfOwner.add(row.owner);
       const arrival = owner ? isCatchUpArrival(arrivalBaseline, owner) : false;
+      const placement = row.kind === "message" ? placements.get(row.message) : undefined;
       const build = (deps: unknown[], make: () => { type: string; node: TimelineNode | null; flight?: TimelineFlight; anchor?: false }) => {
-        const all = [...base, turnStart, arrival, ...deps];
+        const all = [...base, turnStart, arrival, placement?.time, placement?.gap, ...deps];
         const cached = cache.get(row.key);
         if (cached && sameDeps(cached.deps, all)) {
           next.set(row.key, cached);
@@ -233,7 +237,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         const spec: TimelineRowSpec = {
           type: made.type,
           ...(made.anchor === false ? { anchor: false } : {}),
-          node: turnStart ? { type: "view", style: { paddingTop: TURN_START_PADDING }, children: [node] } : node,
+          node: turnStart ? { type: "view", style: { paddingTop: TURN_START_PADDING }, children: [node] } : placement ? botPlacedNode(ctx, made.node, placement) ?? EMPTY_NODE : node,
           ...(arrival ? { appear } : {}),
           ...(made.flight ? { flight: made.flight } : {}),
         };
@@ -251,12 +255,12 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           const message = row.message;
           const sig = expandedIn(expanded, [message.id, row.key]);
           if (bot && botSaid(message)) {
-            build([message, bot, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, bot, sandboxImages) }));
+            build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
           } else if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;
             build([message, retryDisabled, sig, flies], () => ({
               type: "user",
-              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0 }) : null,
+              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0, inset: placement ? BOT_BUBBLE_INSET : undefined }) : null,
               flight: flies ? { nodeId: "bubble", ...flies, duration: motion.sendBubble.duration, easing: SEND_FLIGHT_EASING } : undefined,
             }));
           } else {
