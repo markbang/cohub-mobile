@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView } from "react-native";
 import { BotRow, PinnedBots } from "@/src/components/BotRow";
-import { PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
+import { pinnedBotEntries, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
 import { Screen, TopBar } from "@/src/ui";
 
 /** The Bots view's pinned faces and rows over fixed Bots, so their layout can be captured without an account's Bots. */
@@ -11,11 +11,12 @@ export default function DebugBotListScreen() {
   const router = useRouter();
   const [entries, setEntries] = useState(() => fixtureEntries(Date.now()));
   const togglePin = ({ space }: BotEntry<SpaceRecord>) => setEntries((current) => current.map((entry) => entry.space.id === space.id ? { ...entry, space: { ...space, isPinned: !space.isPinned } } : entry));
+  const faces = pinnedBotEntries(entries);
   return <Screen>
     <TopBar title="Bots" onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-      <PinnedBots entries={entries.filter((entry) => entry.space.isPinned)} onPress={() => undefined} onTogglePin={togglePin} />
-      {entries.filter((entry) => !entry.space.isPinned).map((entry) => <BotRow key={entry.space.id} entry={entry} onPress={() => undefined} onTogglePin={() => togglePin(entry)} />)}
+      <PinnedBots entries={faces} onPress={() => undefined} onTogglePin={togglePin} />
+      {entries.filter((entry) => !faces.includes(entry)).map((entry) => <BotRow key={entry.space.id} entry={entry} onPress={() => undefined} onTogglePin={() => togglePin(entry)} />)}
     </ScrollView>
   </Screen>;
 }

@@ -145,7 +145,7 @@ export default function ChatsScreen() {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
     if (botsView) {
       const needle = trimmedQuery.toLowerCase();
-      return bots.entries.filter((entry) => needle ? normalizeSearchQuery(displaySpaceName(entry.space)).toLowerCase().includes(needle) : entry.space.isPinned !== true).map((entry) => ({ kind: "bot" as const, entry }));
+      return bots.entries.filter((entry) => needle ? normalizeSearchQuery(displaySpaceName(entry.space)).toLowerCase().includes(needle) : !pinnedBots.includes(entry)).map((entry) => ({ kind: "bot" as const, entry }));
     }
     if (!trimmedQuery && listFilter === "all") {
       const running = new Set(runningIds);
@@ -166,7 +166,7 @@ export default function ChatsScreen() {
       ...remoteSpaces.map((hit) => ({ kind: "remote-space" as const, hit })),
       ...localSpaces.filter((space) => !remoteSpaceIds.has(space.id)).map((space) => ({ kind: "local-space" as const, space })),
     ];
-  }, [botSpaceIds, bots.entries, botsView, expandedForks, listFilter, localSessions, localSpaces, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
+  }, [botSpaceIds, bots.entries, botsView, expandedForks, listFilter, localSessions, localSpaces, pinnedBots, remoteSearch.query, remoteSearch.sessions, remoteSearch.spaces, runningIds, sessionForks, trimmedQuery]);
 
   // Running Chats move up by recent activity; while the list is moving under a finger the order
   // holds and only row content updates, so the row being reached for is not swapped out.

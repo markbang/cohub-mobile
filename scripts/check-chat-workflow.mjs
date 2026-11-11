@@ -1861,7 +1861,7 @@ try {
   const chat = (id, spaceId) => ({ id, spaceId, title: id });
   const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-work", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   let filter = "bots";
-  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, note: null, chatId: "talk", running: false, needsYou: false };
+  const entry = { space: { id: "bot", slug: "cohubbot-bot", name: "Cohub" }, note: null, chatId: "talk", running: false, needsYou: false };
   const pinned = { space: { id: "pin", slug: "cohubbot-pin", name: "Pinned", isPinned: true }, note: null, chatId: "pin-talk", running: false, needsYou: false };
   const toggled = [];
   let watched = [];
@@ -1912,11 +1912,13 @@ try {
   // A Bot's row and pinned face say every state they show, and offer the pin a hold opens as a named action.
   const toggled = [];
   const readBot = loadChromeComponent("../src/components/BotRow.tsx", "useBot", { ...chromeScope, ...appHooks(() => ({ sessionSeen: { baseline: 0, entries: {} } })), useState: (initial) => [initial, () => {}], displaySpaceName: (space) => space.name, isSessionUnread, haptics: {}, ContextMenu: "ContextMenu" });
-  const bot = readBot({ entry: { space: { id: "bot", slug: "cohubbot", name: "Cohub", isPinned: true }, note: { messageId: "m", at: "2026-11-11T00:00:00Z" }, chatId: "talk", running: true, needsYou: true }, onPress: () => {}, onTogglePin: () => toggled.push("bot") });
-  assert.equal(bot.press.accessibilityLabel, "ui.openNamed, bots.primary, bots.running, bots.needsYou, session.unread, space.pinned");
+  const read = (slug) => readBot({ entry: { space: { id: "bot", slug, name: "Cohub", isPinned: true }, note: { messageId: "m", at: "2026-11-11T00:00:00Z" }, chatId: "talk", running: true, needsYou: true }, onPress: () => {}, onTogglePin: () => toggled.push("bot") });
+  const bot = read("cohubbot-bot");
+  assert.equal(bot.press.accessibilityLabel, "ui.openNamed, bots.running, bots.needsYou, session.unread, space.pinned");
   assert.deepEqual(bot.press.accessibilityActions, [{ name: "togglePin", label: "bots.unpin" }]);
   bot.press.onAccessibilityAction({ nativeEvent: { actionName: "togglePin" } });
   assert.deepEqual(toggled, ["bot"]);
+  assert.equal(read(PRIMARY_BOT_SLUG).press.accessibilityActions, undefined, "the primary Bot's place is not a pin, so it offers none");
 }
 const fadeAnimation = { duration: () => fadeAnimation };
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
@@ -5951,8 +5953,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const entries = botEntries(spaces, bots, new Set(["writer"]), new Set(["idle"]));
   assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow the last thing they said");
   assert.deepEqual(entries.map((entry) => [entry.chatId, entry.running, entry.needsYou]), [["p-chat", false, false], ["w-chat", true, false], [null, false, true]]);
-  const pinnedSpaces = [{ ...spaces[0], isPinned: true, createdAt: "2026-09-01T00:00:00Z" }, { ...spaces[1], isPinned: true, createdAt: "2026-08-01T00:00:00Z" }, { ...spaces[2], isPinned: true, createdAt: "2026-10-01T00:00:00Z" }, { id: "loose", slug: "cohubbot-loose" }];
-  assert.deepEqual(pinnedBotEntries(botEntries(pinnedSpaces, bots, new Set(), new Set())).map((entry) => entry.space.id), ["primary", "idle", "writer"], "pinned faces keep their places whoever spoke last: the primary Bot, then oldest first");
+  const pinnedSpaces = [{ ...spaces[0], isPinned: true, createdAt: "2026-09-01T00:00:00Z" }, { ...spaces[1], isPinned: true, createdAt: "2026-08-01T00:00:00Z" }, { ...spaces[2], createdAt: "2026-10-01T00:00:00Z" }, { id: "loose", slug: "cohubbot-loose" }];
+  assert.deepEqual(pinnedBotEntries(botEntries(pinnedSpaces, bots, new Set(), new Set())).map((entry) => entry.space.id), ["primary", "idle", "writer"], "the primary Bot is the first face, pinned or not; pinned Bots follow oldest first, whoever spoke last");
+  assert.deepEqual(pinnedBotEntries(botEntries([spaces[2]], bots, new Set(), new Set())), [], "alone, the primary Bot stays a row, which shows what it last said");
 
   assert.deepEqual(relayContent([{ type: "text", text: "Plan my week" }, { type: "image", data: "x" }], "<bot_reminder>say</bot_reminder>"), [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }, { type: "image", data: "x" }], "the reminder follows the user's words after a blank line");
   assert.deepEqual(relayContent([{ type: "image", data: "x" }], "r"), [{ type: "image", data: "x" }, { type: "text", text: "r" }]);

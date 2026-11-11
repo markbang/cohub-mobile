@@ -27,13 +27,15 @@ type BotProps = { entry: BotEntry<SpaceRecord>; onPress: () => void; onPressIn?:
  * What a Bot's row and its pinned face share: who it is, whether it has news, and the long-press menu that
  * pins it, as a Space row's (the system's on iOS, drawn at the touch on Android).
  */
-function useBot({ entry, onPress, onTogglePin }: BotProps) {
+function useBot({ entry, onPress, onTogglePin: togglePin }: BotProps) {
   const { t } = useTranslation();
   const { space, note, chatId, running, needsYou } = entry;
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const name = displaySpaceName(space);
   const primary = space.slug === PRIMARY_BOT_SLUG;
   const pinned = space.isPinned === true;
+  // The primary Bot's place is not a pin: a face beside other Bots, a row alone.
+  const onTogglePin = primary ? undefined : togglePin;
   // Unread is the device's record of when the user's Chat with this Bot was last open, as for any Chat.
   const unread = useAppSelector((app) => note && chatId ? isSessionUnread({ id: chatId, lastMessageId: note.messageId, lastMessageAt: note.at }, app.sessionSeen) : false);
   const pinTitle = pinned ? t("bots.unpin") : t("bots.pin");
