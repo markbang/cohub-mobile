@@ -78,7 +78,7 @@ import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLift
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
@@ -305,11 +305,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       recordDebugEvent("chat.screen.blur", { session: debugAlias("session", sessionId) });
     };
   }, [sessionId]));
-  // The open Chat is seen up to whichever record (thread or list) knows the newer message.
-  const seenMessageId = latestMessageId(view.session, sessionSummary);
-  useFocusEffect(useCallback(() => {
-    if (seenMessageId) void markSessionSeen(sessionId, seenMessageId).catch(() => undefined);
-  }, [markSessionSeen, seenMessageId, sessionId]));
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", () => {
       sendGenerationRef.current += 1;
@@ -633,6 +628,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const botChats = botSpace ? botFile.data ?? null : null;
   const spaceAvatarUrl = listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl ?? null;
   const bot = useMemo<BotPeer | null>(() => botChats?.chat?.id === sessionId ? { name: spaceName, avatarUrl: spaceAvatarUrl } : null, [botChats?.chat?.id, sessionId, spaceAvatarUrl, spaceName]);
+  // The open Chat is seen up to whichever record (thread or list) knows the newer message. A Bot's row compares
+  // its last note's Turn-derived id, which the session's server id never equals, so its page records that id.
+  const botNoteId = useMemo(() => bot ? latestBotNote(view.turns, spaceId)?.messageId ?? null : null, [bot, spaceId, view.turns]);
+  const seenMessageId = botNoteId ?? latestMessageId(view.session, sessionSummary);
+  useFocusEffect(useCallback(() => {
+    if (seenMessageId) void markSessionSeen(sessionId, seenMessageId).catch(() => undefined);
+  }, [markSessionSeen, seenMessageId, sessionId]));
   // A notification for the Chat a Bot works in lands on the Bot's page; its work log opens it as a Chat.
   const botPageId = !workLog && botChats?.session?.id === sessionId ? botChats.chat?.id ?? null : null;
   useEffect(() => { if (botPageId) router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: botPageId } }); }, [botPageId, router]);
