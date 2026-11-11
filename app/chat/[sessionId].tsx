@@ -1469,7 +1469,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     try {
       if (!client || !botChats?.session || !note) throw new Error(t("bots.relayFailed"));
       const content = note.userContent?.length ? note.userContent : note.userText ? [{ type: "text" as const, text: note.userText }] : [];
-      if (await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel })) showToast({ title: t("bots.busy") });
+      // A steer the running Turn refuses stays queued for when that Turn ends; the page stays quiet.
+      await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel });
     } catch {
       setRelayFailed(withMember(clientMessageId, true));
     }
