@@ -116,6 +116,6 @@ function PinnedBot(props: BotProps) {
       {bot.unread || needsYou ? <View pointerEvents="none" className="absolute right-0 top-0 size-3.5 rounded-full border-2 border-background bg-accent" /> : null}
       {bot.primary ? <PrimaryStar /> : null}
     </View>
-    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="max-w-full px-1 text-caption text-fg-secondary">{bot.name}</Text>
+    <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="max-w-full px-1 text-micro text-fg-secondary">{bot.name}</Text>
   </Pressable>)}</View>;
 }
