@@ -123,14 +123,6 @@ export function relayContent(content: readonly ContentBlock[], reminder: string 
   return content.map((block, position) => position === index && block.type === "text" ? { ...block, text: `${block.text}\n\n${reminder}` } : block);
 }
 
-/**
- * A message already in the user's Chat whose delivery to the Bot failed: shown failed, its retry delivers it again.
- * It cannot be deleted like an unsent message, because it is already written.
- */
-export function relayFailedMessage(message: MessageRecord, error: string): MessageRecord {
-  return { ...message, errorMessage: error, meta: { ...(message.meta ?? {}), sendFailed: true, relayFailed: true } };
-}
-
 /** Two reads of one Chat: the copy updated later wins, so a slower list read never undoes a newer event. */
 export function newerSession<S extends Pick<BotSession, "updatedAt">>(left: S | null | undefined, right: S | null | undefined): S | null {
   if (!left || !right) return left ?? right ?? null;

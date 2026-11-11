@@ -1021,7 +1021,7 @@ export type AppActions = {
   /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
   /** Inserts the bubble before returning; resolves once the server accepts the send. */
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
   /** `onOptimistic` receives the pending bubble synchronously; it has no Chat until the server answers. */
   sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
   discardFailedSend: (sessionId: string, messageId: string) => void;
@@ -2313,7 +2313,7 @@ export function AppProvider({
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2331,7 +2331,7 @@ export function AppProvider({
       const optimistic = optimisticSend({
         sessionId, clientMessageId, text, attachments, model: options.model ?? null, harness: options.harness ?? null, authorUuid: userUuid, turnSequence,
         // Behind another unaccepted send, this one will find a Turn running.
-        meta: { awaitingSubmit: true, sendOrder: order, queuedFollowup: shouldQueueFollowup(view?.turns ?? [], view?.stream) || messages.some((message) => isLocalSend(message) && message.id !== retried?.id) },
+        meta: { awaitingSubmit: true, sendOrder: order, queuedFollowup: shouldQueueFollowup(view?.turns ?? [], view?.stream) || messages.some((message) => isLocalSend(message) && message.id !== retried?.id), ...(retried?.meta?.relayed === true ? { relayed: true } : {}) },
       });
       const row = () => stateRef.current.sessionViews[sessionId]?.messages.find((message) => isLocalSend(message) && message.meta?.clientMessageId === clientMessageId) ?? null;
       recordDebugEvent("chat.send.optimistic_created", { sequence: optimistic.sequence, attachmentCount: attachments.length, hasText: Boolean(text), clientMessageIdPresent: true, retry: Boolean(retried) });
@@ -2364,6 +2364,14 @@ export function AppProvider({
           const withContent = { ...(row() ?? submitted), content, text: text || submitted.text };
           dispatch({ type: "message-optimistic", sessionId, message: withContent });
           void saveMessages(userKey, sessionId, [withContent]).catch(() => undefined);
+          // A Bot gets the message before it is written to the user's Chat, so one recorded there was always
+          // delivered. A retry of a message that only failed to be recorded does not deliver it twice.
+          if (options.relay && withContent.meta?.relayed !== true) {
+            await options.relay(content);
+            const relayed = { ...(row() ?? withContent), meta: { ...(row() ?? withContent).meta, relayed: true } };
+            dispatch({ type: "message-optimistic", sessionId, message: relayed });
+            void saveMessages(userKey, sessionId, [relayed]).catch(() => undefined);
+          }
           const request = client.space(spaceId).prompt({
             // A note is recorded without a reply (a Bot's page writes the user's words this way).
             mode: options.note ? "note" : "agent",
