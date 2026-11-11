@@ -35,6 +35,12 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
       user_key TEXT PRIMARY KEY NOT NULL,
       payload TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS bot_list_cache (
+      user_key TEXT NOT NULL,
+      space_id TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      PRIMARY KEY (user_key, space_id)
+    );
     CREATE TABLE IF NOT EXISTS running_session_cache (
       user_key TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -482,6 +488,7 @@ export async function clearUserCache(userKey: string) {
     await db.runAsync("DELETE FROM session_seen_baseline WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM composer_drafts WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_list_cache WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM bot_list_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM running_session_cache WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM space_visits WHERE user_key = ?", userKey);
   });
@@ -496,6 +503,18 @@ export async function loadSpaceListCache(userKey: string): Promise<import("@neta
 export async function saveSpaceListCache(userKey: string, overview: import("@neta-art/cohub").PaletteOverviewResponse): Promise<void> {
   const db = await database();
   await db.runAsync("INSERT OR REPLACE INTO space_list_cache (user_key, payload) VALUES (?, ?)", userKey, JSON.stringify(overview));
+}
+
+/** Each Bot's last read row (its `bot.json` and the last thing it said), so the Bots view paints before the reads return. */
+export async function loadBotListCache<T>(userKey: string): Promise<Map<string, T>> {
+  const db = await database();
+  const rows = await db.getAllAsync<{ spaceId: string; payload: string }>("SELECT space_id AS spaceId, payload FROM bot_list_cache WHERE user_key = ?", userKey);
+  return new Map(rows.flatMap((row) => { const value = parse<T>(row.payload); return value ? [[row.spaceId, value] as const] : []; }));
+}
+
+export async function saveBotListCache(userKey: string, spaceId: string, row: unknown): Promise<void> {
+  const db = await database();
+  await db.runAsync("INSERT OR REPLACE INTO bot_list_cache (user_key, space_id, payload) VALUES (?, ?, ?)", userKey, spaceId, JSON.stringify(row));
 }
 
 /** Last complete Running scan per source, so the filter paints before the account scan finishes. */

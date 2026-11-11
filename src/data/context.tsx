@@ -994,6 +994,8 @@ export type LocalExecution = { approvalMode?: ApprovalMode; serviceTier?: string
 export type AppActions = {
   client: CohubClient | null;
   userUuid: string;
+  /** Scopes this account's local cache. */
+  userKey: string;
   spaceRealtime: SpaceRealtime | null;
   refreshChats: () => Promise<void>;
   discoverRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
@@ -2694,6 +2696,7 @@ export function AppProvider({
     () => ({
       client,
       userUuid,
+      userKey,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,
@@ -2791,6 +2794,7 @@ export function AppProvider({
       clearComposerDraftForUser,
       upsertSpace,
       userUuid,
+      userKey,
     ],
   );
 
