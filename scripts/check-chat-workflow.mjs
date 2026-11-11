@@ -1911,8 +1911,8 @@ try {
 {
   // A Bot's row and pinned face say every state they show, and offer the pin a hold opens as a named action.
   const toggled = [];
-  const useBot = loadChromeComponent("../src/components/BotRow.tsx", "useBot", { ...chromeScope, ...appHooks(() => ({ sessionSeen: { baseline: 0, entries: {} } })), useState: (initial) => [initial, () => {}], displaySpaceName: (space) => space.name, isSessionUnread, haptics: {}, ContextMenu: "ContextMenu" });
-  const bot = useBot({ entry: { space: { id: "bot", slug: "cohubbot", name: "Cohub", isPinned: true }, note: { messageId: "m", at: "2026-11-11T00:00:00Z" }, chatId: "talk", running: true, needsYou: true }, onPress: () => {}, onTogglePin: () => toggled.push("bot") });
+  const readBot = loadChromeComponent("../src/components/BotRow.tsx", "useBot", { ...chromeScope, ...appHooks(() => ({ sessionSeen: { baseline: 0, entries: {} } })), useState: (initial) => [initial, () => {}], displaySpaceName: (space) => space.name, isSessionUnread, haptics: {}, ContextMenu: "ContextMenu" });
+  const bot = readBot({ entry: { space: { id: "bot", slug: "cohubbot", name: "Cohub", isPinned: true }, note: { messageId: "m", at: "2026-11-11T00:00:00Z" }, chatId: "talk", running: true, needsYou: true }, onPress: () => {}, onTogglePin: () => toggled.push("bot") });
   assert.equal(bot.press.accessibilityLabel, "ui.openNamed, bots.primary, bots.running, bots.needsYou, session.unread, space.pinned");
   assert.deepEqual(bot.press.accessibilityActions, [{ name: "togglePin", label: "bots.unpin" }]);
   bot.press.onAccessibilityAction({ nativeEvent: { actionName: "togglePin" } });
