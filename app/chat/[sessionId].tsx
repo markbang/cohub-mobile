@@ -83,6 +83,7 @@ import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
 import { botFileQuery } from "@/src/data/use-bots";
+import { saveBotFileCache } from "@/src/data/local-db";
 import { RenderErrorBoundary, RenderFailureView } from "@/src/components/RenderErrorBoundary";
 import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
@@ -244,15 +245,21 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const theme = useAppTheme();
   const { t } = useTranslation();
   const showToast = useToast();
-  const { client, userUuid, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, setSessionArchived, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft, refreshSessionStatuses } = useAppActions();
+  const { client, userUuid, userKey, refreshHome, sendMessage, sendNewMessage, upsertSpace, discardFailedSend, abortSession, refreshSession, loadOlderTurns, loadNewerTurns, loadTurnIndex, jumpToTurn, loadLatestTurns, renameSession, setSessionArchived, forkSession, getAccessToken, loadModels, loadModelStatus, loadSessionReadSequence, saveSessionReadSequence, markSessionSeen, loadComposerDraft, saveComposerDraft, clearComposerDraft, refreshSessionStatuses } = useAppActions();
   // Each subscription is scoped to this Chat; token batches reach only LiveReply and LiveTurnProcess.
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const connectionUnavailable = useAppSelector((app) => app.connectionUnavailable);
   const latestTurnStatus = useAppSelector((app) => app.state.sessionLatestTurns[sessionId]?.status);
   const parentSessionId = useAppSelector((app) => app.state.sessionForks[sessionId]?.parentSessionId ?? null);
   const getAppState = useAppStateGetter();
-  const view = useSession(sessionId);
   const sessionSummary = useAppSelector((app) => app.state.sessions.find((item) => item.id === sessionId) ?? null);
+  const botModeEnabled = useBotMode(userUuid).enabled;
+  // A Bot's page is its user Chat, which can be read as a note delta before the detail request returns.
+  const earlySpaceId = draft?.spaceId ?? sessionSummary?.spaceId ?? "";
+  const earlySpaceSlug = useAppSelector((app) => (earlySpaceId ? app.state.spaces.find((item) => item.id === earlySpaceId)?.slug : undefined));
+  const deltaNotes = !workLog && isBotSpace({ slug: earlySpaceSlug ?? sessionSummary?.space?.slug });
+  const botSpaceEarly = botModeEnabled && deltaNotes;
+  const view = useSession(sessionId, { notesOnly: deltaNotes });
   const session = view.session ?? sessionSummary;
   const spaceId = draft?.spaceId ?? view.space?.id ?? session?.spaceId ?? sessionSummary?.spaceId ?? "";
   const listedSpace = useAppSelector((app) => (draft ? app.state.spaces.find((item) => item.id === draft.spaceId) ?? null : null));
@@ -269,8 +276,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     retry: 0,
   });
   const draftSpace = draft ? listedSpace ?? spaceLookup.data ?? null : null;
-  const runtime = useSpaceRuntime(spaceId);
-  useSyncQuery(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
+  const runtime = useSpaceRuntime(spaceId, !botSpaceEarly);
+  useSyncQuery(`chat:${sessionId}:tail`, () => refreshSession(sessionId, { silent: true, throwOnError: true, notesOnly: deltaNotes }), 60_000, view.historyLoaded && !view.hasMoreNewer && !view.stream);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const { blurTarget: screenBlurTarget, attachBlurTarget: attachScreenBlurTarget } = useBlurTarget();
   const composerRef = useRef<View>(null);
@@ -623,8 +630,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // In Bot mode a Bot's page is the Chat its `bot.json` names for the user: what the Bot `say`s and what the user
   // writes. Every other Chat, including the one the Bot works in, renders as an ordinary Chat.
   const listedSpaceSlug = useAppSelector((app) => (spaceId ? app.state.spaces.find((item) => item.id === spaceId)?.slug : undefined));
-  const botSpace = useBotMode(userUuid).enabled && isBotSpace({ slug: listedSpaceSlug ?? view.space?.slug ?? draftSpace?.slug });
+  const botSpace = botModeEnabled && !workLog && isBotSpace({ slug: listedSpaceSlug ?? sessionSummary?.space?.slug ?? view.space?.slug ?? draftSpace?.slug });
   const botFile = useQuery({ ...botFileQuery(client, spaceId), enabled: botSpace && Boolean(client && spaceId) });
+  // A Bot opened without visiting the Bots view still leaves its identity for the next launch.
+  const savedBotFileRef = useRef("");
+  useEffect(() => {
+    if (!botSpace || !botFile.data || !userKey || savedBotFileRef.current === spaceId) return;
+    savedBotFileRef.current = spaceId;
+    void saveBotFileCache(userKey, spaceId, botFile.data).catch(() => undefined);
+  }, [botFile.data, botSpace, spaceId, userKey]);
   const botChats = botSpace ? botFile.data ?? null : null;
   const spaceAvatarUrl = listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl ?? null;
   const bot = useMemo<BotPeer | null>(() => botChats?.chat?.id === sessionId ? { name: spaceName, avatarUrl: spaceAvatarUrl } : null, [botChats?.chat?.id, sessionId, spaceAvatarUrl, spaceName]);
@@ -760,7 +774,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     ...(fastAvailable ? { fast: { value: fast, onToggle: () => setFastChoices((current) => ({ ...current, [composerHarness]: !fast })) } } : {}),
   };
   // The catalog names the recorded model; before it loads the trigger would show the raw id.
-  useEffect(() => { void loadModels().catch(() => undefined); }, [client, loadModels]);
+  useEffect(() => { if (!botSpaceEarly) void loadModels().catch(() => undefined); }, [botSpaceEarly, client, loadModels]);
   const liveStream = shouldShowLiveStream(view.stream, messages);
   // Mounting LegendList empty then filling it drops `initialScrollAtEnd`, so the first paint
   // would show the oldest rows and jump. Wait until there is a tail to pin to.
@@ -1058,7 +1072,9 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     recordDebugEvent("chat.stop.started");
     haptics.commit();
     try {
-      await abortSession(sessionId);
+      // On a Bot's page the work runs in the Bot's working Chat; only a reply here belongs to this one.
+      await abortSession(bot && botWork ? botWork.id : sessionId, { refresh: !bot });
+      if (bot && botWork) await refreshSessionStatuses([botWork], { silent: true, force: true });
       recordDebugEvent("chat.stop.ended", { outcome: "success" });
     } catch (error) {
       recordDebugEvent("chat.stop.ended", { outcome: "failed" });
@@ -1776,7 +1792,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} variant={bot ? "bot" : "chat"} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : running ? t("ui.composer.working") : bot ? t("bots.composer.placeholder", { name: spaceName }) : t("ui.composer.placeholder")} />
+        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} variant={bot ? "bot" : "chat"} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={bot ? botWorking : running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : bot ? (botWorking ? t("ui.composer.working") : t("bots.composer.placeholder", { name: spaceName })) : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
         </EdgeFooter>
         {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}

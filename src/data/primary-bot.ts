@@ -49,7 +49,7 @@ async function setRandomAvatar(client: CohubClient, spaceId: string) {
 
 /** The two Chats a Bot keeps: `session` it works in, `chat` the user reads (the Bot's `say` notes land there). */
 export type BotChats = { session: SessionRecord; chat: SessionRecord };
-type BotFile = { raw: Record<string, unknown>; session: SessionRecord | null; chat: SessionRecord | null };
+export type BotFile = { raw: Record<string, unknown>; session: SessionRecord | null; chat: SessionRecord | null };
 
 function parseBotFile(text: string): Record<string, unknown> {
   let parsed: unknown = null;

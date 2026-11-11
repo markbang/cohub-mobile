@@ -2,12 +2,13 @@ import type { SpaceRuntimeStatus } from "@/src/data/runtime";
 import { useAppActions } from "@/src/data/context";
 import { useScreenQuery } from "./query";
 
-export function useSpaceRuntime(spaceId: string) {
+/** A Bot's page always runs in the cloud, so it skips the runtime read. */
+export function useSpaceRuntime(spaceId: string, enabled = true) {
   const { client } = useAppActions();
   const query = useScreenQuery({
     queryKey: [`space:${spaceId}:runtime`],
     queryFn: (): Promise<SpaceRuntimeStatus> => client!.space(spaceId).getRuntime(),
-    enabled: Boolean(client && spaceId),
+    enabled: Boolean(client && spaceId) && enabled,
     retry: 0,
   });
   return {

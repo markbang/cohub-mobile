@@ -517,6 +517,14 @@ export async function saveBotListCache(userKey: string, spaceId: string, row: un
   await db.runAsync("INSERT OR REPLACE INTO bot_list_cache (user_key, space_id, payload) VALUES (?, ?, ?)", userKey, spaceId, JSON.stringify(row));
 }
 
+/** Refreshes a Bot's `bot.json` for the Chat page without touching the note the Bots view saved for its row. */
+export async function saveBotFileCache(userKey: string, spaceId: string, file: unknown): Promise<void> {
+  const db = await database();
+  const row = await db.getFirstAsync<{ payload: string }>("SELECT payload FROM bot_list_cache WHERE user_key = ? AND space_id = ?", userKey, spaceId);
+  const previous = row ? parse<{ note?: unknown }>(row.payload) : null;
+  await db.runAsync("INSERT OR REPLACE INTO bot_list_cache (user_key, space_id, payload) VALUES (?, ?, ?)", userKey, spaceId, JSON.stringify({ file, note: previous?.note ?? null }));
+}
+
 /** Last complete Running scan per source, so the filter paints before the account scan finishes. */
 export async function loadRunningSessionCache(userKey: string, source: string): Promise<{ payload: string; scannedAt: number } | null> {
   const db = await database();

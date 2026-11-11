@@ -288,7 +288,7 @@ export default function ChatsScreen() {
     if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
     if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
     if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
-    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!) : undefined} />;
+    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!, { notesOnly: true }) : undefined} />;
     if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
     return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
   };

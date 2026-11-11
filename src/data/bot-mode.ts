@@ -69,6 +69,19 @@ export function latestBotNote(turns: readonly SessionTurnRecord[], spaceId: stri
   return { text, at: turn.createdAt, messageId: `${turn.id}:user`, from: from === spaceId ? null : from };
 }
 
+/** The Turn range cached messages cover, so a Bot's page can read only what arrived after them. */
+export function cachedTurnRange(messages: readonly Pick<MessageRecord, "meta">[]): { oldest: number | null; newest: number | null } {
+  let oldest: number | null = null;
+  let newest: number | null = null;
+  for (const message of messages) {
+    const sequence = message.meta?.turnSequence;
+    if (typeof sequence !== "number" || !Number.isSafeInteger(sequence)) continue;
+    oldest = oldest === null ? sequence : Math.min(oldest, sequence);
+    newest = newest === null ? sequence : Math.max(newest, sequence);
+  }
+  return { oldest, newest };
+}
+
 /** What reaches the Bot's working Chat: the user's message with the bot mod's reminder after a blank line. */
 export function relayContent(content: readonly ContentBlock[], reminder: string | null): ContentBlock[] {
   if (!reminder) return [...content];

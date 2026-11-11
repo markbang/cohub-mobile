@@ -33,6 +33,8 @@ import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, 
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
+import { hydrateBotCache } from "@/src/data/bot-cache";
+import { cachedTurnRange } from "@/src/data/bot-mode";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
 import { useSessionSeenOwner } from "@/src/data/use-session-seen";
@@ -760,7 +762,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...(session ? { session } : {}),
         turns,
         historyLoaded: true,
-        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
+        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages),
         hasMoreOlder: action.direction === "older" ? action.hasMore : current.hasMoreOlder,
         hasMoreNewer: action.direction === "newer" ? action.hasMore : current.hasMoreNewer,
         loadingOlder: action.direction === "older" ? false : current.loadingOlder,
@@ -864,7 +866,7 @@ function reducer(state: AppState, action: Action): AppState {
       return updateView(nextState, action.sessionId, {
         turns,
         historyLoaded: true,
-        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
+        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages),
         oldestCursor: turns[0]?.sequence ?? current.oldestCursor,
         newestCursor: turns.at(-1)?.sequence ?? current.newestCursor,
         ...(isTerminalTurnStatus(patched?.status) && current.stream?.turnId === patched?.id ? { stream: null } : {}),
@@ -1006,12 +1008,12 @@ export type AppActions = {
   installationId: string | null;
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
   refreshHome: (options?: { silent?: boolean }) => Promise<void>;
-  refreshSessionStatuses: (sessions: StatusSession[], options?: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean }) => Promise<void>;
+  refreshSessionStatuses: (sessions: StatusSession[], options?: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean; force?: boolean }) => Promise<void>;
   loadMoreSessions: () => Promise<void>;
-  openSession: (sessionId: string) => Promise<void>;
-  prefetchSession: (sessionId: string) => void;
+  openSession: (sessionId: string, options?: SessionOpenOptions) => Promise<void>;
+  prefetchSession: (sessionId: string, options?: SessionOpenOptions) => void;
   closeSession: (sessionId: string) => void;
-  refreshSession: (sessionId: string, options?: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean }) => Promise<void>;
+  refreshSession: (sessionId: string, options?: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean; notesOnly?: boolean }) => Promise<void>;
   loadOlderTurns: (sessionId: string) => Promise<void>;
   loadNewerTurns: (sessionId: string) => Promise<void>;
   loadTurnIndex: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
@@ -1027,7 +1029,7 @@ export type AppActions = {
   saveComposerDraft: (spaceId: string, scope: ComposerDraftScope, text: string) => Promise<void>;
   /** With `expected`, clears only while the draft still holds that text. */
   clearComposerDraft: (spaceId: string, scope: ComposerDraftScope, expected?: string) => Promise<void>;
-  abortSession: (sessionId: string) => Promise<void>;
+  abortSession: (sessionId: string, options?: { refresh?: boolean }) => Promise<void>;
   loadModels: (options?: { force?: boolean }) => Promise<ChatModelCatalogItem[]>;
   loadModelStatus: (options?: { force?: boolean }) => Promise<ModelStatusResponse | null>;
   loadSpaceOverview: () => Promise<PaletteOverviewResponse>;
@@ -1067,6 +1069,9 @@ const createAppStore = (): AppStore => createStore<AppSnapshot>()(() => ({
   sessionSeen: EMPTY_SESSION_SEEN,
 }));
 
+/** A Bot's page shows only its notes, so it reads what arrived since the cached tail instead of the last page again. */
+type SessionOpenOptions = { notesOnly?: boolean };
+
 const MODELS_KEY = ["models"] as const;
 const MODEL_STATUS_KEY = ["model-status"] as const;
 
@@ -1101,10 +1106,10 @@ export function AppProvider({
   const subscriptions = useRef(new Map<string, () => void>());
   const sessionSpaces = useRef(new Map<string, string>());
   const openTokens = useRef(new Map<string, number>());
-  const sessionLoadRef = useRef<(sessionId: string) => Promise<void>>(async () => undefined);
+  const sessionLoadRef = useRef<(sessionId: string, options?: SessionOpenOptions) => Promise<void>>(async () => undefined);
   const sessionReleaseRef = useRef<(sessionId: string) => void>(() => undefined);
   const sessionLifecycleRef = useRef(createSessionLifecycle({
-    load: (sessionId) => sessionLoadRef.current(sessionId),
+    load: (sessionId, options) => sessionLoadRef.current(sessionId, options),
     release: (sessionId) => sessionReleaseRef.current(sessionId),
     releaseDelayMs: 1000,
   }));
@@ -1218,7 +1223,7 @@ export function AppProvider({
     return queryClient.fetchQuery({ queryKey: MODEL_STATUS_KEY, queryFn: () => activeClient.models.status(), staleTime: 60_000 });
   }, [queryClient]);
 
-  const refreshSessionStatuses = useCallback(async (sessions: StatusSession[], options: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean } = {}) => {
+  const refreshSessionStatuses = useCallback(async (sessions: StatusSession[], options: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean; force?: boolean } = {}) => {
     const activeClient = clientRef.current;
     if (!activeClient || sessions.length === 0) return;
     const generation = statusGenerationRef.current;
@@ -1237,7 +1242,7 @@ export function AppProvider({
       }, DEFAULT_SESSION_FILTER_MINUTES, {
         knownTurns: stateRef.current.sessionLatestTurns,
         turnStatuses: stateRef.current.sessionTurnStatuses,
-        cached: options.silent,
+        cached: options.silent && !options.force,
         activeOnly: options.activeOnly,
         shouldContinue: () => generation === statusGenerationRef.current && (!options.silent || isAppActive()),
       });
@@ -1512,6 +1517,7 @@ export function AppProvider({
       } catch (error) {
         console.warn("[mobile-cache] failed to prune expired cache", error);
       }
+      void hydrateBotCache(queryClient, userKey).catch((error) => console.warn("[mobile-cache] failed to hydrate Bots", error));
       try {
         const cached = await hydrateHome(userKey);
         if (active && (cached.spaces.length > 0 || cached.sessions.length > 0)) {
@@ -1548,7 +1554,7 @@ export function AppProvider({
       discoveryRequests.clear();
       eventRevisions.clear();
     };
-  }, [applyCacheRetention, dispatch, refreshHome, userKey]);
+  }, [applyCacheRetention, dispatch, queryClient, refreshHome, userKey]);
 
   useEffect(() => {
     if (!client) return;
@@ -1739,12 +1745,12 @@ export function AppProvider({
   }, []);
 
   const refreshSession = useCallback(
-    async (sessionId: string, options: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean } = {}) => {
+    async (sessionId: string, options: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean; notesOnly?: boolean } = {}) => {
       if (!client) return;
       const view = stateRef.current.sessionViews[sessionId];
       // A failed initial detail read needs discovery and subscriptions, not just a history refresh.
       if (!view?.session || !view.space) {
-        await sessionLoadRef.current(sessionId);
+        await sessionLoadRef.current(sessionId, { notesOnly: options.notesOnly });
         return;
       }
       const spaceId = view.session.spaceId;
@@ -1758,15 +1764,36 @@ export function AppProvider({
       // Recovery resyncs must not flash the pull-to-refresh spinner.
       dispatch({ type: "session-refresh-start", sessionId, ...(options.silent ? { silent: true } : {}), ...(options.catchUp ? { catchUp: true } : {}) });
       try {
-        const response = await withTimeout(client.space(spaceId).session(sessionId).turns.listPaginated({ limit: 30 }), "Loading Chat");
+        const before = stateRef.current.sessionViews[sessionId];
+        const cachedRange = options.notesOnly ? cachedTurnRange(before?.messages ?? []) : { oldest: null, newest: null };
+        const cursor = options.notesOnly ? before?.newestCursor ?? cachedRange.newest : null;
+        // A Bot's page reads only the notes after the tail it already shows.
+        const response = await withTimeout(client.space(spaceId).session(sessionId).turns.listPaginated(cursor !== null ? { cursor, direction: "newer", limit: 100 } : { limit: 30 }), "Loading Chat");
         if (!isCurrentRequest()) return;
         const current = stateRef.current.sessionViews[sessionId];
-        const loaded = { turns: current?.turns ?? [], hasMoreOlder: current?.hasMoreOlder ?? false, hasMoreNewer: current?.hasMoreNewer ?? false };
-        const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
-        // A head that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
-        const { turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, head) ?? (loaded.hasMoreNewer ? loaded : head);
         const liveMessages = current?.messages.filter(isLiveMessage) ?? [];
-        const messages = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
+        let turns: SessionTurnRecord[];
+        let hasMoreOlder: boolean;
+        let hasMoreNewer: boolean;
+        let oldestCursor: number | null;
+        let newestCursor: number | null;
+        let messages: MessageRecord[];
+        if (cursor !== null) {
+          turns = mergeTurns(current?.turns ?? [], response.turns);
+          hasMoreOlder = current?.hasMoreOlder ?? true;
+          hasMoreNewer = response.hasMore;
+          oldestCursor = current?.oldestCursor ?? cachedRange.oldest;
+          newestCursor = turns.at(-1)?.sequence ?? cursor;
+          messages = mergeDisplayMessages(current?.messages ?? [], messagesFromTurns(turns));
+        } else {
+          const loaded = { turns: current?.turns ?? [], hasMoreOlder: current?.hasMoreOlder ?? false, hasMoreNewer: current?.hasMoreNewer ?? false };
+          const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
+          // A head that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
+          ({ turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, head) ?? (loaded.hasMoreNewer ? loaded : head));
+          oldestCursor = turns[0]?.sequence ?? null;
+          newestCursor = turns.at(-1)?.sequence ?? null;
+          messages = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
+        }
         const claimed = claimedFailedSends(liveMessages, messages);
         if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
         dispatch({
@@ -1778,9 +1805,10 @@ export function AppProvider({
           turns,
           hasMoreOlder,
           hasMoreNewer,
-          oldestCursor: turns[0]?.sequence ?? null,
-          newestCursor: turns.at(-1)?.sequence ?? null,
+          oldestCursor,
+          newestCursor,
         });
+        queryClient.setQueryData([`chat:${sessionId}:tail`], Date.now());
         // In-flight sends own their rows; rewriting them here could revive one its send already removed.
         void saveMessages(userKey, sessionId, messages.filter((message) => message.meta?.optimistic !== true)).catch(() => undefined);
         markChatEntry("refresh.end", { turns: turns.length });
@@ -1799,7 +1827,7 @@ export function AppProvider({
       try { await request; }
       finally { if (paginationRequestsRef.current.get(key) === request) paginationRequestsRef.current.delete(key); }
     },
-    [client, dispatch, userKey, stateRef],
+    [client, dispatch, queryClient, userKey, stateRef],
   );
 
   const loadTurnIndex = useCallback(async (sessionId: string, options: { force?: boolean } = {}) => {
@@ -2099,7 +2127,7 @@ export function AppProvider({
   }, [resyncSession]);
 
   const loadSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, options: SessionOpenOptions = {}) => {
       if (!client) return;
       const token = (openTokens.current.get(sessionId) ?? 0) + 1;
       openTokens.current.set(sessionId, token);
@@ -2110,7 +2138,7 @@ export function AppProvider({
         recordSpaceVisit(view.space.id);
         // Memory already owns the history window; disk hydration would replace newer live messages.
         attachSessionRealtime(client, view.space.id, sessionId);
-        await refreshSession(sessionId, { silent: true, catchUp: true });
+        await refreshSession(sessionId, { silent: true, catchUp: true, ...(options.notesOnly ? { notesOnly: true } : {}) });
         return;
       }
       dispatch({ type: "session-start", sessionId, session: summary ?? null });
@@ -2163,17 +2191,34 @@ export function AppProvider({
         dispatch({ type: "session-start", sessionId, space, session });
         attachSessionRealtime(client, spaceId, sessionId);
         const sessionClient = client.space(spaceId).session(sessionId);
+        const cachedMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
+        const cachedRange = options.notesOnly ? cachedTurnRange(cachedMessages) : { oldest: null, newest: null };
+        // A Bot's page reads only the notes after the cached tail; anything older is already on screen.
         markChatEntry("turns.start");
-        const response = await withTimeout(sessionClient.turns.listPaginated({ limit: 30 }), "Loading Chat");
+        const response = await withTimeout(cachedRange.newest !== null
+          ? sessionClient.turns.listPaginated({ cursor: cachedRange.newest, direction: "newer", limit: 100 })
+          : sessionClient.turns.listPaginated({ limit: 30 }), "Loading Chat");
         markChatEntry("turns.end", { count: response.turns.length });
         if (openTokens.current.get(sessionId) !== token) return;
         const messages = messagesFromTurns(response.turns);
-        const cachedMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
         const liveMessages = cachedMessages.filter(isLiveMessage);
-        const shown = mergeDisplayMessages(messages, liveMessages);
+        const shown = cachedRange.newest !== null ? mergeDisplayMessages(cachedMessages, messages) : mergeDisplayMessages(messages, liveMessages);
         const claimed = claimedFailedSends(liveMessages, shown);
         if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
-        dispatch({ type: "session-success", sessionId, space, session: response.session ?? session, messages: shown, turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false, oldestCursor: response.turns[0]?.sequence ?? null, newestCursor: response.turns.at(-1)?.sequence ?? null });
+        dispatch({
+          type: "session-success",
+          sessionId,
+          space,
+          session: response.session ?? session,
+          messages: shown,
+          turns: response.turns,
+          hasMoreOlder: cachedRange.newest !== null ? cachedRange.oldest !== null && cachedRange.oldest > 1 : response.hasMore,
+          hasMoreNewer: false,
+          oldestCursor: cachedRange.oldest ?? response.turns[0]?.sequence ?? null,
+          newestCursor: Math.max(cachedRange.newest ?? 0, response.turns.at(-1)?.sequence ?? 0) || null,
+        });
+        // The open just read the tail; mark the poll fresh so it does not repeat the read at once.
+        queryClient.setQueryData([`chat:${sessionId}:tail`], Date.now());
         // The turn index only feeds the turn navigator and marker colors; loading it eagerly made
         // every Chat open pay a second slow request plus a full re-render. It loads when opened.
         void saveMessages(userKey, sessionId, messages).catch(() => undefined);
@@ -2182,7 +2227,7 @@ export function AppProvider({
         dispatch({ type: "session-error", sessionId, message: error instanceof Error ? error.message : translate("data.openChatFailed") });
       }
     },
-    [attachSessionRealtime, client, dispatch, recordSpaceVisit, refreshSession, userKey, stateRef],
+    [attachSessionRealtime, client, dispatch, queryClient, recordSpaceVisit, refreshSession, userKey, stateRef],
   );
 
   const releaseSession = useCallback((sessionId: string) => {
@@ -2199,15 +2244,15 @@ export function AppProvider({
     sessionReleaseRef.current = releaseSession;
   }, [loadSession, releaseSession]);
 
-  const openSession = useCallback(async (sessionId: string) => {
+  const openSession = useCallback(async (sessionId: string, options?: SessionOpenOptions) => {
     if (!client) return;
     startChatEntry();
-    await sessionLifecycleRef.current.open(sessionId);
+    await sessionLifecycleRef.current.open(sessionId, options);
   }, [client]);
 
-  const prefetchSession = useCallback((sessionId: string) => {
+  const prefetchSession = useCallback((sessionId: string, options?: SessionOpenOptions) => {
     if (!client || !sessionId || sessionId === "new") return;
-    sessionLifecycleRef.current.prime(sessionId);
+    sessionLifecycleRef.current.prime(sessionId, options);
   }, [client]);
 
   const closeSession = useCallback((sessionId: string) => {
@@ -2215,7 +2260,7 @@ export function AppProvider({
   }, []);
 
   const abortSession = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, options: { refresh?: boolean } = {}) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const view = stateRef.current.sessionViews[sessionId];
       const summary = stateRef.current.sessions.find((item) => item.id === sessionId);
@@ -2225,7 +2270,7 @@ export function AppProvider({
         turnId: view?.stream?.turnId ?? null,
       });
       dispatch({ type: "stream-clear", sessionId });
-      await refreshSession(sessionId);
+      if (options.refresh !== false) await refreshSession(sessionId);
       void queryClient.invalidateQueries();
     },
     [client, dispatch, refreshSession, queryClient, stateRef],
@@ -2888,15 +2933,16 @@ function sameSessionViewSummary(a: SessionViewSummary, b: SessionViewSummary) {
   return shallowEqual(leftRest, rightRest) && left?.status === right?.status && left?.turnId === right?.turnId && !left === !right;
 }
 
-export function useSession(sessionId: string) {
+export function useSession(sessionId: string, options?: SessionOpenOptions) {
   const { openSession, closeSession } = useAppActions();
+  const notesOnly = options?.notesOnly === true;
   // Layout so a press-in prefetch can land in sessionViews before the first paint.
   useLayoutEffect(() => {
     // "" is a new Chat the server has not created yet.
     if (!sessionId) return;
-    void openSession(sessionId);
+    void openSession(sessionId, { notesOnly });
     return () => closeSession(sessionId);
-  }, [closeSession, openSession, sessionId]);
+  }, [closeSession, notesOnly, openSession, sessionId]);
   return useAppSelector((app) => (sessionId ? summarizeSessionView(app.state.sessionViews[sessionId]) : NEW_CHAT_VIEW), sameSessionViewSummary);
 }
 
