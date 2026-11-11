@@ -367,6 +367,16 @@ export async function loadSessionSeen(userKey: string, now: number): Promise<Ses
   return { baseline: row.baseline, entries: Object.fromEntries(rows.map(({ sessionId, messageId, seenAt }) => [sessionId, { messageId, seenAt }])) };
 }
 
+/** Every Chat counts as read up to `now`: seen rows fall back to the moved baseline, as when they are pruned. */
+export async function markAllSessionsSeen(userKey: string, now: number) {
+  const db = await database();
+  await writeTransaction(db, async () => {
+    await db.runAsync("DELETE FROM session_seen WHERE user_key = ?", userKey);
+    await db.runAsync("INSERT OR IGNORE INTO session_seen_baseline (user_key, baseline) VALUES (?, ?)", userKey, now);
+    await db.runAsync("UPDATE session_seen_baseline SET baseline = MAX(baseline, ?) WHERE user_key = ?", now, userKey);
+  });
+}
+
 export async function saveSessionSeen(userKey: string, sessionId: string, entry: SessionSeenEntry) {
   const db = await database();
   await db.runAsync(

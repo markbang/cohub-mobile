@@ -200,6 +200,8 @@ export const en = {
   "chats.empty.archived.body": "Archive Chats you're done with to keep lists focused. A new message brings a Chat back.",
   "chats.action.clearFilters": "Clear filters",
   "chats.action.newChat": "New Chat",
+  "chats.action.markAllRead": "Mark all as read",
+  "chats.markAllRead.failed": "Could not save read state. Try again.",
   "chats.error.title": "Chats are unavailable",
   "chats.error.body":
     "Check your connection and sign-in session, then retry.",

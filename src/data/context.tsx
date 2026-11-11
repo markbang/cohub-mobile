@@ -1051,6 +1051,8 @@ export type AppActions = {
   /** Device-local: records the Chat's latest message as seen for the Chats list unread marker. */
   markSessionSeen: (sessionId: string, messageId: string | null) => Promise<void>;
   markSessionUnread: (sessionId: string) => Promise<void>;
+  /** Device-local: clears every unread marker, including Chats not loaded into a list yet. */
+  markAllSessionsSeen: () => Promise<void>;
   /** Starts uploading files as they are attached; `release` stops ones removed before sending. */
   prepareAttachments: (target: UploadTarget, attachments: readonly AttachmentDraft[]) => void;
   releaseAttachments: (target: UploadTarget, attachments: readonly AttachmentDraft[]) => void;
@@ -1189,7 +1191,7 @@ export function AppProvider({
   );
 
   const { loadOverview: loadSpaceOverview, recordVisit: recordSpaceVisit, reset: resetSpaceList } = useSpaceListOwner(client, userKey, store, queryClient);
-  const { markSeen: markSessionSeen, markUnread: markSessionUnread, reload: reloadSessionSeen } = useSessionSeenOwner(userKey, store);
+  const { markSeen: markSessionSeen, markUnread: markSessionUnread, markAllSeen: markAllSessionsSeen, reload: reloadSessionSeen } = useSessionSeenOwner(userKey, store);
   // Scoped to the client and user like every other cache: a new account never sees another's uploads.
   const attachmentUploads = useMemo(
     () => client && userKey ? createAttachmentUploads((target, attachment, options) => uploadAttachmentFile(client, target, attachment, options)) : null,
@@ -2786,6 +2788,7 @@ export function AppProvider({
       saveSessionReadSequence: saveSessionReadSequenceForUser,
       markSessionSeen,
       markSessionUnread,
+      markAllSessionsSeen,
       prepareAttachments: (target, attachments) => attachmentUploads?.prepare(target, attachments),
       releaseAttachments: (target, attachments) => attachmentUploads?.release(target, attachments),
       attachmentUploadState: (target, attachment) => attachmentUploads?.state(target, attachment) ?? null,
@@ -2795,6 +2798,7 @@ export function AppProvider({
       attachmentUploads,
       markSessionSeen,
       markSessionUnread,
+      markAllSessionsSeen,
       spaceRealtime,
       refreshChats,
       discoverRunningSessions,

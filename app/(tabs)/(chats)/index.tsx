@@ -32,6 +32,7 @@ import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pa
 import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
 import { BotRow } from "@/src/components/BotRow";
 import { isBotSpace, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
+import { isSessionUnread } from "@/src/data/chat-read-state";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBots } from "@/src/data/use-bots";
 import { displaySpaceName } from "@/src/utils";
@@ -59,7 +60,7 @@ export default function ChatsScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
   const titleScroll = largeTitleScroll(true);
-  const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft } = useAppActions();
+  const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft, markAllSessionsSeen } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks }), shallowEqual);
   // Rows read their own status; the list only needs which Chats run, so a Turn update re-renders one row, not every row.
@@ -214,6 +215,10 @@ export default function ChatsScreen() {
   useScreenVisibleEffect(useCallback(() => dropHeldOrder, [dropHeldOrder]));
   useEffect(() => clearOrderTimers, [clearOrderTimers]);
   const emptyError = Boolean(dataError) && shownItems.length === 0;
+  // Offered only while a shown row has a dot; a running Chat's row shows its ring instead.
+  const hasUnread = useAppSelector((app) => shownItems.some((item) => item.kind === "local-session"
+    ? !runningIds.includes(item.session.id) && isSessionUnread(item.session, app.sessionSeen)
+    : item.kind === "bot" && item.entry.note !== null && item.entry.chatId !== null && isSessionUnread({ id: item.entry.chatId, lastMessageId: item.entry.note.messageId, lastMessageAt: item.entry.note.at }, app.sessionSeen)));
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
@@ -261,6 +266,7 @@ export default function ChatsScreen() {
   const sourceActions: NativeMenuAction[] = [
     ...sourceOptions.map((option) => ({ icon: option.icon, title: option.label, detail: option.detail, checked: !archivedView && option.value === shownSource, onPress: () => selectSource(option.value) })),
     { icon: "archive", title: t("chats.archived"), checked: archivedView, onPress: () => setArchivedView(true) },
+    ...(hasUnread ? [{ icon: "check-check" as const, title: t("chats.action.markAllRead"), onPress: () => void markAllSessionsSeen().catch(() => toast({ title: t("chats.markAllRead.failed"), tone: "danger" })) }] : []),
   ];
   const hasActiveFilter = Boolean(trimmedQuery) || listFilter !== "all" || botsView;
   const newAction = botsView

@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { EMPTY_SESSION_SEEN, type SessionSeenEntry, type SessionSeenState } from "./chat-read-state";
-import { loadSessionSeen, saveSessionSeen } from "./local-db";
+import { loadSessionSeen, markAllSessionsSeen, saveSessionSeen } from "./local-db";
 
 type SeenStore = StoreApi<{ sessionSeen: SessionSeenState }>;
 
@@ -39,5 +39,13 @@ export function useSessionSeenOwner(userKey: string, store: SeenStore) {
 
   const markUnread = useCallback((sessionId: string) => mark(sessionId, { messageId: null, seenAt: 0 }), [mark]);
 
-  return { markSeen, markUnread, reload: hydrate };
+  const markAllSeen = useCallback(() => {
+    // A pending hydrate would merge the cleared rows back in.
+    generation.current += 1;
+    const now = Date.now();
+    store.setState((current) => ({ sessionSeen: { baseline: Math.max(current.sessionSeen.baseline ?? now, now), entries: {} } }));
+    return markAllSessionsSeen(userKey, now);
+  }, [store, userKey]);
+
+  return { markSeen, markUnread, markAllSeen, reload: hydrate };
 }

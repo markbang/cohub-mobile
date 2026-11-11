@@ -197,6 +197,8 @@ export const zh: Record<TranslationKey, string> = {
   "chats.empty.archived.body": "归档已完成的对话，让列表保持清爽。发送新消息即可恢复。",
   "chats.action.clearFilters": "清除筛选",
   "chats.action.newChat": "新对话",
+  "chats.action.markAllRead": "全部标为已读",
+  "chats.markAllRead.failed": "无法保存已读状态，请重试。",
   "chats.error.title": "对话不可用",
   "chats.error.body": "请检查网络连接和登录状态后重试。",
   "chats.loadingMore": "正在加载更多对话",
