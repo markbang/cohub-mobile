@@ -34,7 +34,6 @@ import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realti
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
 import { hydrateBotCache } from "@/src/data/bot-cache";
-import { cachedTurnRange } from "@/src/data/bot-mode";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
 import { useSessionSeenOwner } from "@/src/data/use-session-seen";
@@ -50,6 +49,7 @@ import {
   loadMessages,
   loadRunningSessionCache,
   loadSessionReadSequence,
+  loadTurns,
   pruneUserCache,
   saveRunningSessionCache,
   saveComposerDraft as saveLocalComposerDraft,
@@ -58,6 +58,7 @@ import {
   saveSessionReadSequence,
   saveSessions,
   saveSpaces,
+  saveTurns,
   type ComposerDraftScope,
 } from "@/src/data/local-db";
 import type {
@@ -71,7 +72,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { claimedFailedSends, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, mergeDisplayMessages, placeAwaitingSends, submitAwaitingSend, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
+import { claimedFailedSends, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, mergeDisplayMessages, placeAwaitingSends, submitAwaitingSend, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, noteWindowTail, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
@@ -356,7 +357,7 @@ type Action =
   | { type: "usage-error"; message: string; silent?: boolean }
   | { type: "session-start"; sessionId: string; space?: SpaceRecord | null; session?: SessionRecord | null }
   | { type: "session-meta"; sessionId: string; space?: SpaceRecord | null; session: SessionRecord }
-  | { type: "session-cache"; sessionId: string; messages: MessageRecord[] }
+  | { type: "session-cache"; sessionId: string; messages: MessageRecord[]; turns?: SessionTurnRecord[] }
   | { type: "session-success"; sessionId: string; space: SpaceRecord; session: SessionRecord; messages: MessageRecord[]; turns: SessionTurnRecord[]; hasMoreOlder: boolean; hasMoreNewer?: boolean; oldestCursor?: number | null; newestCursor?: number | null }
   | { type: "session-error"; sessionId: string; message: string }
   | { type: "session-refresh-start"; sessionId: string; silent?: boolean; catchUp?: boolean }
@@ -677,7 +678,11 @@ function reducer(state: AppState, action: Action): AppState {
         const local = (state.sessionViews[action.sessionId]?.messages ?? []).filter((message) => isLocalSend(message) || isFailedSend(message));
         const localIds = new Set(local.map((message) => message.meta?.clientMessageId));
         const cached = action.messages.filter((message) => typeof message.meta?.clientMessageId !== "string" || !localIds.has(message.meta.clientMessageId));
-        return updateView(state, action.sessionId, { messages: mergeDisplayMessages(cached, local), loading: false, catchingUp: true });
+        // Cached Turns restore the window itself, so every later Turn joins it like one read from the server.
+        // Without them the cached rows only stand in until the first page.
+        const turns = action.turns ?? [];
+        const rows = turns.length > 0 ? mergeDisplayMessages(messagesFromTurns(turns), cached.filter(isFailedSend)) : cached;
+        return updateView(state, action.sessionId, { ...(turns.length > 0 ? { turns } : {}), messages: mergeDisplayMessages(rows, local), loading: false, catchingUp: true });
       }
     case "session-success": {
       const session = preferNewerSession(
@@ -762,7 +767,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...(session ? { session } : {}),
         turns,
         historyLoaded: true,
-        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages),
+        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
         hasMoreOlder: action.direction === "older" ? action.hasMore : current.hasMoreOlder,
         hasMoreNewer: action.direction === "newer" ? action.hasMore : current.hasMoreNewer,
         loadingOlder: action.direction === "older" ? false : current.loadingOlder,
@@ -866,7 +871,7 @@ function reducer(state: AppState, action: Action): AppState {
       return updateView(nextState, action.sessionId, {
         turns,
         historyLoaded: true,
-        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages),
+        messages: mergeDisplayMessages(messagesFromTurns(turns), current.messages.filter(isLiveMessage)),
         oldestCursor: turns[0]?.sequence ?? current.oldestCursor,
         newestCursor: turns.at(-1)?.sequence ?? current.newestCursor,
         ...(isTerminalTurnStatus(patched?.status) && current.stream?.turnId === patched?.id ? { stream: null } : {}),
@@ -883,7 +888,9 @@ function reducer(state: AppState, action: Action): AppState {
       const view = state.sessionViews[action.sessionId] ?? emptyView();
       const incomingMeta = action.message.meta ?? {};
       const turnId = typeof incomingMeta.turnId === "string" ? incomingMeta.turnId : null;
-      const turnSequence = typeof incomingMeta.turnSequence === "number" ? incomingMeta.turnSequence : view.turns.find((turn) => turn.id === turnId)?.sequence;
+      // The server's copy of a send can arrive before its Turn; until then it keeps the place its bubble holds.
+      const sent = typeof incomingMeta.clientMessageId === "string" ? view.messages.find((message) => isLocalSend(message) && message.meta?.clientMessageId === incomingMeta.clientMessageId) : undefined;
+      const turnSequence = typeof incomingMeta.turnSequence === "number" ? incomingMeta.turnSequence : view.turns.find((turn) => turn.id === turnId)?.sequence ?? (sent ? turnSequenceForMessage(sent) : null);
       const message = { ...action.message, meta: { ...incomingMeta, ...(turnSequence != null ? { turnSequence } : {}), _mobileLive: true } };
       const messages = mergeMessages(view.messages, message);
       const streamDone = action.message.role === "assistant" && incomingMeta.messageKind !== "assistant_intermediate" && hasFinalAssistantForTurn(messages, view.stream?.turnId ?? turnId);
@@ -1108,6 +1115,7 @@ export function AppProvider({
   const subscriptions = useRef(new Map<string, () => void>());
   const sessionSpaces = useRef(new Map<string, string>());
   const openTokens = useRef(new Map<string, number>());
+  const cachedTurnTails = useRef(new Map<string, number>());
   const sessionLoadRef = useRef<(sessionId: string, options?: SessionOpenOptions) => Promise<void>>(async () => undefined);
   const sessionReleaseRef = useRef<(sessionId: string) => void>(() => undefined);
   const sessionLifecycleRef = useRef(createSessionLifecycle({
@@ -1746,6 +1754,14 @@ export function AppProvider({
     return () => coordinator.dispose();
   }, []);
 
+  /** A Bot page's window goes to disk when a read finds its tail moved, so the next open restores it and reads on from there. */
+  const cacheTurnWindow = useCallback((sessionId: string, turns: SessionTurnRecord[]) => {
+    const newest = noteWindowTail(turns);
+    if (newest === null || cachedTurnTails.current.get(sessionId) === newest) return;
+    cachedTurnTails.current.set(sessionId, newest);
+    void saveTurns(userKey, sessionId, turns).catch(() => undefined);
+  }, [userKey]);
+
   const refreshSession = useCallback(
     async (sessionId: string, options: { silent?: boolean; throwOnError?: boolean; catchUp?: boolean; notesOnly?: boolean } = {}) => {
       if (!client) return;
@@ -1767,35 +1783,19 @@ export function AppProvider({
       dispatch({ type: "session-refresh-start", sessionId, ...(options.silent ? { silent: true } : {}), ...(options.catchUp ? { catchUp: true } : {}) });
       try {
         const before = stateRef.current.sessionViews[sessionId];
-        const cachedRange = options.notesOnly ? cachedTurnRange(before?.messages ?? []) : { oldest: null, newest: null };
-        const cursor = options.notesOnly ? before?.newestCursor ?? cachedRange.newest : null;
-        // A Bot's page reads only the notes after the tail it already shows.
+        // A Bot's page reads only the notes after the newest one it holds.
+        const cursor = options.notesOnly && !before?.hasMoreNewer ? noteWindowTail(before?.turns ?? []) : null;
         const response = await withTimeout(client.space(spaceId).session(sessionId).turns.listPaginated(cursor !== null ? { cursor, direction: "newer", limit: 100 } : { limit: 30 }), "Loading Chat");
         if (!isCurrentRequest()) return;
         const current = stateRef.current.sessionViews[sessionId];
         const liveMessages = current?.messages.filter(isLiveMessage) ?? [];
-        let turns: SessionTurnRecord[];
-        let hasMoreOlder: boolean;
-        let hasMoreNewer: boolean;
-        let oldestCursor: number | null;
-        let newestCursor: number | null;
-        let messages: MessageRecord[];
-        if (cursor !== null) {
-          turns = mergeTurns(current?.turns ?? [], response.turns);
-          hasMoreOlder = current?.hasMoreOlder ?? true;
-          hasMoreNewer = response.hasMore;
-          oldestCursor = current?.oldestCursor ?? cachedRange.oldest;
-          newestCursor = turns.at(-1)?.sequence ?? cursor;
-          messages = mergeDisplayMessages(current?.messages ?? [], messagesFromTurns(turns));
-        } else {
-          const loaded = { turns: current?.turns ?? [], hasMoreOlder: current?.hasMoreOlder ?? false, hasMoreNewer: current?.hasMoreNewer ?? false };
-          const head = { turns: response.turns, hasMoreOlder: response.hasMore, hasMoreNewer: false };
-          // A head that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
-          ({ turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, head) ?? (loaded.hasMoreNewer ? loaded : head));
-          oldestCursor = turns[0]?.sequence ?? null;
-          newestCursor = turns.at(-1)?.sequence ?? null;
-          messages = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
-        }
+        const loaded = { turns: current?.turns ?? [], hasMoreOlder: current?.hasMoreOlder ?? false, hasMoreNewer: current?.hasMoreNewer ?? false };
+        const incoming = { turns: response.turns, hasMoreOlder: cursor === null && response.hasMore, hasMoreNewer: cursor !== null && response.hasMore };
+        // A read that doesn't join replaces the loaded turns, except a detached window keeps the reader's place.
+        const { turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, incoming) ?? (loaded.hasMoreNewer ? loaded : incoming);
+        const oldestCursor = turns[0]?.sequence ?? null;
+        const newestCursor = turns.at(-1)?.sequence ?? null;
+        const messages = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
         const claimed = claimedFailedSends(liveMessages, messages);
         if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
         dispatch({
@@ -1813,6 +1813,7 @@ export function AppProvider({
         queryClient.setQueryData([`chat:${sessionId}:tail`], Date.now());
         // In-flight sends own their rows; rewriting them here could revive one its send already removed.
         void saveMessages(userKey, sessionId, messages.filter((message) => message.meta?.optimistic !== true)).catch(() => undefined);
+        if (options.notesOnly && !hasMoreNewer) cacheTurnWindow(sessionId, turns);
         markChatEntry("refresh.end", { turns: turns.length });
       } catch (error) {
         if (!isCurrentRequest()) return;
@@ -1829,7 +1830,7 @@ export function AppProvider({
       try { await request; }
       finally { if (paginationRequestsRef.current.get(key) === request) paginationRequestsRef.current.delete(key); }
     },
-    [client, dispatch, queryClient, userKey, stateRef],
+    [cacheTurnWindow, client, dispatch, queryClient, userKey, stateRef],
   );
 
   const loadTurnIndex = useCallback(async (sessionId: string, options: { force?: boolean } = {}) => {
@@ -2150,12 +2151,13 @@ export function AppProvider({
         try {
           markChatEntry("cache.start");
           const live = (message: MessageRecord) => typeof message.meta?.clientMessageId === "string" && sendQueueRef.current.has(sessionId, message.meta.clientMessageId);
-          const cachedMessages = settleInterruptedSends((await loadMessages(userKey, sessionId)).filter((message) => !live(message)), translate("data.messageSendFailed"));
+          const [storedMessages, cachedTurns] = await Promise.all([loadMessages(userKey, sessionId), options.notesOnly ? loadTurns(userKey, sessionId) : []]);
+          const cachedMessages = settleInterruptedSends(storedMessages.filter((message) => !live(message)), translate("data.messageSendFailed"));
           markChatEntry("cache.end", { count: cachedMessages.length });
           const claimed = claimedFailedSends(cachedMessages, mergeDisplayMessages(cachedMessages, []));
           if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
-          if (openTokens.current.get(sessionId) === token && cachedMessages.length > 0) {
-            dispatch({ type: "session-cache", sessionId, messages: cachedMessages });
+          if (openTokens.current.get(sessionId) === token && (cachedMessages.length > 0 || cachedTurns.length > 0)) {
+            dispatch({ type: "session-cache", sessionId, messages: cachedMessages, turns: cachedTurns });
           }
         } catch (error) {
           console.warn("[mobile-cache] failed to load Chat", error);
@@ -2193,18 +2195,18 @@ export function AppProvider({
         dispatch({ type: "session-start", sessionId, space, session });
         attachSessionRealtime(client, spaceId, sessionId);
         const sessionClient = client.space(spaceId).session(sessionId);
-        const cachedMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
-        const cachedRange = options.notesOnly ? cachedTurnRange(cachedMessages) : { oldest: null, newest: null };
-        // A Bot's page reads only the notes after the cached tail; anything older is already on screen.
+        // A page restored from cached notes (a Bot's page) reads only the notes after them.
+        const cursor = options.notesOnly ? noteWindowTail(stateRef.current.sessionViews[sessionId]?.turns ?? []) : null;
         markChatEntry("turns.start");
-        const response = await withTimeout(cachedRange.newest !== null
-          ? sessionClient.turns.listPaginated({ cursor: cachedRange.newest, direction: "newer", limit: 100 })
-          : sessionClient.turns.listPaginated({ limit: 30 }), "Loading Chat");
+        const response = await withTimeout(sessionClient.turns.listPaginated(cursor !== null ? { cursor, direction: "newer", limit: 100 } : { limit: 30 }), "Loading Chat");
         markChatEntry("turns.end", { count: response.turns.length });
         if (openTokens.current.get(sessionId) !== token) return;
-        const messages = messagesFromTurns(response.turns);
-        const liveMessages = cachedMessages.filter(isLiveMessage);
-        const shown = cachedRange.newest !== null ? mergeDisplayMessages(cachedMessages, messages) : mergeDisplayMessages(messages, liveMessages);
+        const current = stateRef.current.sessionViews[sessionId];
+        const loaded = { turns: cursor !== null ? current?.turns ?? [] : [], hasMoreOlder: (current?.turns[0]?.sequence ?? 1) > 1, hasMoreNewer: false };
+        const incoming = { turns: response.turns, hasMoreOlder: cursor === null && response.hasMore, hasMoreNewer: cursor !== null && response.hasMore };
+        const { turns, hasMoreOlder, hasMoreNewer } = mergeTurnWindows(loaded, incoming) ?? incoming;
+        const liveMessages = current?.messages.filter(isLiveMessage) ?? [];
+        const shown = mergeDisplayMessages(messagesFromTurns(turns), liveMessages);
         const claimed = claimedFailedSends(liveMessages, shown);
         if (claimed.length > 0) void deleteMessages(userKey, sessionId, claimed).catch(() => undefined);
         dispatch({
@@ -2213,23 +2215,24 @@ export function AppProvider({
           space,
           session: response.session ?? session,
           messages: shown,
-          turns: response.turns,
-          hasMoreOlder: cachedRange.newest !== null ? cachedRange.oldest !== null && cachedRange.oldest > 1 : response.hasMore,
-          hasMoreNewer: false,
-          oldestCursor: cachedRange.oldest ?? response.turns[0]?.sequence ?? null,
-          newestCursor: Math.max(cachedRange.newest ?? 0, response.turns.at(-1)?.sequence ?? 0) || null,
+          turns,
+          hasMoreOlder,
+          hasMoreNewer,
+          oldestCursor: turns[0]?.sequence ?? null,
+          newestCursor: turns.at(-1)?.sequence ?? null,
         });
         // The open just read the tail; mark the poll fresh so it does not repeat the read at once.
         queryClient.setQueryData([`chat:${sessionId}:tail`], Date.now());
         // The turn index only feeds the turn navigator and marker colors; loading it eagerly made
         // every Chat open pay a second slow request plus a full re-render. It loads when opened.
-        void saveMessages(userKey, sessionId, messages).catch(() => undefined);
+        void saveMessages(userKey, sessionId, messagesFromTurns(response.turns)).catch(() => undefined);
+        if (options.notesOnly && !hasMoreNewer) cacheTurnWindow(sessionId, turns);
       } catch (error) {
         if (openTokens.current.get(sessionId) !== token) return;
         dispatch({ type: "session-error", sessionId, message: error instanceof Error ? error.message : translate("data.openChatFailed") });
       }
     },
-    [attachSessionRealtime, client, dispatch, queryClient, recordSpaceVisit, refreshSession, userKey, stateRef],
+    [attachSessionRealtime, cacheTurnWindow, client, dispatch, queryClient, recordSpaceVisit, refreshSession, userKey, stateRef],
   );
 
   const releaseSession = useCallback((sessionId: string) => {

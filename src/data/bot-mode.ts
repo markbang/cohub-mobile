@@ -70,19 +70,6 @@ export function latestBotNote(turns: readonly SessionTurnRecord[], spaceId: stri
   return { text, at: turn.createdAt, messageId: `${turn.id}:user`, from: from === spaceId ? null : from };
 }
 
-/** The Turn range cached messages cover, so a Bot's page can read only what arrived after them. */
-export function cachedTurnRange(messages: readonly Pick<MessageRecord, "meta">[]): { oldest: number | null; newest: number | null } {
-  let oldest: number | null = null;
-  let newest: number | null = null;
-  for (const message of messages) {
-    const sequence = message.meta?.turnSequence;
-    if (typeof sequence !== "number" || !Number.isSafeInteger(sequence)) continue;
-    oldest = oldest === null ? sequence : Math.min(oldest, sequence);
-    newest = newest === null ? sequence : Math.max(newest, sequence);
-  }
-  return { oldest, newest };
-}
-
 /** The model saved in a Bot's `bot.json`; it travels with the Bot, so the app and the bot mod read one value. */
 export function botModelFrom(raw: Record<string, unknown> | null | undefined): ChatModelSelection | null {
   const value = raw?.model;
