@@ -20,7 +20,7 @@ import { createAttachmentUploads } from "../src/data/attachment-uploads.ts";
 import { launcherShortcuts, launcherShortcutsKey } from "../src/data/launcher-shortcuts.ts";
 import { incomingShareFromItems, isShareIntentPath } from "../src/data/incoming-share.ts";
 import { chatLinkNavigation } from "../src/data/chat-link-navigation.ts";
-import { chatOpenAction, focusedRouteKeys, leftPaneWidth, selectedChatId, showsPaneBack, splitMode, splitRoutes } from "../src/data/split-navigation.ts";
+import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, selectedChatId, showsPaneBack, splitMode, splitRoutes } from "../src/data/split-navigation.ts";
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
@@ -5441,6 +5441,30 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(getReplyContentWidth(402), 370, "phone replies fill the row");
   assert.equal(getReplyContentWidth(787), 680, "a wide pane caps the reading line");
   assert.equal(getReplyRowWidth(787), 712);
+}
+{
+  // Root stack: a burst of taps on one row opens its screen once.
+  const { StackRouter, StackActions, CommonActions, RouterActionHandling, extendRouterActions } = createRequire(import.meta.url)("expo-router/build/react-navigation/routers/index.js");
+  const routeNames = ["(tabs)", "chat/[sessionId]", "space/[spaceId]"];
+  const config = { routeNames, routeGetIdList: {} };
+  const router = extendRouterActions(StackRouter, dropRepeatedTopPush)({});
+  const reduce = (state, action) => router.getStateForAction(state, action, config).state;
+  const names = (state) => state.routes.map((item) => `${item.name}${item.params?.sessionId ?? item.params?.spaceId ?? ""}${item.params?.turn ? `@${item.params.turn}` : ""}`);
+  const home = { key: "navigator:root", type: "stack", stale: false, routeKeySeq: 1, index: 0, routeNames, routes: [{ key: "(tabs):0", name: "(tabs)", params: {} }] };
+  const chatA = StackActions.push("chat/[sessionId]", { sessionId: "a" });
+  const opened = reduce(home, chatA);
+  const tapped = [chatA, StackActions.push("chat/[sessionId]", { sessionId: "a", __internal_expo_router_no_animation: true }), CommonActions.navigate("chat/[sessionId]", { sessionId: "a" })].reduce(reduce, opened);
+  assert.equal(tapped, opened, "repeat taps on the open Chat, Expo Router's internal params aside, leave one screen");
+  assert.deepEqual(names(reduce(tapped, StackActions.pop())), ["(tabs)"], "one back returns to the list");
+  assert.deepEqual(names(reduce(opened, StackActions.push("chat/[sessionId]", { sessionId: "a", turn: "4" }))), ["(tabs)", "chat/[sessionId]a", "chat/[sessionId]a@4"], "the same Chat at a turn still pushes");
+  const deeper = reduce(opened, StackActions.push("space/[spaceId]", { spaceId: "x" }));
+  const reopened = reduce(deeper, chatA);
+  assert.deepEqual(names(reopened), ["(tabs)", "chat/[sessionId]a", "space/[spaceId]x", "chat/[sessionId]a"], "an equal route below the top is pushed again, not lifted");
+  assert.deepEqual(reopened.routes.slice(0, 3), deeper.routes, "history under the push is unchanged");
+  const replaced = reduce(opened, StackActions.replace("chat/[sessionId]", { sessionId: "a" }));
+  assert.notEqual(replaced.routes[1].key, opened.routes[1].key, "replace with the same route still replaces");
+  assert.deepEqual(names(reduce(opened, CommonActions.goBack())), ["(tabs)"]);
+  assert.equal(dropRepeatedTopPush(home, { type: "NAVIGATE", payload: { name: "(tabs)", params: {}, state: { routes: [] } } }), RouterActionHandling.Delegate, "a link into a tab carries nested state and is never a repeat");
 }
 {
   // The right pane draws inside the tab app's screen, which is never focused while a pane route is on
