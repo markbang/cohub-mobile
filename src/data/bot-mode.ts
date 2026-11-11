@@ -37,18 +37,15 @@ export function botNoteSpace(turn: Pick<SessionTurnRecord, "executionKind" | "me
   return turn?.executionKind === "note" ? readSessionTurnOrigin(turn.meta)?.spaceId ?? null : null;
 }
 
-/** A note a Bot wrote, this one or another: it sits on the Bots' side. */
-export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined) {
-  return botNoteSpace(turn) !== null;
-}
-
 /** Another Bot that wrote on this Bot's page; `known` is false when its Space is not loaded, so only a generic name shows. */
 export type BotSender = { name: string; avatarUrl: string | null; known: boolean };
 /** The face beside another Bot's name above its bubble. */
 export const BOT_SENDER_AVATAR_SIZE = 20;
 
-export function botSender(peers: ReadonlyMap<string, BotPeer>, spaceId: string, unknownName: string): BotSender {
-  const peer = peers.get(spaceId);
+/** Null when the page's own Bot wrote it. */
+export function botSender(peers: ReadonlyMap<string, BotPeer>, writer: string, pageSpaceId: string, unknownName: string): BotSender | null {
+  if (writer === pageSpaceId) return null;
+  const peer = peers.get(writer);
   return peer ? { ...peer, known: true } : { name: unknownName, avatarUrl: null, known: false };
 }
 
@@ -56,7 +53,7 @@ export function botSender(peers: ReadonlyMap<string, BotPeer>, spaceId: string, 
 export type BotNote = { text: string; at: string; messageId: string; from: string | null };
 
 export function latestBotNote(turns: readonly SessionTurnRecord[], spaceId: string): BotNote | null {
-  const turn = turns.filter(isBotSaid).reduce<SessionTurnRecord | null>((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, null);
+  const turn = turns.filter((turn) => botNoteSpace(turn) !== null).reduce<SessionTurnRecord | null>((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, null);
   if (!turn) return null;
   const text = turn.userText ?? botReplyBlocks(turn.userContent).flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
   const from = botNoteSpace(turn);

@@ -261,7 +261,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           const sig = expandedIn(expanded, [message.id, row.key]);
           const writer = noteWriter(message);
           if (writer) {
-            const sender = writer === spaceId ? null : botSender(botPeers, writer, t("bots.otherBot"));
+            const sender = botSender(botPeers, writer, spaceId, t("bots.otherBot"));
             build([message, sandboxImages, sender?.name, sender?.avatarUrl, sender?.known], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages, sender) }));
           } else if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;

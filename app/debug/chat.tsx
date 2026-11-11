@@ -8,6 +8,7 @@ import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { BOT_BUBBLE_INSET, botNoteSpace, botPlacements, botSender, type BotPeer } from "@/src/data/bot-mode";
+import { useTranslation } from "@/src/i18n";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -26,6 +27,7 @@ const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
   const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string }>();
@@ -135,7 +137,7 @@ export default function DebugChatScreen() {
           // The Chat screen's Bot rows: the time above, the gap where the side changes, then the bubble.
           ? <View style={placements[index]?.gap ? { paddingTop: placements[index].gap } : undefined}>
             {placements[index]?.time ? <BotTimeDivider at={placements[index].time} /> : null}
-            {writerOf(item) ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} sender={writerOf(item) === BOT_SPACE_ID ? null : botSender(BOT_PEERS, writerOf(item)!, "Another Bot")} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
+            {writerOf(item) ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} sender={botSender(BOT_PEERS, writerOf(item)!, BOT_SPACE_ID, t("bots.otherBot"))} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
           </View>
           : <MessageBubble message={item} availableWidth={width} />}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}

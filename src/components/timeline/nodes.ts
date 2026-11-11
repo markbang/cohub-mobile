@@ -478,7 +478,8 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
 }
 
 /** `Avatar`'s shape, for another Bot's face above its bubble. */
-function botAvatar(ctx: NodeContext, peer: Pick<BotSender, "name" | "avatarUrl">, size: number): TimelineNode {
+function botAvatar(ctx: NodeContext, peer: Pick<BotSender, "name" | "avatarUrl">): TimelineNode {
+  const size = BOT_SENDER_AVATAR_SIZE;
   const shape = { width: size, height: size, borderRadius: size * 0.3 };
   if (peer.avatarUrl) return { type: "image", uri: imageThumbnailUrl(peer.avatarUrl, size, PixelRatio.get()), fallbackUri: peer.avatarUrl, style: { ...shape, backgroundColor: color(ctx.theme.colors.surfaceRaised) } };
   return { type: "view", style: { ...shape, alignItems: "center", justifyContent: "center", backgroundColor: color(ctx.theme.colors.accentSoft) }, children: [text(initials(peer.name), textStyle("micro", ctx.theme.colors.accent, { fontSize: 12, lineHeight: 14 }))] };
@@ -496,7 +497,7 @@ export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxIma
   if (body.length === 0) return null;
   const header: TimelineNode[] = sender ? [{
     type: "view", style: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
-    children: [...(sender.known ? [botAvatar(ctx, sender, BOT_SENDER_AVATAR_SIZE)] : []), text(sender.name, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } })],
+    children: [...(sender.known ? [botAvatar(ctx, sender)] : []), text(sender.name, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } })],
   }] : [];
   return {
     type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, alignItems: "flex-start" },
