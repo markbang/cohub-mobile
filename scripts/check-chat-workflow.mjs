@@ -30,14 +30,14 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
-import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, isSubmittingSend, placeAwaitingSends, settleInterruptedSends, submitAwaitingSend, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
+import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, isSubmittingSend, placeAwaitingSends, settleInterruptedSends, submitAwaitingSend, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, noteWindowTail, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
@@ -1100,7 +1100,7 @@ for (const [tab, component, expectedRequests] of [
   findRefresh(source); assert.ok(callback);
   let loads = 0;
   const scope = {
-    useCallback: (fn) => fn, client: {}, dispatch: () => {}, userKey: "user", queryClient: { setQueryData: () => undefined },
+    useCallback: (fn) => fn, client: {}, dispatch: () => {}, userKey: "user", queryClient: { setQueryData: () => undefined }, cacheTurnWindow: () => {},
     stateRef: { current: { sessionViews: {}, sessions: [] } },
     sessionLoadRef: { current: async (id) => { assert.equal(id, "uncached"); loads++; } },
   };
@@ -2940,7 +2940,7 @@ const windowOf = (from, to, hasMoreOlder, hasMoreNewer) => ({ turns: turnRange(f
   const live = [{ id: "in", meta: { turnSequence: 25 } }, { id: "past", meta: { turnSequence: 101 } }, { id: "unknown", meta: {} }];
   assert.deepEqual(messagesInWindow(live, detached).map((message) => message.id), ["in"], "a detached window shows only its own Turns, not records from the running tail");
 }
-async function refreshWith(view, head, overrides = {}) {
+async function refreshWith(view, head, overrides = {}, options = {}) {
   const actions = [];
   const refreshScope = {
     client: { space: () => ({ session: () => ({ turns: { listPaginated: async () => ({ session: view.session, turns: head.turns, hasMore: head.hasMoreOlder }) } }) }) },
@@ -2951,7 +2951,7 @@ async function refreshWith(view, head, overrides = {}) {
     markChatEntry: () => {},
     dispatch: (action) => actions.push(action),
     withTimeout: pageTimeout,
-    mergeTurnWindows, mergeDisplayMessages, messagesFromTurns,
+    mergeTurnWindows, mergeDisplayMessages, messagesFromTurns, noteWindowTail,
     isLiveMessage: () => false,
     saveMessages: async () => {},
     claimedFailedSends, deleteMessages: async () => {},
@@ -2960,7 +2960,7 @@ async function refreshWith(view, head, overrides = {}) {
     ...overrides,
   };
   const refresh = new Function(...Object.keys(refreshScope), ts.transpileModule(`return (${sessionCallbacks.refreshSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(refreshScope));
-  await refresh("session", { silent: true, catchUp: true });
+  await refresh("session", { silent: true, catchUp: true, ...options });
   return actions.find((action) => action.type === "session-refresh-end");
 }
 {
@@ -2971,6 +2971,17 @@ async function refreshWith(view, head, overrides = {}) {
   assert.deepEqual([pagedAway.turns.at(-1).sequence, pagedAway.hasMoreNewer], [25, true], "a reader paged away from the tail keeps their window");
   const paged = await refreshWith(loadedView(windowOf(1, 40, false, false)), windowOf(21, 50, true, false));
   assert.deepEqual([paged.turns.length, paged.hasMoreOlder], [50, false], "the tail refresh keeps pages loaded above it");
+  // A Bot's page reads only the notes after the newest one it holds; they join the window like any page.
+  const noteRange = (from, to) => turnRange(from, to).map((turn) => ({ ...turn, executionKind: "note" }));
+  const reads = [];
+  const stored = [];
+  const notes = (turns) => ({ space: () => ({ session: () => ({ turns: { listPaginated: async (read) => (reads.push(read), { session: { id: "session", spaceId: "space" }, turns, hasMore: false }) } }) }) });
+  const poll = (window, turns) => refreshWith(loadedView(window), null, { client: notes(turns), queryClient: { setQueryData: () => undefined }, cacheTurnWindow: (_session, kept) => stored.push(kept.at(-1).sequence) }, { notesOnly: true });
+  const joined = await poll({ ...windowOf(10, 40, true, false), turns: noteRange(10, 40) }, noteRange(41, 42));
+  assert.deepEqual([reads, windowSequences(joined).at(0), windowSequences(joined).at(-1), joined.hasMoreOlder, joined.hasMoreNewer, stored], [[{ cursor: 40, direction: "newer", limit: 100 }], 10, 42, true, false, [42]], "the tail poll of a Bot's page adds its new notes below the window and stores it");
+  await poll(windowOf(10, 40, true, false), turnRange(11, 40));
+  assert.deepEqual(reads.at(-1), { limit: 30 }, "a window with an agent Turn reads the last page again, because that Turn can still change");
+  assert.equal(noteWindowTail(turnRange(1, 2)), null, "and is never stored as notes");
 }
 {
   const actions = [];
@@ -4717,28 +4728,6 @@ assert.deepEqual(
     await flushSync();
     assert.deepEqual(deleted, ["local-killed"], "the claimed failed row is removed from the cache, so later cold starts do not flash it");
   }
-  {
-    // A Bot's page reads only what arrived after its cached notes, instead of the last page again.
-    const calls = [];
-    const cachedNote = { id: "turn-40:user", role: "user", sequence: 79, meta: { turnId: "turn-40", turnSequence: 40 } };
-    const fresh = turnRange(41, 41)[0];
-    const actions = [];
-    const scope = {
-      client: { space: () => ({ session: () => ({ turns: { listPaginated: (options) => { calls.push(options); return Promise.resolve({ turns: [fresh], session: { id: "session", spaceId: "space" }, hasMore: false }); } } }) }) },
-      openTokens: { current: new Map() },
-      stateRef: { current: { sessions: [{ id: "session", spaceId: "space" }], spaces: [{ id: "space", name: "Space" }], sessionViews: { session: { messages: [cachedNote], session: { id: "session", spaceId: "space" }, space: { id: "space", name: "Space" } } } } },
-      dispatch: (action) => actions.push(action), loadMessages: async () => [], settleInterruptedSends, claimedFailedSends, mergeDisplayMessages,
-      deleteMessages: async () => {}, isLocalSend, isFailedSend, sendQueueRef: { current: createSendQueue() }, cachedTurnRange,
-      userKey: "test-user", recordSpaceVisit: () => {}, attachSessionRealtime: () => {}, refreshSession: async () => {},
-      messagesFromTurns, isLiveMessage: () => false, saveMessages: async () => {}, markChatEntry: () => {}, translate: (key) => key,
-      withTimeout: (promise) => promise, displaySpaceName: (space) => space.name, queryClient: { setQueryData: () => undefined },
-    };
-    const open = new Function(...Object.keys(scope), ts.transpileModule(`return (${sessionCallbacks.loadSession});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
-    await open("session", { notesOnly: true });
-    assert.deepEqual(calls, [{ cursor: 40, direction: "newer", limit: 100 }], "a cached Bot page asks only for notes after its tail");
-    const success = actions.find((action) => action.type === "session-success");
-    assert.deepEqual([success?.turns.length, success?.hasMoreOlder, success?.messages.some((message) => message.id === cachedNote.id)], [1, true, true], "the delta joins the cached notes and still pages older history");
-  }
   // A process killed mid-send leaves its row marked in flight; the next cold open settles it.
   const inFlight = { id: "local-a", role: "user", sequence: 9, errorMessage: null, meta: { optimistic: true, clientMessageId: "a", turnSequence: 5, sendDraft: { text: "hi", attachments: [], model: null, harness: null } } };
   const legacy = { id: "local-b", role: "user", sequence: 11, meta: { optimistic: true, clientMessageId: "b" } };
@@ -5290,7 +5279,7 @@ assert.equal(databaseOpens, 1);
 assert.equal(schemaRuns, 1, "concurrent cache readers share completed schema initialization");
 assert.equal(messageCacheResets, 1, "rows written under the per-step ordering are dropped once");
 {
-  const pageLimits = [...readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8").matchAll(/turns\.listPaginated\(\{ limit: (\d+) \}\)/g)].map((match) => Number(match[1]));
+  const pageLimits = [...readFileSync(new URL("../src/data/context.tsx", import.meta.url), "utf8").matchAll(/turns\.listPaginated\((?:[^)]*: )?\{ limit: (\d+) \}\)/g)].map((match) => Number(match[1]));
   assert.ok(pageLimits.length >= 2);
   assert.ok(cacheModule.MESSAGE_CACHE_LIMIT >= 2 * Math.max(...pageLimits), "the cached tail covers the first server page, so that page does not prepend rows above an opened Chat");
 }
@@ -6046,7 +6035,7 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
     updateLatestTurn: (state) => state, recordDebugEvent: () => {}, sortByRecent: (rows) => rows, preferNewerSession: (_current, incoming) => incoming, reconcileTurnStatusPatch: (_known, turn) => turn,
     mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage, turnFitsWindow, latestTurn, isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, hasFinalAssistantForTurn, isAwaitingSubmit, isFailedSend, isLocalSend,
   };
-  const { reducer, mergeMessages } = new Function(...Object.keys(scope), ts.transpileModule(`${helpers}\n${contextFunctionSource("reducer")}\nreturn { reducer, mergeMessages };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
+  const { reducer, mergeMessages, isLiveMessage } = new Function(...Object.keys(scope), ts.transpileModule(`${helpers}\n${contextFunctionSource("reducer")}\nreturn { reducer, mergeMessages, isLiveMessage };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
   const note = (id, sequence, text, meta) => ({ id, sessionId: "fixture", sequence, executionKind: "note", status: "completed", intent: "followup", userUuid: "user", userContent: [{ type: "text", text }], userText: text, assistantContent: null, assistantText: null, provider: null, model: null, stopReason: null, errorMessage: null, finalUsage: null, meta, startedAt: null, completedAt: `2026-11-11T04:3${sequence}:00Z`, durationMs: 0, createdAt: `2026-11-11T04:3${sequence}:00Z`, updatedAt: `2026-11-11T04:3${sequence}:00Z` });
   const said = note("t4", 4, "Sort of — the engineer in this Space.", { origin: BOT_SAY_ORIGIN, clientMessageId: "bot-4", userMessageId: "m4" });
   // The server's note message: the session's own message counter, no Turn sequence, no origin.
@@ -6098,6 +6087,40 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
   const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
   assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");
+
+  // A Bot's page is restored from its cached Turns: a note that arrives or is sent only adds its row.
+  const restored = reducer({ sessions: [], sessionViews: { fixture: scope.emptyView() } }, { type: "session-cache", sessionId: "fixture", messages: messagesFromTurns(history), turns: history.slice(1) }).sessionViews.fixture;
+  assert.deepEqual([restored.turns.map((turn) => turn.sequence), restored.messages.length], [[2, 3], 2], "cached Turns restore the window and its rows");
+  const added = reducer({ sessions: [], sessionViews: { fixture: { ...restored, historyLoaded: true } } }, { type: "turn-upsert", sessionId: "fixture", turn: said }).sessionViews.fixture;
+  assert.deepEqual([added.messages.map((message) => message.text), added.oldestCursor], [["Hi, I'm here.", "Are you our new engineer?", said.userText], 2], "a new note joins the rows already shown; nothing above it is dropped or read again");
+  // The server's copy of a send can arrive before its Turn, numbered by the session's own counter.
+  const typed = { id: "local-c4", sessionId: "fixture", role: "user", sequence: 7, text: "On it?", content: [{ type: "text", text: "On it?" }], meta: { optimistic: true, clientMessageId: "c4", turnSequence: 4 } };
+  const copied = reducer({ sessions: [], sessionViews: { fixture: { ...restored, historyLoaded: true, messages: [...restored.messages, typed] } } }, { type: "message-add", sessionId: "fixture", message: { ...typed, id: "m4", sequence: 2, meta: { turnId: "t4", messageId: "m4", clientMessageId: "c4", messageKind: "user" } } }).sessionViews.fixture;
+  assert.deepEqual(page(copied, bot).map(([text]) => text), ["Hi, I'm here.", "Are you our new engineer?", "On it?"], "it keeps its bubble's place at the end until the Turn arrives");
+
+  // Its open reads only the notes after the cached Turns, and a send made during that read keeps its bubble.
+  let state = { sessions: [], spaces: [], sessionViews: { fixture: { ...scope.emptyView(), session: { id: "fixture", spaceId: "space" }, space: { id: "space", name: "Space" } } } };
+  const reads = [];
+  const stored = [];
+  const read = Promise.withResolvers();
+  const open = compileCallback(sessionCallbacks.loadSession, {
+    client: { space: () => ({ session: () => ({ turns: { listPaginated: (options) => { reads.push(options); return read.promise; } } }) }) },
+    openTokens: { current: new Map() }, stateRef: { get current() { return state; } }, dispatch: (action) => { state = reducer(state, action); },
+    loadMessages: async () => [], loadTurns: async () => history, cacheTurnWindow: (_session, turns) => { stored.push(turns.map((turn) => turn.sequence)); }, saveMessages: async () => {}, deleteMessages: async () => {},
+    settleInterruptedSends, claimedFailedSends, mergeDisplayMessages, mergeTurnWindows, messagesFromTurns, noteWindowTail, isLiveMessage, isLocalSend, isFailedSend, sendQueueRef: { current: createSendQueue() },
+    userKey: "user", recordSpaceVisit: () => {}, attachSessionRealtime: () => {}, refreshSession: async () => {}, markChatEntry: () => {}, translate: (key) => key,
+    withTimeout: (promise) => promise, displaySpaceName: (space) => space.name, queryClient: { setQueryData: () => undefined },
+  });
+  const loading = open("fixture", { notesOnly: true });
+  await flushSync();
+  assert.deepEqual(reads, [{ cursor: 3, direction: "newer", limit: 100 }], "a Bot's page asks only for the notes after its cached Turns");
+  state = reducer(state, { type: "message-optimistic", sessionId: "fixture", message: { id: "local-typed", sessionId: "fixture", role: "user", sequence: 9, text: "typed meanwhile", content: [], meta: { optimistic: true, clientMessageId: "typed", turnSequence: 5 } } });
+  read.resolve({ turns: [said], session: { id: "fixture", spaceId: "space" }, hasMore: false });
+  await loading;
+  const opened = state.sessionViews.fixture;
+  assert.deepEqual([opened.turns.map((turn) => turn.sequence), opened.oldestCursor, opened.hasMoreOlder, opened.historyLoaded], [[1, 2, 3, 4], 1, false, true], "the new notes join the cached window");
+  assert.deepEqual(opened.messages.map((message) => message.text), ["hi", "Hi, I'm here.", "Are you our new engineer?", said.userText, "typed meanwhile"], "a send made while the open reads keeps its bubble");
+  assert.deepEqual(stored, [[1, 2, 3, 4]], "the joined window is what the next open restores");
 }
 
 console.log("Chat workflow checks passed");

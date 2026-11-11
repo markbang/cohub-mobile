@@ -1,5 +1,5 @@
 import { openDatabaseAsync, type SQLiteDatabase } from "expo-sqlite";
-import type { MessageRecord, SessionListFork, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
+import type { MessageRecord, SessionListFork, SessionTurnRecord, SpaceRecord, UserSessionListItem } from "@neta-art/cohub";
 import { turnSequenceForMessage } from "./session-history";
 import type { SessionSeenEntry, SessionSeenState } from "./chat-read-state";
 
@@ -87,6 +87,14 @@ async function initializeDatabase(): Promise<SQLiteDatabase> {
     );
     CREATE INDEX IF NOT EXISTS messages_session_sequence
       ON messages (user_key, session_id, sequence);
+    CREATE TABLE IF NOT EXISTS turns (
+      user_key TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_key, session_id, sequence)
+    );
     CREATE TABLE IF NOT EXISTS session_read_state (
       user_key TEXT NOT NULL,
       session_id TEXT NOT NULL,
@@ -262,6 +270,7 @@ export async function pruneUserCache(userKey: string, cutoff: number) {
   const db = await database();
   await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
+    await db.runAsync("DELETE FROM turns WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
     await db.runAsync("DELETE FROM session_read_state WHERE user_key = ? AND updated_at < ?", userKey, cutoff);
@@ -331,6 +340,38 @@ export async function deleteMessages(userKey: string, sessionId: string, message
   for (const messageId of messageIds) {
     await db.runAsync("DELETE FROM messages WHERE user_key = ? AND session_id = ? AND message_id = ?", userKey, sessionId, messageId);
   }
+}
+
+/**
+ * The newest Turns of a Chat whose page reads only what came after them (a Bot's page). The view is built
+ * from Turns, so the Turns are what restores it; cached messages alone only stand in until a page lands.
+ * One unbroken run is kept, so the next open continues from its newest Turn.
+ */
+export async function saveTurns(userKey: string, sessionId: string, turns: readonly SessionTurnRecord[]) {
+  const kept = turns.slice(-MESSAGE_CACHE_LIMIT);
+  const first = kept[0];
+  const last = kept.at(-1);
+  if (!first || !last) return;
+  const db = await database();
+  const now = Date.now();
+  await writeTransaction(db, async () => {
+    await db.runAsync("DELETE FROM turns WHERE user_key = ? AND session_id = ? AND (sequence < ? OR sequence > ?)", userKey, sessionId, first.sequence, last.sequence);
+    const statement = await db.prepareAsync("INSERT OR REPLACE INTO turns (user_key, session_id, sequence, payload, updated_at) VALUES (?, ?, ?, ?, ?)");
+    try {
+      for (const turn of kept) await statement.executeAsync(userKey, sessionId, turn.sequence, JSON.stringify(turn), now);
+    } finally {
+      await statement.finalizeAsync();
+    }
+  });
+}
+
+export async function loadTurns(userKey: string, sessionId: string) {
+  const db = await database();
+  const rows = await db.getAllAsync<{ payload: string }>("SELECT payload FROM turns WHERE user_key = ? AND session_id = ? ORDER BY sequence", userKey, sessionId);
+  return rows.flatMap((row) => {
+    const value = parse<SessionTurnRecord>(row.payload);
+    return value ? [value] : [];
+  });
 }
 
 export async function loadSessionReadSequence(userKey: string, sessionId: string): Promise<number | null> {
@@ -490,6 +531,7 @@ export async function clearUserCache(userKey: string) {
   const db = await database();
   await writeTransaction(db, async () => {
     await db.runAsync("DELETE FROM messages WHERE user_key = ?", userKey);
+    await db.runAsync("DELETE FROM turns WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM sessions WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM session_forks WHERE user_key = ?", userKey);
     await db.runAsync("DELETE FROM spaces WHERE user_key = ?", userKey);

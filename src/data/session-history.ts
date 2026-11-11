@@ -336,6 +336,15 @@ export function turnFitsWindow(window: TurnWindow, sequence: number) {
 	return !(window.hasMoreOlder && sequence < first - 1);
 }
 
+/**
+ * A note is complete when written, so a window of only notes can be stored and read on from its newest
+ * Turn. Any other Turn can still change, and only a fresh page shows that.
+ */
+export function noteWindowTail(turns: readonly Pick<SessionTurnRecord, "sequence" | "executionKind">[]): number | null {
+	const last = turns.at(-1);
+	return last && turns.every((turn) => turn.executionKind === "note") ? last.sequence : null;
+}
+
 export function mergeTurnWindows(current: TurnWindow, incoming: TurnWindow): TurnWindow | null {
 	const first = current.turns[0];
 	const last = current.turns.at(-1);
