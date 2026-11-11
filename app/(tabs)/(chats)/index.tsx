@@ -30,8 +30,8 @@ import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
 import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
 import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
-import { BotRow } from "@/src/components/BotRow";
-import { isBotSpace, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
+import { BotRow, PinnedBots } from "@/src/components/BotRow";
+import { isBotSpace, pinnedBotEntries, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
 import { isSessionUnread } from "@/src/data/chat-read-state";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBots } from "@/src/data/use-bots";
@@ -60,7 +60,7 @@ export default function ChatsScreen() {
   const tabBarInset = useFloatingTabBarInset();
   const { headerHeight, onHeaderLayout, scrollY, scrollRef, blurTarget, attachBlurTarget } = useEdgeChrome({ trackScroll: true });
   const titleScroll = largeTitleScroll(true);
-  const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft, markAllSessionsSeen } = useAppActions();
+  const { client, userUuid, refreshHome, refreshChats, refreshSessionStatuses, loadMoreSessions, prefetchSession, loadComposerDraft, saveComposerDraft, markAllSessionsSeen, toggleSpacePin } = useAppActions();
   // Stream batches touch only `sessionViews`, which this tab never reads.
   const state = useAppSelector(({ state }) => ({ booting: state.booting, error: state.error, sessionsError: state.sessionsError, sessionStatusError: state.sessionStatusError, sessionsLoadingMore: state.sessionsLoadingMore, sessions: state.sessions, spaces: state.spaces, sessionForks: state.sessionForks }), shallowEqual);
   // Rows read their own status; the list only needs which Chats run, so a Turn update re-renders one row, not every row.
@@ -105,7 +105,6 @@ export default function ChatsScreen() {
   const sourceLoadingMore = sourceSessions.loadingMore;
   const baseSessions = listFilter === "all" ? state.sessions : sourceSessionList;
   const [visibleSpaceIds, setVisibleSpaceIds] = useState<string[]>([]);
-  useSpaceRealtime(visibleSpaceIds);
   const visibleRowsRef = useRef<(keys: readonly string[]) => void>(() => undefined);
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken<ChatListItem>[] }) => {
     visibleRowsRef.current(viewableItems.filter((token) => token.isViewable).map((token) => token.key));
@@ -116,6 +115,10 @@ export default function ChatsScreen() {
   const dataError = (botsView ? bots.error : null) ?? state.sessionsError ?? sourceSessions.error ?? sourcePreference.error ?? state.error ?? state.sessionStatusError;
   const remoteSearch = useRemoteSearch(client, query, { enabled: listFilter === "all" && !botsView, types: CHAT_SEARCH_TYPES });
   const trimmedQuery = normalizeSearchQuery(query);
+  // Pinned Bots leave the rows for the faces above them; a search lists every match as a row.
+  const pinnedBots = useMemo(() => botsView && !trimmedQuery ? pinnedBotEntries(bots.entries) : [], [bots.entries, botsView, trimmedQuery]);
+  // The faces sit in the list's header, outside the rows it reports as visible.
+  useSpaceRealtime([...pinnedBots.map((entry) => entry.space.id), ...visibleSpaceIds].slice(0, 10));
   useEffect(() => {
     if (listFilter === "all" || sourceSessionList.length === 0) return;
     void refreshSessionStatuses(sourceSessionList, { silent: true });
@@ -142,7 +145,7 @@ export default function ChatsScreen() {
     const flatSession = (session: (typeof localSessions)[number]) => ({ kind: "local-session" as const, session, fork: sessionForks[session.id] ?? null, tree: null });
     if (botsView) {
       const needle = trimmedQuery.toLowerCase();
-      return bots.entries.filter((entry) => !needle || normalizeSearchQuery(displaySpaceName(entry.space)).toLowerCase().includes(needle)).map((entry) => ({ kind: "bot" as const, entry }));
+      return bots.entries.filter((entry) => needle ? normalizeSearchQuery(displaySpaceName(entry.space)).toLowerCase().includes(needle) : entry.space.isPinned !== true).map((entry) => ({ kind: "bot" as const, entry }));
     }
     if (!trimmedQuery && listFilter === "all") {
       const running = new Set(runningIds);
@@ -186,7 +189,9 @@ export default function ChatsScreen() {
     scrollY,
     contentInset: nativeHeaders ? 0 : headerHeight,
   });
-  const emptyFill = useEmptyListFill(shownItems.length === 0);
+  // Pinned Bots stand above the rows, so a list with none left is not an empty screen.
+  const empty = shownItems.length === 0 && pinnedBots.length === 0;
+  const emptyFill = useEmptyListFill(empty);
   useEffect(() => { visibleRowsRef.current = rowMotion.setVisibleKeys; });
   useEffect(() => { shownKeysRef.current = shownItems.map(chatItemKey); }, [shownItems]);
   const clearOrderTimers = useCallback(() => {
@@ -214,11 +219,14 @@ export default function ChatsScreen() {
   }, [dropHeldOrder]);
   useScreenVisibleEffect(useCallback(() => dropHeldOrder, [dropHeldOrder]));
   useEffect(() => clearOrderTimers, [clearOrderTimers]);
-  const emptyError = Boolean(dataError) && shownItems.length === 0;
-  // Offered only while a shown row has a dot; a running Chat's row shows its ring instead.
-  const hasUnread = useAppSelector((app) => shownItems.some((item) => item.kind === "local-session"
-    ? !runningIds.includes(item.session.id) && isSessionUnread(item.session, app.sessionSeen)
-    : item.kind === "bot" && item.entry.note !== null && item.entry.chatId !== null && isSessionUnread({ id: item.entry.chatId, lastMessageId: item.entry.note.messageId, lastMessageAt: item.entry.note.at }, app.sessionSeen)));
+  const emptyError = Boolean(dataError) && empty;
+  // Offered only while a shown row or pinned Bot has a dot; a running Chat's row shows its ring instead.
+  const hasUnread = useAppSelector((app) => {
+    const botUnread = ({ note, chatId }: (typeof pinnedBots)[number]) => note !== null && chatId !== null && isSessionUnread({ id: chatId, lastMessageId: note.messageId, lastMessageAt: note.at }, app.sessionSeen);
+    return pinnedBots.some(botUnread) || shownItems.some((item) => item.kind === "local-session"
+      ? !runningIds.includes(item.session.id) && isSessionUnread(item.session, app.sessionSeen)
+      : item.kind === "bot" && botUnread(item.entry));
+  });
 
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
@@ -254,6 +262,8 @@ export default function ChatsScreen() {
     openSearchSession(sessionId);
   };
   const primaryBot = bots.entries.find((entry) => entry.space.slug === PRIMARY_BOT_SLUG) ?? null;
+  // A Bot is a Space, so its pin is the Space's: saved on the server, as on the web.
+  const toggleBotPin = (spaceId: string) => void toggleSpacePin(spaceId).catch((error: unknown) => toast({ title: t("bots.pinFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
 
   const sourceOptions: readonly { value: ChatsSource; label: string; detail?: string; icon: NativeMenuAction["icon"] }[] = [
     { value: "all", label: t("chats.source.all"), icon: "messages" },
@@ -294,7 +304,7 @@ export default function ChatsScreen() {
     if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
     if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
     if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
-    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!, { notesOnly: true }) : undefined} />;
+    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!, { notesOnly: true }) : undefined} onTogglePin={() => toggleBotPin(item.entry.space.id)} />;
     if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
     return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
   };
@@ -352,8 +362,9 @@ export default function ChatsScreen() {
           {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("chats.searching")} /> : null}
           {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("chats.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
           </View>
+          <PinnedBots entries={pinnedBots} onPress={(entry) => void openBot(entry.space.id)} onPressIn={(entry) => { if (entry.chatId) prefetchSession(entry.chatId, { notesOnly: true }); }} onTogglePin={(entry) => toggleBotPin(entry.space.id)} />
         </View>}
-        ListEmptyComponent={emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (botsView && bots.loading) || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
+        ListEmptyComponent={pinnedBots.length > 0 ? null : emptyError ? <EmptyState icon="cloud-off" title={t("chats.error.title")} description={t("chats.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : state.booting || (botsView && bots.loading) || (listFilter !== "all" && (sourceSessions.loading || !sourceSessions.initialized)) ? <LoadingRows count={5} /> : searchEmpty}
         ListFooterComponent={!dataError && (state.sessionsLoadingMore || (listFilter !== "all" && sourceLoadingMore)) ? <ListEdgeLoader label={t("chats.loadingMore")} /> : null}
       />
       </ListContinuityProvider>
