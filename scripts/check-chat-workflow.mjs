@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botPlacements, isBotSaid, isBotSaidMessage, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botMessageSpace, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4064,7 +4064,7 @@ const liveRowScope = {
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
-  bot: null, botLayout: null, isBotSaidMessage, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
+  bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botSender, t: (key) => key, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -4079,14 +4079,19 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
 }
 const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
-// A Bot's page: what the Bot `say`s sits on its side with its face; the user's notes stay the user's. Ordinary Chats unchanged.
+const PEER_SPACE_ID = "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8";
+// A Bot's page: what the Bot `say`s sits on its side; another Bot's `tell` too, under its name; the user's notes stay the user's. Ordinary Chats unchanged.
 {
   const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN } };
+  const told = { id: "told", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "told", meta: { origin: { ...BOT_SAY_ORIGIN, spaceId: PEER_SPACE_ID } } };
   const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" } };
-  const row = (bot, turn, meta = {}, botLayout = null) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, botLayout, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
+  const row = (bot, turn, meta = {}, botLayout = null, botPeers = new Map()) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, botLayout, botPeers, spaceId: BOT_SAY_ORIGIN.spaceId, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
   const bot = { name: "Cohub", avatarUrl: null };
   const botNote = row(bot, said).find((node) => node.type === "BotNoteBubble");
-  assert.ok(botNote && !("bot" in botNote.props) && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, without its face");
+  assert.ok(botNote && botNote.props.sender === null && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, without a face or name");
+  const toldBy = (peers) => row(bot, told, {}, null, peers).find((node) => node.type === "BotNoteBubble")?.props.sender;
+  assert.deepEqual(toldBy(new Map([[PEER_SPACE_ID, { name: "Cohub", avatarUrl: "https://a/x.png" }]])), { name: "Cohub", avatarUrl: "https://a/x.png", known: true }, "another Bot's note is a left bubble under its face and name");
+  assert.deepEqual(toldBy(new Map()), { name: "bots.otherBot", avatarUrl: null, known: false }, "a Bot whose Space is not loaded reads as another Bot, without a face");
   const userNote = row(bot, typed).find((node) => node.type === "MessageBubble");
   assert.equal(userNote.props.rowInset, BOT_BUBBLE_INSET, "the user's bubbles on a Bot's page sit as close as the Bot's");
   const timed = new Map([["said:user", { time: "2026-11-11T08:00:00Z", gap: 0 }]]);
@@ -4102,15 +4107,15 @@ const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9
   assert.ok(row(null, said).some((node) => node.type === "MessageBubble") && !row(null, said).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows every note as before");
 
   const timelineAst = ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let botSaidSource;
+  let writerSource;
   (function find(node) {
-    if (ts.isVariableDeclaration(node) && node.name.getText(timelineAst) === "botSaid") botSaidSource = node.initializer.arguments[0].getText(timelineAst);
+    if (ts.isVariableDeclaration(node) && node.name.getText(timelineAst) === "noteWriter") writerSource = node.initializer.arguments[0].getText(timelineAst);
     ts.forEachChild(node, find);
   })(timelineAst);
-  const nativeBotSaid = (bot) => new Function("bot", "turnsById", "isBotSaidMessage", ts.transpileModule(`return (${botSaidSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(bot, new Map([[said.id, said], [typed.id, typed]]), isBotSaidMessage);
+  const nativeWriter = (bot) => new Function("bot", "turnsById", "botMessageSpace", ts.transpileModule(`return (${writerSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(bot, new Map([[said.id, said], [typed.id, typed], [told.id, told]]), botMessageSpace);
   const note = (turn) => ({ id: `${turn.id}:user`, role: "user", meta: { turnId: turn.id } });
-  assert.deepEqual([nativeBotSaid(bot)(note(said)), nativeBotSaid(bot)(note(typed))], [true, false], "the native timeline draws only the `say` note as the Bot's");
-  assert.equal(nativeBotSaid(null)(note(said)), false, "an ordinary Chat's native timeline draws no Bot notes");
+  assert.deepEqual([said, told, typed].map((turn) => nativeWriter(bot)(note(turn))), [BOT_SAY_ORIGIN.spaceId, PEER_SPACE_ID, null], "the native timeline tells the Bot's notes, another Bot's, and the user's apart as the JS list does");
+  assert.equal(nativeWriter(null)(note(said)), null, "an ordinary Chat's native timeline draws no Bot notes");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5860,11 +5865,14 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(isBotSpace({ slug: "cohubbots" }), false, "only the exact slug or a cohubbot- prefix marks a Bot");
   const said = { id: "said", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN }, sequence: 3, userText: "On it.", userContent: [{ type: "text", text: "On it." }], createdAt: "2026-11-10T10:03:00Z" };
   const typed = { id: "typed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" }, sequence: 4, userText: "Plan my week", userContent: [], createdAt: "2026-11-10T10:04:00Z" };
-  assert.equal(isBotSaid(said), true);
-  assert.equal(isBotSaid(typed), false, "a note the user wrote has no origin, though the timeline gives it a source Turn");
-  assert.equal(isBotSaid({ ...said, executionKind: "agent" }), false);
-  assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }]), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user" }, "a Bot row shows the last thing the Bot said, not the user's last message");
-  assert.equal(latestBotNote([typed]), null);
+  assert.equal(botNoteSpace(said), BOT_SAY_ORIGIN.spaceId);
+  assert.equal(botNoteSpace(typed), null, "a note the user wrote has no origin, though the timeline gives it a source Turn");
+  assert.equal(botNoteSpace({ ...said, executionKind: "agent" }), null);
+  const space = BOT_SAY_ORIGIN.spaceId;
+  assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }], space), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user", from: null }, "a Bot row shows the last thing the Bot said, not the user's last message");
+  const told = { ...said, id: "told", sequence: 5, userText: "Deck checked.", meta: { origin: { ...BOT_SAY_ORIGIN, spaceId: "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8" } } };
+  assert.equal(latestBotNote([said, told], space).from, "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8", "a row names the other Bot when it wrote last");
+  assert.equal(latestBotNote([typed], space), null);
   const missing = Object.assign(new Error("File or directory not found."), { status: 404 });
   assert.deepEqual(botDirectory({ entries: [], loading: false, error: missing }), { entries: [], known: true, error: null }, "a folder a Bot has not written yet reads as empty");
 
@@ -5883,23 +5891,25 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(relayContent([{ type: "text", text: "Hi" }], null), [{ type: "text", text: "Hi" }], "without a reminder the words go as typed");
   const at = (minutes) => new Date(Date.parse("2026-11-11T08:00:00") + minutes * 60_000).toISOString();
   const thread = [
-    { id: "a", createdAt: at(0), bot: false },
-    { id: "b", createdAt: at(1), bot: true },
-    { id: "c", createdAt: at(2), bot: true },
-    { id: "d", createdAt: at(3), bot: false },
-    { id: "e", createdAt: at(3 + BOT_TIME_GAP_MS / 60_000), bot: false },
-    { id: "f", createdAt: at(24 * 60), bot: true },
-    { id: "g", createdAt: null, bot: true },
+    { id: "a", createdAt: at(0), by: null },
+    { id: "b", createdAt: at(1), by: "bot" },
+    { id: "c", createdAt: at(2), by: "bot" },
+    { id: "p", createdAt: at(2), by: "peer" },
+    { id: "d", createdAt: at(3), by: null },
+    { id: "e", createdAt: at(3 + BOT_TIME_GAP_MS / 60_000), by: null },
+    { id: "f", createdAt: at(24 * 60), by: "bot" },
+    { id: "g", createdAt: null, by: "bot" },
   ];
-  assert.deepEqual(botPlacements(thread, (message) => message.bot), [
+  assert.deepEqual(botPlacements(thread, (message) => message.by), [
     { time: at(0), gap: 0 },
     { time: null, gap: BOT_TURN_GAP },
     { time: null, gap: 0 },
     { time: null, gap: BOT_TURN_GAP },
+    { time: null, gap: BOT_TURN_GAP },
     { time: at(3 + BOT_TIME_GAP_MS / 60_000), gap: 0 },
     { time: at(24 * 60), gap: 0 },
     { time: null, gap: 0 },
-  ], "the time shows first, after a long pause, and on a new day; the gap opens only where the side changes");
+  ], "the time shows first, after a long pause, and on a new day; the gap opens only where the writer changes");
   const label = (key, params) => `${key === "bots.time.today" ? "Today" : "Yesterday"} ${params.time}`;
   const now = Date.parse("2026-11-11T12:00:00");
   assert.equal(formatThreadTime("2026-11-11T08:00:00", label, "en", now), "Today 08:00");
@@ -5995,15 +6005,16 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
 
   const callbackSource = (ast, name) => { let found; (function find(node) { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name) found = node.initializer.arguments[0].getText(ast); ts.forEachChild(node, find); })(ast); return found; };
   const threadSource = callbackSource(chatAst, "threadMessages");
-  const botSaidSource = callbackSource(ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), "botSaid");
+  const botSaidSource = callbackSource(ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), "noteWriter");
   const bot = { name: "Engineer", avatarUrl: null };
   const page = (view, peer) => {
     const messages = compileCallback(threadSource, { pendingNew: null, view, messagesInWindow, withTurnSequences, mergeDisplayMessages, messagesFromTurns, isOptimisticFollowup, isAssistantIntermediate: (message) => message.meta?.messageKind === "assistant_intermediate", hasRenderableMessage: () => true, queuedFollowupIds: new Set() })();
     const turnsById = new Map(view.turns.map((turn) => [turn.id, turn]));
     const turnsBySequence = new Map(view.turns.map((turn) => [turn.sequence, [turn]]));
-    const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
-    const nativeSaid = compileCallback(botSaidSource, { bot: peer, turnsById, isBotSaidMessage });
-    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble"), nativeSaid(item)]);
+    const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, spaceId: BOT_SAY_ORIGIN.spaceId, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+    const nativeWriter = compileCallback(botSaidSource, { bot: peer, turnsById, botMessageSpace });
+    // A bubble with a sender line would be another Bot's; this page's own Bot has none.
+    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble" && node.props.sender === null), nativeWriter(item) !== null]);
   };
   const expected = [["hi", false, false], ["Hi, I'm here.", true, true], ["Are you our new engineer?", false, false], ["Sort of — the engineer in this Space.", true, true]];
   const live = deliver([persisted, created]);
@@ -6013,6 +6024,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   // Opening the page paints the cache before any Turn loads; the Bot's words stay on its side.
   const cached = JSON.parse(JSON.stringify(messagesFromTurns([...history, said])));
   assert.deepEqual(page({ ...scope.emptyView(), messages: cached, historyLoaded: false }, bot), expected, "cached rows alone place the Bot's notes on its side, in order");
+  const toldCached = JSON.parse(JSON.stringify(messagesFromTurns([note("t5", 5, "Deck checked.", { origin: { ...BOT_SAY_ORIGIN, spaceId: PEER_SPACE_ID } })])))[0];
+  const toldRow = compileRenderMessage({ ...liveRowScope, bot, spaceId: BOT_SAY_ORIGIN.spaceId, messages: [toldCached], client: null, streamTurnId: null, replyAnchor: null, turnsById: new Map(), turnsBySequence: new Map() })({ item: toldCached, index: 0 });
+  assert.equal(chromeNodes(toldRow).find((node) => node.type === "BotNoteBubble")?.props.sender?.name, "bots.otherBot", "a cached note from another Bot keeps its sender before its Turn loads");
   assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
   const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
   assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");

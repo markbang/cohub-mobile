@@ -182,6 +182,8 @@ export const en = {
   "bots.profile.model": "Model",
   "bots.composer.placeholder": "Message {name}",
   "bots.primary": "Primary Bot",
+  "bots.otherBot": "Another Bot",
+  "bots.preview.from": "{name}: {text}",
   "bots.time.today": "Today {time}",
   "bots.time.yesterday": "Yesterday {time}",
   "settings.botMode.title": "Bot mode",

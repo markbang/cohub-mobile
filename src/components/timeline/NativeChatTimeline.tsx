@@ -10,7 +10,7 @@ import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { BOT_BUBBLE_INSET, botPlacements, isBotSaidMessage, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
@@ -94,6 +94,8 @@ type Props = {
   onRefresh: () => void;
   /** On a Bot's page, the Bot: what it said with `say` sits on its side. */
   bot?: BotPeer | null;
+  /** Other Bots that may write on a Bot's page, by Space. */
+  botPeers: ReadonlyMap<string, BotPeer>;
 };
 
 type Cached = { deps: unknown[]; spec: TimelineRowSpec };
@@ -124,7 +126,7 @@ function expandedIn(expanded: ReadonlySet<string>, scopes: readonly string[]) {
  * scrolls, follows the tail, and animates. Only rows whose description changed cross to native.
  */
 export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(function NativeChatTimeline(props, ref) {
-  const { sessionId, spaceId, client, messages, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession, bot = null } = props;
+  const { sessionId, spaceId, client, messages, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession, bot = null, botPeers } = props;
   const NativeView = ChatTimelineView!;
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -182,12 +184,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   }, [forkOrigin, rows, spaceId]);
   const relatedView = useRelatedSessions(client, relatedRefs, lookupSession);
 
-  const botSaid = useCallback((message: MessageRecord) => Boolean(bot) && isBotSaidMessage(message, typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null), [bot, turnsById]);
+  // On a Bot's page, the Bot that wrote a note: this one, or another; null for the user's notes.
+  const noteWriter = useCallback((message: MessageRecord) => bot ? botMessageSpace(message, typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null) : null, [bot, turnsById]);
   const imagePaths = useMemo(() => {
     const paths = new Set<string>();
-    for (const row of rows) if (row.kind === "message" && (row.message.role !== "user" || botSaid(row.message))) for (const path of replyImagePaths(row.message)) paths.add(path);
+    for (const row of rows) if (row.kind === "message" && (row.message.role !== "user" || noteWriter(row.message) !== null)) for (const path of replyImagePaths(row.message)) paths.add(path);
     return [...paths];
-  }, [botSaid, rows]);
+  }, [noteWriter, rows]);
   const sandboxImages = useSandboxImageUrls(client, spaceId || null, imagePaths);
 
   const expandedTurns = useMemo(() => [...expanded].flatMap((id) => {
@@ -218,7 +221,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     for (const row of rows) if (row.kind === "message") messageByKey.set(row.key, row.message);
     // A Bot's page spaces its bubbles by side and time instead of by Turn.
     const placed = bot ? [...messageByKey.values()] : [];
-    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" || botSaid(message)).map((placement, index) => [placed[index]!, placement]));
+    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" ? spaceId : noteWriter(message)).map((placement, index) => [placed[index]!, placement]));
     for (const row of rows) {
       const owner = row.owner ? messageByKey.get(row.owner) : undefined;
       const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
@@ -255,8 +258,10 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         case "message": {
           const message = row.message;
           const sig = expandedIn(expanded, [message.id, row.key]);
-          if (bot && botSaid(message)) {
-            build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
+          const writer = noteWriter(message);
+          if (writer) {
+            const sender = botSender(botPeers, writer, spaceId, t("bots.otherBot"));
+            build([message, sandboxImages, sender?.name, sender?.avatarUrl, sender?.known], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages, sender) }));
           } else if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;
             build([message, retryDisabled, sig, flies], () => ({
@@ -332,7 +337,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: rows.map((row) => row.key), rows: out };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, bot, botSaid, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
+  }, [rows, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());
