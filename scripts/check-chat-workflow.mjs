@@ -29,7 +29,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { botEntries, intermediateBlocks, isBotSpace, newerSession, PRIMARY_BOT_SLUG, processTexts } from "../src/data/bot-mode.ts";
+import { botDirectory, botEntries, isBotSaid, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -407,7 +407,7 @@ const chromeScope = {
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   // Bot mode is off unless a check turns it on, so every other screen renders as before.
   useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
-  useBots: () => ({ entries: [], loading: false, error: null, openSession: async () => "", refetch: async () => {} }), BotRow: "BotRow", BotTitle: "BotTitle", BotTurnTalk: "BotTurnTalk",
+  useBots: () => ({ entries: [], loading: false, error: null, openChat: async () => "", refetch: async () => {} }), BotRow: "BotRow", BotTitle: "BotTitle",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
   largeTitleScroll: () => ({ hold: 0, collapsed: 52, edge: [8, 48] }), useLargeTitleSnap: () => ({}),
@@ -1847,14 +1847,14 @@ try {
   assert.equal(list().props.data[1].tree.depth, 1);
   screen.unmount();
 } finally { mock.timers.reset(); }
-// Bot mode in Chats: the Bots view is one row per Bot, each opening its one Chat; Bot Chats leave the other views.
+// Bot mode in Chats: the Bots view is one row per Bot, each opening the user's Chat with it; Bot Chats leave the other views.
 {
   const screen = createScreenHooks();
   const opened = [];
   const chat = (id, spaceId) => ({ id, spaceId, title: id });
-  const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-old", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
+  const state = { booting: false, spaces: [{ id: "bot", slug: "cohubbot" }, { id: "work", slug: "work" }], sessions: [chat("bot-work", "bot"), chat("plain", "work")], sessionForks: {}, sessionLatestTurns: {}, sessionTurnStatuses: {} };
   let filter = "bots";
-  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, session: chat("main", "bot"), running: false };
+  const entry = { space: { id: "bot", slug: "cohubbot", name: "Cohub" }, note: null, chatId: "talk", running: false, needsYou: false };
   const renderChats = loadChromeComponent(chatsRoute, "ChatsScreen", {
     ...chromeScope, ...screen.hooks,
     useRouter: () => ({ push: () => {} }), useScrollToTop: () => {}, useFloatingTabBarInset: () => 80, useSpaceRealtime: () => {},
@@ -1862,7 +1862,7 @@ try {
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, client: {}, userUuid: "user", connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {}, loadComposerDraft: async () => "", saveComposerDraft: async () => {} })),
     useBotMode: () => ({ enabled: true, loaded: true, error: null }), isBotSpace,
-    useBots: () => ({ entries: [entry], loading: false, error: null, openSession: async (spaceId) => spaceId === "bot" ? "main" : "", refetch: async () => {} }),
+    useBots: () => ({ entries: [entry], loading: false, error: null, openChat: async (spaceId) => spaceId === "bot" ? "talk" : "", refetch: async () => {} }),
     displaySpaceName: (space) => space.name ?? "",
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
     useSourceSessions: () => ({ sessions: [], loading: false, loadingMore: false, error: null, initialized: true, loadMore: () => {}, reload: () => {} }),
@@ -1877,7 +1877,7 @@ try {
   assert.equal(row.type, "BotRow");
   row.props.onPress();
   await flushSync();
-  assert.deepEqual(opened, ["main"], "a Bot opens its one Chat");
+  assert.deepEqual(opened, ["talk"], "a Bot opens the user's Chat with it");
   filter = "all";
   assert.deepEqual(list().props.data.map((item) => item.session.id), ["plain"], "with Bot mode on, Bot Chats leave the other views");
   screen.unmount();
@@ -3937,7 +3937,6 @@ const timelineInput = { messages: timelineMessages, turnsBySequence: new Map([[1
 const builtRows = timelineRows(timelineInput);
 assert.deepEqual(builtRows.map((row) => row.key), ["older", "from:1:user", "1:user", "process:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a turn's rows follow its user message, the live reply sits under its steps, and the fork boundary closes the turn");
 assert.equal(builtRows.find((row) => row.kind === "live").processInRow, true, "the streaming turn's steps render in their own row, not twice");
-assert.deepEqual(timelineRows({ ...timelineInput, bot: true }).map((row) => row.key), ["older", "from:1:user", "1:user", "talk:turn-a", "to:turn-a", "live", "1:assistant", "fork"], "a Bot Chat drops the steps and keeps what the Bot said between them, above the reply");
 assert.equal(builtRows.find((row) => row.kind === "process").live, true);
 assert.equal(timelineTargetKey(builtRows, "1:user"), "from:1:user", "a turn jump lands on the first row of the message, above its sent-from link");
 assert.deepEqual(visibleTimelineMessages(builtRows, ["live", "process:turn-a", "1:assistant"]).map((item) => item.key), ["1:user", "1:assistant"], "visible attachment rows report their message once, in order");
@@ -4013,7 +4012,8 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
-  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey, bot: false,
+  ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
+  bot: null, isBotSaid, BotNoteBubble: "BotNoteBubble",
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -4027,15 +4027,19 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   const dividers = forkMessages.map((item, index) => chromeNodes(renderForkRow({ item, index })).filter((node) => node.type === "ForkedFromDivider").length);
   assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
 }
+// A Bot's page: what the Bot `say`s sits on its side with its face; the user's notes stay the user's. Ordinary Chats unchanged.
 {
-  const turn = { id: "turn-a", status: "completed", meta: {} };
-  const botScope = (bot, meta = {}) => compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [{ ...turn, meta }]]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", BotTurnTalk: "BotTurnTalk", BotHandoffList: "BotHandoffList", BotIncomingBubble: "BotIncomingBubble", BotReplyBubble: "BotReplyBubble", sentFrom, sentSessions, compactionFromMessage: () => null, botPeerOf: () => ({ name: "Writer", avatarUrl: null }), isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
-  const botRow = (bot, item = { id: "user-a", role: "user", sessionId: "fixture", meta: { turnSequence: 1 } }, meta) => chromeNodes(botScope(bot, meta)({ item, index: 0 })).map((node) => node.type);
-  const shown = ["TurnProcess", "BotTurnTalk", "SentToList", "SentFromLink", "BotHandoffList", "BotIncomingBubble", "BotReplyBubble", "MessageBubble"];
-  assert.deepEqual(botRow(true).filter((type) => shown.includes(type)), ["MessageBubble", "BotTurnTalk", "BotHandoffList"], "a Bot Turn shows what the Bot said, never its steps");
-  assert.deepEqual(botRow(true, { id: "reply", role: "assistant", meta: { turnSequence: 1 } }).filter((type) => shown.includes(type)), ["BotReplyBubble"], "a Bot's reply is a bubble without the reply meta");
-  assert.deepEqual(botRow(true, undefined, { origin: { kind: "prompt", spaceId: relatedId(7), sessionId: relatedId(8), turnId: relatedId(9) } }).filter((type) => shown.includes(type)), ["BotIncomingBubble", "BotTurnTalk", "BotHandoffList"], "a message another Bot sent shows as that Bot's bubble");
-  assert.ok(!botRow(false).includes("BotTurnTalk") && botRow(false).includes("TurnProcess"), "other Chats are unchanged");
+  const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "work-turn", meta: {} };
+  const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", meta: { clientMessageId: "c1" } };
+  const row = (bot, turn, meta = {}) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
+  const bot = { name: "Cohub", avatarUrl: null };
+  const botNote = row(bot, said).find((node) => node.type === "BotNoteBubble");
+  assert.ok(botNote && botNote.props.bot === bot && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, with its face");
+  const userNote = row(bot, typed).find((node) => node.type === "MessageBubble");
+  assert.ok(userNote && !row(bot, typed).some((node) => node.type === "BotNoteBubble" || node.type === "TurnProcess" || node.type === "SentFromLink"), "the user's note is the user's bubble, without steps or links");
+  assert.equal(typeof userNote.props.onDiscard, "function");
+  assert.equal(row(bot, typed, { relayFailed: true }).find((node) => node.type === "MessageBubble").props.onDiscard, undefined, "a message the Bot did not get offers a retry, not a delete: it is already in the Chat");
+  assert.ok(row(null, said).some((node) => node.type === "MessageBubble") && !row(null, said).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows every note as before");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -4054,9 +4058,8 @@ assert.equal(chromeNodes(renderLiveRow({ item: runningRowMessages[1], index: 1 }
 const liveView = { stream: { turnId: "turn", intermediateMessages: [] }, messages: [], turns: [{ id: "turn", startedAt: "2026-10-31T09:00:00.000Z", createdAt: "2026-10-31T08:59:59.000Z" }] };
 const renderLiveReply = loadChromeComponent("../app/chat/[sessionId].tsx", "LiveReply", {
   ...chromeScope, ...appHooks(() => ({ state: { sessionViews: { fixture: liveView } } })),
-  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", BotStreamBubble: "BotStreamBubble", BotTurnTalk: "BotTurnTalk", isOptimisticFollowup, thinkingBlocks,
+  StreamingTurnProcess: "StreamingTurnProcess", StreamCard: "StreamCard", isOptimisticFollowup, thinkingBlocks,
 });
-assert.deepEqual(chromeNodes(renderLiveReply({ sessionId: "fixture", bot: true, showStream: true, processInRow: false, availableWidth: 390 })).map((node) => node.type).filter((type) => ["StreamingTurnProcess", "StreamCard", "BotTurnTalk", "BotStreamBubble"].includes(type)), ["BotTurnTalk", "BotStreamBubble"], "a Bot's live reply is a bubble without the steps");
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).filter((node) => node.type === "StreamCard").length, 1);
 assert.equal(chromeNodes(renderLiveReply({ sessionId: "fixture", showStream: true, processInRow: true, availableWidth: 390 })).find((node) => node.type === "StreamCard").props.startedAt, "2026-10-31T09:00:00.000Z", "the live reply is stamped with its Turn's start");
 assert.equal(renderLiveReply({ sessionId: "fixture", showStream: false, processInRow: true, availableWidth: 390 }), null, "completed replies leave no stale live duplicate");
@@ -4444,16 +4447,6 @@ function sendHarness({ view = {}, prompt, buildPromptContent = async (text) => [
   return { send, state, actions, prompts, queue, update, row, readers };
 }
 const acceptedTurn = (body, sequence, status = "running") => ({ mode: "immediate", turn: queuedFollowup(`accepted-${body.clientMessageId}`, sequence, { status, meta: { clientMessageId: body.clientMessageId } }) });
-// A Bot's Chat asks for the Bot context window on every send and retry; other Chats send none.
-{
-  for (const contextWindow of [400_000, undefined]) {
-    const harness = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
-    await harness.send("fixture", "Hi", [], contextWindow ? { contextWindow } : {});
-    assert.equal(harness.prompts[0].contextWindow, contextWindow);
-    assert.equal("contextWindow" in harness.prompts[0], Boolean(contextWindow), "an ordinary send leaves the field out");
-  }
-  assert.equal(chatSource.split("contextWindow: bot ? BOT_CONTEXT_WINDOW : undefined").length - 1, 2, "a Bot Chat's composer send and a failed send's retry both carry it");
-}
 for (const busy of [false, true]) {
   for (const [text, attachments] of [["Hello", []], ["", [photoDraft]], ["", [fileDraft]], ["Review these", [photoDraft, fileDraft]]]) {
     const uploads = Promise.withResolvers();
@@ -5682,7 +5675,8 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
 }
 
 // The primary Bot is created once, adopted when it already exists, and never touches a same-slug Space without the bot mod.
-// Each Bot is one Chat, named in `.agents/bot.json`; a missing file or a deleted Chat gets a new one, nothing else is rewritten.
+// A Bot keeps two Chats in `.agents/bot.json` (`session` it works in, `chat` the user reads) and the fallback hook;
+// whatever is missing is made, nothing that exists is rewritten.
 {
   const BOT_MOD = "bot-mod-space";
   const source = ts.transpileModule(readFileSync(new URL("../src/data/primary-bot.ts", import.meta.url), "utf8"), {
@@ -5696,6 +5690,9 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   }, primaryBot);
   const httpError = (status, message = `HTTP ${status}`) => Object.assign(new Error(message), { status });
   const BOT_JSON = ".agents/bot.json";
+  const HOOK = ".cohub/hooks/bot-fallback.yml";
+  const TEMPLATE = "templates/bot-fallback.yml";
+  const hookYaml = "schema: cohub.space-hook.v1\non:\n  event: session.turn.finalized\nrun: bash /mods/cohubbot/bin/fallback\n";
   const botClient = ({ owned = [], mods = [], files = {}, chats = [], readErrors = {}, createError = null } = {}) => {
     const calls = [];
     const lookups = [...owned];
@@ -5719,7 +5716,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
         },
         sessions: {
           list: async (options) => { calls.push(["chats", spaceId, options.ids]); return { sessions: options.ids.filter((id) => known.has(id)).map((id) => ({ id, spaceId })) }; },
-          create: async () => { const id = `chat-${++created}`; known.add(id); calls.push(["chat", spaceId]); return { ok: true, session: { id, spaceId } }; },
+          create: async (input) => { const id = `chat-${++created}`; known.add(id); calls.push(["chat", spaceId, input?.title ?? null]); return { ok: true, session: { id, spaceId } }; },
         },
         profile: async (body) => { calls.push(["profile", spaceId, body]); return { space: { id: spaceId } }; },
       }),
@@ -5728,97 +5725,142 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   };
   const botMod = (enabled = true) => ({ modSpaceId: BOT_MOD, enabled });
   const personaWrite = (spaceId) => ["write", spaceId, { path: ".agents/APPEND_SYSTEM.md", content: primaryBot.PRIMARY_BOT_PERSONA, encoding: "utf-8" }];
-  const botJsonWrite = (spaceId, session) => ["write", spaceId, { path: BOT_JSON, content: `${JSON.stringify({ session })}\n`, encoding: "utf-8" }];
+  const botJsonWrite = (spaceId, file) => ["write", spaceId, { path: BOT_JSON, content: `${JSON.stringify(file)}\n`, encoding: "utf-8" }];
+  const hookWrite = (spaceId) => ["write", spaceId, { path: HOOK, content: hookYaml, encoding: "utf-8" }];
   const writes = (calls) => calls.filter(([kind]) => kind === "write" || kind === "chat");
 
   const avatar = "https://cca.neta.art/avatars/webp/a.webp";
-  const fresh = botClient({ owned: [httpError(404)], files: { "avatars.json": JSON.stringify([avatar]) } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1" });
-  assert.deepEqual(fresh.calls, [
-    ["get", "cohubbot"],
-    ["create", { name: "Cohub", slug: "cohubbot", mods: [{ modSpaceId: BOT_MOD, mountSlug: "cohubbot" }] }],
-    ["read", BOT_MOD, "avatars.json"],
-    ["profile", "new-bot", { avatarUrl: avatar }],
+  const fresh = botClient({ owned: [httpError(404)], files: { "avatars.json": JSON.stringify([avatar]), [TEMPLATE]: hookYaml } });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(fresh.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1", chatId: "chat-2" });
+  assert.deepEqual(writes(fresh.calls), [
     personaWrite("new-bot"),
-    ["chat", "new-bot"],
-    botJsonWrite("new-bot", "chat-1"),
-  ], "a missing Bot is created with the bot mod, an avatar from the bot mod's list, its persona, and its one Chat");
-  assert.ok(primaryBot.PRIMARY_BOT_PERSONA.startsWith("# Cohub\n\nRole: primary\n"));
+    ["chat", "new-bot", null],
+    ["chat", "new-bot", "Cohub · Chat"],
+    botJsonWrite("new-bot", { session: "chat-1", chat: "chat-2" }),
+    hookWrite("new-bot"),
+  ], "a new Bot gets its persona, the Chat it works in, the Chat the user reads, bot.json naming both, and the fallback hook");
+  assert.ok(fresh.calls.some(([kind, spaceId]) => kind === "profile" && spaceId === "new-bot"), "and an avatar from the bot mod's list");
 
   const noAvatars = botClient({ owned: [httpError(404)] });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(noAvatars.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1" }, "an unreadable avatar list still creates the Bot");
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(noAvatars.client), { status: "created", spaceId: "new-bot", sessionId: "chat-1", chatId: "chat-2" }, "an unreadable avatar list still creates the Bot");
+  assert.ok(!writes(noAvatars.calls).some(([, , input]) => input?.path === HOOK), "with no template to copy, the hook is skipped");
 
-  const existing = botClient({ owned: [{ id: "bot" }], mods: [{ modSpaceId: "other", enabled: true }, botMod(false)], files: { "avatars.json": JSON.stringify([avatar]) } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(existing.client), { status: "ready", spaceId: "bot", sessionId: "chat-1", modEnabled: false }, "a disabled bot mod is reported, not changed");
-  assert.deepEqual(writes(existing.calls), [["chat", "bot"], botJsonWrite("bot", "chat-1"), personaWrite("bot")], "a Bot missing its persona and bot.json gets both");
-  assert.ok(!existing.calls.some(([kind]) => kind === "profile"), "an existing Bot keeps its avatar");
+  const oldBot = botClient({ owned: [{ id: "bot" }], mods: [botMod(false)], files: { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "main", note: "kept" }), [TEMPLATE]: hookYaml }, chats: ["main"] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(oldBot.client), { status: "ready", spaceId: "bot", sessionId: "main", chatId: "chat-1", modEnabled: false }, "a disabled bot mod is reported, not changed");
+  assert.deepEqual(writes(oldBot.calls), [["chat", "bot", "Cohub · Chat"], botJsonWrite("bot", { session: "main", note: "kept", chat: "chat-1" }), hookWrite("bot")], "a Bot without `chat` gets one; its working Chat and other keys stay");
+  assert.ok(!oldBot.calls.some(([kind]) => kind === "profile"), "an existing Bot keeps its avatar");
 
-  const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "main" }) }, chats: ["main"] });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", sessionId: "main", modEnabled: true });
-  assert.deepEqual(writes(kept.calls), [], "an existing persona and a bot.json naming a live Chat are never rewritten");
-  assert.equal(kept.files[".agents/APPEND_SYSTEM.md"], "# Custom");
+  const complete = { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "main", chat: "talk" }), [HOOK]: "custom hook", [TEMPLATE]: hookYaml };
+  const kept = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ...complete }, chats: ["main", "talk"] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(kept.client), { status: "ready", spaceId: "bot", sessionId: "main", chatId: "talk", modEnabled: true });
+  assert.deepEqual(writes(kept.calls), [], "a complete Bot is never rewritten, its own hook included");
 
-  const gone = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ".agents/APPEND_SYSTEM.md": "# Custom", [BOT_JSON]: JSON.stringify({ session: "deleted" }) } });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(gone.client), { status: "ready", spaceId: "bot", sessionId: "chat-1", modEnabled: true });
-  assert.deepEqual(writes(gone.calls), [["chat", "bot"], botJsonWrite("bot", "chat-1")], "a bot.json naming a deleted Chat points at a new one");
+  const gone = botClient({ owned: [{ id: "bot" }], mods: [botMod()], files: { ...complete }, chats: ["main"] });
+  assert.equal((await primaryBot.ensurePrimaryBot(gone.client)).chatId, "chat-1");
+  assert.deepEqual(writes(gone.calls), [["chat", "bot", "Cohub · Chat"], botJsonWrite("bot", { session: "main", chat: "chat-1" })], "a deleted user Chat is made again");
 
   const unreadable = botClient({ owned: [{ id: "bot" }], mods: [botMod()], readErrors: { [BOT_JSON]: httpError(503, "sandbox offline") } });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(unreadable.client), { status: "error", message: "sandbox offline" });
-  assert.deepEqual(writes(unreadable.calls), [], "a bot.json read failure creates and writes nothing, not even a missing persona");
+  assert.deepEqual(writes(unreadable.calls), [], "a bot.json read failure creates and writes nothing");
 
-  const malformed = botClient({ files: { [BOT_JSON]: "{\"chat\":1}" } });
-  await assert.rejects(primaryBot.ensureBotSession(malformed.client, "sub"), /does not name a Chat/);
-  assert.deepEqual(writes(malformed.calls), [], "a bot.json someone else wrote is never overwritten");
+  const malformed = botClient({ files: { [BOT_JSON]: "[1]" } });
+  await assert.rejects(primaryBot.ensureBotChats(malformed.client, "sub", "Writer"), /not valid/);
+  assert.deepEqual(writes(malformed.calls), [], "a bot.json that is not an object is never overwritten");
 
-  const sub = botClient({ chats: ["older"] });
-  assert.equal((await primaryBot.ensureBotSession(sub.client, "sub")).id, "chat-1", "a sub-Bot without bot.json gets its Chat on first open");
-  assert.deepEqual(writes(sub.calls), [["chat", "sub"], botJsonWrite("sub", "chat-1")]);
+  const sub = botClient({ files: { [TEMPLATE]: hookYaml } });
+  const subChats = await primaryBot.ensureBotChats(sub.client, "sub", "Writer");
+  assert.deepEqual([subChats.session.id, subChats.chat.id], ["chat-1", "chat-2"], "a sub-Bot without bot.json gets both Chats on first open");
+  assert.deepEqual(writes(sub.calls).map(([kind, , input]) => kind === "chat" ? input : input.path), [null, "Writer · Chat", BOT_JSON, HOOK]);
 
   const conflict = botClient({ owned: [{ id: "mine" }], mods: [{ modSpaceId: "other", enabled: true }] });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(conflict.client), { status: "conflict", spaceId: "mine" });
   assert.deepEqual(conflict.calls, [["get", "cohubbot"], ["mods", "mine"]], "a same-slug Space without the bot mod is left untouched");
 
-  const raced = botClient({ owned: [httpError(404), { id: "other-device" }], mods: [botMod()], createError: httpError(409, "space slug already exists"), files: { ".agents/APPEND_SYSTEM.md": "# Cohub", [BOT_JSON]: JSON.stringify({ session: "theirs" }) }, chats: ["theirs"] });
-  assert.deepEqual(await primaryBot.ensurePrimaryBot(raced.client), { status: "ready", spaceId: "other-device", sessionId: "theirs", modEnabled: true }, "a slug conflict on create adopts the Bot and the Chat another device made");
+  const raced = botClient({ owned: [httpError(404), { id: "other-device" }], mods: [botMod()], createError: httpError(409, "space slug already exists"), files: { ...complete }, chats: ["main", "talk"] });
+  assert.deepEqual(await primaryBot.ensurePrimaryBot(raced.client), { status: "ready", spaceId: "other-device", sessionId: "main", chatId: "talk", modEnabled: true }, "a slug conflict on create adopts the Bot another device made");
 
   const failed = botClient({ owned: [httpError(500, "server down")] });
   assert.deepEqual(await primaryBot.ensurePrimaryBot(failed.client), { status: "error", message: "server down" });
-  assert.deepEqual(failed.calls, [["get", "cohubbot"]], "other lookup errors create nothing");
 }
 
-// Bot mode: which Spaces are Bots, one row per Bot ordered with the primary first, and what a Bot said between steps.
+// The user's Chat with a Bot: what the Bot `say`s (a note with a source Turn) is the Bot; the user's own notes are the user.
 {
-  assert.equal(isBotSpace({ slug: "cohubbot" }), true);
   assert.equal(isBotSpace({ slug: "cohubbot-writer" }), true);
   assert.equal(isBotSpace({ slug: "cohubbots" }), false, "only the exact slug or a cohubbot- prefix marks a Bot");
-  assert.equal(isBotSpace({ slug: "my-cohubbot" }), false);
-  assert.equal(isBotSpace({ slug: null }), false);
-
-  const chat = (id, at, extra = {}) => ({ id, spaceId: "space", title: id, latestMessageText: null, lastMessageAt: at, lastMessageId: null, updatedAt: at, ...extra });
-  const listed = chat("main", "2026-11-03T00:00:00Z", { latestMessageText: "old" });
-  assert.equal(newerSession(listed, chat("main", "2026-11-07T00:00:00Z", { latestMessageText: "new" })).latestMessageText, "new", "a home row updated after the Bot's read wins");
-  assert.equal(newerSession(listed, chat("main", "2026-11-01T00:00:00Z")).latestMessageText, "old");
-  assert.equal(newerSession(null, listed), listed);
+  const said = { id: "said", executionKind: "note", sourceTurnId: "work-turn", sequence: 3, userText: "On it.", userContent: [{ type: "text", text: "On it." }], createdAt: "2026-11-10T10:03:00Z" };
+  const typed = { id: "typed", executionKind: "note", sequence: 2, userText: "Plan my week", userContent: [], createdAt: "2026-11-10T10:02:00Z" };
+  assert.equal(isBotSaid(said), true);
+  assert.equal(isBotSaid(typed), false, "a note the user wrote has no source Turn");
+  assert.equal(isBotSaid({ ...said, executionKind: "agent" }), false);
+  assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }]), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user" }, "a Bot row shows the last thing the Bot said, not the user's last message");
+  assert.equal(latestBotNote([typed]), null);
+  const missing = Object.assign(new Error("File or directory not found."), { status: 404 });
+  assert.deepEqual(botDirectory({ entries: [], loading: false, error: missing }), { entries: [], known: true, error: null }, "a folder a Bot has not written yet reads as empty");
 
   const spaces = [
     { id: "writer", slug: "cohubbot-writer", updatedAt: "2026-10-01T00:00:00Z" },
     { id: "idle", slug: "cohubbot-idle", lastActivityAt: "2026-11-04T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" },
     { id: "primary", slug: "cohubbot", updatedAt: "2026-10-01T00:00:00Z" },
   ];
-  const mains = new Map([["writer", chat("w", "2026-11-05T00:00:00Z")], ["idle", null], ["primary", chat("p", "2026-11-02T00:00:00Z")]]);
-  const entries = botEntries(spaces, mains, new Set(["writer"]));
-  assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow their Chat's activity, or the Space's before it has one");
-  assert.deepEqual(entries.map((entry) => [entry.session?.id ?? null, entry.running]), [["p", false], ["w", true], [null, false]], "each row reflects only its Bot's one Chat");
+  const bots = new Map([["writer", { note: { text: "Done", at: "2026-11-05T00:00:00Z", messageId: "w:user" }, chatId: "w-chat" }], ["primary", { note: null, chatId: "p-chat" }]]);
+  const entries = botEntries(spaces, bots, new Set(["writer"]), new Set(["idle"]));
+  assert.deepEqual(entries.map((entry) => entry.space.id), ["primary", "writer", "idle"], "the primary Bot stays on top; the rest follow the last thing they said");
+  assert.deepEqual(entries.map((entry) => [entry.chatId, entry.running, entry.needsYou]), [["p-chat", false, false], ["w-chat", true, false], [null, false, true]]);
 
-  const blocks = intermediateBlocks([
-    { content: [{ type: "text", text: "Looking at the repo." }, { type: "tool_use", id: "t1", name: "bash", input: {} }] },
-    { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }, { type: "thinking", thinking: "hmm" }] },
-    { content: [], text: "  Found it.  " },
-    { content: [{ type: "text", text: "Done: the fix is in." }] },
-  ]);
-  assert.deepEqual(processTexts(blocks, "Done: the fix is in.\n"), ["Looking at the repo.", "Found it."], "tools, results, and thinking stay in the steps; text repeating the final reply shows once");
-  assert.deepEqual(processTexts(blocks, ""), ["Looking at the repo.", "Found it.", "Done: the fix is in."]);
-  assert.deepEqual(processTexts([{ type: "text", text: "   " }], "x"), []);
+  assert.deepEqual(relayContent([{ type: "text", text: "Plan my week" }, { type: "image", data: "x" }], "<bot_reminder>say</bot_reminder>"), [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }, { type: "image", data: "x" }], "the reminder follows the user's words after a blank line");
+  assert.deepEqual(relayContent([{ type: "image", data: "x" }], "r"), [{ type: "image", data: "x" }, { type: "text", text: "r" }]);
+  assert.deepEqual(relayContent([{ type: "text", text: "Hi" }], null), [{ type: "text", text: "Hi" }], "without a reminder the words go as typed");
+  const relayed = relayFailedMessage({ id: "n", role: "user", meta: { turnSequence: 4, clientMessageId: "c" } }, "Not delivered");
+  assert.deepEqual([relayed.errorMessage, relayed.meta.sendFailed, relayed.meta.relayFailed, relayed.meta.turnSequence], ["Not delivered", true, true, 4], "a message the Bot did not get stays in place, marked failed");
+}
+
+// Handing the user's words to the Bot: the reminder, the Bot window, Cohub, and a steer when the Bot is mid-run.
+{
+  const source = ts.transpileModule(readFileSync(new URL("../src/data/bot-relay.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const steered = [];
+  let steerError = null;
+  const relay = {};
+  new Function("require", "exports", source)((name) => {
+    if (name === "@/src/config") return { BOT_CONTEXT_WINDOW: 400_000, BOT_MOD_SPACE_ID: "bot-mod" };
+    if (name === "./bot-mode") return { relayContent };
+    if (name === "./followup-queue") return { steerQueuedFollowup: async (_client, spaceId, sessionId, turnId) => { if (steerError) throw steerError; steered.push([spaceId, sessionId, turnId]); } };
+    throw new Error(`Unexpected bot-relay dependency: ${name}`);
+  }, relay);
+  const prompts = [];
+  let status = "running";
+  const reads = [];
+  const client = { space: (spaceId) => ({
+    prompt: async (body) => { prompts.push([spaceId, body]); return { mode: "immediate", turn: { id: "relayed", status } }; },
+    files: { read: async (path) => { reads.push([spaceId, path]); return { path, content: " <bot_reminder>say</bot_reminder>\n" }; } },
+  }) };
+  const reminder = await relay.loadBotReminder(client);
+  assert.equal(reminder, "<bot_reminder>say</bot_reminder>");
+  await relay.loadBotReminder(client);
+  assert.deepEqual(reads, [["bot-mod", "reminder.txt"]], "the reminder is read from the bot mod once per launch");
+  assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Plan my week" }], reminder, model: null }), false);
+  const [spaceId, body] = prompts[0];
+  assert.deepEqual([spaceId, body.mode, body.sessionId, body.harness, body.contextWindow, body.content], ["bot", "agent", "work", "cohub", 400_000, [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }]], "the Bot's working Chat gets the words with the reminder, on Cohub, at the Bot window");
+  assert.deepEqual(steered, [], "an idle Bot is not steered");
+  status = "queued";
+  assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Also Friday" }], reminder, model: null }), false);
+  assert.deepEqual(steered, [["bot", "work", "relayed"]], "while the Bot works, what the user adds is steered into its run");
+  steerError = new Error("turn already started");
+  assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "One more" }], reminder, model: null }), true, "a refused steer leaves the words queued, not lost");
+}
+
+// A Bot's page sends in two steps: a note in the user's Chat, then the words to the Bot; a failed second step is redone alone.
+{
+  const harness = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
+  await harness.send("fixture", "Plan my week", [], { note: true });
+  assert.equal(harness.prompts[0].mode, "note", "the user's words are written to their Chat with the Bot as a note");
+  const ordinary = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
+  await ordinary.send("fixture", "Hello", [], {});
+  assert.equal(ordinary.prompts[0].mode, "agent", "an ordinary Chat still prompts the agent");
+  assert.ok(!("contextWindow" in ordinary.prompts[0]), "and sends no Bot window");
+  assert.ok(chatSource.includes("...(bot ? { note: true } : { model: activeModel, harness, ...(execution ? { execution } : {}) })") && chatSource.includes("if (noteId) void relayToBotChat(noteId);"), "a Bot page send writes the note, then hands it to the Bot");
+  assert.ok(/if \(message\.meta\?\.relayFailed === true && relayId\) \{[^}]*void relayToBotChat\(relayId\);\s*return;/.test(chatSource), "retrying a message the Bot did not get only hands it over again");
 }
 
 console.log("Chat workflow checks passed");
