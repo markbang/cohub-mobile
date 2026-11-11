@@ -78,7 +78,7 @@ import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLift
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, relayFailedMessage, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, relayFailedMessage, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
@@ -654,6 +654,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   useEffect(() => { if (botPageId) router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: botPageId } }); }, [botPageId, router]);
   const botWork = bot ? botChats?.session ?? null : null;
   useEffect(() => { if (botWork) void refreshSessionStatuses([botWork], { silent: true }); }, [botWork, refreshSessionStatuses]);
+  // Without a saved choice, the Bot's working Chat names the model its turns actually run with.
+  const botLastTurn = useAppSelector(({ state }) => (botWork ? state.sessionLatestTurns[botWork.id] : null));
   // The Bot is typing while its working Chat runs.
   const botWorking = useAppSelector(({ state }) => botWork ? sessionListStatus(state.sessions.find((item) => item.id === botWork.id) ?? botWork, state.sessionLatestTurns[botWork.id], state.sessionTurnStatuses) === "running" : false);
   // The user's message reaches the Bot in two steps; one whose second step failed stays here marked failed.
@@ -748,10 +750,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const lastAgentTurn = useMemo(() => turnsNewestFirst.find(isAgentTurn), [turnsNewestFirst]);
   const composerHarness: RuntimeHarness = bot ? "cohub" : selectedHarness ?? runtimeHarnessFromTurn(lastAgentTurn);
   const recordedLocalModel = composerHarness === "cohub" ? null : turnsNewestFirst.find((turn) => runtimeHarnessFromTurn(turn) === composerHarness && turn.model);
-  // A Bot's model is chosen on its profile.
-  const [botModel] = useBotModel(userUuid, spaceId);
+  // A Bot's model is saved in its `bot.json`; its page and the bot mod read the same value.
+  const [botModel, setBotModel] = useBotModel(client, spaceId, botSpace);
+  const effectiveBotModel = useMemo(() => {
+    const base = botModel ?? turnModelSelection(botLastTurn);
+    const name = base ? models.find((item) => item.provider === base.provider && item.id === base.id)?.model?.name : null;
+    return base ? { ...base, ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}) } : null;
+  }, [botLastTurn, botModel, models]);
   const activeModel = composerHarness === "cohub"
-    ? (bot && botModel !== undefined ? botModel : modelOverride ? selectedModel : recordedModel)
+    ? (bot ? effectiveBotModel ?? recordedModel : modelOverride ? selectedModel : recordedModel)
     : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
@@ -1804,7 +1811,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => closeOverlay("attachments")} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => closeOverlay("turns")} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
         <GlassBackdrop target={screenBlurTarget}>{!bot && runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} execution={executionMenu} open={harnessMenuOpen} onClose={() => closeOverlay("harness")} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); closeOverlay("harness"); }} /> : null}
-        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={modelOverride ? selectedModel : recordedModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOverride(true); closeOverlay("model"); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
+        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={bot ? effectiveBotModel : modelOverride ? selectedModel : recordedModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { closeOverlay("model"); if (bot) { void setBotModel(model).catch((error: unknown) => showToast({ title: t("bots.model.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" })); return; } setSelectedModel(model); setModelOverride(true); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
         <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="chat-notice-sheet" />
         <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => closeOverlay("rename")}>
           {/* A Modal is its own window, so the core avoider (keyboard events) rather than the app-level one. */}
