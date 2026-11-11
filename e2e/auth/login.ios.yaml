@@ -36,6 +36,15 @@ name: Sign in on the dev tenant (iOS)
       visible: "^Agree$"
     commands:
       - tapOn: "^Agree$"
+# The tenant may open on an emailed code instead, which offers password sign-in as a switch.
+- extendedWaitUntil:
+    visible: "(Password|Sign in with password)"
+    timeout: 45000
+- runFlow:
+    when:
+      visible: "Sign in with password"
+    commands:
+      - tapOn: "Sign in with password"
 - extendedWaitUntil:
     visible: "Password"
     timeout: 45000
