@@ -512,7 +512,9 @@ export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxIma
 export function botPlacedNode(ctx: NodeContext, node: TimelineNode | null, placement: BotPlacement): TimelineNode | null {
   if (!placement.time) return node && placement.gap ? { type: "view", style: { paddingTop: placement.gap }, children: [node] } : node;
   const label = formatThreadTime(placement.time, ctx.t, getActiveLocale());
-  return { type: "view", children: [text(label, textStyle("caption", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { alignSelf: "center", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 } }), ...(node ? [node] : [])] };
+  // The padding sits on a view: Android's timeline text does not lay out its own padding.
+  const row: TimelineNode = { type: "view", style: { alignItems: "center", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 }, children: [text(label, textStyle("caption", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }))] };
+  return { type: "view", children: [row, ...(node ? [node] : [])] };
 }
 
 function liveDot(ctx: NodeContext): TimelineNode {
