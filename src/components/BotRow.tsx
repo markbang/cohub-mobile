@@ -14,7 +14,7 @@ import { displaySpaceName, previewText } from "@/src/utils";
 const BOT_ROW_AVATAR_SIZE = 52;
 
 /** A Bot as a contact: the last thing it said, and whether it is working, waiting on the user, or has news. */
-export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord>; onPress: () => void }) {
+export function BotRow({ entry, onPress, onPressIn }: { entry: BotEntry<SpaceRecord>; onPress: () => void; onPressIn?: () => void }) {
   const { t } = useTranslation();
   const theme = useAppTheme();
   const { space, note, chatId, running, needsYou } = entry;
@@ -43,5 +43,6 @@ export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord>; onPre
     unread={unread}
     accessibilityLabel={[t("ui.openNamed", { name }), primary ? t("bots.primary") : null, running ? t("bots.running") : null, needsYou ? t("bots.needsYou") : null, unread ? t("session.unread") : null].filter(Boolean).join(", ")}
     onPress={onPress}
+    onPressIn={onPressIn}
   />;
 }

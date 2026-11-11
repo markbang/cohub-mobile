@@ -103,12 +103,19 @@ export function useBots(enabled: boolean) {
   /** The user's Chat with a Bot; one the Bot does not have yet (an older or hand-made Bot) is made on first open, as for the primary Bot. */
   const openChat = useCallback(async (spaceId: string): Promise<string> => {
     const known = queryClient.getQueryData<Awaited<ReturnType<typeof readBotFile>>>(botFileQuery(client, spaceId).queryKey);
-    if (known?.chat && known.session && checked.has(spaceId)) return known.chat.id;
     const space = spaces.find((item) => item.id === spaceId);
-    const { chat } = await ensureBotChats(client!, spaceId, displaySpaceName(space));
-    checked.add(spaceId);
-    void queryClient.invalidateQueries({ queryKey: botFileQuery(client, spaceId).queryKey });
-    return chat.id;
+    const ensure = async () => {
+      const chats = await ensureBotChats(client!, spaceId, displaySpaceName(space));
+      checked.add(spaceId);
+      void queryClient.invalidateQueries({ queryKey: botFileQuery(client, spaceId).queryKey });
+      return chats;
+    };
+    // A known Chat opens at once; the per-launch check costs several round trips, so it runs behind it.
+    if (known?.chat && known.session) {
+      if (!checked.has(spaceId)) void ensure().catch((error) => console.warn("[bots] check failed", error));
+      return known.chat.id;
+    }
+    return (await ensure()).chat.id;
   }, [client, queryClient, spaces]);
 
   return {
