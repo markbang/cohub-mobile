@@ -5960,9 +5960,10 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
     const messages = compileCallback(threadSource, { pendingNew: null, view, messagesInWindow, withTurnSequences, mergeDisplayMessages, messagesFromTurns, isOptimisticFollowup, isAssistantIntermediate: (message) => message.meta?.messageKind === "assistant_intermediate", hasRenderableMessage: () => true, queuedFollowupIds: new Set() })();
     const turnsById = new Map(view.turns.map((turn) => [turn.id, turn]));
     const turnsBySequence = new Map(view.turns.map((turn) => [turn.sequence, [turn]]));
-    const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
+    const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, spaceId: BOT_SAY_ORIGIN.spaceId, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
     const nativeWriter = compileCallback(botSaidSource, { bot: peer, turnsById, botMessageSpace });
-    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble"), nativeWriter(item) !== null]);
+    // A bubble with a sender line would be another Bot's; this page's own Bot has none.
+    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble" && node.props.sender === null), nativeWriter(item) !== null]);
   };
   const expected = [["hi", false, false], ["Hi, I'm here.", true, true], ["Are you our new engineer?", false, false], ["Sort of — the engineer in this Space.", true, true]];
   const live = deliver([persisted, created]);
