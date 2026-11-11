@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botMessageSpace, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -5809,7 +5809,7 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   const primaryBot = {};
   new Function("require", "exports", source)((name) => {
     if (name === "@/src/config") return { BOT_MOD_SPACE_ID: BOT_MOD };
-    if (name === "./bot-mode") return { PRIMARY_BOT_SLUG };
+    if (name === "./bot-mode") return { PRIMARY_BOT_SLUG, botModelFrom: (raw) => (raw?.model && typeof raw.model === "object" ? raw.model : null) };
     throw new Error(`Unexpected primary-bot dependency: ${name}`);
   }, primaryBot);
   const httpError = (status, message = `HTTP ${status}`) => Object.assign(new Error(message), { status });
@@ -5993,10 +5993,16 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(reminder, "<bot_reminder>say</bot_reminder>");
   await relay.loadBotReminder(client);
   assert.deepEqual(reads, [["bot-mod", "reminder.txt"]], "the reminder is read from the bot mod once per launch");
-  assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Plan my week" }], reminder, model: null }), false);
+  assert.deepEqual(botModelFrom({ model: { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" } }), { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" }, "a Bot's saved model is read from its bot.json");
+assert.equal(botModelFrom({ model: { provider: "cohub" } }), null, "a model without an id is no choice");
+assert.deepEqual(turnModelSelection({ provider: "cohub", model: "claude-sonnet-5", meta: { requestedThinkingLevel: "low" } }), { provider: "cohub", id: "claude-sonnet-5", thinkingLevel: "low" }, "an unset Bot page shows the model its working Chat last ran with");
+assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Plan my week" }], reminder, model: null }), false);
   const [spaceId, body] = prompts[0];
   assert.deepEqual([spaceId, body.mode, body.sessionId, body.harness, body.contextWindow, body.content], ["bot", "agent", "work", "cohub", 400_000, [{ type: "text", text: "Plan my week\n\n<bot_reminder>say</bot_reminder>" }]], "the Bot's working Chat gets the words with the reminder, on Cohub, at the Bot window");
   assert.deepEqual(steered, [], "an idle Bot is not steered");
+  await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "In French" }], reminder, model: { provider: "cohub", id: "claude-sonnet-5", thinkingLevel: "high" } });
+  const chosen = prompts.at(-1)[1];
+  assert.deepEqual([chosen.model, chosen.provider, chosen.thinkingLevel], ["claude-sonnet-5", "cohub", "high"], "the Bot's saved model rides every relay");
   status = "queued";
   assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "Also Friday" }], reminder, model: null }), false);
   assert.deepEqual(steered, [["bot", "work", "relayed"]], "while the Bot works, what the user adds is steered into its run");

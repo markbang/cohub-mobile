@@ -63,10 +63,10 @@ function withTimeout<T>(promise: Promise<T>) {
 
 export type SessionStatus = "running" | "completed" | "failed" | "stopped" | "idle";
 
-/** Turn fields the Chats list reads: identity and status, plus what the row can show instead of a missing preview. */
-export type LatestSessionTurn = Pick<SessionTurnRecord, "id" | "sequence" | "status" | "updatedAt"> & Partial<Pick<SessionTurnRecord, "userText" | "assistantText" | "errorMessage" | "startedAt">>;
+/** Turn fields the Chats list reads: identity and status, a preview when the row has no text, and the model a Bot page reports. */
+export type LatestSessionTurn = Pick<SessionTurnRecord, "id" | "sequence" | "status" | "updatedAt"> & Partial<Pick<SessionTurnRecord, "userText" | "assistantText" | "errorMessage" | "startedAt" | "provider" | "model" | "meta">>;
 
-const LATEST_TURN_FIELDS = ["id", "sequence", "status", "updatedAt", "userText", "assistantText", "errorMessage", "startedAt"] as const;
+const LATEST_TURN_FIELDS = ["id", "sequence", "status", "updatedAt", "userText", "assistantText", "errorMessage", "startedAt", "provider", "model", "meta"] as const;
 
 /** Narrow a Turn (or a realtime patch of one) to the fields the Chats list reads. */
 function latestTurnFields(turn: Partial<Record<(typeof LATEST_TURN_FIELDS)[number], unknown>>): Partial<LatestSessionTurn> {

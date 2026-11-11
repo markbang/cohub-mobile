@@ -1,4 +1,5 @@
-import { readSessionTurnOrigin, type ContentBlock, type MessageRecord, type SessionRecord, type SessionTurnRecord, type SpaceRecord } from "@neta-art/cohub";
+import { isModelThinkingLevel, readSessionTurnOrigin, type ContentBlock, type MessageRecord, type SessionRecord, type SessionTurnRecord, type SpaceRecord } from "@neta-art/cohub";
+import type { ChatModelSelection } from "./types";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
 
@@ -80,6 +81,32 @@ export function cachedTurnRange(messages: readonly Pick<MessageRecord, "meta">[]
     newest = newest === null ? sequence : Math.max(newest, sequence);
   }
   return { oldest, newest };
+}
+
+/** The model saved in a Bot's `bot.json`; it travels with the Bot, so the app and the bot mod read one value. */
+export function botModelFrom(raw: Record<string, unknown> | null | undefined): ChatModelSelection | null {
+  const value = raw?.model;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { provider, id, thinkingLevel } = value as Record<string, unknown>;
+  if (typeof provider !== "string" || !provider.trim() || typeof id !== "string" || !id.trim()) return null;
+  return {
+    provider: provider.trim(),
+    id: id.trim(),
+    ...(typeof thinkingLevel === "string" && isModelThinkingLevel(thinkingLevel) ? { thinkingLevel } : {}),
+  };
+}
+
+/** The model a Turn ran with, for a Bot page with no saved choice: its working Chat is the truth. */
+export function turnModelSelection(turn: { provider?: string | null; model?: string | null; meta?: unknown } | null | undefined): ChatModelSelection | null {
+  if (!turn?.model) return null;
+  const level = turn.meta && typeof turn.meta === "object" && !Array.isArray(turn.meta)
+    ? (turn.meta as Record<string, unknown>).requestedThinkingLevel
+    : null;
+  return {
+    provider: turn.provider || "cohub",
+    id: turn.model,
+    ...(typeof level === "string" && isModelThinkingLevel(level) ? { thinkingLevel: level } : {}),
+  };
 }
 
 /** What reaches the Bot's working Chat: the user's message with the bot mod's reminder after a blank line. */

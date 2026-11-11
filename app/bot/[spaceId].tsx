@@ -1,15 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { botDirectory } from "@/src/data/bot-mode";
+import { botDirectory, turnModelSelection } from "@/src/data/bot-mode";
 import { useBotModel } from "@/src/data/bot-model";
 import { useAppActions, useAppSelector, useModelCatalog } from "@/src/data/context";
 import { botFileQuery } from "@/src/data/use-bots";
 import { useSpaceDirectory } from "@/src/data/use-space-directory";
+import { useToast } from "@/src/components/Toast";
 import { useTranslation } from "@/src/i18n";
+import { formatThinkingLevel } from "@/src/model-catalog";
 import { Avatar, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { displaySpaceName } from "@/src/utils";
@@ -18,7 +20,7 @@ import { displaySpaceName } from "@/src/utils";
 export default function BotProfileScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { client, userUuid, loadModels, loadModelStatus } = useAppActions();
+  const { client, loadModels, loadModelStatus, refreshSessionStatuses } = useAppActions();
   const { models, modelsLoading, modelsError, modelStatus, modelStatusLoading, modelStatusError } = useModelCatalog();
   const params = useLocalSearchParams<{ spaceId?: string | string[] }>();
   const spaceId = (Array.isArray(params.spaceId) ? params.spaceId[0] : params.spaceId) ?? "";
@@ -39,11 +41,25 @@ export default function BotProfileScreen() {
   const file = useQuery({ ...botFileQuery(client, spaceId), enabled: Boolean(client && spaceId) });
   const workChat = file.data?.session ?? null;
   const failure = root.error ?? agents.error ?? memory.error;
-  // The model the Bot's page sends with; unchosen, the page keeps the one its Chat last ran with.
-  const [model, setModel] = useBotModel(userUuid, spaceId);
+  // The model the Bot's turns run with; unchosen, the page shows the one its working Chat last ran with.
+  const [model, setModel] = useBotModel(client, spaceId);
+  const botLastTurn = useAppSelector((app) => (workChat ? app.state.sessionLatestTurns[workChat.id] : null));
+  useEffect(() => {
+    if (workChat && model === undefined && !botLastTurn?.model) void refreshSessionStatuses([workChat], { silent: true });
+  }, [botLastTurn?.model, model, refreshSessionStatuses, workChat]);
+  const effectiveModel = useMemo(() => {
+    const base = model ?? turnModelSelection(botLastTurn);
+    const name = base ? models.find((item) => item.provider === base.provider && item.id === base.id)?.model?.name : null;
+    return base ? { ...base, ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}) } : null;
+  }, [botLastTurn, model, models]);
   const [modelOpen, setModelOpen] = useState(false);
+  const showToast = useToast();
   const modelRowRef = useRef<View>(null);
   const openModels = () => { setModelOpen(true); void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); };
+  const chooseModel = (next: Parameters<typeof setModel>[0]) => {
+    setModelOpen(false);
+    void setModel(next).catch((error: unknown) => showToast({ title: t("bots.model.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
+  };
   return <Screen>
     <TopBar title={name} onBack={() => router.back()} />
     <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -64,11 +80,11 @@ export default function BotProfileScreen() {
       <SettingsGroup>
         {/* The Chat the Bot works in, as an ordinary Chat: its steps, tools, and raw replies. */}
         <SettingsRow icon="list-tree" title={t("bots.profile.workLog")} onPress={workChat ? () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: workChat.id, log: "1" } }) : undefined} />
-        <MenuAnchor ref={modelRowRef} open={modelOpen}><SettingsRow icon="zap" title={t("bots.profile.model")} detail={model?.name || model?.id || t("chat.model.automatic")} onPress={openModels} /></MenuAnchor>
+        <MenuAnchor ref={modelRowRef} open={modelOpen}><SettingsRow icon="zap" title={t("bots.profile.model")} detail={[effectiveModel?.name || effectiveModel?.id, effectiveModel?.thinkingLevel ? formatThinkingLevel(effectiveModel.thinkingLevel) : null].filter(Boolean).join(" · ") || undefined} onPress={openModels} /></MenuAnchor>
         <SettingsRow icon="clock" title={t("bots.profile.schedules")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId } })} />
         <SettingsRow icon="folder-open" title={t("bots.profile.files")} onPress={() => router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } })} last />
       </SettingsGroup>
     </ScrollView>
-    <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={modelRowRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={model ?? null} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(next) => { setModel(next); setModelOpen(false); }} /></MenuPresence>
+    <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={modelRowRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={effectiveModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={chooseModel} /></MenuPresence>
   </Screen>;
 }

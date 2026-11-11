@@ -175,6 +175,7 @@ export const zh: Record<TranslationKey, string> = {
   "bots.profile.schedules": "定时任务",
   "bots.profile.files": "文件",
   "bots.profile.workLog": "工作记录",
+  "bots.model.saveFailed": "Bot 模型保存失败，请重试。",
   "bots.profile.model": "模型",
   "bots.composer.placeholder": "发消息给 {name}",
   "bots.primary": "主 Bot",

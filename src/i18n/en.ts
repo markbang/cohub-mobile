@@ -178,6 +178,7 @@ export const en = {
   "bots.profile.schedules": "Schedules",
   "bots.profile.files": "Files",
   "bots.profile.workLog": "Work log",
+  "bots.model.saveFailed": "Could not save the Bot's model. Try again.",
   "bots.profile.model": "Model",
   "bots.composer.placeholder": "Message {name}",
   "bots.primary": "Primary Bot",
