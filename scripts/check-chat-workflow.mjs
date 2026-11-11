@@ -4027,10 +4027,11 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   const dividers = forkMessages.map((item, index) => chromeNodes(renderForkRow({ item, index })).filter((node) => node.type === "ForkedFromDivider").length);
   assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
 }
+const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
 // A Bot's page: what the Bot `say`s sits on its side with its face; the user's notes stay the user's. Ordinary Chats unchanged.
 {
-  const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "work-turn", meta: {} };
-  const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", meta: { clientMessageId: "c1" } };
+  const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN } };
+  const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" } };
   const row = (bot, turn, meta = {}) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
   const bot = { name: "Cohub", avatarUrl: null };
   const botNote = row(bot, said).find((node) => node.type === "BotNoteBubble");
@@ -4040,6 +4041,17 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   assert.equal(typeof userNote.props.onDiscard, "function");
   assert.equal(row(bot, typed, { relayFailed: true }).find((node) => node.type === "MessageBubble").props.onDiscard, undefined, "a message the Bot did not get offers a retry, not a delete: it is already in the Chat");
   assert.ok(row(null, said).some((node) => node.type === "MessageBubble") && !row(null, said).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows every note as before");
+
+  const timelineAst = ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let botSaidSource;
+  (function find(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(timelineAst) === "botSaid") botSaidSource = node.initializer.arguments[0].getText(timelineAst);
+    ts.forEachChild(node, find);
+  })(timelineAst);
+  const nativeBotSaid = (bot) => new Function("bot", "turnsById", "isBotSaid", ts.transpileModule(`return (${botSaidSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(bot, new Map([[said.id, said], [typed.id, typed]]), isBotSaid);
+  const note = (turn) => ({ id: `${turn.id}:user`, role: "user", meta: { turnId: turn.id } });
+  assert.deepEqual([nativeBotSaid(bot)(note(said)), nativeBotSaid(bot)(note(typed))], [true, false], "the native timeline draws only the `say` note as the Bot's");
+  assert.equal(nativeBotSaid(null)(note(said)), false, "an ordinary Chat's native timeline draws no Bot notes");
 }
 const ownerRow = renderLiveRow({ item: runningRowMessages[0], index: 0 });
 assert.equal(ownerRow.type, "View");
@@ -5783,14 +5795,14 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(await primaryBot.ensurePrimaryBot(failed.client), { status: "error", message: "server down" });
 }
 
-// The user's Chat with a Bot: what the Bot `say`s (a note with a source Turn) is the Bot; the user's own notes are the user.
+// The user's Chat with a Bot: what the Bot `say`s (a note with an origin) is the Bot; the user's own notes are the user.
 {
   assert.equal(isBotSpace({ slug: "cohubbot-writer" }), true);
   assert.equal(isBotSpace({ slug: "cohubbots" }), false, "only the exact slug or a cohubbot- prefix marks a Bot");
-  const said = { id: "said", executionKind: "note", sourceTurnId: "work-turn", sequence: 3, userText: "On it.", userContent: [{ type: "text", text: "On it." }], createdAt: "2026-11-10T10:03:00Z" };
-  const typed = { id: "typed", executionKind: "note", sequence: 2, userText: "Plan my week", userContent: [], createdAt: "2026-11-10T10:02:00Z" };
+  const said = { id: "said", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN }, sequence: 3, userText: "On it.", userContent: [{ type: "text", text: "On it." }], createdAt: "2026-11-10T10:03:00Z" };
+  const typed = { id: "typed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" }, sequence: 4, userText: "Plan my week", userContent: [], createdAt: "2026-11-10T10:04:00Z" };
   assert.equal(isBotSaid(said), true);
-  assert.equal(isBotSaid(typed), false, "a note the user wrote has no source Turn");
+  assert.equal(isBotSaid(typed), false, "a note the user wrote has no origin, though the timeline gives it a source Turn");
   assert.equal(isBotSaid({ ...said, executionKind: "agent" }), false);
   assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }]), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user" }, "a Bot row shows the last thing the Bot said, not the user's last message");
   assert.equal(latestBotNote([typed]), null);

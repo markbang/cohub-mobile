@@ -1,4 +1,4 @@
-import type { ContentBlock, MessageRecord, SessionRecord, SessionTurnRecord, SpaceRecord } from "@neta-art/cohub";
+import { readSessionTurnOrigin, type ContentBlock, type MessageRecord, type SessionRecord, type SessionTurnRecord, type SpaceRecord } from "@neta-art/cohub";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
 
@@ -30,10 +30,11 @@ export function isBotSpace(space: { slug?: string | null } | null | undefined) {
 
 /**
  * The Bot's `say`: a note written into the user's Chat from one of its working Turns, which the server
- * records as the note's source. The user's own notes have none.
+ * records as the note's `meta.origin`. The user's own notes have none. `sourceTurnId` cannot tell them
+ * apart: the timeline fills it with each Turn's own id.
  */
-export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "sourceTurnId"> | null | undefined) {
-  return turn?.executionKind === "note" && Boolean(turn.sourceTurnId);
+export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined) {
+  return turn?.executionKind === "note" && readSessionTurnOrigin(turn.meta) !== null;
 }
 
 /** The newest thing the Bot said in a page of the user's Chat, as a Bots row shows it. */
