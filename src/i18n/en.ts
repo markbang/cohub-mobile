@@ -164,7 +164,6 @@ export const en = {
   "bots.running": "Running",
   "bots.typing": "Typing",
   "bots.relayFailed": "Not delivered to the Bot. Tap Retry.",
-  "bots.busy": "The Bot is busy, so it will read this when it finishes.",
   "bots.empty": "No Bots yet",
   "bots.newBot": "New Bot",
   "bots.newBot.prompt": "Create a new Bot for me:",

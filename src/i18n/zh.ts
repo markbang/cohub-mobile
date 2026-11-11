@@ -161,7 +161,6 @@ export const zh: Record<TranslationKey, string> = {
   "bots.running": "运行中",
   "bots.typing": "正在输入",
   "bots.relayFailed": "没有送达 Bot，请点重试。",
-  "bots.busy": "Bot 正忙，忙完会看到这条消息。",
   "bots.empty": "还没有 Bot",
   "bots.newBot": "新建 Bot",
   "bots.newBot.prompt": "帮我新建一个 Bot：",
