@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, relayFailedMessage, turnModelSelection } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, cachedTurnRange, isBotSpace, latestBotNote, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -4105,7 +4105,6 @@ const PEER_SPACE_ID = "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8";
   assert.equal(row(null, typed).find((node) => node.type === "MessageBubble").props.rowInset, undefined, "an ordinary Chat keeps its bubble spacing");
   assert.ok(userNote && !row(bot, typed).some((node) => node.type === "BotNoteBubble" || node.type === "TurnProcess" || node.type === "SentFromLink"), "the user's note is the user's bubble, without steps or links");
   assert.equal(typeof userNote.props.onDiscard, "function");
-  assert.equal(row(bot, typed, { relayFailed: true }).find((node) => node.type === "MessageBubble").props.onDiscard, undefined, "a message the Bot did not get offers a retry, not a delete: it is already in the Chat");
   assert.ok(row(null, said).some((node) => node.type === "MessageBubble") && !row(null, said).some((node) => node.type === "BotNoteBubble"), "an ordinary Chat shows every note as before");
 
   const timelineAst = ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -5964,8 +5963,6 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(formatThreadTime("2026-11-10T23:59:00", label, "en", now), "Yesterday 23:59");
   assert.equal(formatThreadTime("2026-11-02T07:05:00", label, "en", now), "Nov 2 07:05");
   assert.equal(formatThreadTime("2025-11-02T07:05:00", label, "en", now), "Nov 2, 2025 07:05");
-  const relayed = relayFailedMessage({ id: "n", role: "user", meta: { turnSequence: 4, clientMessageId: "c" } }, "Not delivered");
-  assert.deepEqual([relayed.errorMessage, relayed.meta.sendFailed, relayed.meta.relayFailed, relayed.meta.turnSequence], ["Not delivered", true, true, 4], "a message the Bot did not get stays in place, marked failed");
 }
 
 // Handing the user's words to the Bot: the reminder, the Bot window, Cohub, and a steer when the Bot is mid-run.
@@ -6011,17 +6008,33 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work", content: [{ type: "text", text: "One more" }], reminder, model: null, contextWindow: 200_000 }), true, "a refused steer leaves the words queued, not lost");
 }
 
-// A Bot's page sends in two steps: a note in the user's Chat, then the words to the Bot; a failed second step is redone alone.
+// A Bot's page hands the message to the Bot, then writes it to the user's Chat: one recorded there was always delivered.
 {
-  const harness = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
-  await harness.send("fixture", "Plan my week", [], { note: true });
-  assert.equal(harness.prompts[0].mode, "note", "the user's words are written to their Chat with the Bot as a note");
+  const image = { type: "image", source: { type: "url", url: "https://cdn.example/photo.png" } };
+  const built = [{ type: "text", text: "Plan my week" }, image];
+  const steps = [];
+  const harness = sendHarness({ buildPromptContent: async () => built, prompt: (body) => { steps.push(body.mode); return acceptedTurn(body, 1); } });
+  await harness.send("fixture", "Plan my week", [photoDraft], { note: true, relay: async (content) => { steps.push(content); } });
+  assert.deepEqual(steps, [built, "note"], "the Bot gets the uploaded image with the words before the note is written");
+  assert.equal(harness.prompts[0].content, built, "the note carries the same content");
+
+  const undelivered = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
+  await assert.rejects(undelivered.send("fixture", "Plan my week", [], { note: true, relay: async () => { throw new Error("offline"); } }), /offline/);
+  assert.equal(undelivered.prompts.length, 0, "a message the Bot did not get is not written as sent");
+  assert.deepEqual([isFailedSend(undelivered.row("client")), undelivered.row("client").errorMessage], [true, "offline"], "it stays on its bubble as a failed send");
+
+  let relays = 0;
+  const unrecorded = sendHarness({ ids: ["first", "second"], prompt: (body, attempt) => { if (attempt === 1) throw new Error("not recorded"); return acceptedTurn(body, 1); } });
+  const relay = async () => { relays += 1; };
+  await assert.rejects(unrecorded.send("fixture", "Plan my week", [], { note: true, relay }), /not recorded/);
+  await unrecorded.send("fixture", "Plan my week", [], { note: true, relay, retryOf: unrecorded.row("first") });
+  assert.deepEqual([relays, unrecorded.prompts.length], [1, 2], "retrying a delivered message that was not recorded only records it");
+
   const ordinary = sendHarness({ prompt: (body) => acceptedTurn(body, 1) });
   await ordinary.send("fixture", "Hello", [], {});
   assert.equal(ordinary.prompts[0].mode, "agent", "an ordinary Chat still prompts the agent");
   assert.ok(!("contextWindow" in ordinary.prompts[0]), "and sends no Bot window");
-  assert.ok(chatSource.includes("...(bot ? { note: true } : { model: activeModel, harness, ...(execution ? { execution } : {}) })") && chatSource.includes("if (noteId) void relayToBotChat(noteId);"), "a Bot page send writes the note, then hands it to the Bot");
-  assert.ok(/if \(message\.meta\?\.relayFailed === true && relayId\) \{[^}]*void relayToBotChat\(relayId\);\s*return;/.test(chatSource), "retrying a message the Bot did not get only hands it over again");
+  assert.equal(chatSource.split("...(bot ? { note: true, relay: relayToBotChat } : ").length, 3, "a Bot page send and its retry both deliver before recording");
 }
 
 // A Bot's `say` reaches an open Bot page live, its message before its Turn: it is the Bot's bubble, after the question it answers.
@@ -6059,7 +6072,7 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   };
 
   const callbackSource = (ast, name) => { let found; (function find(node) { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name) found = node.initializer.arguments[0].getText(ast); ts.forEachChild(node, find); })(ast); return found; };
-  const threadSource = callbackSource(chatAst, "threadMessages");
+  const threadSource = callbackSource(chatAst, "messages");
   const botSaidSource = callbackSource(ts.createSourceFile("timeline.tsx", readFileSync(new URL("../src/components/timeline/NativeChatTimeline.tsx", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX), "noteWriter");
   const bot = { name: "Engineer", avatarUrl: null };
   const page = (view, peer) => {

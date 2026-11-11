@@ -326,7 +326,7 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
       },
       ...(failed ? [{
         type: "view" as const, style: { flexDirection: "row", alignItems: "center", marginRight: -8 },
-        children: [...(message.meta?.relayFailed === true ? [] : [action("discard", t("chat.sendFailed.delete"), "trash", theme.colors.textMuted)]), action("retry", t("common.retry"), "refresh", theme.colors.accent, options.retryDisabled)],
+        children: [action("discard", t("chat.sendFailed.delete"), "trash", theme.colors.textMuted), action("retry", t("common.retry"), "refresh", theme.colors.accent, options.retryDisabled)],
       }] : []),
     ],
   };

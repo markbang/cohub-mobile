@@ -62,7 +62,7 @@ import type { LocalExecution } from "@/src/data/context";
 import type { LocalExecutionMenu } from "@/src/components/ExecutionHarnessMenu";
 import { SessionApprovals } from "@/src/components/SessionApprovals";
 import { useSpaceRuntime } from "@/src/data/use-space-runtime";
-import { harnessLabel, HttpError, isAgentTurn, type ApprovalMode, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
+import { harnessLabel, HttpError, isAgentTurn, type ApprovalMode, resolveWebBaseUrl, type SpaceRecord, type CohubClient, type ContentBlock, type LocalHarness, type MessageRecord, type ModelCatalogEntry, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
 import { appendVoiceText as appendDictation } from "@/src/data/voice-append";
 import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend, isSubmittingSend, mergeDisplayMessages, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, turnSequenceForMessage, withTurnSequences } from "@/src/data/session-history";
 import { useAppTheme, typography } from "@/src/theme";
@@ -78,7 +78,7 @@ import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLift
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, relayFailedMessage, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
@@ -658,8 +658,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const botLastTurn = useAppSelector(({ state }) => (botWork ? state.sessionLatestTurns[botWork.id] : null));
   // The Bot is typing while its working Chat runs.
   const botWorking = useAppSelector(({ state }) => botWork ? sessionListStatus(state.sessions.find((item) => item.id === botWork.id) ?? botWork, state.sessionLatestTurns[botWork.id], state.sessionTurnStatuses) === "running" : false);
-  // The user's message reaches the Bot in two steps; one whose second step failed stays here marked failed.
-  const [relayFailed, setRelayFailed] = useState<ReadonlySet<string>>(() => new Set());
   const spaceSessions = useAppSelector((app) => app.state.sessions.filter((item) => item.spaceId === spaceId), shallowEqual);
   const queuedFollowups = useMemo(() => queuedFollowupTurns(view.turns, view.stream?.turnId), [view.stream?.turnId, view.turns]);
   const queuedFollowupIds = useMemo(() => new Set(queuedFollowups.map((turn) => turn.id)), [queuedFollowups]);
@@ -672,7 +670,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     return () => cancelAnimationFrame(frame);
   }, [completeSendTransition, sendTransition, transitionQueueItem]);
   useEffect(() => { recordDebugEvent("chat.queue.state", { count: queuedFollowups.length, ids: queuedFollowups.map((turn) => chatScrollTrace.alias("turn", turn.id)) }); }, [queuedFollowups]);
-  const threadMessages = useMemo(() => {
+  const messages = useMemo(() => {
     if (pendingNew) return [pendingNew];
     const history = messagesFromTurns(view.turns);
     return messagesInWindow(withTurnSequences(
@@ -681,7 +679,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       view.turns,
     ), { turns: view.turns, hasMoreNewer: view.hasMoreNewer });
   }, [pendingNew, queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
-  const messages = useMemo(() => relayFailed.size ? threadMessages.map((message) => relayFailed.has(clientMessageIdOf(message) ?? "") ? relayFailedMessage(message, t("bots.relayFailed")) : message) : threadMessages, [relayFailed, t, threadMessages]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
@@ -1469,18 +1466,11 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     });
   };
 
-  // Step two of a send on a Bot's page: the note's words, as the server stored them, go to the Chat the Bot works in.
-  const relayToBotChat = async (clientMessageId: string) => {
-    setRelayFailed(withMember(clientMessageId, false));
-    const note = getAppState().sessionViews[sessionId]?.turns.find((turn) => turn.meta?.clientMessageId === clientMessageId);
-    try {
-      if (!client || !botChats?.session || !note) throw new Error(t("bots.relayFailed"));
-      const content = note.userContent?.length ? note.userContent : note.userText ? [{ type: "text" as const, text: note.userText }] : [];
-      // A steer the running Turn refuses stays queued for when that Turn ends; the page stays quiet.
-      await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel, contextWindow: botChats.contextWindow ?? BOT_CONTEXT_WINDOW });
-    } catch {
-      setRelayFailed(withMember(clientMessageId, true));
-    }
+  // A send on a Bot's page first hands the message to the Chat the Bot works in; its failure is the send's failure.
+  const relayToBotChat = async (content: ContentBlock[]) => {
+    if (!client || !botChats?.session) throw new Error(t("bots.relayFailed"));
+    // A steer the running Turn refuses stays queued for when that Turn ends; the page stays quiet.
+    await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel, contextWindow: botChats.contextWindow ?? BOT_CONTEXT_WINDOW });
   };
 
   const submit = () => {
@@ -1509,13 +1499,11 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
     recordDebugEvent("chat.send.composer_cleared");
     let optimisticCreated = false;
-    let noteId: string | null = null;
     sendMessage(sessionId, text, files, {
-      // On a Bot's page the words are written here as a note first, then handed to the Bot.
-      ...(bot ? { note: true } : { model: activeModel, harness, ...(execution ? { execution } : {}) }),
+      // On a Bot's page the words go to the Bot, then are written here as a note.
+      ...(bot ? { note: true, relay: relayToBotChat } : { model: activeModel, harness, ...(execution ? { execution } : {}) }),
       onOptimistic: (message) => {
         optimisticCreated = true;
-        if (bot) noteId = clientMessageIdOf(message);
         flight.inserted(message);
         if (!isOptimisticFollowup(message)) {
           cancelTurnScroll();
@@ -1523,10 +1511,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           requestFollowTail(!reducedMotion);
         }
       },
-    }).then(() => {
-      showSent();
-      if (noteId) void relayToBotChat(noteId);
-    }, (error: unknown) => {
+    }).then(showSent, (error: unknown) => {
       // Once the bubble exists it carries the failure and its retry.
       if (optimisticCreated) return;
       restoreComposer(text, files);
@@ -1535,13 +1520,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   };
 
   const retrySend = (message: MessageRecord) => {
-    // Already written here; only handing it to the Bot failed, so only that is redone.
-    const relayId = clientMessageIdOf(message);
-    if (message.meta?.relayFailed === true && relayId) {
-      haptics.commit();
-      void relayToBotChat(relayId);
-      return;
-    }
     const draft = failedSendDraft(message);
     if (!draft) return;
     if (!sessionId) {
@@ -1555,19 +1533,17 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     if (!getAppState().sessionViews[sessionId]?.historyLoaded) return;
     haptics.commit();
     let replaced = false;
-    let noteId: string | null = null;
     sendMessage(sessionId, draft.text, draft.attachments, {
-      ...(bot ? { note: true } : { model: draft.model, ...(draft.harness ? { harness: draft.harness } : {}) }),
+      ...(bot ? { note: true, relay: relayToBotChat } : { model: draft.model, ...(draft.harness ? { harness: draft.harness } : {}) }),
       retryOf: message,
       onOptimistic: (optimistic) => {
         replaced = true;
-        if (bot) noteId = clientMessageIdOf(optimistic);
         if (isOptimisticFollowup(optimistic)) return;
         cancelTurnScroll();
         setFollowingTail(true);
         requestFollowTail(!reducedMotion);
       },
-    }).then(() => { if (noteId) void relayToBotChat(noteId); }, (error: unknown) => {
+    }).catch((error: unknown) => {
       if (!replaced) showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
     });
   };
@@ -1657,7 +1633,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const writer = bot ? botMessageSpace(item, sequenceTurns?.[0] ?? messageTurn) : null;
     return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{writer
       ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} sender={botSender(botPeers, writer, spaceId, t("bots.otherBot"))} />
-      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={item.meta?.relayFailed === true ? undefined : discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
+      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
       : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
   }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, t, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
@@ -1848,19 +1824,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     /></MenuPresence>
     </GlassBackdrop>
   </Screen>;
-}
-
-function clientMessageIdOf(message: MessageRecord) {
-  return typeof message.meta?.clientMessageId === "string" ? message.meta.clientMessageId : null;
-}
-
-function withMember(id: string, member: boolean) {
-  return (current: ReadonlySet<string>): ReadonlySet<string> => {
-    const next = new Set(current);
-    if (member) next.add(id);
-    else next.delete(id);
-    return next;
-  };
 }
 
 /**
