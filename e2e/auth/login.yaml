@@ -57,7 +57,16 @@ name: Sign in on the dev tenant
     commands:
       - tapOn:
           point: "79%, 56%"
-# The password step only appears after the identifier is submitted.
+# The password step only appears after the identifier is submitted. The tenant may open on an emailed
+# code instead, which offers password sign-in as a switch.
+- extendedWaitUntil:
+    visible: "(Password|Sign in with password)"
+    timeout: 45000
+- runFlow:
+    when:
+      visible: "Sign in with password"
+    commands:
+      - tapOn: "Sign in with password"
 - extendedWaitUntil:
     visible: "Password"
     timeout: 45000
