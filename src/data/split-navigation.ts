@@ -1,3 +1,6 @@
+import { removeInternalExpoRouterParams } from "expo-router/build/navigationParams";
+import { RouterActionHandling, type NavigationAction, type NavigationState, type RouterActionResult } from "expo-router/build/react-navigation/routers/index";
+
 /**
  * The root navigator draws one navigation state two ways. A compact window keeps the phone's single
  * stack; a wide one puts the tab app (`routes[0]`) in a left pane and the routes above it in a right
@@ -76,4 +79,27 @@ export function chatOpenAction(mode: SplitMode, topRouteName: string | undefined
 /** The right pane's first screen has nothing to go back to inside the pane; `null` is outside it. */
 export function showsPaneBack(paneIndex: number | null): boolean {
   return paneIndex !== 0;
+}
+
+/**
+ * Drops a PUSH or NAVIGATE that repeats the route already on top, so a burst of taps on one row
+ * opens its screen once. Only the top is compared: unlike `singular`, an equal route deeper in the
+ * stack stays where it is. Expo Router's internal params are ignored; any user param that differs
+ * (a Chat opened at a turn) pushes as usual.
+ */
+export function dropRepeatedTopPush<State extends NavigationState>(state: State, action: NavigationAction): RouterActionResult<State> | RouterActionHandling.Delegate {
+  if (action.type !== "PUSH" && action.type !== "NAVIGATE") return RouterActionHandling.Delegate;
+  if (action.target !== undefined && action.target !== state.key) return RouterActionHandling.Delegate;
+  const payload = action.payload as { name?: unknown; params?: object; state?: unknown; __internal__PreviewKey?: unknown } | undefined;
+  const top = state.routes[state.index];
+  // A nested destination (a link into a tab) carries its own state, and a committed link preview
+  // owns a preloaded route; neither is a repeat of the top.
+  if (!top || payload?.name !== top.name || payload.state !== undefined || payload.__internal__PreviewKey !== undefined) return RouterActionHandling.Delegate;
+  return sameParams(removeInternalExpoRouterParams(top.params), removeInternalExpoRouterParams(payload.params)) ? { state, affectedRouteKey: top.key } : RouterActionHandling.Delegate;
+}
+
+function sameParams(a: object | undefined, b: object | undefined): boolean {
+  const left = Object.entries(a ?? {});
+  const right = new Map(Object.entries(b ?? {}));
+  return left.length === right.size && left.every(([key, value]) => right.has(key) && right.get(key) === value);
 }

@@ -1,4 +1,4 @@
-import { createNativeStackProps, createStandardRouterNavigator, IsWithinNativeNavigator, useRouter, type NativeStackNavigationOptions, type NavigatorContentProps } from "expo-router";
+import { createNativeStackProps, createStandardRouterNavigator, extendRouterActions, IsWithinNativeNavigator, useRouter, type NativeStackNavigationOptions, type NavigatorContentProps } from "expo-router";
 import { createStandardNativeStackNavigator, type NativeStackNavigatorCreateProps, type StandardNativeStackEventMap } from "expo-router/build/fork/native-stack/createNativeStackNavigator";
 // The router `Stack` itself uses: singular routes, the zoom-transition id, and previews on top of React Navigation's.
 import { StackRouter } from "expo-router/build/layouts/stack-router";
@@ -7,7 +7,7 @@ import { INTERNAL_EXPO_ROUTER_NO_ANIMATION_PARAM_NAME } from "expo-router/build/
 import { IsFocusedContext } from "expo-router/build/react-navigation/core/useIsFocused";
 import { use, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
-import { chatSessionId, focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
+import { chatSessionId, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
 import { useTranslation } from "@/src/i18n";
 import { PrimaryButton } from "@/src/ui";
 import { Mascot } from "@/src/ui/Mascot";
@@ -120,7 +120,7 @@ function EmptyPane() {
   </View>;
 }
 
-const SplitStackNavigator = createStandardRouterNavigator(SplitStackContent, StackRouter, {
+const SplitStackNavigator = createStandardRouterNavigator(SplitStackContent, extendRouterActions(StackRouter, dropRepeatedTopPush), {
   activityDefaultThreshold: 2,
   createProps: createNativeStackProps,
 });
