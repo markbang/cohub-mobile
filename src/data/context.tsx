@@ -2037,6 +2037,14 @@ export function AppProvider({
     );
     const stopPersisted = sessionClient.subscribe({
       event: (event) => {
+        if (event.type === "session.turn.created") {
+          // A note is complete when written and never finalizes, so only its creation brings its Turn (and the
+          // origin that marks a Bot's `say`) to an open Chat. Before the first page lands the Turn would stand in
+          // for the cached thread; that page brings it instead.
+          const turn = (event.payload as { turn?: SessionTurnRecord }).turn;
+          if (turn?.executionKind === "note" && typeof turn.id === "string" && Number.isSafeInteger(turn.sequence) && stateRef.current.sessionViews[sessionId]?.historyLoaded) dispatch({ type: "turn-upsert", sessionId, turn });
+          return;
+        }
         if (event.type !== "session.updated") return;
         const currentSummary = stateRef.current.sessions.find((item) => item.id === sessionId);
         const current = stateRef.current.sessionViews[sessionId]?.session
