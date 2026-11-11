@@ -37,6 +37,14 @@ export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "meta"
   return turn?.executionKind === "note" && readSessionTurnOrigin(turn.meta) !== null;
 }
 
+/**
+ * A row on a Bot's page: its Turn decides once loaded. Before that, a cached row still carries the Turn's meta
+ * (`messagesFromTurns` copies it), origin included; a Bot's page holds only notes, so the origin marks the Bot's.
+ */
+export function isBotSaidMessage(message: Pick<MessageRecord, "meta">, turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined) {
+  return turn ? isBotSaid(turn) : readSessionTurnOrigin(message.meta) !== null;
+}
+
 /** The newest thing the Bot said in a page of the user's Chat, as a Bots row shows it. */
 export type BotNote = { text: string; at: string; messageId: string };
 
