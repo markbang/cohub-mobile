@@ -36,7 +36,7 @@ export function useBots(enabled: boolean) {
     const chatId = files[index]?.chat?.id;
     return {
       queryKey: [`chats:bots:${space.id}:said:${chatId}`],
-      queryFn: async (): Promise<BotNote | null> => latestBotNote((await client!.space(space.id).session(chatId!).turns.listPaginated({ limit: 20 })).turns),
+      queryFn: async (): Promise<BotNote | null> => latestBotNote((await client!.space(space.id).session(chatId!).turns.listPaginated({ limit: 20 })).turns, space.id),
       enabled: active && Boolean(chatId),
       refetchInterval: POLL_MS,
     };

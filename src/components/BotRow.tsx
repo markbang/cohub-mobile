@@ -23,7 +23,10 @@ export function BotRow({ entry, onPress }: { entry: BotEntry<SpaceRecord>; onPre
   const age = useRelativeTime(note?.at ?? space.lastActivityAt);
   // Unread is the device's record of when the user's Chat with this Bot was last open, as for any Chat.
   const unread = useAppSelector((app) => note && chatId ? isSessionUnread({ id: chatId, lastMessageId: note.messageId, lastMessageAt: note.at }, app.sessionSeen) : false);
-  const preview = note ? previewText(note.text) : "";
+  // Another Bot's message reads as theirs, as in a group chat's preview.
+  const writer = useAppSelector((app) => note?.from ? app.state.spaces.find((item) => item.id === note.from) ?? null : null);
+  const text = note ? previewText(note.text) : "";
+  const preview = note?.from && text ? t("bots.preview.from", { name: writer ? displaySpaceName(writer) : t("bots.otherBot"), text }) : text;
   // Working is the avatar's ring, as on a running Chat's row, and needing the user a chip on the name's line,
   // so the preview keeps the whole second line.
   return <ListRow

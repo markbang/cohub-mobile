@@ -7,7 +7,7 @@ import { BotTitle } from "@/src/components/BotTitle";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
-import { BOT_BUBBLE_INSET, botPlacements, isBotSaid, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botNoteSpace, botPlacements, botSender, type BotPeer } from "@/src/data/bot-mode";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -34,7 +34,8 @@ export default function DebugChatScreen() {
   const messages = useMemo(() => conversation(fixture), [fixture]);
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
-  const placements = useMemo(() => botPlacements(messages, (message) => message.role !== "user" || isBotSaid(botTurns.get(String(message.meta?.turnId)))), [botTurns, messages]);
+  const writerOf = (message: MessageRecord) => botNoteSpace(botTurns.get(String(message.meta?.turnId)));
+  const placements = botPlacements(messages, writerOf);
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
@@ -82,9 +83,10 @@ export default function DebugChatScreen() {
         key={fixture}
         ref={timelineRef}
         sessionId={`debug-${fixture}`}
-        spaceId=""
+        spaceId={bot ? BOT_SPACE_ID : ""}
         client={null}
         bot={bot}
+        botPeers={BOT_PEERS}
         messages={messages}
         turnsById={botTurns}
         turnsBySequence={NO_TURN_SEQUENCES}
@@ -133,7 +135,7 @@ export default function DebugChatScreen() {
           // The Chat screen's Bot rows: the time above, the gap where the side changes, then the bubble.
           ? <View style={placements[index]?.gap ? { paddingTop: placements[index].gap } : undefined}>
             {placements[index]?.time ? <BotTimeDivider at={placements[index].time} /> : null}
-            {isBotSaid(botTurns.get(String(item.meta?.turnId))) ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
+            {writerOf(item) ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} sender={writerOf(item) === BOT_SPACE_ID ? null : botSender(BOT_PEERS, writerOf(item)!, "Another Bot")} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
           </View>
           : <MessageBubble message={item} availableWidth={width} />}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
@@ -152,17 +154,21 @@ export default function DebugChatScreen() {
 // Full width: Android's accessibility dump leaves out a view too small to see.
 const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height: 8 } as const;
 
-type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** A Bot page's `say`, at minutes from today 08:00. */ bot?: boolean; at?: number };
+type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** On a Bot's page: which Bot wrote the note (none for the user's), at minutes from today 08:00. */ bot?: "self" | "peer" | "stranger"; at?: number };
 
 const BOT: BotPeer = { name: "Chief of staff", avatarUrl: null };
 // The origin the server records on a `say` note; it is read only when its ids are UUIDs.
 const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
+const BOT_SPACE_ID = BOT_SAY_ORIGIN.spaceId;
+// Another Bot the app has loaded, and one it has not.
+const BOT_WRITERS = { self: BOT_SPACE_ID, peer: "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8", stranger: "7c1d3e5f-8091-4b2c-8d3e-4f5061728394" } as const;
+const BOT_PEERS: ReadonlyMap<string, BotPeer> = new Map([[BOT_WRITERS.peer, { name: "Cohub", avatarUrl: null }]]);
 
 /** The `say` Turn behind each of the Bot's lines, so both timelines put them on its side. */
 function botSayTurns(messages: readonly MessageRecord[]): ReadonlyMap<string, SessionTurnRecord> {
-  return new Map(messages.filter((message) => message.meta?.bot === true).map((message) => {
+  return new Map(messages.filter((message) => typeof message.meta?.writer === "string").map((message) => {
     const id = String(message.meta?.turnId);
-    return [id, { id, sequence: message.sequence, executionKind: "note", status: "completed", meta: { origin: BOT_SAY_ORIGIN } } as unknown as SessionTurnRecord];
+    return [id, { id, sequence: message.sequence, executionKind: "note", status: "completed", meta: { origin: { ...BOT_SAY_ORIGIN, spaceId: message.meta?.writer } } } as unknown as SessionTurnRecord];
   }));
 }
 
@@ -204,13 +210,15 @@ const SCRIPTS: Record<Fixture, Line[]> = {
   ],
   bot: [
     { role: "user", text: "Remind me about the board deck tomorrow.", at: -11 * 60 },
-    { role: "user", text: "Hey, what needs my attention today?", bot: false, at: -2 },
-    { role: "user", text: "GM! Can I get your approval for the board deck review at 2pm?", bot: true, at: 0 },
-    { role: "user", text: "Updated the numbers based on today's pull from Salesforce, Mercury, QuickBooks, and Hex.", bot: true, at: 0 },
+    { role: "user", text: "Hey, what needs my attention today?", at: -2 },
+    { role: "user", text: "GM! Can I get your approval for the board deck review at 2pm?", bot: "self", at: 0 },
+    { role: "user", text: "Updated the numbers based on today's pull from Salesforce, Mercury, QuickBooks, and Hex.", bot: "self", at: 0 },
     { role: "user", text: "Can you add a slide for headcount and pull from Rippling", at: 3 },
-    { role: "user", content: [{ type: "text", text: "Pulled and added" }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC")], bot: true, at: 6 },
+    { role: "user", content: [{ type: "text", text: "Pulled and added" }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC")], bot: "self", at: 6 },
+    { role: "user", text: "Chief of staff asked me to check the deck. The headcount slide matches Rippling.", bot: "peer", at: 7 },
+    { role: "user", text: "The offsite receipts are coded.", bot: "stranger", at: 8 },
     { role: "user", text: "Looks good, send it to the team", at: 40 },
-    { role: "user", text: "Sent. Overnight there were 41 new emails: 6 needed you and are in your inbox, 3 invoices went to Expense Manager, 2 intros are connected, and 1 bug report went to Bug Triager. Nothing else is waiting on you before the review.", bot: true, at: 41 },
+    { role: "user", text: "Sent. Overnight there were 41 new emails: 6 needed you and are in your inbox, 3 invoices went to Expense Manager, 2 intros are connected, and 1 bug report went to Bug Triager. Nothing else is waiting on you before the review.", bot: "self", at: 41 },
   ],
   states: [
     { role: "user", text: "A message that sent normally." },
@@ -233,7 +241,7 @@ function conversation(fixture: Fixture): MessageRecord[] {
       model: line.role === "assistant" ? "claude-sonnet" : null,
       stopReason: "stop", errorMessage: line.error ?? null,
       usage: line.role === "assistant" ? { input: 1200, output: 240, cacheRead: 300, cacheWrite: 0, totalTokens: 1740 } : null,
-      meta: line.at === undefined ? { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn } : { turnId: `debug-${fixture}-turn-${index + 1}`, turnSequence: index + 1, bot: line.bot === true }, authorUuid: null, authorProfile: null,
+      meta: line.at === undefined ? { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn } : { turnId: `debug-${fixture}-turn-${index + 1}`, turnSequence: index + 1, ...(line.bot ? { writer: BOT_WRITERS[line.bot] } : {}) }, authorUuid: null, authorProfile: null,
       startedAt: null, completedAt: null, durationMs: 4200,
       createdAt: new Date(line.at === undefined ? start + index * 60_000 : today.getTime() + line.at * 60_000).toISOString(),
     } as MessageRecord;

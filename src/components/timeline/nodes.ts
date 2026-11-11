@@ -23,8 +23,8 @@ import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { curves, loops } from "@/src/motion";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, typography, type AppTheme } from "@/src/theme";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
-import { contentText, hasRenderableContent, messageText } from "@/src/utils";
-import { BOT_BUBBLE_INSET, botReplyBlocks, type BotPlacement } from "@/src/data/bot-mode";
+import { contentText, hasRenderableContent, initials, messageText } from "@/src/utils";
+import { BOT_BUBBLE_INSET, BOT_SENDER_AVATAR_SIZE, botReplyBlocks, type BotPlacement, type BotSender } from "@/src/data/bot-mode";
 
 const MD4C_FLAGS = { underline: false, superscript: false, subscript: false, latexMath: true, highlight: false, hardSoftBreaks: false, preserveBlankLines: false, admonitions: true };
 const TOOL_DETAILS_MAX_HEIGHT = 420;
@@ -477,8 +477,15 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
-/** `BotNoteBubble`: what the Bot said with `say`, its words and images on the left. */
-export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages): TimelineNode | null {
+/** `Avatar`'s shape, for another Bot's face above its bubble. */
+function botAvatar(ctx: NodeContext, peer: Pick<BotSender, "name" | "avatarUrl">, size: number): TimelineNode {
+  const shape = { width: size, height: size, borderRadius: size * 0.3 };
+  if (peer.avatarUrl) return { type: "image", uri: imageThumbnailUrl(peer.avatarUrl, size, PixelRatio.get()), fallbackUri: peer.avatarUrl, style: { ...shape, backgroundColor: color(ctx.theme.colors.surfaceRaised) } };
+  return { type: "view", style: { ...shape, alignItems: "center", justifyContent: "center", backgroundColor: color(ctx.theme.colors.accentSoft) }, children: [text(initials(peer.name), textStyle("micro", ctx.theme.colors.accent, { fontSize: 12, lineHeight: 14 }))] };
+}
+
+/** `BotNoteBubble`: what a Bot wrote, its words and images on the left; another Bot's (`sender`) has its face and name above. */
+export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages, sender: BotSender | null): TimelineNode | null {
   const { theme } = ctx;
   const maxWidth = getBubbleMaxWidth(ctx.width);
   const width = maxWidth - BUBBLE_PADDING_X * 2;
@@ -487,9 +494,13 @@ export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxIma
     ? contentNodes(ctx, message.id, blocks, { width, color: ctx.theme.colors.assistantBubbleText, onSurface: true, sandboxImages })
     : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, width, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
   if (body.length === 0) return null;
+  const header: TimelineNode[] = sender ? [{
+    type: "view", style: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
+    children: [...(sender.known ? [botAvatar(ctx, sender, BOT_SENDER_AVATAR_SIZE)] : []), text(sender.name, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } })],
+  }] : [];
   return {
-    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, flexDirection: "row" },
-    children: [{
+    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, alignItems: "flex-start" },
+    children: [...header, {
       type: "view", style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
       children: body,
     }],

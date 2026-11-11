@@ -20,9 +20,9 @@ export default function DebugBotListScreen() {
 
 function fixtureEntries(now: number): BotEntry<SpaceRecord>[] {
   const ago = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
-  const entry = (id: string, name: string, minutes: number, text: string, state: Partial<Pick<BotEntry<SpaceRecord>, "running" | "needsYou">> = {}): BotEntry<SpaceRecord> => ({
+  const entry = (id: string, name: string, minutes: number, text: string, state: Partial<Pick<BotEntry<SpaceRecord>, "running" | "needsYou">> & { from?: string } = {}): BotEntry<SpaceRecord> => ({
     space: { id, slug: id === "primary" ? PRIMARY_BOT_SLUG : `${PRIMARY_BOT_SLUG}-${id}`, name, title: name, publicProfile: null, lastActivityAt: ago(minutes), updatedAt: ago(minutes) } as unknown as SpaceRecord,
-    note: { text, at: ago(minutes), messageId: `${id}:user` },
+    note: { text, at: ago(minutes), messageId: `${id}:user`, from: state.from ?? null },
     chatId: null,
     running: state.running ?? false,
     needsYou: state.needsYou ?? false,
@@ -32,7 +32,8 @@ function fixtureEntries(now: number): BotEntry<SpaceRecord>[] {
     entry("sales", "Sales Outbound", 20, "Outreach drafts queued for approval.", { running: true }),
     entry("talent", "Talent Scout", 45, "Shortlist of 6 candidates ready.", { needsYou: true }),
     entry("growth", "Growth Marketer with a name long enough to truncate", 90, "A/B copy variants ready to review, with a preview long enough to need truncating on one line."),
-    entry("support", "Customer Support", 26 * 60, "12 tickets resolved, 2 escalated."),
+    // From another Bot whose Space this fixture has not loaded, so its name falls back.
+    entry("support", "Customer Support", 26 * 60, "12 tickets resolved, 2 escalated.", { from: "primary" }),
     entry("expense", "Expense Manager", 3 * 24 * 60, "Receipts coded — one needs a look."),
   ];
 }

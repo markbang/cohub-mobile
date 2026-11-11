@@ -29,23 +29,39 @@ export function isBotSpace(space: { slug?: string | null } | null | undefined) {
 }
 
 /**
- * The Bot's `say`: a note written into the user's Chat from one of its working Turns, which the server
- * records as the note's `meta.origin`. The user's own notes have none. `sourceTurnId` cannot tell them
- * apart: the timeline fills it with each Turn's own id.
+ * The Space of the Bot that wrote a note into a Bot's Chat, which the server records as the note's `meta.origin`:
+ * the Bot's own for its `say`, another Bot's for its `tell`. The user's own notes have none. `sourceTurnId`
+ * cannot tell them apart: the timeline fills it with each Turn's own id.
  */
-export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined) {
-  return turn?.executionKind === "note" && readSessionTurnOrigin(turn.meta) !== null;
+export function botNoteSpace(turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined): string | null {
+  return turn?.executionKind === "note" ? readSessionTurnOrigin(turn.meta)?.spaceId ?? null : null;
 }
 
-/** The newest thing the Bot said in a page of the user's Chat, as a Bots row shows it. */
-export type BotNote = { text: string; at: string; messageId: string };
+/** A note a Bot wrote, this one or another: it sits on the Bots' side. */
+export function isBotSaid(turn: Pick<SessionTurnRecord, "executionKind" | "meta"> | null | undefined) {
+  return botNoteSpace(turn) !== null;
+}
 
-export function latestBotNote(turns: readonly SessionTurnRecord[]): BotNote | null {
+/** Another Bot that wrote on this Bot's page; `known` is false when its Space is not loaded, so only a generic name shows. */
+export type BotSender = { name: string; avatarUrl: string | null; known: boolean };
+/** The face beside another Bot's name above its bubble. */
+export const BOT_SENDER_AVATAR_SIZE = 20;
+
+export function botSender(peers: ReadonlyMap<string, BotPeer>, spaceId: string, unknownName: string): BotSender {
+  const peer = peers.get(spaceId);
+  return peer ? { ...peer, known: true } : { name: unknownName, avatarUrl: null, known: false };
+}
+
+/** The newest thing a Bot said in a page of the user's Chat, as a Bots row shows it; `from` is another Bot's Space. */
+export type BotNote = { text: string; at: string; messageId: string; from: string | null };
+
+export function latestBotNote(turns: readonly SessionTurnRecord[], spaceId: string): BotNote | null {
   const turn = turns.filter(isBotSaid).reduce<SessionTurnRecord | null>((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, null);
   if (!turn) return null;
   const text = turn.userText ?? botReplyBlocks(turn.userContent).flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
+  const from = botNoteSpace(turn);
   // The id the Chat's messages carry, so read state compares like any Chat's.
-  return { text, at: turn.createdAt, messageId: `${turn.id}:user` };
+  return { text, at: turn.createdAt, messageId: `${turn.id}:user`, from: from === spaceId ? null : from };
 }
 
 /** What reaches the Bot's working Chat: the user's message with the bot mod's reminder after a blank line. */
@@ -86,20 +102,21 @@ export function botEntries<P extends BotSpace>(spaces: readonly P[], bots: Reado
 export const BOT_TIME_GAP_MS = 15 * 60_000;
 /** Each bubble row's own top and bottom padding on a Bot's page, so two bubbles from one side sit 4 apart. */
 export const BOT_BUBBLE_INSET = 2;
-/** Added above a bubble whose side differs from the one before it: 4 + 8 = 12 between them. */
+/** Added above a bubble whose writer differs from the one before it: 4 + 8 = 12 between them. */
 export const BOT_TURN_GAP = 8;
 
 /** Where a message sits on a Bot's page: the time row above it, if any, and the space added above it otherwise. */
 export type BotPlacement = { time: string | null; gap: number };
 
-export function botPlacements<M extends { createdAt?: string | null }>(messages: readonly M[], fromBot: (message: M) => boolean): BotPlacement[] {
-  let previous: { at: number; bot: boolean } | null = null;
+/** `writer` is the Space of the Bot that wrote a message, or null for the user. */
+export function botPlacements<M extends { createdAt?: string | null }>(messages: readonly M[], writer: (message: M) => string | null): BotPlacement[] {
+  let previous: { at: number; writer: string | null } | null = null;
   return messages.map((message) => {
     const at = Date.parse(message.createdAt ?? "");
-    const bot = fromBot(message);
+    const by = writer(message);
     const time = Number.isFinite(at) && (!previous || !Number.isFinite(previous.at) || at - previous.at >= BOT_TIME_GAP_MS || new Date(at).toDateString() !== new Date(previous.at).toDateString()) ? message.createdAt! : null;
-    const gap = time || !previous || previous.bot === bot ? 0 : BOT_TURN_GAP;
-    previous = { at, bot };
+    const gap = time || !previous || previous.writer === by ? 0 : BOT_TURN_GAP;
+    previous = { at, writer: by };
     return { time, gap };
   });
 }

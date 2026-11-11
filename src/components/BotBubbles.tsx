@@ -4,17 +4,21 @@ import { Text, View } from "react-native";
 import Animated, { useReducedMotion } from "react-native-reanimated";
 import { BubbleContentWidth } from "@/src/components/BubbleText";
 import { BubbleContext, MessageContent } from "@/src/components/MessageContent";
-import { BOT_BUBBLE_INSET, botReplyBlocks } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, BOT_SENDER_AVATAR_SIZE, botReplyBlocks, type BotSender } from "@/src/data/bot-mode";
 import { formatThreadTime } from "@/src/data/chat-format";
 import { useTranslation } from "@/src/i18n";
 import { getActiveLocale } from "@/src/i18n/core";
 import { loops } from "@/src/motion";
 import { useAppTheme } from "@/src/theme";
+import { Avatar } from "@/src/ui";
 import { BUBBLE_PADDING_X, getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 
-/** What the Bot said with `say`: its words and images, on the left like a messaging app. `nodes.ts` draws the same row for the native timeline. */
-export function BotNoteBubble({ message, spaceId, availableWidth }: { message: MessageRecord; spaceId: string | null; availableWidth?: number }) {
+/**
+ * What a Bot wrote: its words and images, on the left like a messaging app. Another Bot's message (`sender`) carries its
+ * face and name above the bubble. `nodes.ts` draws the same row for the native timeline.
+ */
+export function BotNoteBubble({ message, spaceId, availableWidth, sender = null }: { message: MessageRecord; spaceId: string | null; availableWidth?: number; sender?: BotSender | null }) {
   const theme = useAppTheme();
   const paneWidth = usePaneWidth();
   const maxWidth = getBubbleMaxWidth(availableWidth ?? paneWidth);
@@ -22,7 +26,11 @@ export function BotNoteBubble({ message, spaceId, availableWidth }: { message: M
   const blocks = botReplyBlocks(message.content);
   const content: ContentBlock[] = blocks.length ? blocks : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
   if (content.length === 0) return null;
-  return <View className="w-full flex-row px-3" style={{ paddingVertical: BOT_BUBBLE_INSET }}>
+  return <View className="w-full items-start px-3" style={{ paddingVertical: BOT_BUBBLE_INSET }}>
+    {sender ? <View className="mb-1 max-w-full flex-row items-center gap-1.5">
+      {sender.known ? <Avatar name={sender.name} uri={sender.avatarUrl} size={BOT_SENDER_AVATAR_SIZE} /> : null}
+      <Text numberOfLines={1} className="shrink text-caption text-fg-muted">{sender.name}</Text>
+    </View> : null}
     <BubbleContext.Provider value={environment}><BubbleContentWidth.Provider value={Math.max(0, maxWidth - BUBBLE_PADDING_X * 2)}>
       <View className="min-w-0 bg-assistant-bubble" style={{ maxWidth, borderRadius: theme.radius.md, borderCurve: "continuous", paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 }}>
         <MessageContent content={content} color={theme.colors.assistantBubbleText} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} sandboxImages />
