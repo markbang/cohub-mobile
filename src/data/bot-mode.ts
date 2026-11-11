@@ -1,5 +1,5 @@
 import { isModelThinkingLevel, readSessionTurnOrigin, type ContentBlock, type MessageRecord, type SessionRecord, type SessionTurnRecord, type SpaceRecord } from "@neta-art/cohub";
-import type { ChatModelSelection } from "./types";
+import type { ChatModelCatalogItem, ChatModelSelection } from "./types";
 
 export const PRIMARY_BOT_SLUG = "cohubbot";
 
@@ -87,6 +87,17 @@ export function botModelFrom(raw: Record<string, unknown> | null | undefined): C
 export function botContextWindowFrom(raw: Record<string, unknown> | null | undefined): number | null {
   const value = raw?.contextWindow;
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+/**
+ * The window a Bot's turns get: its saved choice capped at its model's window, as the platform caps a prompt's.
+ * A model the catalog does not have, or one whose window is only the platform's assumption, caps nothing.
+ */
+export function botContextWindow(saved: number, model: ChatModelSelection | null | undefined, models: readonly ChatModelCatalogItem[]): number {
+  const entry = model ? models.find((item) => item.provider === model.provider && item.id === model.id)?.model : null;
+  // The platform's cap comes first: the user's own catalog may set `contextWindow` below it.
+  const limit = entry?.contextWindowSource === "default" ? null : entry?.contextWindowLimit ?? entry?.contextWindow;
+  return typeof limit === "number" && limit > 0 ? Math.min(saved, limit) : saved;
 }
 
 /** The model a Turn ran with, for a Bot page with no saved choice: its working Chat is the truth. */

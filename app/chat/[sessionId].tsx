@@ -78,7 +78,7 @@ import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLift
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botContextWindow, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
@@ -1470,7 +1470,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const relayToBotChat = async (content: ContentBlock[]) => {
     if (!client || !botChats?.session) throw new Error(t("bots.relayFailed"));
     // A steer the running Turn refuses stays queued for when that Turn ends; the page stays quiet.
-    await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel, contextWindow: botChats.contextWindow ?? BOT_CONTEXT_WINDOW });
+    await relayToBot(client, { spaceId, sessionId: botChats.session.id, content, reminder: await loadBotReminder(client), model: activeModel, contextWindow: botContextWindow(botChats.contextWindow ?? BOT_CONTEXT_WINDOW, activeModel, models) });
   };
 
   const submit = () => {
