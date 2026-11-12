@@ -211,12 +211,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-apk"
-          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName' | while read -r candidate; do
-            if gh release view "$candidate" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Eq '^cohub-v.+-android-arm64-v8a\.apk$'; then
-              printf '%s\n' "$candidate"
-              break
-            fi
-          done)
+          # One query, no pipe: `grep -q` exits on its match, gh dies of SIGPIPE on its next line, and
+          # pipefail turned that match into a miss, so an older release's runtime was used.
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select((.draft or .prerelease) | not) | select(any(.assets[].name; test("^cohub-v.+-android-arm64-v8a\\.apk$")))] | sort_by(.created_at) | last | .tag_name // empty')
           if [[ -z "$tag" ]]; then
             echo "No Android APK has been published. Build one OTA-capable APK with Native Release first; JS-only changes can OTA after that."
             exit 1
@@ -382,12 +379,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-ipa"
-          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[].tagName' | while read -r candidate; do
-            if gh release view "$candidate" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq 'cohub-ios-native-fingerprint.txt'; then
-              printf '%s\n' "$candidate"
-              break
-            fi
-          done)
+          # One query, no pipe, as for Android.
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select((.draft or .prerelease) | not) | select(any(.assets[].name; . == "cohub-ios-native-fingerprint.txt"))] | sort_by(.created_at) | last | .tag_name // empty')
           if [[ -z "$tag" ]]; then
             echo "No iOS OTA fingerprint has been published. Ship one OTA-capable TestFlight build with Native Release (platform=ios, profile=production, submit=true) first; JS-only changes can OTA after that."
             exit 1
