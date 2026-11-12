@@ -30,7 +30,7 @@ import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
-import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botSender, isBotSpace, latestBotNote, pinnedBotEntries, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
+import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botExchange, botExchangeText, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botVoice, isBotSpace, latestBotNote, pinnedBotEntries, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
@@ -1919,6 +1919,38 @@ try {
   bot.press.onAccessibilityAction({ nativeEvent: { actionName: "togglePin" } });
   assert.deepEqual(toggled, ["bot"]);
   assert.equal(read(PRIMARY_BOT_SLUG).press.accessibilityActions, undefined, "the primary Bot's place is not a pin, so it offers none");
+}
+{
+  // A message between Bots says who told whom in the Bots list and on the Bot's page, in both timelines; it is two lines until tapped.
+  const peerId = "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8";
+  const t = (key, params) => params ? `${key}(${Object.values(params).join(", ")})` : key;
+  const flat = (value) => value.replace(/\s+/g, " ");
+  const previewOf = (note) => chromeNodes(loadChromeComponent("../src/components/BotRow.tsx", "BotRow", { ...chromeScope, ...appHooks(() => ({ state: { spaces: [{ id: peerId, name: "Writer" }] } })), useTranslation: () => ({ t }), useBot: () => ({ name: "Cohub", primary: false, unread: false, press: {}, menu: (view) => view }), useRelativeTime: () => "now", previewText: flat, displaySpaceName: (space) => space.name, BOT_ROW_AVATAR_SIZE: 52, Avatar: "Avatar", PrimaryStar: "PrimaryStar" })({ entry: { space: { id: "bot" }, note: { text: "Deck sent.", at: "", messageId: "m", ...note }, running: false, needsYou: false }, onPress: () => {} })).find((node) => node.type === "ListRow").props.subtitle;
+  assert.deepEqual([previewOf({ from: peerId }), previewOf({ from: null, to: peerId }), previewOf({ from: "gone" }), previewOf({ from: null })], ["bots.preview.from(Writer, Deck sent.)", "bots.preview.to(Writer, Deck sent.)", "bots.preview.from(bots.otherBot, Deck sent.)", "Deck sent."]);
+
+  const bot = { name: "Cohub", avatarUrl: null };
+  const peer = { name: "Writer", avatarUrl: null };
+  const exchange = (outgoing) => ({ peer: peerId, outgoing, content: [{ type: "text", text: "Check the deck.\n\nThen report." }] });
+  let open = false;
+  const opened = [];
+  const row = (props) => chromeNodes(loadChromeComponent("../src/components/BotBubbles.tsx", "BotExchangeRow", { ...chromeScope, useTranslation: () => ({ t }), useState: () => [open, (next) => { open = next(open); }], useMemo: (make) => make(), getBubbleMaxWidth: (width) => width, previewText: flat, botExchangeText, BOT_EXCHANGE_AVATAR_SIZE: 20, BOT_EXCHANGE_PREVIEW: 280, BOT_BUBBLE_INSET, Avatar: "Avatar", AppIcon: "AppIcon", MessageContent: "MessageContent", BubbleContext: { Provider: "BubbleContext" }, BubbleContentWidth: { Provider: "BubbleContentWidth" } })({ bot, peer, spaceId: null, onOpenBot: (id) => opened.push(id), ...props }));
+  const closed = row({ exchange: exchange(false) });
+  const words = (node) => [node.props.children].flat().join("");
+  const lines = closed.filter((node) => node.type === "Text").map((node) => [words(node), node.props.numberOfLines]);
+  assert.deepEqual(lines, [["bots.exchange(Writer, Cohub)", 1], ["Check the deck. Then report.", 2]], "who told whom, then two lines of what was said");
+  const [whole, face] = closed.filter((node) => node.type === "Pressable");
+  face.props.onPress();
+  whole.props.onPress();
+  assert.deepEqual([opened, open, whole.props.accessibilityState], [[peerId], true, { expanded: false }], "the face opens the other Bot; a tap opens the message");
+  const openRow = row({ exchange: exchange(true) });
+  assert.deepEqual([openRow.find((node) => node.type === "MessageContent").props.content[0].text, words(openRow.find((node) => node.type === "Text"))], ["Check the deck.\n\nThen report.", "bots.exchange(Cohub, Writer)"], "opened, it shows the whole message; one this Bot sent reads the other way round");
+  assert.equal(row({ exchange: exchange(false), peer: null }).filter((node) => node.type === "Pressable").length, 1, "a Bot whose Space is not loaded has a face that opens nothing");
+
+  const text = (value, _style, options) => ({ type: "text", value, ...options });
+  const node = (expanded, known = peer) => loadChromeComponent("../src/components/timeline/nodes.ts", "botExchangeNode", { getBubbleMaxWidth: (width) => width, previewText: flat, botExchangeText, BOT_EXCHANGE_AVATAR_SIZE: 20, BOT_EXCHANGE_PREVIEW: 280, BOT_BUBBLE_INSET, STEP_RULE: 1, color: (value) => value, text, textStyle: () => ({}), icon: (name) => ({ type: "icon", name }), botAvatar: () => ({ type: "avatar" }), contentNodes: (_ctx, scope, content) => [{ type: "content", scope, content }] })({ theme: { colors: {} }, t, width: 390, expanded: new Set(expanded) }, "m1", exchange(false), bot, known, {}).children[0];
+  const [head, body] = node([]).children;
+  assert.deepEqual([node([]).action, node([]).payload, head.children[0].action, head.children[0].payload, head.children[1].value, head.children[2].name, body.children[0].value, body.children[0].numberOfLines], ["toggle", { id: "exchange:m1" }, "openBot", { spaceId: peerId }, "bots.exchange(Writer, Cohub)", "chevron-right", "Check the deck. Then report.", 2], "the native timeline draws the same row");
+  assert.deepEqual([node(["exchange:m1"]).children[1].children[0].type, node(["exchange:m1"]).accessibilityState, node([], null).children[0].children[0].action], ["content", { expanded: true }, undefined]);
 }
 const fadeAnimation = { duration: () => fadeAnimation };
 const renderConnectionBanner = loadChromeComponent("../src/ui.tsx", "ConnectionBanner", { ...chromeScope, Animated: { View: "Animated.View" }, FadeIn: fadeAnimation, FadeOut: fadeAnimation, motion: { fade: { duration: 150 } }, useOutageAnnouncement: () => undefined, useDelayedStatus: (_key, value) => value });
@@ -4108,7 +4140,7 @@ const liveRowScope = {
   listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
-  bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botSender, t: (key) => key, BotNoteBubble: "BotNoteBubble", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
+  bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botExchange, openPeerBot: () => {}, BotNoteBubble: "BotNoteBubble", BotExchangeRow: "BotExchangeRow", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
 const compileRenderMessage = (scope) => new Function(...Object.keys(scope), ts.transpileModule(`return (${renderMessageSource});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(scope));
 const renderLiveRow = compileRenderMessage(liveRowScope);
@@ -4124,18 +4156,25 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
 }
 const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
 const PEER_SPACE_ID = "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8";
-// A Bot's page: what the Bot `say`s sits on its side; another Bot's `tell` too, under its name; the user's notes stay the user's. Ordinary Chats unchanged.
+// A Bot's page: what the Bot `say`s sits on its side; a message between Bots is its own row; the user's notes stay the user's. Ordinary Chats unchanged.
 {
   const said = { id: "said", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "said", meta: { origin: BOT_SAY_ORIGIN } };
   const told = { id: "told", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "told", meta: { origin: { ...BOT_SAY_ORIGIN, spaceId: PEER_SPACE_ID } } };
   const typed = { id: "typed", sequence: 1, status: "completed", executionKind: "note", sourceTurnId: "typed", meta: { clientMessageId: "c1" } };
-  const row = (bot, turn, meta = {}, botLayout = null, botPeers = new Map()) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, botLayout, botPeers, spaceId: BOT_SAY_ORIGIN.spaceId, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
+  const row = (bot, turn, meta = {}, botLayout = null, botPeers = new Map()) => chromeNodes(compileRenderMessage({ ...liveRowScope, bot, botLayout, botPeers, spaceId: BOT_SAY_ORIGIN.spaceId, client: null, streamTurnId: null, replyAnchor: null, turnsBySequence: new Map([[1, [turn]]]), turnsById: new Map([[turn.id, turn]]), TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} })({ item: { id: `${turn.id}:user`, role: "user", text: turn.userText ?? "Deck checked.", content: [], meta: { turnSequence: 1, turnId: turn.id, ...turn.meta, ...meta } }, index: 0 }));
   const bot = { name: "Cohub", avatarUrl: null };
   const botNote = row(bot, said).find((node) => node.type === "BotNoteBubble");
-  assert.ok(botNote && botNote.props.sender === null && !row(bot, said).some((node) => node.type === "MessageBubble"), "a `say` note is the Bot's bubble, without a face or name");
-  const toldBy = (peers) => row(bot, told, {}, null, peers).find((node) => node.type === "BotNoteBubble")?.props.sender;
-  assert.deepEqual(toldBy(new Map([[PEER_SPACE_ID, { name: "Cohub", avatarUrl: "https://a/x.png" }]])), { name: "Cohub", avatarUrl: "https://a/x.png", known: true }, "another Bot's note is a left bubble under its face and name");
-  assert.deepEqual(toldBy(new Map()), { name: "bots.otherBot", avatarUrl: null, known: false }, "a Bot whose Space is not loaded reads as another Bot, without a face");
+  assert.ok(botNote && !row(bot, said).some((node) => node.type === "MessageBubble" || node.type === "BotExchangeRow"), "a `say` note is the Bot's bubble");
+  // What another Bot told this one, and what this one told it back, are the same row with the direction turned round.
+  const peers = new Map([[PEER_SPACE_ID, { name: "Writer", avatarUrl: "https://a/x.png" }]]);
+  const between = (turn, known = peers) => { const nodes = row(bot, turn, {}, null, known); const found = nodes.find((node) => node.type === "BotExchangeRow")?.props; return found && !nodes.some((node) => node.type === "BotNoteBubble") ? [found.exchange.peer, found.exchange.outgoing, found.exchange.content[0].text, found.peer?.name ?? null, found.bot.name] : null; };
+  assert.deepEqual(between(told), [PEER_SPACE_ID, false, "Deck checked.", "Writer", "Cohub"], "another Bot's note is a message between Bots, from the Bot that wrote it");
+  const reported = { ...said, id: "reported", userText: `@[Writer](cohub://spaces/${PEER_SPACE_ID}) Deck sent.` };
+  assert.deepEqual(between(reported), [PEER_SPACE_ID, true, "Deck sent.", "Writer", "Cohub"], "the Bot's own note that opens with a mention of another Bot is its message to that Bot, without the mention");
+  assert.equal(between({ ...said, id: "self", userText: `@[Cohub](cohub://spaces/${BOT_SAY_ORIGIN.spaceId}) Deck sent.` }), null, "a mention of itself addresses no one");
+  assert.equal(between({ ...said, id: "aside", userText: `Ask @[Writer](cohub://spaces/${PEER_SPACE_ID}) about the deck.` }), null, "a mention further in is part of what the Bot says");
+  assert.deepEqual(between(told, new Map()), [PEER_SPACE_ID, false, "Deck checked.", null, "Cohub"], "a Bot whose Space is not loaded has no face to open");
+  assert.deepEqual([botVoice(botExchange({ text: "Hi", content: [] }, PEER_SPACE_ID, "page"), PEER_SPACE_ID), botVoice(null, "page"), botVoice(null, null)], [`tell:${PEER_SPACE_ID}`, "page", null], "both ways of an exchange with one Bot space as one voice, apart from the Bot's own");
   const userNote = row(bot, typed).find((node) => node.type === "MessageBubble");
   assert.equal(userNote.props.rowInset, BOT_BUBBLE_INSET, "the user's bubbles on a Bot's page sit as close as the Bot's");
   const timed = new Map([["said:user", { time: "2026-11-11T08:00:00Z", gap: 0 }]]);
@@ -5937,9 +5976,11 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.equal(botNoteSpace(typed), null, "a note the user wrote has no origin, though the timeline gives it a source Turn");
   assert.equal(botNoteSpace({ ...said, executionKind: "agent" }), null);
   const space = BOT_SAY_ORIGIN.spaceId;
-  assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }], space), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user", from: null }, "a Bot row shows the last thing the Bot said, not the user's last message");
+  assert.deepEqual(latestBotNote([typed, said, { ...said, id: "older", sequence: 1, userText: "Hi" }], space), { text: "On it.", at: "2026-11-10T10:03:00Z", messageId: "said:user", from: null, to: null }, "a Bot row shows the last thing the Bot said, not the user's last message");
   const told = { ...said, id: "told", sequence: 5, userText: "Deck checked.", meta: { origin: { ...BOT_SAY_ORIGIN, spaceId: "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8" } } };
   assert.equal(latestBotNote([said, told], space).from, "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8", "a row names the other Bot when it wrote last");
+  const reported = { ...said, id: "reported", sequence: 6, userText: "@[Writer](cohub://spaces/5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8) Deck sent." };
+  assert.deepEqual([latestBotNote([told, reported], space).to, latestBotNote([told, reported], space).text, latestBotNote([told, reported], space).from], ["5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8", "Deck sent.", null], "and when the Bot's last note was for another Bot, names that one");
   assert.equal(latestBotNote([typed], space), null);
   const missing = Object.assign(new Error("File or directory not found."), { status: 404 });
   assert.deepEqual(botDirectory({ entries: [], loading: false, error: missing }), { entries: [], known: true, error: null }, "a folder a Bot has not written yet reads as empty");
@@ -6112,8 +6153,7 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
     const turnsBySequence = new Map(view.turns.map((turn) => [turn.sequence, [turn]]));
     const render = compileRenderMessage({ ...liveRowScope, bot: peer, botLayout: null, spaceId: BOT_SAY_ORIGIN.spaceId, messages, client: null, streamTurnId: null, replyAnchor: null, turnsById, turnsBySequence, TurnProcess: "TurnProcess", LiveTurnProcess: "LiveTurnProcess", SentToList: "SentToList", SentFromLink: "SentFromLink", isActiveTurnStatus, isTerminalTurnStatus, lookupSession: () => null, openRelatedSession: () => {} });
     const nativeWriter = compileCallback(botSaidSource, { bot: peer, turnsById, botMessageSpace });
-    // A bubble with a sender line would be another Bot's; this page's own Bot has none.
-    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble" && node.props.sender === null), nativeWriter(item) !== null]);
+    return messages.map((item, index) => [item.text, chromeNodes(render({ item, index })).some((node) => node.type === "BotNoteBubble"), nativeWriter(item) !== null]);
   };
   const expected = [["hi", false, false], ["Hi, I'm here.", true, true], ["Are you our new engineer?", false, false], ["Sort of — the engineer in this Space.", true, true]];
   const live = deliver([persisted, created]);
@@ -6125,7 +6165,7 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   assert.deepEqual(page({ ...scope.emptyView(), messages: cached, historyLoaded: false }, bot), expected, "cached rows alone place the Bot's notes on its side, in order");
   const toldCached = JSON.parse(JSON.stringify(messagesFromTurns([note("t5", 5, "Deck checked.", { origin: { ...BOT_SAY_ORIGIN, spaceId: PEER_SPACE_ID } })])))[0];
   const toldRow = compileRenderMessage({ ...liveRowScope, bot, spaceId: BOT_SAY_ORIGIN.spaceId, messages: [toldCached], client: null, streamTurnId: null, replyAnchor: null, turnsById: new Map(), turnsBySequence: new Map() })({ item: toldCached, index: 0 });
-  assert.equal(chromeNodes(toldRow).find((node) => node.type === "BotNoteBubble")?.props.sender?.name, "bots.otherBot", "a cached note from another Bot keeps its sender before its Turn loads");
+  assert.equal(chromeNodes(toldRow).find((node) => node.type === "BotExchangeRow")?.props.exchange.peer, PEER_SPACE_ID, "a cached note from another Bot keeps its sender before its Turn loads");
   assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
   const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
   assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");

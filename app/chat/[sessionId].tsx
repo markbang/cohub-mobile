@@ -36,7 +36,7 @@ import { TurnNavigatorSheet } from "@/src/components/TurnNavigatorSheet";
 import { SpacePanels, type SpacePanel } from "@/src/components/SpacePanels";
 import { shallowEqual, useAppActions, useAppSelector, useAppStateGetter, useModelCatalog, useSession, useSessionStream } from "@/src/data/context";
 import { useScreenQuery, useSyncQuery } from "@/src/data/query";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { sessionListStatus } from "@/src/data/session-status";
 import type { ComposerDraftScope } from "@/src/data/local-db";
 import { createNewChatDraft } from "@/src/data/new-chat-draft";
@@ -76,9 +76,9 @@ import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistan
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
-import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
-import { BOT_BUBBLE_INSET, botContextWindow, botMessageSpace, botPlacements, botSender, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botContextWindow, botExchange, botMessageSpace, botPlacements, botVoice, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
 import { useBotModel } from "@/src/data/bot-model";
 import { loadBotReminder, relayToBot } from "@/src/data/bot-relay";
@@ -697,7 +697,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const writer = (message: MessageRecord) => {
       if (message.role !== "user") return spaceId;
       const sequence = turnSequenceForMessage(message);
-      return botMessageSpace(message, (sequence !== null ? turnsBySequence.get(sequence)?.[0] : undefined) ?? (typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null));
+      const space = botMessageSpace(message, (sequence !== null ? turnsBySequence.get(sequence)?.[0] : undefined) ?? (typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) : null));
+      return botVoice(space ? botExchange(message, space, spaceId) : null, space);
     };
     const placements = botPlacements(messages, writer);
     return new Map(messages.map((message, index) => [message.id, placements[index]!]));
@@ -1387,6 +1388,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }
     router.push({ pathname: "/chat/[sessionId]", params: { sessionId: ref.sessionId, turnId: ref.turnId } });
   }, [navigation, router]);
+  // The face on a message between Bots opens the user's Chat with the Bot at the other end.
+  const queryClient = useQueryClient();
+  const openPeerBot = useCallback((peerSpaceId: string) => {
+    void queryClient.fetchQuery(botFileQuery(client, peerSpaceId)).then((file) => {
+      if (!file.chat) throw new Error(t("bots.openFailed"));
+      openRelatedSession({ spaceId: peerSpaceId, sessionId: file.chat.id, turnId: "" });
+    }).catch(() => showToast({ title: t("bots.openFailed"), tone: "danger" }));
+  }, [client, openRelatedSession, queryClient, showToast, t]);
 
   // The flight from the composer for the send about to be inserted: measured before the composer
   // clears, never awaited, and dropped unless it is ready before the bubble's first frame.
@@ -1631,11 +1640,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // is fatal on the new architecture and freezes the whole screen.
     const placement = botLayout?.get(item.id);
     const writer = bot ? botMessageSpace(item, sequenceTurns?.[0] ?? messageTurn) : null;
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{writer
-      ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} sender={botSender(botPeers, writer, spaceId, t("bots.otherBot"))} />
+    const exchange = bot && writer ? botExchange(item, writer, spaceId) : null;
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{exchange && bot
+      ? <BotExchangeRow exchange={exchange} bot={bot} peer={botPeers.get(exchange.peer) ?? null} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} onOpenBot={openPeerBot} />
+      : writer
+      ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
       : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
       : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, t, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1664,6 +1676,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           sessionId={sessionId}
           bot={bot}
           botPeers={botPeers}
+          onOpenBot={openPeerBot}
           spaceId={spaceId}
           client={client}
           messages={messages}

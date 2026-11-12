@@ -2,13 +2,12 @@ import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/c
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
-import { BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
 import { BotTitle } from "@/src/components/BotTitle";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
-import { BOT_BUBBLE_INSET, botNoteSpace, botPlacements, botSender, type BotPeer } from "@/src/data/bot-mode";
-import { useTranslation } from "@/src/i18n";
+import { BOT_BUBBLE_INSET, botExchange, botNoteSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -27,7 +26,6 @@ const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
   const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string }>();
@@ -37,8 +35,8 @@ export default function DebugChatScreen() {
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
   // As the Chat screen: a reply is the page's Bot, a note is whoever wrote it.
-  const writerOf = (message: MessageRecord) => message.role !== "user" ? BOT_SPACE_ID : botNoteSpace(botTurns.get(String(message.meta?.turnId)));
-  const placements = botPlacements(messages, writerOf);
+  const exchangeOf = (message: MessageRecord) => { const writer = botNoteSpace(botTurns.get(String(message.meta?.turnId))); return writer ? botExchange(message, writer, BOT_SPACE_ID) : null; };
+  const placements = botPlacements(messages, (message) => message.role !== "user" ? BOT_SPACE_ID : botVoice(exchangeOf(message), botNoteSpace(botTurns.get(String(message.meta?.turnId)))));
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
@@ -134,11 +132,11 @@ export default function DebugChatScreen() {
         key={fixture}
         data={messages}
         keyExtractor={(message) => message.id}
-        renderItem={({ item, index }) => { const writer = botNoteSpace(botTurns.get(String(item.meta?.turnId))); return bot
+        renderItem={({ item, index }) => { const writer = botNoteSpace(botTurns.get(String(item.meta?.turnId))); const exchange = exchangeOf(item); return bot
           // The Chat screen's Bot rows: the time above, the gap where the side changes, then the bubble.
           ? <View style={placements[index]?.gap ? { paddingTop: placements[index].gap } : undefined}>
             {placements[index]?.time ? <BotTimeDivider at={placements[index].time} /> : null}
-            {writer ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} sender={botSender(BOT_PEERS, writer, BOT_SPACE_ID, t("bots.otherBot"))} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
+            {exchange ? <BotExchangeRow exchange={exchange} bot={bot} peer={BOT_PEERS.get(exchange.peer) ?? null} spaceId={null} availableWidth={width} onOpenBot={NOOP} /> : writer ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
           </View>
           : <MessageBubble message={item} availableWidth={width} />; }}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
@@ -218,8 +216,10 @@ const SCRIPTS: Record<Fixture, Line[]> = {
     { role: "user", text: "Updated the numbers based on today's pull from Salesforce, Mercury, QuickBooks, and Hex.", bot: "self", at: 0 },
     { role: "user", text: "Can you add a slide for headcount and pull from Rippling", at: 3 },
     { role: "user", content: [{ type: "text", text: "Pulled and added" }, PNG("iVBORw0KGgoAAAANSUhEUgAAABAAAAAMCAIAAADkharWAAAAFUlEQVR4nGN4UWFDEmIY1TCqATsCAHYZNRC672UqAAAAAElFTkSuQmCC")], bot: "self", at: 6 },
-    { role: "user", text: "Chief of staff asked me to check the deck. The headcount slide matches Rippling.", bot: "peer", at: 7 },
-    { role: "user", text: "The offsite receipts are coded.", bot: "stranger", at: 8 },
+    // Messages between Bots: a request from a Bot the app has loaded, this Bot's report back to it, and one from a Bot it has not.
+    { role: "user", text: "Can you check the headcount slide against Rippling before the 2pm review? Last month's export counted two contractors twice, and the board deck needs the current numbers.", bot: "peer", at: 7 },
+    { role: "user", text: `@[Cohub](cohub://spaces/${BOT_WRITERS.peer}) The headcount slide matches Rippling: 48 full-time and 6 contractors. Both duplicates from last month are gone.\n\n- Checked against today's Rippling export\n- Slide 7 updated`, bot: "self", at: 8 },
+    { role: "user", text: "The offsite receipts are coded.", bot: "stranger", at: 9 },
     { role: "user", text: "Looks good, send it to the team", at: 40 },
     { role: "user", text: "Sent. Overnight there were 41 new emails: 6 needed you and are in your inbox, 3 invoices went to Expense Manager, 2 intros are connected, and 1 bug report went to Bug Triager. Nothing else is waiting on you before the review.", bot: "self", at: 41 },
   ],
