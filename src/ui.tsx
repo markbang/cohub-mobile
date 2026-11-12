@@ -669,6 +669,15 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
               onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
               submitBehavior="newline"
+              onKeyPress={Platform.OS === "web" ? (event) => {
+                // Web: Enter sends and Shift+Enter breaks the line; an Enter that commits an IME composition stays with the IME.
+                const key = event.nativeEvent as unknown as KeyboardEvent;
+                if (key.key !== "Enter" || key.shiftKey || key.isComposing || key.keyCode === 229) return;
+                event.preventDefault();
+                if (!canSend) return;
+                traceAction("composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked });
+                onSend();
+              } : undefined}
             />
           </PasteImagesInput>
   </>;
