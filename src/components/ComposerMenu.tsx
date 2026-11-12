@@ -25,7 +25,7 @@ export function ComposerMenu({ anchorRef, title, onClose, children, preferredWid
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const [viewport, setViewport] = useState({ width, height });
-  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics()?.screenY ?? null);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => Keyboard.metrics?.()?.screenY ?? null);
   const [anchor, setAnchor] = useState<ComposerMenuAnchor | null>(null);
   const presence = useMenuPresence();
   const measureAnchor = useCallback(() => {

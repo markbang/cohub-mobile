@@ -9,7 +9,7 @@ export function useChatScrollTrace(source: string, getState: () => TraceFields) 
   }, [getState, source]);
   useEffect(() => {
     if (!recording) return;
-    log("screen.observe", { keyboardVisible: Keyboard.isVisible(), appState: AppState.currentState });
+    log("screen.observe", { keyboardVisible: Keyboard.isVisible?.(), appState: AppState.currentState });
     const show = Keyboard.addListener("keyboardDidShow", (event) => log("keyboard.show", { height: event.endCoordinates.height, screenY: event.endCoordinates.screenY }));
     const hide = Keyboard.addListener("keyboardDidHide", () => log("keyboard.hide"));
     const app = AppState.addEventListener("change", (state) => log("app.state", { state }));

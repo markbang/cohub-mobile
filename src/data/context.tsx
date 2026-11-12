@@ -19,7 +19,6 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { File as ExpoFile, UploadType } from "expo-file-system";
 import { translate } from "@/src/i18n/core";
 import { config } from "@/src/config";
 import { createMobileClient } from "@/src/data/client";
@@ -84,6 +83,9 @@ import { isAppActive, subscribeAppActive } from "@/src/platform/app-lifecycle";
 import { useDeviceDisplayInterrupts, useDeviceRuntimeSession } from "@/src/platform/device-runtime";
 import { DEFAULT_SESSION_FILTER_MINUTES, sessionListStatus, latestTurn, loadSessionLatestTurns, reconcileLatestTurn, reconcileTurnStatusPatch, sessionPageState, type LatestSessionTurn, type SessionPageBoundary, type StatusSession } from "@/src/data/session-status";
 import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoordinator, isTransportRecovery, type SessionResyncReason } from "@/src/data/session-reconnect";
+import { attachmentFile } from "@/src/data/attachment-file";
+import { isBotSpace } from "@/src/data/bot-mode";
+import { botOnly } from "@/src/data/bot-mode-preference";
 import {
   displaySpaceName,
   newId,
@@ -131,11 +133,8 @@ async function uploadAttachmentFile(
   attachment: AttachmentDraft,
   { signal, onProgress }: { signal: AbortSignal; onProgress: (ratio: number) => void },
 ): Promise<UploadedAttachment> {
-  const file = new ExpoFile(attachment.uri);
+  const file = await attachmentFile(attachment.uri);
   const mimeType = file.type || attachment.mimeType;
-
-  // Use expo-file-system's native upload to avoid React Native bridge recycling issues.
-  // SDK's fetch-based upload can fail with "dynamic value has been recycled" on Android.
   const plan = await client.publicAssets.createUpload({
     purpose: "chat_attachment",
     uploadProtocol: "presigned_put_v1",
@@ -155,21 +154,14 @@ async function uploadAttachmentFile(
     }
   }
 
-  // `File.upload` defaults to POST; the presigned URL is signed for the method the plan
-  // reports (PUT), and a mismatched method makes R2 reject the signature with 403.
   const uploadStarted = performance.now();
   recordDebugEvent("net.upload", { kind: "attachment", bytes: file.size, mimeType, method: plan.asset.uploadMethod });
   try {
-    const uploadResult = await file.upload(plan.asset.uploadUrl, {
-      httpMethod: plan.asset.uploadMethod,
-      uploadType: UploadType.BINARY_CONTENT,
-      headers: uploadHeaders,
-      signal,
-      onProgress: ({ bytesSent, totalBytes }) => onProgress(totalBytes > 0 ? bytesSent / totalBytes : 0),
-    });
-    recordDebugEvent("net.upload.response", { kind: "attachment", status: uploadResult.status, durationMs: Math.round(performance.now() - uploadStarted) });
-    if (uploadResult.status < 200 || uploadResult.status >= 300) {
-      throw new Error(`File upload failed: HTTP ${uploadResult.status}`);
+    // A presigned URL is signed for the method the plan reports (PUT); another method fails with 403.
+    const status = await file.upload(plan.asset.uploadUrl, { method: plan.asset.uploadMethod, headers: uploadHeaders, signal, onProgress });
+    recordDebugEvent("net.upload.response", { kind: "attachment", status, durationMs: Math.round(performance.now() - uploadStarted) });
+    if (status < 200 || status >= 300) {
+      throw new Error(`File upload failed: HTTP ${status}`);
     }
   } catch (error) {
     recordDebugEvent("net.upload.error", { kind: "attachment", durationMs: Math.round(performance.now() - uploadStarted), message: error instanceof Error ? error.message : String(error) });
@@ -1233,7 +1225,9 @@ export function AppProvider({
     return queryClient.fetchQuery({ queryKey: MODEL_STATUS_KEY, queryFn: () => activeClient.models.status(), staleTime: 60_000 });
   }, [queryClient]);
 
-  const refreshSessionStatuses = useCallback(async (sessions: StatusSession[], options: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean; force?: boolean } = {}) => {
+  const refreshSessionStatuses = useCallback(async (requested: StatusSession[], options: { silent?: boolean; throwOnError?: boolean; activeOnly?: boolean; force?: boolean } = {}) => {
+    // The Bot mode App is granted Bot Spaces only; any other Space's Turns answer 403.
+    const sessions = botOnly ? requested.filter((session) => isBotSpace(session.space ?? stateRef.current.spaces.find((space) => space.id === session.spaceId))) : requested;
     const activeClient = clientRef.current;
     if (!activeClient || sessions.length === 0) return;
     const generation = statusGenerationRef.current;

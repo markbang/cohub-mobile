@@ -1,6 +1,7 @@
 import { Tabs } from "expo-router";
 import { AnimatedTabIcon } from "@/src/components/AnimatedTabIcon";
 import { FloatingTabBar, TabBlurTargetsProvider, TabScreenLayout } from "@/src/components/FloatingTabBar";
+import { botOnly } from "@/src/data/bot-mode-preference";
 import { useTranslation } from "@/src/i18n";
 import { TabBarMinimizeProvider } from "@/src/ui/tab-bar-minimize";
 
@@ -26,6 +27,8 @@ export default function TabLayout() {
         name="(spaces)"
         options={{
           title: t("tabs.spaces"),
+          // The Bot mode App reaches Spaces only as Bots.
+          ...(botOnly ? { href: null } : {}),
           tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="layers" color={color} size={size} focused={focused} />,
         }}
       />
@@ -33,6 +36,7 @@ export default function TabLayout() {
         name="(activity)"
         options={{
           title: t("tabs.activity"),
+          ...(botOnly ? { href: null } : {}),
           tabBarIcon: ({ color, size, focused }) => <AnimatedTabIcon name="activity" color={color} size={size} focused={focused} />,
         }}
       />

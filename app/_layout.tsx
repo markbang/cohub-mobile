@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
+import { connectWebSession, getWebAccessToken, type WebViewer } from "@/src/auth/web-session";
 import { AppUpdateBanner } from "@/src/components/AppUpdateBanner";
 import { ToastProvider } from "@/src/components/Toast";
 import { GlassMenuWarmup } from "@/src/ui/MorphMenuSurface";
@@ -82,7 +83,7 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf") });
   const [platformFontsLoaded, platformFontError] = useFonts(PLATFORM_FONT_FAMILIES);
   if ((!fontsLoaded && !fontError) || (!platformFontsLoaded && !platformFontError)) return null;
-  return <LocaleProvider><TracedRoot><AuthEnvironmentRoot /></TracedRoot></LocaleProvider>;
+  return <LocaleProvider><TracedRoot>{Platform.OS === "web" ? <WebRoot /> : <AuthEnvironmentRoot />}</TracedRoot></LocaleProvider>;
 }
 
 /** The root view sees every touch no nested view consumes, so blank-space taps reach the log. */
@@ -252,6 +253,30 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
   if (!isAuthenticated || (authError && !identity.uuid)) return <AuthScreen environment={environment} onSelectEnvironment={onSelectEnvironment} onSignIn={handleSignIn} loading={authLoading} error={authError} />;
   if (identity.authenticated !== isAuthenticated || !identity.uuid) return <LoadingScreen />;
   return <AppProvider key={identity.uuid} userUuid={identity.uuid} getAccessToken={getAccessToken} getAuthSessionVersion={getAuthSessionVersion} onUnauthorized={onUnauthorized}><Navigation theme={theme} /></AppProvider>;
+}
+
+/** In the browser the Cohub page hosting the App signs the viewer in; see `src/auth/web-session.ts`. */
+function WebRoot() {
+  const theme = useAppTheme();
+  const [session, setSession] = useState<{ viewer: WebViewer | null; error: string | null; loading: boolean }>({ viewer: null, error: null, loading: true });
+
+  const connect = useCallback(() => connectWebSession().then(
+    (viewer) => setSession({ viewer, error: null, loading: false }),
+    (error: unknown) => setSession({ viewer: null, error: error instanceof Error ? error.message : String(error), loading: false }),
+  ), []);
+  const retry = useCallback(async () => {
+    setSession({ viewer: null, error: null, loading: true });
+    await connect();
+  }, [connect]);
+
+  useEffect(() => { void connect(); }, [connect]);
+  useEffect(() => { void SplashScreen.hideAsync(); }, []);
+  const onUnauthorized = useCallback(() => setSession({ viewer: null, error: translate("data.signInRejected"), loading: false }), []);
+  const getAuthSessionVersion = useCallback(() => 0, []);
+
+  if (session.viewer) return <AppProvider key={session.viewer.uuid} userUuid={session.viewer.uuid} getAccessToken={getWebAccessToken} getAuthSessionVersion={getAuthSessionVersion} onUnauthorized={onUnauthorized}><Navigation theme={theme} /></AppProvider>;
+  if (session.loading) return <LoadingScreen />;
+  return <AuthScreen environment="prod" onSelectEnvironment={() => undefined} onSignIn={retry} loading={false} error={session.error} />;
 }
 
 function Navigation({ theme }: { theme: ReturnType<typeof useAppTheme> }) {

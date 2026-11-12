@@ -1,5 +1,5 @@
 import { createContext, use, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { View, type LayoutChangeEvent } from "react-native";
+import { Platform, View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type LayoutAnimationsValues, type SharedValue } from "react-native-reanimated";
 import { runOnUISync } from "react-native-worklets";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "@/src/data/list-continuity";
@@ -67,7 +67,9 @@ export function useListContinuity<T>({ items, keyOf, list, query, quiet, scrollY
     const until = shouldMove ? Date.now() + MOVE_WINDOW_MS : 0;
     if (shouldMove || armedUntil.current > Date.now()) {
       armedUntil.current = until;
-      runOnUISync(() => {
+      // The browser has no UI thread to reach; a plain write is already synchronous there.
+      if (Platform.OS === "web") movingUntil.set(until);
+      else runOnUISync(() => {
         "worklet";
         movingUntil.set(until);
       });

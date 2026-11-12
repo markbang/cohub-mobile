@@ -408,7 +408,7 @@ const chromeScope = {
   nativeHeaders: false, useNativeHeader: () => {}, NAVIGATION_BAR_INSETS: {}, useEmptyListFill: (empty) => ({ style: empty ? { flexGrow: 1 } : undefined }), uiSnapshots: false,
   ROUNDED_TITLE: undefined, Mascot: "Mascot", AppSwitch: "AppSwitch",
   // Bot mode is off unless a check turns it on, so every other screen renders as before.
-  useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
+  botOnly: false, useBotMode: () => ({ enabled: false, loaded: true, error: null }), isBotSpace: () => false, PRIMARY_BOT_SLUG: "cohubbot",
   useBots: () => ({ entries: [], loading: false, error: null, openChat: async () => "", refetch: async () => {} }), BotRow: "BotRow", PinnedBots: "PinnedBots", pinnedBotEntries, BotTitle: "BotTitle",
   usePaneBack: () => true, usePaneWidth: () => 402, useScreenVisible: () => true, useScreenVisibleEffect: () => {}, useOpenChat: () => () => {}, useSplitLayout: () => ({ mode: "compact", selectedChatId: null, paneTopName: undefined }),
   LargeTitleBar: "LargeTitleBar", LargeTitle: "LargeTitle", LargeTitleSearch: "LargeTitleSearch", SearchField: "SearchField", EdgeBlurTarget: "EdgeBlurTarget",
@@ -1871,7 +1871,7 @@ try {
     useOpenChat: () => (target) => opened.push(target.sessionId),
     useEdgeChrome: () => ({ headerHeight: 0, onHeaderLayout: () => {}, onScroll: () => {} }), EdgeHeader: "EdgeHeader",
     ...appHooks(() => ({ state, sessionSeen: { baseline: null, entries: {} }, client: {}, userUuid: "user", connectionUnavailable: false, refreshHome: async () => {}, refreshChats: async () => {}, refreshSessionStatuses: async () => {}, loadMoreSessions: async () => {}, prefetchSession: () => {}, loadComposerDraft: async () => "", saveComposerDraft: async () => {}, toggleSpacePin: async (spaceId) => { toggled.push(spaceId); } })),
-    useBotMode: () => ({ enabled: true, loaded: true, error: null }), isBotSpace,
+    botOnly: false, useBotMode: () => ({ enabled: true, loaded: true, error: null }), isBotSpace,
     useBots: () => ({ entries: [entry, pinned], loading: false, error: null, openChat: async (spaceId) => ({ bot: "talk", pin: "pin-talk" })[spaceId] ?? "", refetch: async () => {} }),
     displaySpaceName: (space) => space.name ?? "",
     useRemoteSearch: () => ({ query: "", sessions: [], spaces: [] }), useSpaceSessionCounts: () => ({}),
@@ -3106,6 +3106,7 @@ function loadPreferenceModule(storage) {
   new Function("require", "exports", preferenceSource)((name) => {
     if (name === "@react-native-async-storage/async-storage") return storage;
     if (name === "react") return {};
+    if (name === "./bot-mode-preference") return { botOnly: false };
     throw new Error(`Unexpected preference dependency: ${name}`);
   }, exports);
   return exports;

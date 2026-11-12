@@ -241,7 +241,7 @@ for (const [file, workflow] of [["native-ci.yml", nativeCi], ["native-release.ym
 }
 
 const ci = parse(".github/workflows/ci.yml");
-assert.deepEqual(ci.jobs.bundle.strategy.matrix.platform, ["android", "ios"], "CI must still export both platform bundles");
+assert.deepEqual(ci.jobs.bundle.strategy.matrix.platform, ["android", "ios", "web"], "CI must still export both platform bundles and the web App");
 assert.equal(Object.hasOwn(ci.jobs.bundle, "needs"), false, "CI exports must not serialize behind Quality: they are independent and serializing them doubled every run's wall clock");
 
 assert.ok(nativeRelease.jobs.check.steps.some((step) => step.run === "npm run check"));

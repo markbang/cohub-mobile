@@ -33,7 +33,7 @@ import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/
 import { BotRow, PinnedBots } from "@/src/components/BotRow";
 import { isBotSpace, pinnedBotEntries, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
 import { isSessionUnread } from "@/src/data/chat-read-state";
-import { useBotMode } from "@/src/data/bot-mode-preference";
+import { botOnly, useBotMode } from "@/src/data/bot-mode-preference";
 import { useBots } from "@/src/data/use-bots";
 import { displaySpaceName } from "@/src/utils";
 
@@ -266,9 +266,11 @@ export default function ChatsScreen() {
   const toggleBotPin = (spaceId: string) => void toggleSpacePin(spaceId).catch((error: unknown) => toast({ title: t("bots.pinFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
 
   const sourceOptions: readonly { value: ChatsSource; label: string; detail?: string; icon: NativeMenuAction["icon"] }[] = [
-    { value: "all", label: t("chats.source.all"), icon: "messages" },
-    { value: "web", label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" },
-    { value: "other", label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" },
+    ...(botOnly ? [] : [
+      { value: "all" as const, label: t("chats.source.all"), icon: "messages" as const },
+      { value: "web" as const, label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" as const },
+      { value: "other" as const, label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" as const },
+    ]),
     ...(botMode ? [{ value: "bots" as const, label: t("chats.source.bots"), detail: t("chats.source.bots.detail"), icon: "sparkles" as const }] : []),
   ];
   const sourceLabel = archivedView ? t("chats.archived") : sourceOptions.find((option) => option.value === shownSource)?.label ?? t("chats.source.all");

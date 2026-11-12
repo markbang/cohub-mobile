@@ -1,9 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 
 type Snapshot = { enabled: boolean; loaded: boolean; error: string | null };
 
 const OFF: Snapshot = { enabled: false, loaded: false, error: null };
+/** The browser build is the Bot mode App: Bot mode is always on, and only Bot Spaces are granted to it. */
+export const botOnly = Platform.OS === "web";
+const BOT_ONLY: Snapshot = { enabled: true, loaded: true, error: null };
 // Keyed by account, so one person's Bot mode never carries over to the next sign-in on this device.
 const storageKey = (userKey: string) => `cohub:mobile:bot-mode:v1:${userKey}`;
 const snapshots = new Map<string, Snapshot>();
@@ -34,8 +38,9 @@ export async function saveBotMode(userKey: string, enabled: boolean): Promise<vo
 }
 
 export function useBotMode(userKey: string): Snapshot {
-  const [snapshot, setSnapshot] = useState(() => snapshots.get(userKey) ?? OFF);
+  const [snapshot, setSnapshot] = useState(() => botOnly ? BOT_ONLY : snapshots.get(userKey) ?? OFF);
   useEffect(() => {
+    if (botOnly) return;
     const listener = () => setSnapshot(snapshots.get(userKey) ?? OFF);
     listeners.add(listener);
     load(userKey);

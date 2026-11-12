@@ -7,7 +7,20 @@ const config = getDefaultConfig(__dirname);
 const lucideRoot = path.join(__dirname, "node_modules/lucide-react-native");
 const defaultResolveRequest = config.resolver.resolveRequest;
 
+// The browser build (`scripts/web-app.mjs`) swaps modules that have no web side.
+const WEB_MODULES = {
+  "react-native-enriched-markdown": path.join(__dirname, "modules/enriched-markdown-web/index.tsx"),
+  "expo-sqlite": path.join(__dirname, "src/platform/sqlite.web.ts"),
+};
+const appHistoryAdapter = path.join(__dirname, "src/platform/app-history-adapter.ts");
+
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === "web") {
+    if (Object.hasOwn(WEB_MODULES, moduleName)) return { filePath: WEB_MODULES[moduleName], type: "sourceFile" };
+    if (moduleName.endsWith("/global-state/browserHistoryAdapter") && context.originModulePath.includes(`${path.sep}expo-router${path.sep}`)) {
+      return { filePath: appHistoryAdapter, type: "sourceFile" };
+    }
+  }
   if (moduleName === "lucide-react-native") {
     return { filePath: path.join(lucideRoot, "dist/cjs/lucide-react-native.js"), type: "sourceFile" };
   }

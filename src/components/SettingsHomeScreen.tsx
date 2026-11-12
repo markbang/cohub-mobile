@@ -12,7 +12,7 @@ import { SettingsSelectRow } from "@/src/components/SettingsSelectRow";
 import { useToast } from "@/src/components/Toast";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { useAppActions } from "@/src/data/context";
-import { saveBotMode, useBotMode } from "@/src/data/bot-mode-preference";
+import { botOnly, saveBotMode, useBotMode } from "@/src/data/bot-mode-preference";
 import { ensurePrimaryBot } from "@/src/data/primary-bot";
 import { saveSessionSourcePreference } from "@/src/data/session-filter-preference";
 import { settingsMenu } from "@/src/data/settings-navigation";
@@ -178,7 +178,7 @@ export function SettingsHomeScreen() {
           })}
         </SettingsGroup>)}
       </View>
-      <SettingsGroup>
+      {botOnly ? null : <SettingsGroup>
         <SettingsRow icon="sparkles" title={t("settings.botMode.title")} value={t("settings.botMode.body")} last>
           {botModeBusy ? <Loader accessibilityLabel={t("common.loading")} /> : null}
           <AppSwitch
@@ -188,8 +188,9 @@ export function SettingsHomeScreen() {
             onValueChange={(value) => void toggleBotMode(value)}
           />
         </SettingsRow>
-      </SettingsGroup>
-      <SettingsGroup>
+      </SettingsGroup>}
+      {/* The Cohub page around the App owns sign-in. */}
+      {botOnly ? null : <SettingsGroup>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("common.signOut")}
@@ -197,7 +198,7 @@ export function SettingsHomeScreen() {
           onPress={() => { setError(null); setSignOutOpen(true); }}
           className="min-h-13 items-center justify-center bg-surface active:bg-danger-soft"
         ><Text className="text-body font-semibold text-danger">{signingOut ? t("profile.signingOut") : t("common.signOut")}</Text></Pressable>
-      </SettingsGroup>
+      </SettingsGroup>}
       <Pressable testID="settings.version" accessibilityRole="button" accessibilityLabel={t("profile.version")} onPress={unlockDebug} className="min-h-11 items-center justify-center">
         <Text className="text-center text-micro tabular-nums text-fg-faint">Cohub Mobile · {version}{updateChannel && updateChannel !== "production" ? ` · ${updateChannel}` : ""}</Text>
       </Pressable>
