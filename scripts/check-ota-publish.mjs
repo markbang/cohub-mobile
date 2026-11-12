@@ -180,6 +180,25 @@ assert.match(JSON.stringify(ota.jobs.android.steps), /cohub-android-native-finge
 assert.equal(publishAndroid.steps.find((step) => step.name === "Publish exported bundle").env.NATIVE_SOURCE_FINGERPRINT, "${{ needs.android.outputs.fingerprint }}");
 assert.match(JSON.stringify(ota.jobs.android.steps), /assets\/fingerprint/);
 assert.match(JSON.stringify(ota.jobs.android.steps), /arm64-v8a/);
+// The installed runtime comes from the newest published release that carries the platform's asset,
+// found in one query: a lookup piped into `grep -q` lost its match to SIGPIPE and fell back to an older release.
+for (const [platform, asset] of [["android", "cohub-v2.3.13-android-arm64-v8a.apk"], ["ios", IOS_NATIVE_FINGERPRINT_ASSET]]) {
+  const lookup = ota.jobs[platform].steps.find((step) => step.id === "fingerprint").run;
+  assert.equal(/\|\s*grep\b[^\n]*-[A-Za-z]*q/.test(lookup), false, `${platform}: no early-exiting reader in the release lookup`);
+  const filter = /tag=\$\(gh api "repos\/\$GITHUB_REPOSITORY\/releases\?per_page=100" --jq '([^']+)'\)/.exec(lookup)?.[1];
+  assert.ok(filter, `${platform}: the release lookup is a single gh api query`);
+  const release = (tag, created, names, extra = {}) => ({ tag_name: tag, created_at: created, draft: false, prerelease: false, assets: names.map((name) => ({ name })), ...extra });
+  const releases = [
+    release("v2.3.15", "2026-11-14T00:00:00Z", [asset], { draft: true }),
+    release("android-cli-v10.19.0", "2026-11-13T12:00:00Z", [asset], { prerelease: true }),
+    release("v2.3.14", "2026-11-13T00:00:00Z", []),
+    release("v2.3.13", "2026-11-10T00:00:00Z", ["cohub-android-native-fingerprint.txt", IOS_NATIVE_FINGERPRINT_ASSET, "cohub-v2.3.13-android-arm64-v8a.apk", "cohub-v2.3.13-android-x86.apk"]),
+    release("v2.3.12", "2026-11-09T00:00:00Z", ["cohub-android-native-fingerprint.txt", IOS_NATIVE_FINGERPRINT_ASSET, "cohub-v2.3.12-android-arm64-v8a.apk"]),
+  ];
+  const pick = (input) => execFileSync("jq", ["-r", filter], { input: JSON.stringify(input), encoding: "utf8" }).trim();
+  assert.equal(pick(releases), "v2.3.13", `${platform}: the newest published release with the asset`);
+  assert.equal(pick(releases.slice(0, 3)), "", `${platform}: none found reads as empty, which the step reports`);
+}
 assert.match(JSON.stringify(ota.jobs.android.steps), /--platform android/);
 assert.ok(JSON.stringify(ota.jobs.ios.steps).includes(IOS_NATIVE_FINGERPRINT_ASSET));
 assert.match(JSON.stringify(ota.jobs.ios.steps), /--platform ios/);
