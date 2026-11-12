@@ -1215,19 +1215,21 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // tokens must not look like a scroll-away. Only a move toward older messages may drop following.
     const offsetDelta = contentOffset.y - lastScrollRef.current.y;
     const grew = contentSize.height > lastScrollRef.current.height;
+    // react-native-web emits no drag or momentum events, so every web scroll the content did not cause is the user's.
+    const dragging = scrollGestureRef.current === "dragging" || Platform.OS === "web";
     lastScrollRef.current = { y: contentOffset.y, height: contentSize.height, viewport: layoutMeasurement.height };
     measureVisibleRows();
     const { distanceToLatest, distanceToOldest } = chatListDistances(contentOffset.y, contentSize.height, layoutMeasurement.height, keyboardInsetRef.current);
     setFollowingTail(nextChatTailFollowing({
       currentlyFollowing: followingTailRef.current,
       distanceToBottom: distanceToLatest,
-      userInteracting: chatTailScrolledAway({ dragging: scrollGestureRef.current === "dragging", momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta }),
+      userInteracting: chatTailScrolledAway({ dragging, momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta }),
       pendingTarget: pendingScrollSequence.current !== null || (turnScrollTargetRef.current !== null && !targetIsLatestMessage()),
       detached: view.hasMoreNewer,
     }));
     // Native animated scrollTo cannot retarget; snap once a burst opens a gap the pin would chase.
     setFollowPinAnimated(chatFollowPinAnimated(distanceToLatest, followPinAnimatedRef.current));
-    if (initialScrollDone.current && followingTailRef.current && chatTailDisplaced({ dragging: scrollGestureRef.current === "dragging", momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta, distanceToLatest })) {
+    if (initialScrollDone.current && followingTailRef.current && chatTailDisplaced({ dragging, momentum: scrollGestureRef.current === "momentum", contentGrew: grew, offsetDelta, distanceToLatest })) {
       recordDebugEvent("chat.tail.displaced", { session: debugAlias("session", sessionId), offsetY: Math.round(contentOffset.y), distanceToLatest: Math.round(distanceToLatest) });
       requestFollowTail(false);
       return;
