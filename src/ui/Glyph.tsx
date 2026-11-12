@@ -7,7 +7,7 @@ import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
 export type GlyphProps = { name: IconName; size: number; color: ColorValue; strokeWidth: number; fill?: string; bold?: number; style?: object };
 
 /**
- * Android draws Framework7 Icons, an open set drawn after SF Symbols, sized as SF draws them (see
+ * Android and the web draw Framework7 Icons, an open set drawn after SF Symbols, sized as SF draws them (see
  * scripts/generate-glyphs.mjs), so glyphs match iOS. `fill` picks the filled shape where the set has one.
  * Names it lacks keep Lucide, thinned and scaled to SF's measure.
  */

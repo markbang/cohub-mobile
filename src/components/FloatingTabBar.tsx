@@ -27,6 +27,8 @@ const BAR_PADDING = 4;
 // capsule, and items centred at even steps between the capsule's two end positions.
 const BAR_SIDE_MARGIN = 21;
 const LENS_WIDTH = 98;
+/** Chats, Spaces, Activity, Me. */
+const TAB_SET_SIZE = 4;
 const LENS_HEIGHT = BAR_HEIGHT - BAR_PADDING * 2;
 /** How far a lifted lens grows past its resting size on each side: iOS 27's 94 × 53 lens grows to 117 × 73 (liquidglass). */
 const LENS_GROWTH_X = 11.5;
@@ -156,8 +158,10 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
   const lastIndex = routes.length - 1;
   // The tab app's pane: in a split window the bar stays at the bottom of the left pane.
   const paneWidth = usePaneWidth();
-  const barWidth = paneWidth - BAR_SIDE_MARGIN * 2;
-  const pitch = itemPitch(barWidth, routes.length);
+  const fullWidth = paneWidth - BAR_SIDE_MARGIN * 2;
+  // Fewer tabs than the full set keep its spacing and the bar hugs them, as UIKit's does.
+  const pitch = itemPitch(fullWidth, Math.max(routes.length, TAB_SET_SIZE));
+  const barWidth = routes.length >= TAB_SET_SIZE ? fullWidth : BAR_PADDING * 2 + LENS_WIDTH + pitch * lastIndex;
   const itemWidth = pitch > 0 ? pitch : LENS_WIDTH;
 
   const hidden = useSharedValue(0);
@@ -432,7 +436,7 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
           </Animated.View>
-          {/* A margin, not padding: with two tabs an item is wider than the lens and the inset goes negative. */}
+          {/* A margin, not padding: in a wide compact window an item is wider than the lens and the inset goes negative. */}
           <View className="flex-1 flex-row" style={{ marginHorizontal: BAR_PADDING + (LENS_WIDTH - itemWidth) / 2 }}>
             {routes.map((route, index) => {
               const { options } = descriptors[route.key];
