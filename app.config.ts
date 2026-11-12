@@ -49,6 +49,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? "cohub-mobile",
     version,
     runtimeVersion: otaRuntimeVersion(),
+    // The web App's address changes with every publish, so `scripts/web-app.mjs` builds against a
+    // placeholder base and swaps it for the address the page is served from.
+    ...(process.env.COHUB_WEB_BASE ? { experiments: { ...config.experiments, baseUrl: process.env.COHUB_WEB_BASE } } : {}),
     updates: updatesUrl
       ? {
           ...config.updates,

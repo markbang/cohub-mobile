@@ -15,6 +15,8 @@ export const liquidGlass = Platform.OS === "ios" && isLiquidGlassAvailable() && 
 export function useReduceTransparency() {
   const [reduce, setReduce] = useState(false);
   useEffect(() => {
+    // The browser has no such setting; react-native-web leaves the API out.
+    if (Platform.OS === "web") return;
     let active = true;
     void AccessibilityInfo.isReduceTransparencyEnabled().then((value) => { if (active) setReduce(value); }).catch(() => undefined);
     const subscription = AccessibilityInfo.addEventListener("reduceTransparencyChanged", setReduce);

@@ -432,7 +432,8 @@ export function FloatingTabBar({ state, descriptors, emitter, insets }: BottomTa
             {/* Without Liquid Glass, the lifted lens stands off the bar as a solid pane rather than a tint on it. */}
             {material === "liquid" ? null : <Animated.View className="absolute inset-0 rounded-full bg-surface-pressed shadow-float" style={liftedLensStyle} />}
           </Animated.View>
-          <View className="flex-1 flex-row" style={{ paddingHorizontal: BAR_PADDING + (LENS_WIDTH - itemWidth) / 2 }}>
+          {/* A margin, not padding: with two tabs an item is wider than the lens and the inset goes negative. */}
+          <View className="flex-1 flex-row" style={{ marginHorizontal: BAR_PADDING + (LENS_WIDTH - itemWidth) / 2 }}>
             {routes.map((route, index) => {
               const { options } = descriptors[route.key];
               const label = typeof options.title === "string" ? options.title : route.name;

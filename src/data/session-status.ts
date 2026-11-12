@@ -106,7 +106,7 @@ export function reconcileTurnStatusPatch(current: LatestSessionTurn | null | und
   return reconcileLatestTurn(current, { ...latestTurnFields(turn), id: turn.id, sequence: turn.sequence, status: turn.status, updatedAt: turn.updatedAt });
 }
 
-export type StatusSession = Pick<UserSessionListItem, "id" | "spaceId" | "lastMessageAt" | "activeTurn">;
+export type StatusSession = Pick<UserSessionListItem, "id" | "spaceId" | "lastMessageAt" | "activeTurn"> & { space?: { slug?: string | null } | null };
 
 type StatusRead = { turn: LatestSessionTurn | null; at: number; activity: string | null };
 type StatusReads = {

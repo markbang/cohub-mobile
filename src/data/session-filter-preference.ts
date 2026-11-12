@@ -1,13 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
+import { botOnly } from "./bot-mode-preference";
 import type { SessionSourceFilter } from "./session-source";
 
 /** The Bots view sits in the source menu while Bot mode is on; it is not a server source filter. */
 export type ChatsSource = SessionSourceFilter | "bots";
 
 const SOURCE_STORAGE_KEY = "cohub:mobile:session-filter-source:v1";
-let source: ChatsSource = "all";
-let sourceLoaded = false;
+let source: ChatsSource = botOnly ? "bots" : "all";
+let sourceLoaded = botOnly;
 let sourceError: string | null = null;
 let sourceRequest: Promise<ChatsSource> | null = null;
 const listeners = new Set<() => void>();

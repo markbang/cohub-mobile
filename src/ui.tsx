@@ -553,7 +553,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const insets = useSafeAreaInsets();
   const { height: windowHeight, fontScale } = useWindowDimensions();
   const material = useGlassMaterial();
-  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => { const frame = Keyboard.metrics(); return frame && isUsableKeyboardFrame(frame) ? frame.screenY : null; });
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(() => { const frame = Keyboard.metrics?.(); return frame && isUsableKeyboardFrame(frame) ? frame.screenY : null; });
   const [expanded, setExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   // User edits always round-trip through onChangeText; voice finals update `value`

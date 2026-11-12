@@ -142,7 +142,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [android, ios]
+        platform: [android, ios, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -207,8 +207,10 @@ jobs:
             metro-ci-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('package-lock.json') }}-
             metro-ota-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('package-lock.json') }}-
 
+      # The web build is the Bot mode Cohub App (Publish Web App); its script also checks the output.
       - name: Export ${{ matrix.platform }} bundle
-        run: npx expo export --platform "${{ matrix.platform }}" --output-dir "dist/${{ matrix.platform }}"
+        run: |
+          if [ "${{ matrix.platform }}" = web ]; then node scripts/web-app.mjs dist/web; else npx expo export --platform "${{ matrix.platform }}" --output-dir "dist/${{ matrix.platform }}"; fi
 
       - name: Save Metro cache
         uses: actions/cache/save@v6
