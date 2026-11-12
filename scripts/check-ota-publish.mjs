@@ -95,9 +95,9 @@ for (const publish of [publishAndroid, publishIos]) {
   assert.equal(JSON.stringify(publish.steps).includes("needs.prepare.outputs.sha }}\"}"), false);
   assert.equal(publish.steps.some((step) => /(^|\s)(npm ci|npx )/.test((step.run ?? "").replace(/npm ci --prefix "\$RUNNER_TEMP\/ota-cli"/, ""))), false, "no target dependencies or app config run beside OTA_API_KEY");
   assert.match(publishStep.run, /PIPESTATUS/, "The publish step must capture the CLI exit status before deciding");
-  assert.match(publishStep.run, /Fingerprint mismatch/, "A fingerprint-mismatch rejection must be reported as an expected skip, not a pipeline failure");
-  assert.match(publishStep.run, /GITHUB_STEP_SUMMARY/, "A skipped publish must explain itself in the run summary");
-  assert.match(publishStep.run, /::warning/, "A skipped publish must surface a warning annotation");
+  assert.match(publishStep.run, /Fingerprint mismatch/, "A fingerprint-mismatch rejection must be explained");
+  assert.match(publishStep.run, /GITHUB_STEP_SUMMARY/, "A publish that did not happen must explain itself in the run summary");
+  assert.equal(/::warning title=\w+ OTA skipped|exit 0\n\s*fi/.test(publishStep.run), false, "A platform that does not publish fails the run instead of skipping with a warning");
   assert.match(publishStep.run, /exit "\$status"/, "Any other CLI failure must still fail the job");
   assert.match(publishStep.run, /isTransientOtaFailure/, "Only transient failures may retry");
   assert.ok(publish["timeout-minutes"] >= OTA_PUBLISH_ATTEMPTS * 5 + 5, "The job must outlast every attempt's 5-minute response timeout");
@@ -146,13 +146,16 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
         },
       });
       const read = (name) => { try { return readFileSync(join(temp, name), "utf8"); } catch { return ""; } };
-      return { status: result.status, calls: Number(read("calls")), sleeps: read("sleeps").trim().split("\n").filter(Boolean), output: result.stdout + result.stderr };
+      return { status: result.status, calls: Number(read("calls")), sleeps: read("sleeps").trim().split("\n").filter(Boolean), output: result.stdout + result.stderr, summary: read("summary") };
     } finally {
       rmSync(temp, { recursive: true, force: true });
     }
   };
+  const name = platform === "ios" ? "iOS" : "Android";
   const firstPublishMismatch = runPublish(["ok"], "d".repeat(40));
-  assert.equal(firstPublishMismatch.status, 0);
+  assert.notEqual(firstPublishMismatch.status, 0, `${platform}: a commit that cannot ride the installed binary fails the run`);
+  assert.match(firstPublishMismatch.output, new RegExp(`::error title=${name} OTA not published::.*${"a".repeat(40)}.*${"d".repeat(40)}`), `${platform}: the failure names the platform and both fingerprints`);
+  assert.match(firstPublishMismatch.summary, new RegExp(`## ${name} OTA not published[\\s\\S]*Native Release`), `${platform}: the summary says which native build to ship`);
   assert.equal(firstPublishMismatch.calls, 0, `${platform}: a new runtime must not accept incompatible code before its first OTA establishes a server baseline`);
   assert.match(firstPublishMismatch.output, /Native fingerprint mismatch/);
   const missingNativeFingerprint = runPublish(["ok"], "");
@@ -169,8 +172,10 @@ for (const [platform, publish] of [["android", publishAndroid], ["ios", publishI
   assert.notEqual(rejected.status, 0);
   assert.equal(rejected.calls, 1, `${platform}: permanent failures do not retry`);
   const mismatch = runPublish(["Error: OTA 409: Fingerprint mismatch", "ok"]);
-  assert.equal(mismatch.status, 0, `${platform}: a fingerprint mismatch stays an explained skip`);
-  assert.equal(mismatch.calls, 1);
+  assert.notEqual(mismatch.status, 0, `${platform}: a server fingerprint rejection fails the run`);
+  assert.equal(mismatch.calls, 1, `${platform}: and does not retry`);
+  assert.match(mismatch.output, new RegExp(`::error title=${name} OTA not published::The OTA server rejected`));
+  assert.match(mismatch.summary, new RegExp(`## ${name} OTA not published`));
 }
 assert.match(JSON.stringify(publishAndroid.steps), /--platform android/);
 assert.match(JSON.stringify(publishIos.steps), /--platform ios/);

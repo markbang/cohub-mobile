@@ -215,14 +215,14 @@ jobs:
           # pipefail turned that match into a miss, so an older release's runtime was used.
           tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select((.draft or .prerelease) | not) | select(any(.assets[].name; test("^cohub-v.+-android-arm64-v8a\\.apk$")))] | sort_by(.created_at) | last | .tag_name // empty')
           if [[ -z "$tag" ]]; then
-            echo "No Android APK has been published. Build one OTA-capable APK with Native Release first; JS-only changes can OTA after that."
+            echo "::error title=Android OTA not published::No Android APK has been published. Build one OTA-capable APK with Native Release first; JS-only changes can OTA after that."
             exit 1
           fi
           asset=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(endswith("-android-arm64-v8a.apk"))')
-          test -n "$asset" || { echo "arm64 APK missing from $tag."; exit 1; }
+          test -n "$asset" || { echo "::error title=Android OTA not published::arm64 APK missing from $tag."; exit 1; }
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$RUNNER_TEMP/native-apk"
           apk="$RUNNER_TEMP/native-apk/$asset"
-          test -f "$apk" || { echo "Failed to download $asset from $tag."; exit 1; }
+          test -f "$apk" || { echo "::error title=Android OTA not published::Failed to download $asset from $tag."; exit 1; }
           runtime=$(unzip -p "$apk" assets/fingerprint | tr -d '[:space:]' | tr 'A-F' 'a-f')
           runtime=$(RUNTIME="$runtime" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.RUNTIME, "installed APK assets/fingerprint"))')
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'cohub-android-native-fingerprint.txt' --dir "$RUNNER_TEMP/native-apk"
@@ -382,12 +382,12 @@ jobs:
           # One query, no pipe, as for Android.
           tag=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[] | select((.draft or .prerelease) | not) | select(any(.assets[].name; . == "cohub-ios-native-fingerprint.txt"))] | sort_by(.created_at) | last | .tag_name // empty')
           if [[ -z "$tag" ]]; then
-            echo "No iOS OTA fingerprint has been published. Ship one OTA-capable TestFlight build with Native Release (platform=ios, profile=production, submit=true) first; JS-only changes can OTA after that."
+            echo "::error title=iOS OTA not published::No iOS OTA fingerprint has been published. Ship one OTA-capable TestFlight build with Native Release (platform=ios, profile=production, submit=true) first; JS-only changes can OTA after that."
             exit 1
           fi
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'cohub-ios-native-fingerprint.txt' --dir "$RUNNER_TEMP/native-ipa"
           fingerprint_file="$RUNNER_TEMP/native-ipa/cohub-ios-native-fingerprint.txt"
-          test -f "$fingerprint_file" || { echo "Failed to download cohub-ios-native-fingerprint.txt from $tag."; exit 1; }
+          test -f "$fingerprint_file" || { echo "::error title=iOS OTA not published::Failed to download cohub-ios-native-fingerprint.txt from $tag."; exit 1; }
           runtime=$(tr -d '[:space:]' < "$fingerprint_file" | tr 'A-F' 'a-f')
           runtime=$(RUNTIME="$runtime" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.RUNTIME, "released cohub-ios-native-fingerprint.txt"))')
           echo "Using $tag iOS runtime $runtime"
@@ -555,9 +555,11 @@ jobs:
           SOURCE_FINGERPRINT=$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { fingerprintFromCliJson } from "./scripts/ota-publish.mjs"; process.stdout.write(fingerprintFromCliJson(readFileSync(process.env.OTA_INPUTS_DIR + "/source-fingerprint.json", "utf8"), "source fingerprint"))')
           NATIVE_SOURCE_FINGERPRINT=$(NATIVE_SOURCE_FINGERPRINT="$NATIVE_SOURCE_FINGERPRINT" node --input-type=module -e 'import { parseFingerprintHash } from "./scripts/ota-publish.mjs"; process.stdout.write(parseFingerprintHash(process.env.NATIVE_SOURCE_FINGERPRINT, "released Android source fingerprint"))')
           if ! SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" node --input-type=module -e 'import { assertFingerprintsMatch } from "./scripts/ota-publish.mjs"; assertFingerprintsMatch(process.env.NATIVE_SOURCE_FINGERPRINT, process.env.SOURCE_FINGERPRINT)'; then
-            echo "Android OTA skipped: source native fingerprint differs from the released APK." >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=Android OTA skipped::Native fingerprint changed; install a matching native distribution first."
-            exit 0
+            # Not publishing is a failure: a green run with one platform missing went unnoticed for a release.
+            reason="this commit's native fingerprint $SOURCE_FINGERPRINT differs from the released APK's $NATIVE_SOURCE_FINGERPRINT"
+            printf '## Android OTA not published\n\n%s.\n\nRun Native Release with `platform=android`, `profile=distribution` and the release tag to ship a matching native build; JS-only commits publish again afterwards.\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Android OTA not published::$reason. Ship a matching native build first."
+            exit 1
           fi
           # Validate against the released APK before the first OTA can register this runtime.
           # Transient transport/server failures retry. Repeating is safe: blobs are
@@ -581,15 +583,15 @@ jobs:
             if [[ $status -eq 0 ]]; then exit 0; fi
             if grep -q "Fingerprint mismatch" "$RUNNER_TEMP/ota-publish.log"; then
               {
-                echo "## OTA skipped (Android)"
+                echo "## Android OTA not published"
                 echo
                 echo "The OTA server rejected this bundle because its native fingerprint differs from the latest update on runtime \`$runtime\`."
                 echo "This commit changed native/SDK code, so it cannot ride the installed binary."
                 echo
                 echo "Run **Native Release** with \`platform=android\`, \`profile=distribution\`, and the release tag to publish a matching native distribution; JS-only commits publish again afterwards."
               } >> "$GITHUB_STEP_SUMMARY"
-              echo "::warning title=Android OTA skipped::Native fingerprint changed; ship a new native distribution first."
-              exit 0
+              echo "::error title=Android OTA not published::The OTA server rejected the bundle: its native fingerprint differs from the latest update on runtime $runtime. Ship a matching native build first."
+              exit 1
             fi
             if (( attempt == attempts )) || ! node --input-type=module -e 'import { readFileSync } from "node:fs"; import { isTransientOtaFailure } from "./scripts/ota-publish.mjs"; process.exit(isTransientOtaFailure(readFileSync(process.env.RUNNER_TEMP + "/ota-publish.log", "utf8")) ? 0 : 1)'; then
               exit "$status"
@@ -686,13 +688,14 @@ jobs:
           # The server pins a runtime to the first fingerprint published on it, so a mismatched
           # commit must never reach it: it would block every matching OTA on that runtime.
           if ! SOURCE_FINGERPRINT="$SOURCE_FINGERPRINT" node --input-type=module -e 'import { assertFingerprintsMatch } from "./scripts/ota-publish.mjs"; assertFingerprintsMatch(process.env.NATIVE_SOURCE_FINGERPRINT, process.env.SOURCE_FINGERPRINT)'; then
-            echo "iOS OTA skipped: source native fingerprint differs from the released IPA." >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=iOS OTA skipped::Native fingerprint changed; ship a new native distribution first."
-            exit 0
+            # Not publishing is a failure: a green run with one platform missing went unnoticed for a release.
+            reason="this commit's native fingerprint $SOURCE_FINGERPRINT differs from the released IPA's $NATIVE_SOURCE_FINGERPRINT"
+            printf '## iOS OTA not published\n\n%s.\n\nRun Native Release with `platform=ios`, `profile=production`, `submit=true` to ship a matching native build; JS-only commits publish again afterwards.\n' "$reason" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=iOS OTA not published::$reason. Ship a matching native build first."
+            exit 1
           fi
-          # Mirrors the Android publish: a fingerprint-mismatch rejection means this
-          # commit needs a new native distribution, not that the pipeline is broken.
-          # Retries transient failures exactly like the Android publish.
+          # Retries transient failures exactly like the Android publish; a fingerprint-mismatch
+          # rejection fails with the native build to ship, as it does there.
           attempts=$(node --input-type=module -e 'import { OTA_PUBLISH_ATTEMPTS } from "./scripts/ota-publish.mjs"; process.stdout.write(String(OTA_PUBLISH_ATTEMPTS))')
           for attempt in $(seq 1 "$attempts"); do
             set +e
@@ -711,15 +714,15 @@ jobs:
             if [[ $status -eq 0 ]]; then exit 0; fi
             if grep -q "Fingerprint mismatch" "$RUNNER_TEMP/ota-publish.log"; then
               {
-                echo "## OTA skipped (iOS)"
+                echo "## iOS OTA not published"
                 echo
                 echo "The OTA server rejected this bundle because its native fingerprint differs from the latest update on runtime \`$runtime\`."
                 echo "This commit changed native/SDK code, so it cannot ride the installed binary."
                 echo
                 echo "Run **Native Release** with \`platform=ios\`, \`profile=production\`, and \`submit=true\` to publish a matching TestFlight build; JS-only commits publish again afterwards."
               } >> "$GITHUB_STEP_SUMMARY"
-              echo "::warning title=iOS OTA skipped::Native fingerprint changed; ship a new native distribution first."
-              exit 0
+              echo "::error title=iOS OTA not published::The OTA server rejected the bundle: its native fingerprint differs from the latest update on runtime $runtime. Ship a matching native build first."
+              exit 1
             fi
             if (( attempt == attempts )) || ! node --input-type=module -e 'import { readFileSync } from "node:fs"; import { isTransientOtaFailure } from "./scripts/ota-publish.mjs"; process.exit(isTransientOtaFailure(readFileSync(process.env.RUNNER_TEMP + "/ota-publish.log", "utf8")) ? 0 : 1)'; then
               exit "$status"
