@@ -135,8 +135,6 @@
       ]
     ],
     "extra": {
-      "apiOrigin": "https://capi.neta.art",
-      "gatewayOrigin": "wss://cgateway.neta.art/ws",
       "authEndpoint": "https://auth.neta.art/",
       "logtoAppId": "16ai0wao2mud3xqkbzqo0",
       "apiResource": "https://api.talesofai",
