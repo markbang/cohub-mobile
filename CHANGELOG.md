@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.3.14](https://github.com/markbang/cohub-mobile/compare/v2.3.13...v2.3.14) (2026-11-12)
+
+
+### Features
+
+* **about:** show the running OTA update next to the app version ([#247](https://github.com/markbang/cohub-mobile/issues/247)) ([586fe69](https://github.com/markbang/cohub-mobile/commit/586fe69ef172dc949498f3f8e5872978fc0703ec))
+* **bots:** add Bot mode where each Bot is one continuous Chat ([#226](https://github.com/markbang/cohub-mobile/issues/226)) ([2dc4946](https://github.com/markbang/cohub-mobile/commit/2dc49463744b267e280679bd4e32d1fb558a54f7))
+* **bots:** draw Bot pages and the Bots view as a messaging app ([#229](https://github.com/markbang/cohub-mobile/issues/229)) ([078a92a](https://github.com/markbang/cohub-mobile/commit/078a92ac0d497cea47e17a2d6b1637a98085195b))
+* **bots:** make each Bot's context window a saved setting, 200k by default ([#239](https://github.com/markbang/cohub-mobile/issues/239)) ([df15b1a](https://github.com/markbang/cohub-mobile/commit/df15b1a03cc3b4cff7017aefc377d2de0af690bc))
+* **bots:** offer six context window tiers, capped at the model's window ([#240](https://github.com/markbang/cohub-mobile/issues/240)) ([34787f2](https://github.com/markbang/cohub-mobile/commit/34787f25863426979370a6abe536442a45f6e807))
+* **bots:** pin Bots as a row of faces above the Bots list ([#241](https://github.com/markbang/cohub-mobile/issues/241)) ([a818f36](https://github.com/markbang/cohub-mobile/commit/a818f36f5c30e3d69137169983334c0457f4bcaf))
+* **bots:** show Bot Chats as message bubbles and drop the needs-you label ([845cdf3](https://github.com/markbang/cohub-mobile/commit/845cdf3906ddae5693b30a14e8e8f5e4b02b104c))
+* **bots:** show messages between Bots as their own compact rows ([#245](https://github.com/markbang/cohub-mobile/issues/245)) ([d0ad286](https://github.com/markbang/cohub-mobile/commit/d0ad286fc2ba34d96e4c4cf2e55c130f2302b405))
+* **bots:** show other Bots' messages under their name on a Bot's page ([#233](https://github.com/markbang/cohub-mobile/issues/233)) ([b699e33](https://github.com/markbang/cohub-mobile/commit/b699e333cc3fca2d97a65e5eea36531b7210f5b5))
+* **bots:** split each Bot into a working Chat and a Chat the user reads ([#227](https://github.com/markbang/cohub-mobile/issues/227)) ([b5f8f34](https://github.com/markbang/cohub-mobile/commit/b5f8f340e236526021f092288c9f0c72a998b525))
+* **chats:** mark every Chat as read from the filter menu ([7b73bcc](https://github.com/markbang/cohub-mobile/commit/7b73bcc08c69dd12eb3c1fac35513bbb975fcba5))
+* **ui:** carry images, list rows, and Android search into their next state ([#234](https://github.com/markbang/cohub-mobile/issues/234)) ([69e821d](https://github.com/markbang/cohub-mobile/commit/69e821d9e9fa162fdef36c6deb253c6d9d4c00aa))
+* **web:** publish Bot mode as a Cohub App ([#251](https://github.com/markbang/cohub-mobile/issues/251)) ([d11a542](https://github.com/markbang/cohub-mobile/commit/d11a542b79857cec8d7dc88fc5c17bb345fbd782))
+
+
+### Fixes
+
+* **android:** draw iOS's soft scroll edge under every blurred header ([6a258f4](https://github.com/markbang/cohub-mobile/commit/6a258f4e238f5c62cef09d8383b34610bfd16a14))
+* **android:** refract the whole screen under the chat header menus ([4f0eb58](https://github.com/markbang/cohub-mobile/commit/4f0eb5835bea0f3cdc7f02e6c2e7d19822fc3a3e))
+* **android:** taper the soft edge's blur into its tail ([7199cc9](https://github.com/markbang/cohub-mobile/commit/7199cc956a9e2e36bdb20ee75b3ac1c92a906d09))
+* **bots:** clear a Bot's unread mark when its page is opened ([b86b722](https://github.com/markbang/cohub-mobile/commit/b86b722545d94f7cb9b4b70240e53332c6c19c0b))
+* **bots:** deliver a message to the Bot before writing it to the Chat ([#242](https://github.com/markbang/cohub-mobile/issues/242)) ([1c6ff5c](https://github.com/markbang/cohub-mobile/commit/1c6ff5c3ac89073ea8519dd4fdcaf3801b734be1))
+* **bots:** keep a Bot's page in place when a message is sent ([#243](https://github.com/markbang/cohub-mobile/issues/243)) ([5cffe93](https://github.com/markbang/cohub-mobile/commit/5cffe93624963c0fb88d45c6654ec4c35298c482))
+* **bots:** keep a busy Bot quiet when a message is steered ([#237](https://github.com/markbang/cohub-mobile/issues/237)) ([81606a5](https://github.com/markbang/cohub-mobile/commit/81606a52453fc8a125ae86471a2dcf74aa2d4993))
+* **bots:** keep cached Bot notes on the Bot's side and paint Bot rows from disk ([#232](https://github.com/markbang/cohub-mobile/issues/232)) ([93e85b8](https://github.com/markbang/cohub-mobile/commit/93e85b863055fdc30eac105539ffb23627c4b51b))
+* **bots:** save each Bot's model and apply it to its turns ([#238](https://github.com/markbang/cohub-mobile/issues/238)) ([2e33ade](https://github.com/markbang/cohub-mobile/commit/2e33ade07adb13a0a9898c8b4aed6a9d41fb0f67))
+* **bots:** show a Bot's live say on its side, after the question it answers ([#230](https://github.com/markbang/cohub-mobile/issues/230)) ([39bc842](https://github.com/markbang/cohub-mobile/commit/39bc84283aef307e1282276df0101b688b0103aa))
+* **bots:** tell the Bot's say from the user's notes by meta.origin ([#228](https://github.com/markbang/cohub-mobile/issues/228)) ([8e58b07](https://github.com/markbang/cohub-mobile/commit/8e58b07c4b61a8202fae4273e31f96f1cabfef34)), closes [#227](https://github.com/markbang/cohub-mobile/issues/227)
+* **config:** point API and gateway at cohub.live ([b42ec19](https://github.com/markbang/cohub-mobile/commit/b42ec1908ae1f31e6fa000840a3f0b7b17770e70))
+* **config:** resolve API and gateway from JS so OTA keeps publishing ([701a970](https://github.com/markbang/cohub-mobile/commit/701a970ca7667bbfcfc3d2678a92f88a8938db82))
+* **navigation:** open a repeated tap on the top screen once ([#236](https://github.com/markbang/cohub-mobile/issues/236)) ([1e759d3](https://github.com/markbang/cohub-mobile/commit/1e759d3da2bd7839ed342c71070c55e665e07b14))
+* **ota:** fail the publish when a platform's update is not uploaded ([#249](https://github.com/markbang/cohub-mobile/issues/249)) ([ba965ba](https://github.com/markbang/cohub-mobile/commit/ba965ba30d504017f9344f0c9db80c31e2f86524))
+* **ota:** find the installed release in one query so Android publishes are not skipped ([#246](https://github.com/markbang/cohub-mobile/issues/246)) ([885f713](https://github.com/markbang/cohub-mobile/commit/885f7131f2e564e88e76abfebc43ced264ee430f))
+* **web:** composer drops browser textarea chrome, takes pasted or dropped files, sends on Enter ([#254](https://github.com/markbang/cohub-mobile/issues/254)) ([b684a25](https://github.com/markbang/cohub-mobile/commit/b684a254e5f81315d959b6caa4eb2db9b4d952ad))
+* **web:** hug the tab bar to its two tabs and draw Android's glyphs ([#255](https://github.com/markbang/cohub-mobile/issues/255)) ([09026b2](https://github.com/markbang/cohub-mobile/commit/09026b28dfd11b4c107cee251ad86ace2696c08e))
+* **web:** run the deep-link boot script after the asset tags resolve ([#257](https://github.com/markbang/cohub-mobile/issues/257)) ([9c639b7](https://github.com/markbang/cohub-mobile/commit/9c639b7306929cf18c7bf6adc1f1406b2f0a2ae9))
+* **web:** stop pulling the chat back to the bottom while scrolling up ([#253](https://github.com/markbang/cohub-mobile/issues/253)) ([593862f](https://github.com/markbang/cohub-mobile/commit/593862f9d9413548bdbd5e2a30103fa9c73865c9))
+* **web:** thin theme-aware scrollbars shown only on hover or while scrolling ([#256](https://github.com/markbang/cohub-mobile/issues/256)) ([cd3b914](https://github.com/markbang/cohub-mobile/commit/cd3b914d64f3f20789169a596486bf2bbe12b041))
+
+
+### Performance
+
+* **bots:** open a Bot's page from cache and read only its new notes ([#235](https://github.com/markbang/cohub-mobile/issues/235)) ([76b83e4](https://github.com/markbang/cohub-mobile/commit/76b83e40a835cf882541778ddcc1b6ab0da44356))
+* **bots:** open a known Bot Chat without waiting on the network ([5df8def](https://github.com/markbang/cohub-mobile/commit/5df8def66f58b0a9341f291775cc993f4932ba4f))
+
+
+### CI
+
+* **ui:** switch the dev sign-in to password when it opens on an emailed code ([0a466ce](https://github.com/markbang/cohub-mobile/commit/0a466ce86faf9fe3b05fc5f9637926d150ded152))
+* **ui:** switch the iOS dev sign-in to password when it opens on an emailed code ([#244](https://github.com/markbang/cohub-mobile/issues/244)) ([cc87cb4](https://github.com/markbang/cohub-mobile/commit/cc87cb412df8edce0522b0c792cb79946b06c15a))
+
 ## [2.3.13](https://github.com/markbang/cohub-mobile/compare/v2.3.12...v2.3.13) (2026-11-10)
 
 
