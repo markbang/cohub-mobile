@@ -255,6 +255,22 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
   return <AppProvider key={identity.uuid} userUuid={identity.uuid} getAccessToken={getAccessToken} getAuthSessionVersion={getAuthSessionVersion} onUnauthorized={onUnauthorized}><Navigation theme={theme} /></AppProvider>;
 }
 
+/** Marks a scrolling element for the moment it moves, so global.css shows its scrollbar only then (and on hover). */
+function markScrolling() {
+  const timers = new Map<Element, ReturnType<typeof setTimeout>>();
+  const onScroll = (event: Event) => {
+    const element = event.target instanceof Element ? event.target : document.documentElement;
+    if (!element.hasAttribute("data-scrolling")) element.setAttribute("data-scrolling", "");
+    clearTimeout(timers.get(element));
+    timers.set(element, setTimeout(() => { timers.delete(element); element.removeAttribute("data-scrolling"); }, 800));
+  };
+  document.addEventListener("scroll", onScroll, { capture: true, passive: true });
+  return () => {
+    document.removeEventListener("scroll", onScroll, { capture: true });
+    for (const timer of timers.values()) clearTimeout(timer);
+  };
+}
+
 /** In the browser the Cohub page hosting the App signs the viewer in; see `src/auth/web-session.ts`. */
 function WebRoot() {
   const theme = useAppTheme();
@@ -271,6 +287,7 @@ function WebRoot() {
 
   useEffect(() => { void connect(); }, [connect]);
   useEffect(() => { void SplashScreen.hideAsync(); }, []);
+  useEffect(() => markScrolling(), []);
   const onUnauthorized = useCallback(() => setSession({ viewer: null, error: translate("data.signInRejected"), loading: false }), []);
   const getAuthSessionVersion = useCallback(() => 0, []);
 
