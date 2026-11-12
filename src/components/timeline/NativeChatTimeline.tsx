@@ -8,9 +8,9 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
-import { BOT_BUBBLE_INSET, botMessageSpace, botPlacements, botSender, type BotPeer } from "@/src/data/bot-mode";
+import { BOT_BUBBLE_INSET, botExchange, botMessageSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
 import { timelineRows, timelineTargetKey, visibleTimelineMessages, type TimelineRow } from "@/src/data/chat-timeline-rows";
@@ -96,6 +96,8 @@ type Props = {
   bot?: BotPeer | null;
   /** Other Bots that may write on a Bot's page, by Space. */
   botPeers: ReadonlyMap<string, BotPeer>;
+  /** The face on a message between Bots opens the Bot at the other end. */
+  onOpenBot?: (spaceId: string) => void;
 };
 
 type Cached = { deps: unknown[]; spec: TimelineRowSpec };
@@ -221,7 +223,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     for (const row of rows) if (row.kind === "message") messageByKey.set(row.key, row.message);
     // A Bot's page spaces its bubbles by side and time instead of by Turn.
     const placed = bot ? [...messageByKey.values()] : [];
-    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" ? spaceId : noteWriter(message)).map((placement, index) => [placed[index]!, placement]));
+    const voice = (message: MessageRecord) => { const writer = noteWriter(message); return botVoice(writer ? botExchange(message, writer, spaceId) : null, writer); };
+    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" ? spaceId : voice(message)).map((placement, index) => [placed[index]!, placement]));
     for (const row of rows) {
       const owner = row.owner ? messageByKey.get(row.owner) : undefined;
       const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
@@ -259,9 +262,12 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           const message = row.message;
           const sig = expandedIn(expanded, [message.id, row.key]);
           const writer = noteWriter(message);
-          if (writer) {
-            const sender = botSender(botPeers, writer, spaceId, t("bots.otherBot"));
-            build([message, sandboxImages, sender?.name, sender?.avatarUrl, sender?.known], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages, sender) }));
+          const exchange = writer ? botExchange(message, writer, spaceId) : null;
+          if (exchange && bot) {
+            const peer = botPeers.get(exchange.peer) ?? null;
+            build([message, sandboxImages, sig, bot.name, peer?.name, peer?.avatarUrl], () => ({ type: "botExchange", node: botExchangeNode(ctx, message.id, exchange, bot, peer, sandboxImages) }));
+          } else if (writer) {
+            build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
           } else if (message.role === "user") {
             const flies = flight && flight.matches(message) ? flight.source : null;
             build([message, retryDisabled, sig, flies], () => ({
@@ -399,7 +405,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return node ? { x: offset.x + node.x, y: offset.y + node.y - lift, width: node.width, height: node.height } : null;
   }, []);
 
-  const { onCopy, onRetry, onDiscard, onFork, onOpenRelated, onLoadOlder, onLoadNewer } = props;
+  const { onCopy, onRetry, onDiscard, onFork, onOpenRelated, onOpenBot, onLoadOlder, onLoadNewer } = props;
   const handleAction = useCallback(({ nativeEvent }: { nativeEvent: { key: string | null; action: string; nodeId: string | null; payload: Record<string, unknown> | null } }) => {
     const { key, action, nodeId, payload } = nativeEvent;
     const row = key ? rowsRef.current.find((item) => item.key === key) : undefined;
@@ -433,6 +439,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
       case "openSession":
         if (payload && typeof payload.sessionId === "string" && typeof payload.spaceId === "string") onOpenRelated({ spaceId: payload.spaceId, sessionId: payload.sessionId, turnId: typeof payload.turnId === "string" ? payload.turnId : "" });
         return;
+      case "openBot":
+        if (typeof payload?.spaceId === "string") onOpenBot?.(payload.spaceId);
+        return;
       case "loadOlder":
         onLoadOlder();
         return;
@@ -465,7 +474,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         }
         return;
     }
-  }, [measureInWindow, onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenRelated, onRetry, openLink, router, sessionId]);
+  }, [measureInWindow, onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenBot, onOpenRelated, onRetry, openLink, router, sessionId]);
 
   useImperativeHandle(ref, () => ({
     scrollToEnd: (animated) => { void nativeRef.current?.scrollToEnd(animated); },

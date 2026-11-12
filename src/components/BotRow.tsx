@@ -73,10 +73,11 @@ export function BotRow(props: BotProps) {
   const { space, note, running, needsYou } = props.entry;
   const bot = useBot(props);
   const age = useRelativeTime(note?.at ?? space.lastActivityAt);
-  // Another Bot's message reads as theirs, as in a group chat's preview.
-  const writer = useAppSelector((app) => note?.from ? app.state.spaces.find((item) => item.id === note.from) ?? null : null);
+  // A message between Bots names the other one, as a group chat's preview does: who wrote it, or who it was for.
+  const other = note?.from ?? note?.to ?? null;
+  const peer = useAppSelector((app) => other ? app.state.spaces.find((item) => item.id === other) ?? null : null);
   const text = note ? previewText(note.text) : "";
-  const preview = note?.from && text ? t("bots.preview.from", { name: writer ? displaySpaceName(writer) : t("bots.otherBot"), text }) : text;
+  const preview = other && text ? t(note?.from ? "bots.preview.from" : "bots.preview.to", { name: peer ? displaySpaceName(peer) : t("bots.otherBot"), text }) : text;
   // Working is the avatar's ring, as on a running Chat's row, and needing the user a chip on the name's line,
   // so the preview keeps the whole second line.
   return bot.menu(<ListRow

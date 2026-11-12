@@ -46,28 +46,56 @@ export function botMessageSpace(message: Pick<MessageRecord, "meta">, turn: Pick
   return turn ? botNoteSpace(turn) : readSessionTurnOrigin(message.meta)?.spaceId ?? null;
 }
 
-/** Another Bot that wrote on this Bot's page; `known` is false when its Space is not loaded, so only a generic name shows. */
-export type BotSender = { name: string; avatarUrl: string | null; known: boolean };
-/** The face beside another Bot's name above its bubble. */
-export const BOT_SENDER_AVATAR_SIZE = 20;
+const ADDRESSED_TO = /^\s*@\[[^\]\n]+\]\(cohub:\/\/spaces\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\)[ \t]*[:：]?\s*/i;
 
-/** Null when the page's own Bot wrote it. */
-export function botSender(peers: ReadonlyMap<string, BotPeer>, writer: string, pageSpaceId: string, unknownName: string): BotSender | null {
-  if (writer === pageSpaceId) return null;
-  const peer = peers.get(writer);
-  return peer ? { ...peer, known: true } : { name: unknownName, avatarUrl: null, known: false };
+/**
+ * The Bot a Bot's own note is for. A report's copy in the sender's own Chat has the Bot's own origin, as a `say`
+ * has, so origin cannot tell them apart; a note that opens with a mention of another Space is read as addressed
+ * to it. `text` is the note without the mention.
+ */
+function botNoteAddressee(text: string, ownSpaceId: string): { to: string; text: string } | null {
+  const match = ADDRESSED_TO.exec(text);
+  const to = match?.[1]?.toLowerCase();
+  return match && to && to !== ownSpaceId ? { to, text: text.slice(match[0].length) } : null;
 }
 
-/** The newest thing a Bot said in a page of the user's Chat, as a Bots row shows it; `from` is another Bot's Space. */
-export type BotNote = { text: string; at: string; messageId: string; from: string | null };
+/**
+ * A message between two Bots on a Bot's page: one another Bot sent this one (`tell` writes it into the receiver's
+ * Chat), or one this Bot sent another. `peer` is the Space of the Bot at the other end; `content` is what it says.
+ */
+export type BotExchange = { peer: string; outgoing: boolean; content: ContentBlock[] };
+/** The other Bot's face beside the line that says who told whom. */
+export const BOT_EXCHANGE_AVATAR_SIZE = 20;
+
+/** `writer` is the Space of the Bot that wrote the note. Null for what the page's own Bot says to the user. */
+export function botExchange(message: Pick<MessageRecord, "content" | "text">, writer: string, pageSpaceId: string): BotExchange | null {
+  const blocks = botReplyBlocks(message.content);
+  const content: ContentBlock[] = blocks.length ? blocks : message.text?.trim() ? [{ type: "text", text: message.text }] : [];
+  if (writer !== pageSpaceId) return { peer: writer, outgoing: false, content };
+  const first = content[0];
+  const sent = first?.type === "text" ? botNoteAddressee(first.text, pageSpaceId) : null;
+  return sent ? { peer: sent.to, outgoing: true, content: botReplyBlocks([{ type: "text", text: sent.text }, ...content.slice(1)]) } : null;
+}
+
+/** The plain words of a message between Bots, for the two lines shown until it is opened. */
+export function botExchangeText(exchange: BotExchange): string {
+  return exchange.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
+}
+
+/**
+ * The newest thing a Bot said in a page of the user's Chat, as a Bots row shows it. `from` is another Bot's Space
+ * when that Bot wrote it; `to` when this Bot wrote it for another Bot.
+ */
+export type BotNote = { text: string; at: string; messageId: string; from: string | null; to?: string | null };
 
 export function latestBotNote(turns: readonly SessionTurnRecord[], spaceId: string): BotNote | null {
   const turn = turns.filter((turn) => botNoteSpace(turn) !== null).reduce<SessionTurnRecord | null>((latest, item) => !latest || item.sequence > latest.sequence ? item : latest, null);
   if (!turn) return null;
   const text = turn.userText ?? botReplyBlocks(turn.userContent).flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
   const from = botNoteSpace(turn);
+  const sent = from === spaceId ? botNoteAddressee(text, spaceId) : null;
   // The id the Chat's messages carry, so read state compares like any Chat's.
-  return { text, at: turn.createdAt, messageId: `${turn.id}:user`, from: from === spaceId ? null : from };
+  return { text: sent?.text ?? text, at: turn.createdAt, messageId: `${turn.id}:user`, from: from === spaceId ? null : from, to: sent?.to ?? null };
 }
 
 /** The model saved in a Bot's `bot.json`; it travels with the Bot, so the app and the bot mod read one value. */
@@ -162,7 +190,12 @@ export const BOT_TURN_GAP = 8;
 /** Where a message sits on a Bot's page: the time row above it, if any, and the space added above it otherwise. */
 export type BotPlacement = { time: string | null; gap: number };
 
-/** `writer` is the Space of the Bot that wrote a message, or null for the user. */
+/** Whose row it is, for `botPlacements`: the user's (null), the Bot's, or one in its exchange with another Bot. */
+export function botVoice(exchange: BotExchange | null, writer: string | null): string | null {
+  return exchange ? `tell:${exchange.peer}` : writer;
+}
+
+/** `writer` says whose row a message is (`botVoice`). */
 export function botPlacements<M extends { createdAt?: string | null }>(messages: readonly M[], writer: (message: M) => string | null): BotPlacement[] {
   let previous: { at: number; writer: string | null } | null = null;
   return messages.map((message) => {

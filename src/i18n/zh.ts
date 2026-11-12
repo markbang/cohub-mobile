@@ -185,6 +185,8 @@ export const zh: Record<TranslationKey, string> = {
   "bots.primary": "主 Bot",
   "bots.otherBot": "另一个 Bot",
   "bots.preview.from": "{name}：{text}",
+  "bots.preview.to": "→ {name}：{text}",
+  "bots.exchange": "{from} → {to}",
   "bots.time.today": "今天 {time}",
   "bots.time.yesterday": "昨天 {time}",
   "settings.botMode.title": "Bot 模式",

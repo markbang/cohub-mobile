@@ -23,8 +23,8 @@ import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { curves, loops } from "@/src/motion";
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, typography, type AppTheme } from "@/src/theme";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
-import { contentText, hasRenderableContent, initials, messageText } from "@/src/utils";
-import { BOT_BUBBLE_INSET, BOT_SENDER_AVATAR_SIZE, botReplyBlocks, type BotPlacement, type BotSender } from "@/src/data/bot-mode";
+import { contentText, hasRenderableContent, initials, messageText, previewText } from "@/src/utils";
+import { BOT_BUBBLE_INSET, BOT_EXCHANGE_AVATAR_SIZE, botExchangeText, botReplyBlocks, type BotExchange, type BotPeer, type BotPlacement } from "@/src/data/bot-mode";
 
 const MD4C_FLAGS = { underline: false, superscript: false, subscript: false, latexMath: true, highlight: false, hardSoftBreaks: false, preserveBlankLines: false, admonitions: true };
 const TOOL_DETAILS_MAX_HEIGHT = 420;
@@ -484,16 +484,16 @@ export function streamingProcessNode(ctx: NodeContext, turnId: string, messages:
   return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
 }
 
-/** `Avatar`'s shape, for another Bot's face above its bubble. */
-function botAvatar(ctx: NodeContext, peer: Pick<BotSender, "name" | "avatarUrl">): TimelineNode {
-  const size = BOT_SENDER_AVATAR_SIZE;
+/** `Avatar`'s shape, for the other Bot's face on a message between Bots. */
+function botAvatar(ctx: NodeContext, peer: BotPeer): TimelineNode {
+  const size = BOT_EXCHANGE_AVATAR_SIZE;
   const shape = { width: size, height: size, borderRadius: size * 0.3 };
   if (peer.avatarUrl) return { type: "image", uri: imageThumbnailUrl(peer.avatarUrl, size, PixelRatio.get()), fallbackUri: peer.avatarUrl, style: { ...shape, backgroundColor: color(ctx.theme.colors.surfaceRaised) } };
   return { type: "view", style: { ...shape, alignItems: "center", justifyContent: "center", backgroundColor: color(ctx.theme.colors.accentSoft) }, children: [text(initials(peer.name), textStyle("micro", ctx.theme.colors.accent, { fontSize: 12 / ctx.fontScale, lineHeight: 14 / ctx.fontScale, fontWeight: "600" }))] };
 }
 
-/** `BotNoteBubble`: what a Bot wrote, its words and images on the left; another Bot's (`sender`) has its face and name above. */
-export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages, sender: BotSender | null): TimelineNode | null {
+/** `BotNoteBubble`: what a Bot says to the user, its words and images on the left. */
+export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxImages: SandboxImages): TimelineNode | null {
   const { theme } = ctx;
   const maxWidth = getBubbleMaxWidth(ctx.width);
   const width = maxWidth - BUBBLE_PADDING_X * 2;
@@ -502,15 +502,50 @@ export function botNoteNode(ctx: NodeContext, message: MessageRecord, sandboxIma
     ? contentNodes(ctx, message.id, blocks, { width, color: ctx.theme.colors.assistantBubbleText, onSurface: true, sandboxImages })
     : message.text?.trim() ? replyMarkdown(ctx, message.text, sandboxImages, width, { color: ctx.theme.colors.assistantBubbleText, onSurface: true }) : [];
   if (body.length === 0) return null;
-  const header: TimelineNode[] = sender ? [{
-    type: "view", style: { maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 },
-    children: [...(sender.known ? [botAvatar(ctx, sender)] : []), text(sender.name, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } })],
-  }] : [];
   return {
     type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, alignItems: "flex-start" },
-    children: [...header, {
+    children: [{
       type: "view", style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.assistantBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
       children: body,
+    }],
+  };
+}
+
+const BOT_EXCHANGE_PREVIEW = 280;
+
+/** `BotExchangeRow`: a message between two Bots, two lines until it is tapped; the face opens the Bot at the other end. */
+export function botExchangeNode(ctx: NodeContext, id: string, exchange: BotExchange, bot: BotPeer, peer: BotPeer | null, sandboxImages: SandboxImages): TimelineNode | null {
+  const { theme, t } = ctx;
+  if (exchange.content.length === 0) return null;
+  const toggle = `exchange:${id}`;
+  const open = ctx.expanded.has(toggle);
+  const maxWidth = getBubbleMaxWidth(ctx.width);
+  const indent = BOT_EXCHANGE_AVATAR_SIZE + 6;
+  const name = peer?.name ?? t("bots.otherBot");
+  const direction = t("bots.exchange", exchange.outgoing ? { from: bot.name, to: name } : { from: name, to: bot.name });
+  const preview = previewText(botExchangeText(exchange), BOT_EXCHANGE_PREVIEW);
+  const face = botAvatar(ctx, { name, avatarUrl: peer?.avatarUrl ?? null });
+  return {
+    type: "view", style: { width: "100%", paddingHorizontal: 12, paddingVertical: BOT_BUBBLE_INSET, alignItems: "flex-start" },
+    children: [{
+      type: "view", action: "toggle", payload: { id: toggle }, pressedOpacity: 0.7, accessibilityRole: "button", accessibilityState: { expanded: open }, accessibilityLabel: preview ? `${direction}: ${preview}` : direction,
+      style: { maxWidth, minWidth: 0 },
+      children: [
+        {
+          type: "view", style: { flexDirection: "row", alignItems: "center", gap: 6 },
+          children: [
+            peer ? { type: "view", action: "openBot", payload: { spaceId: exchange.peer }, pressedOpacity: 0.7, accessibilityRole: "button", accessibilityLabel: t("ui.openNamed", { name }), children: [face] } : face,
+            text(direction, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } }),
+            icon(open ? "chevron-down" : "chevron-right", 14, theme.colors.textFaint),
+          ],
+        },
+        {
+          type: "view", style: { marginTop: 4, marginLeft: BOT_EXCHANGE_AVATAR_SIZE / 2, borderLeftWidth: STEP_RULE, borderLeftColor: color(theme.colors.border), paddingLeft: indent - BOT_EXCHANGE_AVATAR_SIZE / 2 - STEP_RULE, gap: 4 },
+          children: open
+            ? contentNodes(ctx, id, exchange.content, { width: maxWidth - indent, color: ctx.theme.colors.textSecondary, sandboxImages })
+            : [text(preview, textStyle("caption", theme.colors.textSecondary, { fontWeight: "400" }), { numberOfLines: 2 })],
+        },
+      ],
     }],
   };
 }

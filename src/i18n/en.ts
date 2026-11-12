@@ -188,6 +188,8 @@ export const en = {
   "bots.primary": "Primary Bot",
   "bots.otherBot": "Another Bot",
   "bots.preview.from": "{name}: {text}",
+  "bots.preview.to": "→ {name}: {text}",
+  "bots.exchange": "{from} → {to}",
   "bots.time.today": "Today {time}",
   "bots.time.yesterday": "Yesterday {time}",
   "settings.botMode.title": "Bot mode",
