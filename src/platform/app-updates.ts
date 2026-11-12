@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
+import * as Updates from "expo-updates";
 import { Platform } from "react-native";
 import { config } from "@/src/config";
 import {
@@ -80,6 +81,15 @@ export function isNewerAppVersion(current: string, latest: string) {
 
 export function getInstalledAppVersion() {
   return Application.nativeApplicationVersion?.trim() || Constants.expoConfig?.version?.trim() || "0.0.0";
+}
+
+/** The OTA update this launch runs, as the publish log names it; null when it runs the bundle built into the app. */
+export function getRunningUpdate(): { id: string; createdAt: Date | null } | null {
+  try {
+    return !Updates.isEmbeddedLaunch && Updates.updateId ? { id: Updates.updateId, createdAt: Updates.createdAt } : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseCachedCheck(value: unknown): CachedCheck | null {

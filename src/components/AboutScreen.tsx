@@ -10,7 +10,8 @@ import { AppUpdateRow } from "@/src/components/AppUpdateBanner";
 import { useDebugUnlock } from "@/src/components/useDebugUnlock";
 import { submitFeedback, type FeedbackAttachment } from "@/src/data/debug-session";
 import { traceAction } from "@/src/data/interaction-trace";
-import { getInstalledAppVersion } from "@/src/platform/app-updates";
+import { formatThreadTime } from "@/src/data/chat-format";
+import { getInstalledAppVersion, getRunningUpdate } from "@/src/platform/app-updates";
 import { openWebLink } from "@/src/platform/browser";
 import { AppSwitch, AppIcon, Field, FIELD_INPUT_CLASS, TopBar, Screen, SectionHeader, PrimaryButton, SettingsGroup } from "@/src/ui";
 import { ROUNDED_TITLE } from "@/src/ui/rounded";
@@ -46,7 +47,7 @@ export function AboutScreen() {
 export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string; message: string }) => void } = {}) {
   const theme = useAppTheme();
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState("");
@@ -57,6 +58,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
   const [feedbackAttachments, setFeedbackAttachments] = useState<FeedbackAttachment[]>([]);
   const attachmentLimit = feedbackIncludeLog ? MAX_ATTACHMENTS - 1 : MAX_ATTACHMENTS;
   const version = getInstalledAppVersion();
+  const update = getRunningUpdate();
   const unlockDebug = useDebugUnlock(useCallback(() => router.push("/debug"), [router]));
 
   const appendAttachments = (next: FeedbackAttachment[]) => {
@@ -127,6 +129,7 @@ export function AboutContent({ onNotice }: { onNotice?: (notice: { title: string
       <SectionHeader title={t("about.section.application")} />
       <SettingsGroup>
         <SettingsRow icon="info" title={t("about.row.version")} detail={version} />
+        <SettingsRow icon="download" title={t("about.row.update")} detail={update ? [update.id.slice(0, 8), update.createdAt ? formatThreadTime(update.createdAt.toISOString(), t, locale) : null].filter(Boolean).join(" · ") : t("about.row.updateEmbedded")} />
         <AppUpdateRow />
       </SettingsGroup>
 
