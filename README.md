@@ -52,10 +52,10 @@ sets the build-time default; optional endpoint overrides are documented in `.env
 
 | Environment | API | Gateway |
 |-------------|-----|---------|
-| Production | `https://capi.neta.art` | `wss://cgateway.neta.art/ws` |
-| Development | `https://capi-dev.neta.art` | `wss://cgateway-dev.neta.art/ws` |
+| Production | `https://api.cohub.live` | `wss://gateway.cohub.live/ws` |
+| Development | `https://api-dev.cohub.live` | `wss://gateway-dev.cohub.live/ws` |
 
-These accelerated origins serve the same deployments. Authentication endpoints, Logto App IDs, the
+Authentication endpoints, Logto App IDs, the
 OAuth resource identifier (`https://api.talesofai`), and public/deep-link origins are unchanged.
 
 ## Android device Runtime policy

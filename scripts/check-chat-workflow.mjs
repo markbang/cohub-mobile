@@ -4353,21 +4353,21 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   const module = loadConfig();
   assert.equal(module.defaultEnvironment, "prod");
   assert.deepEqual([module.BOT_CONTEXT_WINDOW, module.BOT_CONTEXT_WINDOWS], [200_000, [100_000, 200_000, 400_000, 500_000, 600_000, 800_000]], "a Bot's profile offers six windows and starts at 200k");
-  assert.equal(module.config.apiOrigin, "https://capi.neta.art");
-  assert.equal(module.config.gatewayOrigin, "wss://cgateway.neta.art/ws");
+  assert.equal(module.config.apiOrigin, "https://api.cohub.live");
+  assert.equal(module.config.gatewayOrigin, "wss://gateway.cohub.live/ws");
   const reference = module.config;
   module.setActiveEnvironment("dev");
   assert.equal(module.config, reference, "environment switches retain the shared config identity");
-  assert.equal(module.config.apiOrigin, "https://capi-dev.neta.art");
-  assert.equal(module.config.gatewayOrigin, "wss://cgateway-dev.neta.art/ws");
+  assert.equal(module.config.apiOrigin, "https://api-dev.cohub.live");
+  assert.equal(module.config.gatewayOrigin, "wss://gateway-dev.cohub.live/ws");
   assert.equal(module.config.authEndpoint, "https://dev-auth.neta.art/");
   assert.equal(module.config.logtoAppId, "vpikk7sl9zwvefiptowtn");
   assert.equal(module.config.apiResource, "https://api.talesofai");
   module.setActiveEnvironment("prod");
   assert.equal(module.config.authEndpoint, "https://auth.neta.art/");
   assert.equal(module.config.logtoAppId, "16ai0wao2mud3xqkbzqo0");
-  assert.equal(loadConfig({ EXPO_PUBLIC_COHUB_ENV: "dev" }).config.apiOrigin, "https://capi-dev.neta.art");
-  assert.equal(loadConfig({}, {}).config.gatewayOrigin, "wss://cgateway.neta.art/ws", "JS defaults match app.json even without Expo extra");
+  assert.equal(loadConfig({ EXPO_PUBLIC_COHUB_ENV: "dev" }).config.apiOrigin, "https://api-dev.cohub.live");
+  assert.equal(loadConfig({}, {}).config.gatewayOrigin, "wss://gateway.cohub.live/ws", "JS defaults match app.json even without Expo extra");
   const overridden = loadConfig({ EXPO_PUBLIC_API_ORIGIN: " https://api.example.test ", EXPO_PUBLIC_GATEWAY_ORIGIN: " wss://gateway.example.test/ws " });
   for (const environment of ["prod", "dev"]) {
     const resolved = overridden.resolveConfig(environment);
@@ -4431,9 +4431,9 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   for (const url of [DEVICE_CLI.nodeUrl, DEVICE_CLI.cliUrl]) assert.match(url, /^https:\/\/github\.com\/markbang\/cohub-mobile\/releases\/download\/android-cli-v/);
   for (const sha of [DEVICE_CLI.nodeSha256, DEVICE_CLI.cliSha256]) assert.match(sha, /^[0-9a-f]{64}$/);
 }
-assert.equal(runtimeGatewayOrigin("wss://cgateway.neta.art/ws"), "wss://cgateway.neta.art");
-assert.equal(runtimeGatewayOrigin("wss://cgateway-dev.neta.art/ws/"), "wss://cgateway-dev.neta.art");
-for (const invalid of ["ws://cgateway.neta.art/ws", "wss://cgateway.neta.art", "wss://cgateway.neta.art/realtime"]) assert.throws(() => runtimeGatewayOrigin(invalid), /wss:\/\/<host>\/ws/);
+assert.equal(runtimeGatewayOrigin("wss://gateway.cohub.live/ws"), "wss://gateway.cohub.live");
+assert.equal(runtimeGatewayOrigin("wss://gateway-dev.cohub.live/ws/"), "wss://gateway-dev.cohub.live");
+for (const invalid of ["ws://gateway.cohub.live/ws", "wss://gateway.cohub.live", "wss://gateway.cohub.live/realtime"]) assert.throws(() => runtimeGatewayOrigin(invalid), /wss:\/\/<host>\/ws/);
 const jwt = (payload) => `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
 assert.equal(accessTokenExpiresAt(jwt({ exp: 1_800_000_000 })), 1_800_000_000_000);
 assert.equal(accessTokenExpiresAt(jwt({ sub: "user" })), null);
