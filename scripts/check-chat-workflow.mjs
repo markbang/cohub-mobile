@@ -4335,7 +4335,7 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   }
 }
 
-// Environment selection shares accelerated origins without changing OAuth identity or explicit overrides.
+// Environment selection resolves API and gateway from JS defaults, so endpoint changes ride OTA.
 {
   const source = ts.transpileModule(readFileSync(new URL("../src/config.ts", import.meta.url), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -4367,7 +4367,8 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
   assert.equal(module.config.authEndpoint, "https://auth.neta.art/");
   assert.equal(module.config.logtoAppId, "16ai0wao2mud3xqkbzqo0");
   assert.equal(loadConfig({ EXPO_PUBLIC_COHUB_ENV: "dev" }).config.apiOrigin, "https://api-dev.cohub.live");
-  assert.equal(loadConfig({}, {}).config.gatewayOrigin, "wss://gateway.cohub.live/ws", "JS defaults match app.json even without Expo extra");
+  assert.equal(loadConfig({}, {}).config.gatewayOrigin, "wss://gateway.cohub.live/ws", "JS defaults resolve without Expo extra");
+  assert.equal(loadConfig({}, { ...extra, apiOrigin: "https://stale.example", gatewayOrigin: "wss://stale.example/ws" }).config.apiOrigin, "https://api.cohub.live", "app.json endpoints cannot change the OTA fingerprint");
   const overridden = loadConfig({ EXPO_PUBLIC_API_ORIGIN: " https://api.example.test ", EXPO_PUBLIC_GATEWAY_ORIGIN: " wss://gateway.example.test/ws " });
   for (const environment of ["prod", "dev"]) {
     const resolved = overridden.resolveConfig(environment);
