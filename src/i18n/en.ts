@@ -699,6 +699,8 @@ export const en = {
   "about.section.links": "Links",
   "about.section.legal": "Legal",
   "about.row.version": "Version",
+  "about.row.update": "Running update",
+  "about.row.updateEmbedded": "Built into the app",
   "about.row.source": "Source code",
   "about.row.sourceDetail": "github.com/markbang/cohub-mobile",
   "about.row.releases": "Release notes",
