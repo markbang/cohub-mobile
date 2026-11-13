@@ -20,11 +20,10 @@ type SpaceRowProps = {
   space: SpaceListSpace;
   sessionCount?: SpaceSessionCount | null;
   onPress: () => void;
-  pinning?: boolean;
   onTogglePin?: () => void;
 };
 
-export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogglePin }: SpaceRowProps) {
+export function SpaceRow({ space, sessionCount, onPress, onTogglePin }: SpaceRowProps) {
   const { t } = useTranslation();
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const name = displaySpaceName(space);
@@ -52,23 +51,22 @@ export function SpaceRow({ space, sessionCount, onPress, pinning = false, onTogg
       subtitle={subtitle}
       trailing={sessionCount && countLabel && !description ? <Animated.View entering={countKnownAtMount ? undefined : FadeIn.duration(motion.fade.duration)}><Meta icon="messages" value={`${sessionCount.count}${sessionCount.hasMore ? "+" : ""}`} label={countLabel} tone="faint" /></Animated.View> : null}
       accessibilityLabel={[t("ui.openNamed", { name }), active ? t("ui.active") : null, pinned ? t("space.pinned") : null].filter(Boolean).join(", ")}
-      accessibilityHint={onTogglePin && !pinning ? t("space.longPressHint") : undefined}
+      accessibilityHint={onTogglePin ? t("space.longPressHint") : undefined}
       onPress={() => { traceAction("space_row", { space: debugAlias("space", space.id), active, pinned }); onPress(); }}
-      // The handler stays attached while pinning: without one, Pressable would turn the hold into a press and navigate.
       // On iOS the system context menu owns the hold; the no-op still keeps a hold from becoming a press.
       onLongPress={nativeContextMenus ? () => undefined : (event) => { const { pageX, pageY } = event.nativeEvent; haptics.longPress(); setMenuAt({ x: pageX, y: pageY }); }}
-      accessibilityActions={onTogglePin && !pinning ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
-      onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin && !pinning) onTogglePin(); }}
+      accessibilityActions={onTogglePin ? [{ name: "togglePin", label: pinned ? t("space.unpin") : t("space.pin") }] : undefined}
+      onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "togglePin" && onTogglePin) onTogglePin(); }}
     />
   );
   // iOS lifts the row into the system context menu; Android opens the drawn menu at the touch.
   const actions = [
     { icon: "arrow-right", title: t("common.open"), onPress },
-    ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: onTogglePin } as const] : []),
+    ...(onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", title: pinned ? t("space.unpin") : t("space.pin"), onPress: onTogglePin } as const] : []),
   ] as const;
   const preview = { title: name, body: space.description?.trim() || undefined, footnote: [active ? t("ui.active") : null, countLabel, age].filter(Boolean).join(" · ") };
   // Messages pins from the leading edge.
-  const swipe = onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", label: pinned ? t("space.unpin") : t("space.pin"), tone: "accent", disabled: pinning, onPress: onTogglePin } as const] : [];
+  const swipe = onTogglePin ? [{ icon: pinned ? "pin-off" : "pin", label: pinned ? t("space.unpin") : t("space.pin"), tone: "accent", onPress: onTogglePin } as const] : [];
   if (nativeContextMenus) return <SwipeActions leading={swipe}><NativeContextMenu menu="space-row" actions={actions} preview={preview}>{row}</NativeContextMenu></SwipeActions>;
   return (
     <>

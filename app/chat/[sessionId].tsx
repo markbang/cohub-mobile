@@ -421,8 +421,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const [chatLabels, setChatLabels] = useState<SessionLabel[]>([]);
   const [chatLabelsError, setChatLabelsError] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [renameSaving, setRenameSaving] = useState(false);
-  const renameSavingRef = useRef(false);
   const [stopping, setStopping] = useState(false);
   const [pendingFollowupAction, setPendingFollowupAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
@@ -1144,7 +1142,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     if (Platform.OS === "ios") {
       Alert.prompt(t("chat.rename.title"), undefined, [
         { text: t("common.cancel"), style: "cancel" },
-        { text: t("common.save"), isPreferred: true, onPress: (value?: string) => void saveRename((value ?? "").slice(0, RENAME_MAX_LENGTH)) },
+        { text: t("common.save"), isPreferred: true, onPress: (value?: string) => saveRename((value ?? "").slice(0, RENAME_MAX_LENGTH)) },
       ], "plain-text", current);
       return;
     }
@@ -1163,14 +1161,9 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     setOverlay("labels");
     reloadChatLabels();
   };
-  const saveRename = async (title = renameValue) => {
-    if (renameSavingRef.current) return;
-    renameSavingRef.current = true;
-    setRenameSaving(true);
-    try { await renameSession(sessionId, title); closeOverlay("rename"); } catch (error) { showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }); } finally {
-      renameSavingRef.current = false;
-      setRenameSaving(false);
-    }
+  const saveRename = (title = renameValue) => {
+    closeOverlay("rename");
+    void renameSession(sessionId, title).catch((error: unknown) => showToast({ title: t("chat.renameFailed.title"), message: error instanceof Error ? error.message : t("chat.renameFailed.body"), tone: "danger" }));
   };
   const archived = Boolean(session?.archivedAt);
   // Only the person whose run stopped can top up for it; other members see the Turn as stopped.
@@ -1178,13 +1171,9 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const turn = view.turns.at(-1);
     return turn?.status === "interrupted" && turn.summary?.reason === "billing" && turn.userUuid === userUuid;
   }, [userUuid, view.turns]);
-  const [archiving, setArchiving] = useState(false);
-  const toggleArchive = async () => {
-    if (!session || archiving) return;
-    setArchiving(true);
-    try { await setSessionArchived(session, !archived); } catch (error) { showToast({ title: t("session.archive.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }); } finally {
-      setArchiving(false);
-    }
+  const toggleArchive = () => {
+    if (!session) return;
+    void setSessionArchived(session, !archived).catch((error: unknown) => showToast({ title: t("session.archive.failed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
   };
   const titleActions: AnchoredMenuAction[] = [
     { icon: "copy", title: t("chat.titleActions.copy"), onPress: () => void copySessionTitle() },
@@ -1197,7 +1186,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       { icon: "square-pen", title: t("chat.actions.rename"), onPress: openRename },
       { icon: "tag", title: t("chat.actions.labels"), disabled: !client || !spaceId, onPress: openLabelSheet },
       // The server refuses to archive a running Chat; the item says why instead of failing.
-      { icon: "archive", title: archived ? t("session.unarchive") : running ? t("session.archive.running") : t("session.archive"), disabled: !client || !session || archiving || (!archived && running), onPress: () => void toggleArchive() },
+      { icon: "archive", title: archived ? t("session.unarchive") : running ? t("session.archive.running") : t("session.archive"), disabled: !client || !session || (!archived && running), onPress: toggleArchive },
     ] },
     { title: spaceName, actions: [
       { icon: "messages", title: t("chat.actions.openChats"), disabled: !spaceId, onPress: () => setActivePanel("chat") },
@@ -1799,7 +1788,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         {/* Only local Harnesses ask for approval, so Cloud-only Chats never read for it. */}
         {sessionId && spaceId && (composerHarness !== "cohub" || view.turns.some((turn) => runtimeHarnessFromTurn(turn) !== "cohub")) ? <SessionApprovals client={client} spaceId={spaceId} sessionId={sessionId} running={running} harnessOf={(turnId) => runtimeHarnessFromTurn(view.turns.find((turn) => turn.id === turnId))} /> : null}
         {billingStopped ? <ComposerNotice icon="wallet" text={t("chat.billingStopped.notice")} action={t("chat.billingStopped.action")} onAction={() => router.push("/settings/billing")} /> : null}
-        {archived ? <ComposerNotice icon="archive" text={t("chat.archived.notice")} action={t("session.unarchive")} busy={archiving} onAction={() => void toggleArchive()} /> : null}
+        {archived ? <ComposerNotice icon="archive" text={t("chat.archived.notice")} action={t("session.unarchive")} onAction={toggleArchive} /> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
         <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh(), execution: executionMenu })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={!bot && runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
@@ -1825,8 +1814,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
               {/* Claims the touch so a tap inside the dialog does not reach the scrim. */}
               <View onStartShouldSetResponder={() => true} className="gap-4 rounded-lg bg-surface p-5" style={{ borderCurve: "continuous" }}>
                 <Text className="text-headline font-semibold text-fg">{t("chat.rename.title")}</Text>
-                <TextInput autoFocus value={renameValue} onChangeText={setRenameValue} editable={!renameSaving} maxLength={RENAME_MAX_LENGTH} returnKeyType="done" onSubmitEditing={() => void saveRename()} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} />
-                <View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => closeOverlay("rename")} /><PrimaryButton label={t("common.save")} loading={renameSaving} onPress={() => void saveRename()} /></View>
+                <TextInput autoFocus value={renameValue} onChangeText={setRenameValue} maxLength={RENAME_MAX_LENGTH} returnKeyType="done" onSubmitEditing={() => saveRename()} placeholder={t("chat.rename.placeholder")} placeholderTextColor={theme.colors.textFaint} className={FIELD_INPUT_CLASS} />
+                <View className="flex-row justify-end gap-2"><PrimaryButton variant="ghost" label={t("common.cancel")} onPress={() => closeOverlay("rename")} /><PrimaryButton label={t("common.save")} onPress={() => saveRename()} /></View>
               </View>
             </Pressable>
           </RNKeyboardAvoidingView>
@@ -1941,11 +1930,11 @@ function WorkLogButton({ labeled, disabled, onPress }: { labeled: boolean; disab
 }
 
 /** A state of the Chat the composer answers, with the one action that changes it. */
-function ComposerNotice({ icon, text, action, busy = false, onAction }: { icon: IconName; text: string; action: string; busy?: boolean; onAction: () => void }) {
+function ComposerNotice({ icon, text, action, onAction }: { icon: IconName; text: string; action: string; onAction: () => void }) {
   return <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} accessibilityRole="summary" className="flex-row items-center gap-2 bg-background pl-4 pr-2">
     <AppIcon name={icon} size={14} tone="muted" />
     <Text className="flex-1 text-caption text-fg-muted">{text}</Text>
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={onAction} className="min-h-11 justify-center px-2 active:opacity-70 disabled:opacity-55">
+    <Pressable accessibilityRole="button" onPress={onAction} className="min-h-11 justify-center px-2 active:opacity-70">
       <Text className="text-caption font-semibold text-accent">{action}</Text>
     </Pressable>
   </Animated.View>;

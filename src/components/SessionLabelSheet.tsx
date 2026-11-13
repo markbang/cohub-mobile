@@ -12,6 +12,7 @@ import {
   toUserSessionLabels,
   type SessionLabel,
 } from "@/src/data/session-labels";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { AppIcon, FIELD_INPUT_CLASS, Loader, LoadingState } from "@/src/ui";
@@ -34,7 +35,7 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
   const [assignments, setAssignments] = useState<LabelAssignmentRecord[]>([]);
   const [loading, setLoading] = useState(labels.length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [busyLabelIds, setBusyLabelIds] = useState<Set<string>>(new Set());
+  const [writes] = useState(createOptimisticWrites);
   const [newLabelName, setNewLabelName] = useState("");
   const [creating, setCreating] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -76,33 +77,25 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
     onLabelsReload?.();
   }, [onLabelsReload]);
 
-  const toggle = useCallback(async (label: SessionLabel) => {
-    if (busyLabelIds.has(label.id) || label.system) return;
+  const toggle = useCallback((label: SessionLabel) => {
     const ref = formatLabelRef(label);
-    if (!ref) return;
-    const wasAssigned = assignedIds.has(label.id);
-    setBusyLabelIds((current) => new Set([...current, label.id]));
+    if (label.system || !ref) return Promise.resolve();
+    const assigned = assignedIds.has(label.id);
     setError(null);
-    setAssignments((current) => wasAssigned
-      ? current.filter((item) => item.labelId !== label.id)
-      : [...current, { labelId: label.id, labelName: label.name, labelSystemKey: label.systemKey } as LabelAssignmentRecord]);
-    try {
-      if (wasAssigned) await detachSessionLabel(client, spaceId, ref, session.id);
-      else await attachSessionLabel(client, spaceId, ref, session.id);
-      onChanged();
-    } catch (caught) {
-      setAssignments((current) => wasAssigned
-        ? [...current, { labelId: label.id, labelName: label.name, labelSystemKey: label.systemKey } as LabelAssignmentRecord]
-        : current.filter((item) => item.labelId !== label.id));
-      setError(caught instanceof Error ? caught.message : t("labels.updateError"));
-    } finally {
-      setBusyLabelIds((current) => {
-        const next = new Set(current);
-        next.delete(label.id);
-        return next;
-      });
-    }
-  }, [assignedIds, busyLabelIds, client, onChanged, session.id, spaceId, t]);
+    return writes.run(label.id, {
+      value: !assigned,
+      confirmed: assigned,
+      apply: (on) => setAssignments((current) => {
+        const rest = current.filter((item) => item.labelId !== label.id);
+        return on ? [...rest, { labelId: label.id, labelName: label.name, labelSystemKey: label.systemKey } as LabelAssignmentRecord] : rest;
+      }),
+      send: async (on) => {
+        await (on ? attachSessionLabel : detachSessionLabel)(client, spaceId, ref, session.id);
+        return on;
+      },
+      settled: () => onChanged(),
+    }).then(() => undefined, (caught: unknown) => setError(caught instanceof Error ? caught.message : t("labels.updateError")));
+  }, [assignedIds, client, onChanged, session.id, spaceId, t, writes]);
 
   const create = useCallback(async () => {
     const name = newLabelName.trim();
@@ -159,7 +152,6 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
         <Text className="text-caption text-fg-muted py-4">{t("labels.none")}</Text>
       ) : selectable.map((item) => {
         const assigned = assignedIds.has(item.id);
-        const busy = busyLabelIds.has(item.id);
         return (
           <Pressable
             key={item.id}
@@ -167,14 +159,12 @@ export function SessionLabelSheet({ client, spaceId, session, labels = [], label
             accessibilityLabel={t("labels.addTo", { name: item.name })}
             accessibilityState={{ checked: assigned }}
             onPress={() => void toggle(item)}
-            disabled={busy}
             className={`min-h-12 flex-row items-center gap-3 rounded-sm px-3 ${assigned ? "bg-accent-soft" : "active:bg-surface-pressed"}`}
           >
             <View className={`size-6 items-center justify-center rounded-xs border-2 ${assigned ? "border-accent bg-accent" : "border-border-strong"}`}>
               {assigned ? <AppIcon name="check" size={16} tone="onAccent" /> : null}
             </View>
             <Text numberOfLines={1} className="text-body font-semibold text-fg flex-1">{item.name}</Text>
-            {busy ? <Loader /> : null}
           </Pressable>
         );
       })}
