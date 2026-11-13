@@ -57,6 +57,7 @@ sets the build-time default; optional endpoint overrides are documented in `.env
 
 Authentication endpoints, Logto App IDs, the
 OAuth resource identifier (`https://api.talesofai`), and public/deep-link origins are unchanged.
+API and gateway resolve from JS defaults in `src/config.ts`, so changing them ships over OTA.
 
 ## Android device Runtime policy
 

@@ -4,8 +4,6 @@ import * as ExpoLinking from "expo-linking";
 export type CohubEnvironment = "prod" | "dev";
 
 type ExpoExtra = {
-  apiOrigin?: string;
-  gatewayOrigin?: string;
   authEndpoint?: string;
   logtoAppId?: string;
   apiResource?: string;
@@ -70,10 +68,9 @@ const environmentDefaults: Record<
 
 export function resolveConfig(environment: CohubEnvironment) {
   const defaults = environmentDefaults[environment];
-  // app.json mirrors the released native config, so changing a JS-visible endpoint
-  // there would change the OTA fingerprint. API and gateway therefore resolve from
-  // these JS defaults and ride OTA; auth and Logto still inherit their production
-  // values from app.json. EXPO_PUBLIC_* overrides any value.
+  // API and gateway resolve from these JS defaults so endpoint changes ride OTA;
+  // auth and Logto inherit their production values from app.json.
+  // EXPO_PUBLIC_* overrides any value.
   const readEnvironmentDefault = (extraValue: string | undefined, fallback: string) =>
     readPublic(environment === "prod" ? extraValue : undefined, fallback);
   return {
