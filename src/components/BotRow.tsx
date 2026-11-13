@@ -10,7 +10,7 @@ import { useRelativeTime } from "@/src/data/use-relative-time";
 import { useTranslation } from "@/src/i18n";
 import { haptics } from "@/src/platform/haptics";
 import { MAX_FONT_SCALE, useAppTheme } from "@/src/theme";
-import { AppIcon, Avatar } from "@/src/ui";
+import { AppIcon, Avatar, Bone } from "@/src/ui";
 import { AvatarStatus, ListRow, Tag } from "@/src/ui/ListRow";
 import { displaySpaceName, previewText } from "@/src/utils";
 
@@ -22,6 +22,7 @@ const PINNED_BOT_AVATAR_SIZE = 56;
 const PINNED_BOT_WIDTH = 72;
 
 type BotProps = { entry: BotEntry<SpaceRecord>; onPress: () => void; onPressIn?: () => void; onTogglePin?: () => void };
+type BotRowProps = BotProps & { loading?: boolean };
 
 /**
  * What a Bot's row and its pinned face share: who it is, whether it has news, and the long-press menu that
@@ -68,7 +69,7 @@ function PrimaryStar() {
 }
 
 /** A Bot as a contact: the last thing it said, and whether it is working, waiting on the user, or has news. */
-export function BotRow(props: BotProps) {
+export function BotRow({ loading = false, ...props }: BotRowProps) {
   const { t } = useTranslation();
   const { space, note, running, needsYou } = props.entry;
   const bot = useBot(props);
@@ -88,7 +89,8 @@ export function BotRow(props: BotProps) {
     title={bot.name}
     titleBadge={needsYou ? <Tag label={t("bots.needsYou")} /> : null}
     meta={age}
-    subtitle={preview || undefined}
+    // A line still loading keeps its place, so the row does not grow when it arrives.
+    subtitle={preview || (loading ? <View className="h-5 justify-center"><Bone width="62%" height={10} /></View> : undefined)}
     divider={false}
     unread={bot.unread}
     onPress={props.onPress}
@@ -104,7 +106,7 @@ export function BotRow(props: BotProps) {
  */
 export function PinnedBots({ entries, onPress, onPressIn, onTogglePin }: { entries: readonly BotEntry<SpaceRecord>[]; onPress: (entry: BotEntry<SpaceRecord>) => void; onPressIn?: (entry: BotEntry<SpaceRecord>) => void; onTogglePin?: (entry: BotEntry<SpaceRecord>) => void }) {
   if (entries.length === 0) return null;
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerClassName="px-2">
+  return <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerClassName="px-2 pb-2">
     {entries.map((entry) => <PinnedBot key={entry.space.id} entry={entry} onPress={() => onPress(entry)} onPressIn={onPressIn ? () => onPressIn(entry) : undefined} onTogglePin={onTogglePin ? () => onTogglePin(entry) : undefined} />)}
   </ScrollView>;
 }

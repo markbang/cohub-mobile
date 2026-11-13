@@ -87,6 +87,9 @@ export function useBots(enabled: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [spaces, filesKey, stamps, running]);
   const failed = [...fileQueries, ...noteQueries, ...needsYouQueries].find((query) => query.error)?.error;
+  // A Bot whose line is still on its way, unlike one that has said nothing yet.
+  const loadingKey = spaces.filter((_, index) => fileQueries[index]?.isLoading || noteQueries[index]?.isLoading).map((space) => space.id).join(",");
+  const loadingIds = useMemo<ReadonlySet<string>>(() => new Set(loadingKey ? loadingKey.split(",") : []), [loadingKey]);
 
   /** The user's Chat with a Bot; one the Bot does not have yet (an older or hand-made Bot) is made on first open, as for the primary Bot. */
   const openChat = useCallback(async (spaceId: string): Promise<string> => {
@@ -105,6 +108,7 @@ export function useBots(enabled: boolean) {
   return {
     entries,
     loading: fileQueries.some((query) => query.isPending && query.isFetching),
+    loadingIds,
     error: failed ? failed.message : null,
     openChat,
     refetch: () => Promise.all([...fileQueries, ...noteQueries, ...needsYouQueries].map((query) => query.refetch())).then(() => undefined),

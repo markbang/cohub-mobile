@@ -1,20 +1,23 @@
 import { Tabs } from "expo-router";
 import { AnimatedTabIcon } from "@/src/components/AnimatedTabIcon";
 import { FloatingTabBar, TabBlurTargetsProvider, TabScreenLayout } from "@/src/components/FloatingTabBar";
+import { TabRail } from "@/src/components/TabRail";
 import { botOnly } from "@/src/data/bot-mode-preference";
 import { useTranslation } from "@/src/i18n";
+import { useDesktopSplit } from "@/src/ui/pane";
 import { TabBarMinimizeProvider } from "@/src/ui/tab-bar-minimize";
 
 export default function TabLayout() {
   const { t } = useTranslation();
+  const rail = useDesktopSplit();
   // Tabs are peers, not a hierarchy: switching must never slide.
   return (
     <TabBlurTargetsProvider>
     <TabBarMinimizeProvider>
     <Tabs
-      screenOptions={{ headerShown: false, animation: "none" }}
+      screenOptions={{ headerShown: false, animation: "none", tabBarPosition: rail ? "left" : "bottom" }}
       screenLayout={({ route, children }) => <TabScreenLayout routeKey={route.key}>{children}</TabScreenLayout>}
-      tabBar={(props) => <FloatingTabBar {...props} />}
+      tabBar={(props) => rail ? <TabRail {...props} /> : <FloatingTabBar {...props} />}
     >
       <Tabs.Screen
         name="(chats)"

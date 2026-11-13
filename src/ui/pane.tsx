@@ -1,6 +1,6 @@
 import { useIsFocused, useRoute, useRouter } from "expo-router";
 import { createContext, useCallback, useContext, useEffect, type EffectCallback } from "react";
-import { useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 import { chatOpenAction, showsPaneBack, type SplitMode } from "@/src/data/split-navigation";
 
 /** The root layout's shape, set by `SplitStack`. */
@@ -21,6 +21,16 @@ export const PaneRouteIndexContext = createContext<number | null>(null);
 
 export function useSplitLayout(): SplitLayout {
   return useContext(SplitLayoutContext);
+}
+
+/**
+ * A browser window wide enough to split: the desktop layout, used with a pointer in a fixed window, where the
+ * phone's thumb-reach chrome gives way: the tabs become a side rail and a tab root's title shares its row with
+ * the bar's actions. Phones, tablets, and a narrow browser window keep the phone's chrome.
+ */
+export function useDesktopSplit(): boolean {
+  const { mode } = useSplitLayout();
+  return Platform.OS === "web" && mode === "split";
 }
 
 /** The width the screen lays out in: its pane in a split window, otherwise the window. */

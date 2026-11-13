@@ -6,7 +6,8 @@ import { useLinkPreviewContext } from "expo-router/build/link/preview/LinkPrevie
 import { INTERNAL_EXPO_ROUTER_NO_ANIMATION_PARAM_NAME } from "expo-router/build/navigationParams";
 import { IsFocusedContext } from "expo-router/build/react-navigation/core/useIsFocused";
 import { use, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { TAB_RAIL_WIDTH } from "@/src/components/TabRail";
 import { chatSessionId, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, selectedChatId, splitMode, splitRoutes } from "@/src/data/split-navigation";
 import { useTranslation } from "@/src/i18n";
 import { PrimaryButton } from "@/src/ui";
@@ -34,7 +35,8 @@ function SplitStackContent(props: ContentProps) {
   const window = useWindowDimensions();
   const mode = splitMode(window.width, window.height);
   const split = mode === "split";
-  const leftWidth = leftPaneWidth(window.width);
+  // The browser's split draws the tabs as a rail beside the list (`useDesktopSplit`).
+  const leftWidth = leftPaneWidth(window.width) + (Platform.OS === "web" ? TAB_RAIL_WIDTH : 0);
   const { root, pane, overlays } = useMemo(() => split ? splitRoutes(state.routes) : { root: state.routes[0], pane: [], overlays: [] }, [split, state.routes]);
   const paneTop = pane.at(-1);
 

@@ -16,7 +16,7 @@ import { edgeChrome, MAX_FONT_SCALE, useAppTheme } from "@/src/theme";
 import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 import { useTabBarMinimized } from "@/src/ui/tab-bar-minimize";
-import { usePaneWidth } from "@/src/ui/pane";
+import { useDesktopSplit, usePaneWidth } from "@/src/ui/pane";
 
 // Geometry and feel follow UIKit's iOS 26 tab bar: a lens rests under the selected tab, lifts and
 // grows under a press, follows a drag across the bar, and settles on the tab it is let go over.
@@ -129,9 +129,10 @@ function itemPitch(barWidth: number, count: number) {
 /** Space the tab bar occupies at the bottom of a tab screen. */
 export function useFloatingTabBarInset() {
   const insets = useSafeAreaInsets();
+  const rail = useDesktopSplit();
   // iOS tab roots scroll with automatic insets, which already clear the system tab bar, so only the
-  // breathing room is added. Android draws this bar over the screen.
-  if (Platform.OS === "ios") return 16;
+  // breathing room is added; the desktop rail sits beside the list. Android draws this bar over the screen.
+  if (Platform.OS === "ios" || rail) return 16;
   return BAR_HEIGHT + barBottomOffset(insets.bottom) + 16;
 }
 
