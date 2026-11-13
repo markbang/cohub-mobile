@@ -153,9 +153,13 @@ export function GlassBackground({ radius, glass = "regular", tint, surface = "gl
       <View style={[StyleSheet.absoluteFill, shape, { backgroundColor: frostTint(theme.colors[surface], theme.colors.background, FROST_OPACITY[surface]) }, rim]} />
     </View>;
   }
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { backgroundColor: tint ?? theme.colors[surface] }, rim, style]} />;
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, shape, { backgroundColor: tint ?? theme.colors[surface] }, rim, WEB_BEHIND, style]} />;
   // design-system-end
 }
+
+// react-native-web gives every View `z-index: 0`, so this absolute layer would paint over a later sibling
+// that is not a View, such as an icon's <svg>. -1 keeps it under the control's content, as native draw order does.
+const WEB_BEHIND = Platform.OS === "web" ? { zIndex: -1 } : null;
 
 /** Lets neighbouring Liquid Glass shapes merge as they near each other; a plain view elsewhere. */
 export function GlassGroup({ spacing, style, pointerEvents, children }: { spacing: number; style?: StyleProp<ViewStyle>; pointerEvents?: "none" | "box-none"; children: ReactNode }) {

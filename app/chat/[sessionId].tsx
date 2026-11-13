@@ -69,7 +69,7 @@ import { useAppTheme, typography } from "@/src/theme";
 import { BOT_CONTEXT_WINDOW, config } from "@/src/config";
 import { useTranslation } from "@/src/i18n";
 import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
-import { useNativeVoiceInput } from "@/src/platform/native-voice-input";
+import { useNativeVoiceInput, voiceInputAvailable } from "@/src/platform/native-voice-input";
 import { GlassBackdrop, GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, DataError, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
 import { displaySessionTitle, displaySpaceName, hasRenderableMessage, isAssistantIntermediate } from "@/src/utils";
@@ -89,7 +89,8 @@ import { nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
 import { previewLocalFile } from "@/src/platform/file-preview";
 import { takeIncomingShare } from "@/src/platform/incoming-share";
-import { usePaneWidth } from "@/src/ui/pane";
+import { usePaneWidth, useSplitLayout } from "@/src/ui/pane";
+import { CHAT_COLUMN_MAX_WIDTH } from "@/src/ui/message-bubble-layout";
 
 type RouteParams = { sessionId?: string | string[]; spaceId?: string | string[]; turn?: string | string[]; turnId?: string | string[]; shared?: string | string[]; log?: string | string[] };
 const NEW_COMPOSER_DRAFT_SCOPE = { kind: "new" } as const;
@@ -120,6 +121,14 @@ const TURN_START_STYLE = { paddingTop: 8 } as const;
 const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
 const FOOTER_MENU = { marginHorizontal: 12, marginBottom: 4 } as const;
 const NO_SPACES: readonly SpaceRecord[] = [];
+// The browser's wide panes center the thread and composer in one reading column. The native apps keep
+// pane-wide rows: their timeline lays rows out natively, and an iPad's pane is never this wide.
+const WEB_COLUMN = Platform.OS === "web" ? { width: "100%", maxWidth: CHAT_COLUMN_MAX_WIDTH, alignSelf: "center" } as const : undefined;
+const WEB_BANNER_COLUMN = WEB_COLUMN ? { maxWidth: CHAT_COLUMN_MAX_WIDTH - 32, marginHorizontal: "auto" } as const : undefined;
+const chatColumnWidth = (width: number) => (WEB_COLUMN ? Math.min(width, CHAT_COLUMN_MAX_WIDTH) : width);
+function ChatColumn({ children }: { children: ReactNode }) {
+  return WEB_COLUMN ? <View pointerEvents="box-none" style={WEB_COLUMN}>{children}</View> : children;
+}
 
 // Decided once per mount: removing the CSS animation mid-fade leaves the row at its partial opacity.
 function ArrivalRow({ arrival, reducedMotion, children }: { arrival: boolean; reducedMotion: boolean; children: ReactNode }) {
@@ -295,6 +304,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const sendTokenRef = useRef(0);
   const reducedMotion = useReducedMotion();
   const paneWidth = usePaneWidth();
+  const split = useSplitLayout().mode === "split";
   const completeSendTransition = useCallback((id: string) => {
     setSendTransition((current) => current?.message.id === id ? null : current);
   }, []);
@@ -1594,6 +1604,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // Row growth uses the list's pin, including tool expansion and streaming. Small growth animates;
   // a burst that outruns the pin snaps so the tail cannot run away.
   const maintainScrollAtEnd = useMemo(() => chatMaintainScrollAtEnd(followingTail, openSettled && !reducedMotion && followPinAnimated), [followPinAnimated, followingTail, openSettled, reducedMotion]);
+  const rowWidth = chatColumnWidth(listWidth || paneWidth);
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
     trace("list.layout", { ...event.nativeEvent.layout });
     setListWidth(event.nativeEvent.layout.width);
@@ -1643,13 +1654,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const placement = botLayout?.get(item.id);
     const writer = bot ? botMessageSpace(item, sequenceTurns?.[0] ?? messageTurn) : null;
     const exchange = bot && writer ? botExchange(item, writer, spaceId) : null;
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{exchange && bot
-      ? <BotExchangeRow exchange={exchange} bot={bot} peer={botPeers.get(exchange.peer) ?? null} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} onOpenBot={openPeerBot} />
+    const spacing = bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined;
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={WEB_COLUMN ? [spacing, WEB_COLUMN] : spacing} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{exchange && bot
+      ? <BotExchangeRow exchange={exchange} bot={bot} peer={botPeers.get(exchange.peer) ?? null} spaceId={spaceId || null} availableWidth={rowWidth} onOpenBot={openPeerBot} />
       : writer
-      ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={listWidth || paneWidth} />
-      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
-      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={listWidth || paneWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={listWidth || paneWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, listWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence, paneWidth]);
+      ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={rowWidth} />
+      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
+      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={rowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
+  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, rowWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1664,7 +1676,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       <ScreenBlurTarget attach={attachScreenBlurTarget}><Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
         <EdgeHeader onLayout={onHeaderLayout} blurTarget={blurTarget}>
         {/* A Bot's page is the Bot alone: its face and name, which open its profile, and its work log. */}
-        {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<IconButton name="list-tree" label={t("bots.profile.workLog")} size={38} disabled={!botWork} onPress={() => { if (botWork) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: botWork.id, log: "1" } }); }} />}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
+        {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<WorkLogButton labeled={split} disabled={!botWork} onPress={() => { if (botWork) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: botWork.id, log: "1" } }); }} />}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
         {view.error ? <ChatErrorBanner message={view.error} belowConnectionBanner={connectionUnavailable} onRetry={() => void refreshSession(sessionId)} /> : null}
         </EdgeHeader>
@@ -1759,14 +1771,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           onContentSizeChange={handleContentSizeChange}
           {...pullRefresh.listProps}
           ListHeaderComponent={<>{pullRefresh.header}{view.hasMoreOlder ? <LoadMoreCapsule icon="chevrons-up" label={t("chat.loadOlder.short")} accessibilityLabel={t("chat.loadOlder")} loading={view.loadingOlder} onPress={() => void loadOlderTurns(sessionId)} /> : null}</>}
-          ListFooterComponent={<View>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={false} availableWidth={listWidth || paneWidth} /> : null}</View>}
+          ListFooterComponent={<View style={WEB_COLUMN}>{view.hasMoreNewer ? <LoadMoreCapsule icon="chevrons-down" label={t("chat.loadNewer.short")} accessibilityLabel={t("chat.loadNewer")} loading={view.loadingNewer} onPress={() => void loadNewerTurns(sessionId)} /> : null}{messages.length === 0 ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={false} availableWidth={rowWidth} /> : null}</View>}
         /></BrandRefreshArea> : null}
         </RenderErrorBoundary>
         {threadPlaceholder ? <KeyboardLiftPadding style={{ position: "absolute", top: headerHeight, right: 0, bottom: footerHeight, left: 0 }}><ChatThreadPlaceholder kind={threadPlaceholder} /></KeyboardLiftPadding> : null}
 
         </EdgeBlurTarget>
         </View>
-        <EdgeFooter keyboard onLayout={onFooterLayout}>
+        <EdgeFooter keyboard onLayout={onFooterLayout}><ChatColumn>
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
         {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
@@ -1791,13 +1803,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
-        ]} sending={starting} onVoice={() => voice.isRecording ? voice.stop() : void voice.start()} variant={bot ? "bot" : "chat"} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={bot ? botWorking : running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : bot ? (botWorking ? t("ui.composer.working") : t("bots.composer.placeholder", { name: spaceName })) : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
-        </EdgeFooter>
-        {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}>
+        ]} sending={starting} onVoice={voiceInputAvailable ? () => voice.isRecording ? voice.stop() : void voice.start() : undefined} variant={bot ? "bot" : "chat"} onModelPress={() => { freezeListForComposerMenu(); closeOverlay("attachments"); if (composerHarness === "cohub") void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); else void runtime.refresh(); setOverlay("model"); }} modelLabel={modelLabel} modelDetail={modelTriggerDetail} modelStatus={activeStatus} voiceActive={voice.isRecording} voiceStarting={voice.isStarting} disabled={stopping} running={bot ? botWorking : running} hasAttachment={attachments.length > 0} placeholder={starting ? t("chat.draft.starting") : bot ? (botWorking ? t("ui.composer.working") : t("bots.composer.placeholder", { name: spaceName })) : running ? t("ui.composer.working") : t("ui.composer.placeholder")} />
+        </ChatColumn></EdgeFooter>
+        {mentions.menu || slash.menu ? <EdgeFooterOverlay footerHeight={footerHeight}><ChatColumn>
           {mentions.menu ? <SpaceMentionMenu menu={mentions.menu} onSelect={mentions.select} onDismiss={mentions.dismiss} style={FOOTER_MENU} /> : null}
           {slash.menu ? <SlashCommandMenu menu={slash.menu} onSelect={slash.select} onDismiss={slash.dismiss} style={FOOTER_MENU} /> : null}
-        </EdgeFooterOverlay> : null}
-        {sendTransition && transitionMessage && ((sendTransition.destination === "bubble" && !nativeChatTimeline) || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={listWidth || paneWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
+        </ChatColumn></EdgeFooterOverlay> : null}
+        {sendTransition && transitionMessage && ((sendTransition.destination === "bubble" && !nativeChatTimeline) || transitionQueueItem) ? <SendBubbleOverlay key={sendTransition.message.id} transition={sendTransition} message={transitionMessage} queueItem={transitionQueueItem} rootRef={sendRootRef} targetRef={queueTransitionActive ? sendQueueRef : sendBubbleRef} availableWidth={rowWidth} spaceId={spaceId || null} onComplete={completeSendTransition} /> : null}
         {labelSheetOpen && client && session && spaceId ? <SessionLabelSheet client={client} spaceId={spaceId} session={session} labels={chatLabels} labelsError={chatLabelsError} onLabelsReload={reloadChatLabels} onClose={() => closeOverlay("labels")} onChanged={() => undefined} /> : null}
         <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => closeOverlay("attachments")} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => closeOverlay("turns")} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
@@ -1914,6 +1926,18 @@ function MissingChat() {
   return <Screen><TopBar title={t("chat.title")} onBack={() => router.back()} /><View className="flex-1 items-center justify-center"><Text className="text-body text-fg-muted">{t("chat.missing")}</Text></View></Screen>;
 }
 
+/** A split window's bar has room to name the action, which the icon alone leaves unclear; a phone keeps the icon. */
+function WorkLogButton({ labeled, disabled, onPress }: { labeled: boolean; disabled: boolean; onPress: () => void }) {
+  const { t } = useTranslation();
+  const label = t("bots.profile.workLog");
+  if (!labeled) return <IconButton name="list-tree" label={label} size={38} disabled={disabled} onPress={onPress} />;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} className="h-11 flex-row items-center gap-2 rounded-full px-4 active:opacity-70 disabled:opacity-45">
+    <GlassBackground radius={22} />
+    <AppIcon name="list-tree" size={18} tone="fg" />
+    <Text numberOfLines={1} className="text-subhead font-semibold text-fg">{label}</Text>
+  </Pressable>;
+}
+
 /** A state of the Chat the composer answers, with the one action that changes it. */
 function ComposerNotice({ icon, text, action, busy = false, onAction }: { icon: IconName; text: string; action: string; busy?: boolean; onAction: () => void }) {
   return <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} accessibilityRole="summary" className="flex-row items-center gap-2 bg-background pl-4 pr-2">
@@ -1935,7 +1959,7 @@ function VoiceStatusRow({ error, partial }: { error: string | null; partial: str
 /** Floats under the header like ConnectionBanner, so it never changes the header height the list is laid out against. */
 function ChatErrorBanner({ message, belowConnectionBanner, onRetry }: { message: string; belowConnectionBanner: boolean; onRetry: () => void }) {
   const { t } = useTranslation();
-  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} pointerEvents="box-none" className="absolute left-4 right-4 top-full" style={{ marginTop: belowConnectionBanner ? 48 : 8 }}>
+  return <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} pointerEvents="box-none" className="absolute left-4 right-4 top-full" style={[{ marginTop: belowConnectionBanner ? 48 : 8 }, WEB_BANNER_COLUMN]}>
     <View accessibilityRole="alert" className="flex-row items-center gap-2 rounded-md bg-danger-soft py-1 pl-3 pr-1 shadow-float" style={{ borderCurve: "continuous" }}>
       <AppIcon name="alert" size={16} tone="danger" />
       <Text selectable numberOfLines={3} className="flex-1 text-caption text-danger">{message}</Text>
