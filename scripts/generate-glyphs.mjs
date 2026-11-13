@@ -101,6 +101,8 @@ const GLYPHS = {
   wrench: "wrench",
   x: "xmark",
   zap: "bolt",
+  "zoom-in": "zoom_in",
+  "zoom-out": "zoom_out",
 };
 
 // SF Symbols' measure at a given point size, from iOS 26 screenshots: a glyph's longer side spans

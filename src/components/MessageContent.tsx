@@ -4,7 +4,7 @@ import { Link, useRouter } from "expo-router";
 import { createContext, memo, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { chatScrollTrace } from "@/src/data/chat-scroll-trace";
 import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
-import { FlatList, Image, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from "react-native";
+import { FlatList, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import Reanimated from "react-native-reanimated";
@@ -22,6 +22,7 @@ import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog
 import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
+import { ContentImage } from "@/src/ui/ContentImage";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
@@ -267,6 +268,7 @@ export function imageUri(block: Extract<ContentBlock, { type: "image" }>) {
 }
 
 function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; index: number; total: number; size: number; onOpen: () => void }) {
+  const router = useRouter();
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [pressed, setPressed] = useState(false);
@@ -283,19 +285,23 @@ function GalleryThumbnail({ uri, index, total, size, onOpen }: { uri: string; in
     backgroundColor: theme.colors.surfaceRaised,
     opacity: pressed ? 0.78 : 1,
   };
+  const thumbnail = (onPress?: () => void) => (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("message.openImage", { index: index + 1, total })}
+      onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={style}
+    >
+      <ContentImage source={{ uri: variantFailed ? uri : imageThumbnailUrl(uri, size, PixelRatio.get()) }} onError={() => setVariantFailed(true)} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
+    </Pressable>
+  );
+  // In the browser Pressable's own click handler replaces the Link's, so the anchor would load the route as a page.
+  if (Platform.OS === "web") return thumbnail(() => { onOpen(); router.push("/image-viewer"); });
   return (
     <Link href="/image-viewer" asChild onPress={onOpen}>
-      <Link.Trigger withAppleZoom>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("message.openImage", { index: index + 1, total })}
-          onPressIn={() => setPressed(true)}
-          onPressOut={() => setPressed(false)}
-          style={style}
-        >
-          <Image source={{ uri: variantFailed ? uri : imageThumbnailUrl(uri, size, PixelRatio.get()) }} onError={() => setVariantFailed(true)} resizeMode="cover" style={{ width: "100%", height: "100%" }} />
-        </Pressable>
-      </Link.Trigger>
+      <Link.Trigger withAppleZoom>{thumbnail()}</Link.Trigger>
     </Link>
   );
 }
@@ -310,7 +316,7 @@ function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number })
   if (uris.length === 1) return <GalleryThumbnail uri={uris[0]!} index={0} total={1} size={thumbnailWidth} onOpen={() => setImageViewerPayload({ uris, index: 0, zoom: true })} />;
 
   return (
-    <GestureDetector gesture={galleryGesture}>
+    <GestureDetector gesture={galleryGesture} enableContextMenu>
       <FlatList
         data={uris}
         horizontal

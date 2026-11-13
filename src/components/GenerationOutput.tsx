@@ -7,6 +7,7 @@ import { imageThumbnailUrl, modelFormat, videoPosterUrl } from "@/src/data/media
 import { useTranslation } from "@/src/i18n";
 import { openWebLink } from "@/src/platform/browser";
 import { AppIcon, type IconName } from "@/src/ui";
+import { ContentImage } from "@/src/ui/ContentImage";
 import { usePaneWidth } from "@/src/ui/pane";
 
 const CONTINUOUS = { borderCurve: "continuous" } as const;
@@ -38,7 +39,7 @@ export function GenerationBlock({ block }: { block: GenerationContentBlock }) {
       router.push("/image-viewer");
     };
     return <Pressable ref={tileRef} accessibilityRole="button" accessibilityLabel={t("media.openImage")} onPress={open} className="overflow-hidden rounded-md bg-surface-raised active:opacity-80" style={CONTINUOUS}>
-      <Image source={{ uri: thumbnail }} resizeMode="contain" style={{ width: "100%", height: 320 }} />
+      <ContentImage source={{ uri: thumbnail }} resizeMode="contain" style={{ width: "100%", height: 320 }} />
     </Pressable>;
   }
   const playable = url && /^https:\/\//i.test(url) ? url : null;

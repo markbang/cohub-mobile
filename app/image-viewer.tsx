@@ -2,7 +2,7 @@ import { Link, usePreventZoomTransitionDismissal, useRouter } from "expo-router"
 import { usePreventRemove } from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityActionEvent, type ImageLoadEvent } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type AccessibilityActionEvent, type ImageLoadEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withDecay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,10 +10,12 @@ import { scheduleOnRN } from "react-native-worklets";
 import { clearImageViewerPayload, getImageViewerPayload, imageViewerFlightStart, imageViewerOriginUsable, imageViewerPanBounds, imageViewerReleasePage, imageViewerShouldDismiss, type ImageViewerRect } from "@/src/data/image-viewer";
 import { useTranslation } from "@/src/i18n";
 import { continuity, curves, motion, springs } from "@/src/motion";
-import { AppIcon, Loader } from "@/src/ui";
+import { AppIcon, Loader, type IconName } from "@/src/ui";
+import { ContentImage } from "@/src/ui/ContentImage";
 
 const MAX_SCALE = 4;
 const MIN_DOUBLE_TAP_SCALE = 2;
+const ZOOM_STEP = 1.5;
 const EDGE_RESISTANCE = 0.3;
 const EASE_OUT = Easing.bezier(...curves.easeOut);
 const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
@@ -161,6 +163,55 @@ export default function ImageViewerScreen() {
     setIndex(next);
     page.set(withSpring(next, SETTLE));
   }, [page, settled]);
+
+  // The browser's mouse, trackpad and keys: zoom around a point, page with the arrows, leave with Escape.
+  const zoomTo = useCallback((target: number, focusX = 0, focusY = 0, animated = true) => {
+    const next = Math.min(Math.max(target, 1), MAX_SCALE);
+    const ratio = next / scale.get();
+    const bounds = imageViewerPanBounds(fit.width, fit.height, next, width, height);
+    const move = (value: SharedValue<number>, to: number) => value.set(animated ? withSpring(to, SETTLE) : to);
+    move(scale, next);
+    move(tx, clamp(focusX - (focusX - tx.get()) * ratio, bounds.x));
+    move(ty, clamp(focusY - (focusY - ty.get()) * ratio, bounds.y));
+    setZoomed(next > 1);
+  }, [fit, height, scale, tx, ty, width]);
+  const step = useCallback((delta: number) => {
+    const next = index + delta;
+    if (next < 0 || next >= count) return;
+    if (scale.get() <= 1) { showPage(next); return; }
+    // A page left behind keeps the transform it last drew, so a zoomed one settles back before the pager moves.
+    const back = { duration: motion.settle.duration, easing: EASE_OUT };
+    tx.set(withTiming(0, back));
+    ty.set(withTiming(0, back));
+    scale.set(withTiming(1, back, (finished) => {
+      "worklet";
+      if (finished) scheduleOnRN(showPage, next);
+    }));
+    setZoomed(false);
+  }, [count, index, scale, showPage, tx, ty]);
+  useEffect(() => {
+    if (Platform.OS !== "web" || !entered || closing) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+      else if (event.key === "ArrowLeft") step(-1);
+      else if (event.key === "ArrowRight") step(1);
+      else if (event.key === "+" || event.key === "=") zoomTo(scale.get() * ZOOM_STEP);
+      else if (event.key === "-") zoomTo(scale.get() / ZOOM_STEP);
+      else return;
+      event.preventDefault();
+    };
+    // A trackpad pinch arrives as a wheel with ctrlKey, in much smaller steps than a mouse wheel's.
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      zoomTo(scale.get() * Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.002)), event.clientX - width / 2, event.clientY - height / 2, false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("wheel", onWheel);
+    };
+  }, [close, closing, entered, height, scale, step, width, zoomTo]);
 
   /**
    * Every exit (button, system back, Escape, a drag) leaves through navigation, which holds the route until
@@ -394,6 +445,11 @@ export default function ImageViewerScreen() {
       <AppIcon name="x" size={22} color={VIEWER.foreground} />
     </Pressable>
   );
+  const webControl = (name: IconName, label: string, onPress: () => void, place: object, disabled = false) => (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} hitSlop={6} onPress={onPress} style={{ ...closeButtonStyle, ...place, opacity: disabled ? 0.4 : 1 }}>
+      <AppIcon name={name} size={22} color={VIEWER.foreground} />
+    </Pressable>
+  );
 
   if (!payload || count === 0) {
     return (
@@ -418,7 +474,7 @@ export default function ImageViewerScreen() {
     <View style={{ flex: 1 }} onAccessibilityEscape={close}>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={[{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: VIEWER.background }, backdropStyle]} />
-      <GestureDetector gesture={gesture}>
+      <GestureDetector gesture={gesture} enableContextMenu>
         <View collapsable={false} style={{ flex: 1, overflow: "hidden" }}>
           <Animated.View style={[{ width, height }, pagerStyle]}>
             {payload.uris.map((uri, itemIndex) => {
@@ -459,6 +515,12 @@ export default function ImageViewerScreen() {
       </GestureDetector>
       <Animated.View style={[{ position: "absolute", top: 0, right: 0, left: 0, zIndex: 2 }, chromeStyle]} pointerEvents="box-none">
         {closeButton}
+        {Platform.OS === "web" ? <>
+          {webControl("zoom-in", t("imageViewer.zoomIn"), () => zoomTo(scale.get() * ZOOM_STEP), { right: 64 })}
+          {webControl("zoom-out", t("imageViewer.zoomOut"), () => zoomTo(scale.get() / ZOOM_STEP), { right: 116 }, !zoomed)}
+          {index > 0 ? webControl("chevron-left", t("imageViewer.previous"), () => step(-1), { top: height / 2 - 22, right: undefined, left: 12 }) : null}
+          {index < count - 1 ? webControl("chevron-right", t("imageViewer.next"), () => step(1), { top: height / 2 - 22 }) : null}
+        </> : null}
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={{ position: "absolute", top: insets.top + 20, left: 16 }}>
           <Text className="text-caption tabular-nums" style={{ color: VIEWER.foreground }}>{index + 1} / {count}</Text>
         </View>
@@ -478,7 +540,7 @@ function ViewerImage({ uri, placeholder, box, zoomTarget, label, pageable, onAcc
     if (width > 0 && height > 0) onSize({ width, height }, exact);
   };
   const image = (
-    <Image
+    <ContentImage
       key={attempt}
       source={{ uri }}
       resizeMode="contain"
@@ -495,7 +557,7 @@ function ViewerImage({ uri, placeholder, box, zoomTarget, label, pageable, onAcc
   );
   return (
     <View style={box}>
-      {placeholder && placeholder !== uri && status === "loading" ? <Image
+      {placeholder && placeholder !== uri && status === "loading" ? <ContentImage
         source={{ uri: placeholder }}
         resizeMode="contain"
         style={[StyleSheet.absoluteFill, box]}

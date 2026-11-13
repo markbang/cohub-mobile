@@ -84,6 +84,8 @@ import CircleUserRound from "lucide-react-native/icons/circle-user-round";
 import Wifi from "lucide-react-native/icons/wifi";
 import X from "lucide-react-native/icons/x";
 import Zap from "lucide-react-native/icons/zap";
+import ZoomIn from "lucide-react-native/icons/zoom-in";
+import ZoomOut from "lucide-react-native/icons/zoom-out";
 import Box from "lucide-react-native/icons/box";
 import CalendarClock from "lucide-react-native/icons/calendar-clock";
 import GitCompare from "lucide-react-native/icons/git-compare";
@@ -181,6 +183,8 @@ export const icons = {
   wifi: Wifi,
   x: X,
   zap: Zap,
+  "zoom-in": ZoomIn,
+  "zoom-out": ZoomOut,
   box: Box,
   "calendar-clock": CalendarClock,
   "git-compare": GitCompare,

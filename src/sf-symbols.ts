@@ -89,6 +89,8 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   wifi: "wifi",
   x: "xmark",
   zap: "bolt",
+  "zoom-in": "plus.magnifyingglass",
+  "zoom-out": "minus.magnifyingglass",
   box: "shippingbox",
   "calendar-clock": "calendar.badge.clock",
   "git-compare": "arrow.left.arrow.right",
