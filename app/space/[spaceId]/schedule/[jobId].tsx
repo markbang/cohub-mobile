@@ -9,6 +9,7 @@ import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { useToast } from "@/src/components/Toast";
 import { useAppActions } from "@/src/data/context";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { usePagedQuery, useScreenQuery } from "@/src/data/query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "@/src/i18n";
@@ -63,24 +64,30 @@ export default function ScheduleScreen() {
   const runs = runList.items ? { items: runList.items, cursor: runList.hasMore ? "more" : null } : null;
   const error = jobQuery.error ? jobQuery.error.message || t("schedule.loadFailed") : null;
   const load = () => Promise.all([jobQuery.refetch(), runList.query.refetch()]);
-  const [busy, setBusy] = useState<"toggle" | "save" | "delete" | null>(null);
+  const [busy, setBusy] = useState<"save" | "delete" | null>(null);
   const [editing, setEditing] = useState<ScheduleValues | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const nextRuns = useMemo(() => job ? nextCronRuns(job.cronExpression, job.timezone, 3) : [], [job]);
 
-  const toggle = async (enabled: boolean) => {
-    if (!client || !job || busy) return;
-    setBusy("toggle");
-    try {
-      setJob((await client.cronJobs.toggle(job.id, enabled)).job);
-      toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
-    } catch (caught) {
-      toast({ title: t("space.settings.schedule.toggleFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
-    } finally {
-      setBusy(null);
-    }
+  const [writes] = useState(createOptimisticWrites);
+  const toggle = (enabled: boolean) => {
+    if (!client || !job) return;
+    let answered: CronJobRecord | null = null;
+    void writes.run(job.id, {
+      value: enabled,
+      confirmed: job.enabled,
+      apply: (value) => queryClient.setQueryData<CronJobRecord>(jobKey, (current) => current && { ...current, enabled: value }),
+      send: async (value) => {
+        answered = (await client.cronJobs.toggle(job.id, value)).job;
+        return answered.enabled;
+      },
+      settled: (value, from) => {
+        if (answered) setJob(answered);
+        if (value !== from) toast({ title: value ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
+      },
+    }).catch((caught: unknown) => toast({ title: t("space.settings.schedule.toggleFailed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" }));
   };
 
   const save = async () => {
@@ -136,7 +143,7 @@ export default function ScheduleScreen() {
         <View className="min-h-13 flex-row items-center gap-3 bg-surface px-4 py-2">
           <AppIcon name="calendar-clock" size={18} tone={job.enabled ? "accent" : "muted"} />
           <Text className="min-w-0 flex-1 text-body text-fg">{t(job.enabled ? "schedule.active" : "schedule.paused")}</Text>
-          <AppSwitch value={job.enabled} disabled={busy !== null} onValueChange={(enabled) => void toggle(enabled)} accessibilityLabel={t("schedule.enabledLabel")} />
+          <AppSwitch value={job.enabled} disabled={busy !== null} onValueChange={toggle} accessibilityLabel={t("schedule.enabledLabel")} />
         </View>
         <Detail label={t("schedule.field.repeat")} value={job.cronExpression} mono />
         <Detail label={t("schedule.field.timezone")} value={job.timezone} />

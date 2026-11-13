@@ -15,7 +15,6 @@ type PinCacheEntry = {
 type ClientPinCache = {
   entries: Map<string, PinCacheEntry>;
   pending: Map<string, Promise<boolean>>;
-  mutations: Map<string, Promise<boolean>>;
   mutationVersions: Map<string, number>;
 };
 
@@ -27,7 +26,6 @@ function getCache(client: CohubClient) {
   const created: ClientPinCache = {
     entries: new Map(),
     pending: new Map(),
-    mutations: new Map(),
     mutationVersions: new Map(),
   };
   caches.set(client, created);
@@ -70,8 +68,6 @@ export async function getResourcePinState(
 ) {
   const key = resourceKey(resourceType, resourceRef);
   const cache = getCache(client);
-  const mutation = cache.mutations.get(key);
-  if (mutation) return mutation;
   const current = cache.entries.get(key);
   if (!options.force && current && Date.now() - current.checkedAt < PIN_CACHE_TTL_MS) {
     return current.pinned;
@@ -106,9 +102,7 @@ export function invalidateResourcePinReads(
     const key = resourceKey(resourceType, resourceRef);
     cache.pending.delete(key);
     cache.entries.delete(key);
-    if (!cache.mutations.has(key)) {
-      cache.mutationVersions.set(key, (cache.mutationVersions.get(key) ?? 0) + 1);
-    }
+    cache.mutationVersions.set(key, (cache.mutationVersions.get(key) ?? 0) + 1);
   }
 }
 
@@ -133,64 +127,27 @@ export async function loadResourcePinStates(
   return states;
 }
 
-async function toggleResourcePinFromState(
+/** Writes the pin itself rather than flipping it, so a repeated request leaves the same state. */
+export async function setResourcePin(
   client: CohubClient,
   resourceType: LabelResourceType,
   resourceRef: string,
-  wasPinned: boolean,
+  pinned: boolean,
 ) {
   const key = resourceKey(resourceType, resourceRef);
   const cache = getCache(client);
   const mutationVersion = (cache.mutationVersions.get(key) ?? 0) + 1;
   cache.mutationVersions.set(key, mutationVersion);
   cache.pending.delete(key);
-  cachePinState(client, resourceType, resourceRef, !wasPinned);
-  const request = (async () => {
-    try {
-      const result = await client.user.labels.patchResourceLabels(
-        resourceType,
-        resourceRef,
-        wasPinned
-          ? { removeLabelRefs: [PINNED_LABEL_REF] }
-          : { addLabelRefs: [PINNED_LABEL_REF] },
-      );
-      const nextPinned = isResourcePinned(result.assignments);
-      if ((cache.mutationVersions.get(key) ?? 0) === mutationVersion) {
-        cachePinState(client, resourceType, resourceRef, nextPinned);
-      }
-      return nextPinned;
-    } catch (error) {
-      if ((cache.mutationVersions.get(key) ?? 0) === mutationVersion) {
-        cachePinState(client, resourceType, resourceRef, wasPinned);
-      }
-      throw error;
-    }
-  })();
-  cache.mutations.set(key, request);
-  void request.finally(() => {
-    if (cache.mutations.get(key) === request) cache.mutations.delete(key);
-  }).catch(() => undefined);
-  return request;
-}
-
-export async function toggleResourcePin(
-  client: CohubClient,
-  resourceType: LabelResourceType,
-  resourceRef: string,
-  currentPinned?: boolean,
-) {
-  const key = resourceKey(resourceType, resourceRef);
-  const cache = getCache(client);
-  const pendingMutation = cache.mutations.get(key);
-  if (pendingMutation) {
-    const wasPinned = await pendingMutation.catch(() => cache.entries.get(key)?.pinned ?? false);
-    return toggleResourcePinFromState(client, resourceType, resourceRef, wasPinned);
+  cache.entries.delete(key);
+  const result = await client.user.labels.patchResourceLabels(
+    resourceType,
+    resourceRef,
+    pinned ? { addLabelRefs: [PINNED_LABEL_REF] } : { removeLabelRefs: [PINNED_LABEL_REF] },
+  );
+  const nextPinned = isResourcePinned(result.assignments);
+  if ((cache.mutationVersions.get(key) ?? 0) === mutationVersion) {
+    cachePinState(client, resourceType, resourceRef, nextPinned);
   }
-  const wasPinned = currentPinned ?? await getResourcePinState(client, resourceType, resourceRef);
-  const mutationAfterRead = cache.mutations.get(key);
-  if (mutationAfterRead) {
-    const resolvedPinned = await mutationAfterRead.catch(() => cache.entries.get(key)?.pinned ?? wasPinned);
-    return toggleResourcePinFromState(client, resourceType, resourceRef, resolvedPinned);
-  }
-  return toggleResourcePinFromState(client, resourceType, resourceRef, wasPinned);
+  return nextPinned;
 }

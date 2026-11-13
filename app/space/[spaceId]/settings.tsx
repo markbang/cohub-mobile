@@ -14,6 +14,7 @@ import { ConfirmSheet } from "@/src/components/SystemDialogs";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { cronSummaryText, formatRunTime } from "@/src/components/ScheduleForm";
 import { nextCronRuns, summarizeCron } from "@/src/data/cron";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { useToast } from "@/src/components/Toast";
 import { installSpaceMod } from "@/src/data/space-mods";
 import { useAppActions } from "@/src/data/context";
@@ -45,6 +46,7 @@ export default function SpaceSettingsScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const toast = useToast();
+  const [writes] = useState(createOptimisticWrites);
   const { client } = useAppActions();
   const { env, setEnv, config, setConfig, sandbox, usage, wallet, ports, allowedSpec, members, setMembers, invitations, setInvitations, mods, setMods, schedules, setSchedules, resources, loadResource } = useSpaceSettings(client, spaceId);
   const [name, setName] = useState("");
@@ -381,19 +383,23 @@ export default function SpaceSettingsScreen() {
               trailing={
                 <AppSwitch
                   value={mod.enabled}
-                  onValueChange={async (enabled) => {
+                  onValueChange={(enabled) => {
                     if (!client || !spaceId) return;
                     const space = client.space(spaceId);
-                    try {
-                      await space.mods.update(mod.id, { enabled });
-                      setMods((current) => current.map((m) => m.id === mod.id ? { ...m, enabled } : m));
-                      toast({ title: enabled ? t("space.settings.modEnabled") : t("space.settings.modDisabled"), tone: "success" });
-                      if (enabled) {
-                        Alert.alert(t("space.settings.modEnabled"), t("space.settings.modEnabledRestart"));
-                      }
-                    } catch (error) {
-                      toast({ title: t("space.settings.modToggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
-                    }
+                    void writes.run(`mod:${mod.id}`, {
+                      value: enabled,
+                      confirmed: mod.enabled,
+                      apply: (value) => setMods((current) => current.map((m) => m.id === mod.id ? { ...m, enabled: value } : m)),
+                      send: async (value) => {
+                        await space.mods.update(mod.id, { enabled: value });
+                        return value;
+                      },
+                      settled: (value, from) => {
+                        if (value === from) return;
+                        toast({ title: value ? t("space.settings.modEnabled") : t("space.settings.modDisabled"), tone: "success" });
+                        if (value) Alert.alert(t("space.settings.modEnabled"), t("space.settings.modEnabledRestart"));
+                      },
+                    }).catch((error: unknown) => toast({ title: t("space.settings.modToggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
                   }}
                 />
               }
@@ -414,15 +420,15 @@ export default function SpaceSettingsScreen() {
               key={schedule.id}
               schedule={schedule}
               onPress={() => router.push({ pathname: "/space/[spaceId]/schedule/[jobId]", params: { spaceId, jobId: schedule.id } })}
-              onToggle={async (enabled) => {
+              onToggle={(enabled) => {
                 if (!client) return;
-                try {
-                  await client.cronJobs.toggle(schedule.id, enabled);
-                  setSchedules((current) => current.map((s) => s.id === schedule.id ? { ...s, enabled } : s));
-                  toast({ title: enabled ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" });
-                } catch (error) {
-                  toast({ title: t("space.settings.schedule.toggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
-                }
+                void writes.run(`schedule:${schedule.id}`, {
+                  value: enabled,
+                  confirmed: schedule.enabled,
+                  apply: (value) => setSchedules((current) => current.map((s) => s.id === schedule.id ? { ...s, enabled: value } : s)),
+                  send: async (value) => (await client.cronJobs.toggle(schedule.id, value)).job.enabled,
+                  settled: (value, from) => { if (value !== from) toast({ title: value ? t("space.settings.schedule.enabled") : t("space.settings.schedule.disabled"), tone: "success" }); },
+                }).catch((error: unknown) => toast({ title: t("space.settings.schedule.toggleFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
               }}
             />
           ))}
@@ -909,20 +915,10 @@ function ImageOptionList({ preferences, disabled, onChange }: { preferences: San
   );
 }
 
-function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord; onPress: () => void; onToggle: (enabled: boolean) => Promise<void> }) {
+function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord; onPress: () => void; onToggle: (enabled: boolean) => void }) {
   const { t, locale } = useTranslation();
-  const [toggling, setToggling] = useState(false);
   // The record carries no run history, so the row previews the next run from the expression, as the detail screen does.
   const nextRun = useMemo(() => schedule.enabled ? nextCronRuns(schedule.cronExpression, schedule.timezone, 1)[0] : undefined, [schedule.cronExpression, schedule.enabled, schedule.timezone]);
-  
-  const handleToggle = async (enabled: boolean) => {
-    setToggling(true);
-    try {
-      await onToggle(enabled);
-    } finally {
-      setToggling(false);
-    }
-  };
 
   const title = schedule.title || t("space.settings.schedule.unnamed");
   return (
@@ -932,7 +928,7 @@ function ScheduleRow({ schedule, onPress, onToggle }: { schedule: CronJobRecord;
       subtitle={cronSummaryText(summarizeCron(schedule.cronExpression), schedule.cronExpression, t)}
       detail={nextRun ? `${t("space.settings.schedule.nextRun")}: ${formatRunTime(nextRun, schedule.timezone, locale)}` : undefined}
       onPress={onPress}
-      trailing={<AppSwitch value={schedule.enabled} onValueChange={handleToggle} disabled={toggling} />}
+      trailing={<AppSwitch value={schedule.enabled} onValueChange={onToggle} />}
     />
   );
 }

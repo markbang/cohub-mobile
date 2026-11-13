@@ -33,7 +33,8 @@ import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
 import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botExchange, botExchangeText, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botVoice, isBotSpace, latestBotNote, pinnedBotEntries, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
-import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, toggleResourcePin } from "../src/data/resource-pins.ts";
+import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, setResourcePin } from "../src/data/resource-pins.ts";
+import { createOptimisticWrites } from "../src/data/optimistic-write.ts";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
@@ -392,6 +393,7 @@ const ORDER_SETTLE_MS = loadChromeComponent(chatsRoute, "ORDER_SETTLE_MS", {});
 const ORDER_HOLD_MAX_MS = loadChromeComponent(chatsRoute, "ORDER_HOLD_MAX_MS", {});
 const spaceItemKey = loadChromeComponent("../app/(tabs)/(spaces)/spaces.tsx", "spaceItemKey", {});
 const chromeScope = {
+  createOptimisticWrites,
   MAX_FONT_SCALE: { control: 1.3, badge: 1.15, glyph: 1 },
   React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), Fragment: "Fragment" },
   View: "View", Text: "Text", TextInput: "TextInput", Pressable: "Pressable", IconButton: "IconButton", AppIcon: "AppIcon", TopBar: "TopBar",
@@ -1603,31 +1605,27 @@ function findSpaceMenuActions(node) {
 }
 findSpaceMenuActions(spaceMenuSource);
 assert.ok(spaceMenuActions, "the Space menu's sections are declared in the screen");
-const buildSpaceActions = new Function("space", "pinning", "t", "setActivePanel", "togglePin", "router", "checkpointing", "createCheckpoint", ts.transpileModule(`return (${spaceMenuActions});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+const buildSpaceActions = new Function("space", "t", "setActivePanel", "togglePin", "router", "checkpointing", "createCheckpoint", ts.transpileModule(`return (${spaceMenuActions});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
 for (const isPinned of [false, true]) {
-  for (const pinning of [false, true]) {
-    const events = [];
-    const sections = buildSpaceActions({ id: "space-123", isPinned }, pinning, (key) => key, (panel) => events.push(panel), () => events.push("togglePin"), { push: (route) => events.push(route) }, false, () => events.push("checkpoint"));
-    assert.deepEqual(sections.map((section) => section.actions.map((action) => action.icon)), [["messages", "folder-open"], ["square-pen", isPinned ? "pin-off" : "pin", "bookmark"]]);
-    const actions = sections.flatMap((section) => section.actions);
-    assert.equal(actions[3].title, isPinned ? "space.unpin" : "space.pin");
-    assert.equal(actions[3].disabled, pinning);
-    menuFocused = true;
-    const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), sections });
-    assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
-    const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
-    const activate = (item) => item.props.onAccessibilityAction({ nativeEvent: { actionName: "activate" } });
-    activate(items[0]);
-    assert.deepEqual(events.splice(0), ["close", "chat"]);
-    activate(items[1]);
-    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
-    activate(items[2]);
-    assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
-    if (!pinning) {
-      activate(items[3]);
-      assert.deepEqual(events.splice(0), ["close", "togglePin"]);
-    } else assert.equal(items[3].props.accessibilityState.disabled, true);
-  }
+  const events = [];
+  const sections = buildSpaceActions({ id: "space-123", isPinned }, (key) => key, (panel) => events.push(panel), () => events.push("togglePin"), { push: (route) => events.push(route) }, false, () => events.push("checkpoint"));
+  assert.deepEqual(sections.map((section) => section.actions.map((action) => action.icon)), [["messages", "folder-open"], ["square-pen", isPinned ? "pin-off" : "pin", "bookmark"]]);
+  const actions = sections.flatMap((section) => section.actions);
+  assert.equal(actions[3].title, isPinned ? "space.unpin" : "space.pin");
+  assert.equal(actions[3].disabled, undefined, "a pin in flight never blocks the next tap");
+  menuFocused = true;
+  const spaceMenu = renderChatMenu({ anchorRef: { current: null }, title: "Space", testID: "space-actions-menu", onClose: () => events.push("close"), sections });
+  assert.equal(chromeNodes(spaceMenu).find((node) => node.props?.accessibilityRole === "menu").props.testID, "space-actions-menu");
+  const items = chromeNodes(spaceMenu).filter((node) => node.props?.accessibilityRole === "menuitem");
+  const activate = (item) => item.props.onAccessibilityAction({ nativeEvent: { actionName: "activate" } });
+  activate(items[0]);
+  assert.deepEqual(events.splice(0), ["close", "chat"]);
+  activate(items[1]);
+  assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/files", params: { spaceId: "space-123" } }]);
+  activate(items[2]);
+  assert.deepEqual(events.splice(0), ["close", { pathname: "/space/[spaceId]/edit", params: { spaceId: "space-123" } }]);
+  activate(items[3]);
+  assert.deepEqual(events.splice(0), ["close", "togglePin"]);
 }
 
 // cfeed 01M6XJVJD42A3BJ9KGBMPJMQE3: the drawn Space menu's open state lived in the screen, so opening and closing
@@ -3749,8 +3747,9 @@ const fakeClient = {
   },
 };
 assert.equal(await getResourcePinState(fakeClient, "session", "session-1", { force: true }), false);
-assert.equal(await toggleResourcePin(fakeClient, "session", "session-1", false), true);
-assert.deepEqual(pinCalls, [{ addLabelRefs: ["Pinned"] }]);
+assert.equal(await setResourcePin(fakeClient, "session", "session-1", true), true);
+assert.equal(await setResourcePin(fakeClient, "session", "session-1", true), true, "a repeated pin stays pinned");
+assert.deepEqual(pinCalls, [{ addLabelRefs: ["Pinned"] }, { addLabelRefs: ["Pinned"] }]);
 
 let resolveRaceRead;
 let racePinned = false;
@@ -3769,38 +3768,96 @@ const raceClient = {
   },
 };
 const staleRead = getResourcePinState(raceClient, "session", "race-1", { force: true });
-const raceMutation = toggleResourcePin(raceClient, "session", "race-1", false);
+const raceMutation = setResourcePin(raceClient, "session", "race-1", true);
 resolveRaceRead({ assignments: [] });
 assert.equal(await staleRead, false);
 assert.equal(await raceMutation, true);
 assert.equal(await getResourcePinState(raceClient, "session", "race-1"), true);
 
-let patchStarted = false;
-let resolveFirstPatch;
-const mutationClient = {
-  user: {
-    labels: {
-      getResourceLabels: async () => ({ assignments: [] }),
-      patchResourceLabels: async (_resourceType, _resourceRef, input) => {
-        patchStarted = true;
-        await new Promise((resolve) => { resolveFirstPatch = resolve; });
-        return { assignments: input.addLabelRefs ? [{ labelSystemKey: "user:pinned" }] : [] };
+// Local-first writes: a pin shows on the tap, its request answers 3 s later, and only the latest intent counts.
+mock.timers.enable({ apis: ["setTimeout"] });
+try {
+  const pinStore = (answer = (value) => value) => {
+    const store = { pinned: false, server: false, applied: [], sent: [], failures: 0, writes: createOptimisticWrites() };
+    store.tap = () => store.writes.run("space-pin:bot", {
+      value: !store.pinned,
+      confirmed: store.pinned,
+      apply: (value) => { store.pinned = value; store.applied.push(value); },
+      send: (value) => {
+        store.sent.push(value);
+        return new Promise((resolve, reject) => setTimeout(() => {
+          const result = answer(value);
+          if (result instanceof Error) return reject(result);
+          store.server = result;
+          resolve(result);
+        }, 3000));
       },
-    },
-  },
-};
-const mutation = toggleResourcePin(mutationClient, "session", "mutation-1", false);
-while (!patchStarted) await new Promise((resolve) => setTimeout(resolve, 0));
-let readDuringMutationResolved = false;
-const readDuringMutation = getResourcePinState(mutationClient, "session", "mutation-1", { force: true }).then((value) => {
-  readDuringMutationResolved = true;
-  return value;
-});
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(readDuringMutationResolved, false);
-resolveFirstPatch(true);
-assert.equal(await mutation, true);
-assert.equal(await readDuringMutation, true);
+    }).catch(() => { store.failures += 1; });
+    return store;
+  };
+
+  const slow = pinStore();
+  const settledPin = slow.tap();
+  assert.equal(slow.pinned, true, "the pin shows synchronously on the tap, before the request answers");
+  assert.equal(slow.writes.pending("space-pin:bot"), true);
+  mock.timers.tick(2999);
+  await flushSync();
+  assert.deepEqual([slow.pinned, slow.server], [true, false], "the row stays pinned while the request is out");
+  mock.timers.tick(1);
+  await settledPin;
+  assert.deepEqual([slow.pinned, slow.server, slow.sent, slow.applied], [true, true, [true], [true]]);
+  assert.equal(slow.writes.pending("space-pin:bot"), false);
+
+  const failing = pinStore(() => new Error("offline"));
+  const failedPin = failing.tap();
+  assert.equal(failing.pinned, true);
+  mock.timers.tick(3000);
+  await failedPin;
+  assert.deepEqual([failing.pinned, failing.applied, failing.failures], [false, [true, false], 1], "a failure rolls back and raises one error for the toast");
+
+  const coalesced = pinStore();
+  const taps = [coalesced.tap(), coalesced.tap(), coalesced.tap()];
+  assert.deepEqual(coalesced.applied, [true, false, true], "each tap shows its intent at once");
+  mock.timers.tick(3000);
+  await Promise.all(taps);
+  assert.deepEqual([coalesced.pinned, coalesced.server, coalesced.sent, coalesced.applied], [true, true, [true], [true, false, true]], "taps made while a request is out wait for it, and one already matching is not sent");
+
+  const interleaved = pinStore();
+  const first = interleaved.tap();
+  mock.timers.tick(1000);
+  const second = interleaved.tap();
+  mock.timers.tick(2000);
+  await flushSync();
+  assert.deepEqual([interleaved.pinned, interleaved.server, interleaved.sent], [false, true, [true, false]], "the first answer is not applied over the newer unpin, which goes next");
+  mock.timers.tick(500);
+  const third = interleaved.tap();
+  mock.timers.tick(2500);
+  await flushSync();
+  assert.deepEqual([interleaved.pinned, interleaved.server, interleaved.sent], [true, false, [true, false, true]], "a stale unpin answer is not applied over the last pin");
+  mock.timers.tick(3000);
+  await Promise.all([first, second, third]);
+  assert.deepEqual([interleaved.pinned, interleaved.server, interleaved.applied, interleaved.failures], [true, true, [true, false, true], 0], "tap-tap-tap ends at the last intent with no server answer painted in between");
+
+  const failingRun = pinStore(() => new Error("offline"));
+  const runTaps = [failingRun.tap(), failingRun.tap(), failingRun.tap()];
+  mock.timers.tick(3000);
+  await Promise.all(runTaps);
+  assert.deepEqual([failingRun.pinned, failingRun.failures], [false, 1], "a failed run of taps rolls back to the confirmed state with one toast");
+
+  const refused = pinStore(() => false);
+  const refusedPin = refused.tap();
+  mock.timers.tick(3000);
+  await refusedPin;
+  assert.deepEqual([refused.pinned, refused.applied], [false, [true, false]], "the server's answer to the latest intent stands");
+
+  const cleared = pinStore();
+  const dropped = cleared.tap();
+  cleared.writes.clear();
+  mock.timers.tick(3000);
+  await flushSync();
+  assert.deepEqual([cleared.applied, cleared.writes.pending("space-pin:bot")], [[true], false], "an answer after sign out is ignored");
+  void dropped;
+} finally { mock.timers.reset(); }
 
 let invalidationReadCount = 0;
 let resolveHangingRead;

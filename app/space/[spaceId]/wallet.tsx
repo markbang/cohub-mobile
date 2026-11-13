@@ -5,10 +5,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SettingsRow } from "@/src/components/SettingsRow";
-import { GroupRow, GroupSlot, GroupTile } from "@/src/components/GroupRow";
+import { GroupRow, GroupTile } from "@/src/components/GroupRow";
 import { useToast } from "@/src/components/Toast";
 import { config } from "@/src/config";
 import { useAppActions, useAppSelector } from "@/src/data/context";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { useScreenQuery } from "@/src/data/query";
 import { formatUsd, walletProductBalanceUsd } from "@/src/data/space-wallet";
 import { useSpaceWallet } from "@/src/data/use-space-wallet";
@@ -45,19 +46,24 @@ export default function SpaceWalletScreen() {
   const detail = useScreenQuery({ queryKey: detailKey, queryFn: (): Promise<SpaceRecord> => client!.spaces.get(spaceId), enabled: Boolean(client && spaceId) }).data ?? null;
   const canEdit = detail?.access?.permissions.includes("space.edit") === true;
   const publicFunding = detail?.publicProfile?.fundingEnabled === true;
-  const [savingFunding, setSavingFunding] = useState(false);
-  const setPublicFunding = async (enabled: boolean) => {
-    if (!client || savingFunding) return;
-    setSavingFunding(true);
-    try {
-      const { space: next } = await client.space(spaceId).profile({ fundingEnabled: enabled });
-      queryClient.setQueryData(detailKey, next);
-      upsertSpace(next);
-    } catch (caught) {
-      toast({ title: t("wallet.publicFunding.failed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
-    } finally {
-      setSavingFunding(false);
-    }
+  const [writes] = useState(createOptimisticWrites);
+  const setPublicFunding = (enabled: boolean) => {
+    if (!client) return;
+    let answered: SpaceRecord | null = null;
+    void writes.run(spaceId, {
+      value: enabled,
+      confirmed: publicFunding,
+      apply: (value) => queryClient.setQueryData<SpaceRecord>(detailKey, (current) => current && { ...current, publicProfile: { ...current.publicProfile, fundingEnabled: value } as SpaceRecord["publicProfile"] }),
+      send: async (value) => {
+        answered = (await client.space(spaceId).profile({ fundingEnabled: value })).space;
+        return answered.publicProfile?.fundingEnabled === true;
+      },
+      settled: () => {
+        if (!answered) return;
+        queryClient.setQueryData(detailKey, answered);
+        upsertSpace(answered);
+      },
+    }).catch((caught: unknown) => toast({ title: t("wallet.publicFunding.failed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" }));
   };
   const copyFundLink = () => void Clipboard.setStringAsync(`${resolveWebBaseUrl({ env: config.environment })}/spaces/${encodeURIComponent(spaceId)}/fund`)
     .then(() => toast({ title: t("wallet.fund.linkCopied"), tone: "success" }))
@@ -109,7 +115,7 @@ export default function SpaceWalletScreen() {
       <Text className="-mt-4 mb-6 px-8 text-caption text-fg-muted">{wallet.checkoutError ? <Text className="text-danger">{t("space.wallet.checkoutFailed")} </Text> : null}{t("space.wallet.rechargeNote")}</Text>
       <SettingsGroup footer={canEdit ? t("wallet.publicFunding.hint") : undefined}>
         <GroupRow leading={<GroupTile icon="wallet" accent />} title={t("wallet.fund.fromBalance")} titleClassName="text-accent" onPress={() => router.push({ pathname: "/space/[spaceId]/fund", params: { spaceId } })} last={!canEdit} />
-        {canEdit ? <GroupRow leading={savingFunding ? <GroupSlot><Loader /></GroupSlot> : <GroupTile icon="globe" />} title={t("wallet.publicFunding")} trailing={<AppSwitch value={publicFunding} disabled={savingFunding} onValueChange={(value) => void setPublicFunding(value)} accessibilityLabel={t("wallet.publicFunding")} />} last={!publicFunding} /> : null}
+        {canEdit ? <GroupRow leading={<GroupTile icon="globe" />} title={t("wallet.publicFunding")} trailing={<AppSwitch value={publicFunding} onValueChange={setPublicFunding} accessibilityLabel={t("wallet.publicFunding")} />} last={!publicFunding} /> : null}
         {canEdit && publicFunding ? <GroupRow leading={<GroupTile icon="link" accent />} title={t("wallet.fund.linkCopy")} titleClassName="text-accent" onPress={copyFundLink} last /> : null}
       </SettingsGroup>
       <SettingsGroup label={t("space.wallet.activity")}>

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { AppHostWebView } from "@/src/components/AppHostWebView";
 import { useAppActions } from "@/src/data/context";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { useScreenQuery } from "@/src/data/query";
 import { openWebLink } from "@/src/platform/browser";
 import { useTranslation } from "@/src/i18n";
@@ -33,23 +34,19 @@ export default function WorkScreen() {
     enabled: Boolean(client && appId),
   });
   const liked = likedQuery.data ?? false;
-  const [liking, setLiking] = useState(false);
+  const [writes] = useState(createOptimisticWrites);
   // The heart flips at once; the count follows the server's answer, never a guess past a failure.
-  const toggleLike = async () => {
-    if (!client || !appId || liking || likedQuery.data === undefined) return;
-    const next = !liked;
-    setLiking(true);
-    queryClient.setQueryData([`app:${appId}:liked`], next);
-    try {
-      const settled = await client.user.likes.set("app", appId, next);
-      queryClient.setQueryData([`app:${appId}:liked`], settled);
-      if (settled !== liked) queryClient.setQueryData<AppDetailResponse>([`app:${appId}:detail`], (current) => current && { ...current, likeCount: Math.max(0, (current.likeCount ?? 0) + (settled ? 1 : -1)) });
-    } catch (caught) {
-      queryClient.setQueryData([`app:${appId}:liked`], liked);
-      toast({ title: t("work.like.failed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" });
-    } finally {
-      setLiking(false);
-    }
+  const toggleLike = () => {
+    if (!client || !appId || likedQuery.data === undefined) return;
+    void writes.run(appId, {
+      value: !liked,
+      confirmed: liked,
+      apply: (value) => queryClient.setQueryData([`app:${appId}:liked`], value),
+      send: (value) => client.user.likes.set("app", appId, value),
+      settled: (value, from) => {
+        if (value !== from) queryClient.setQueryData<AppDetailResponse>([`app:${appId}:detail`], (current) => current && { ...current, likeCount: Math.max(0, (current.likeCount ?? 0) + (value ? 1 : -1)) });
+      },
+    }).catch((caught: unknown) => toast({ title: t("work.like.failed"), message: caught instanceof Error ? caught.message : undefined, tone: "danger" }));
   };
   const likeCount = detail?.likeCount ?? null;
   const fundable = detail?.space.publicProfile?.fundingEnabled === true;
@@ -68,7 +65,7 @@ export default function WorkScreen() {
       onBack={() => router.back()} 
       actions={detail || contentUrl ? (
         <>
-          {detail && <IconButton name={liked ? "heart-fill" : "heart"} tone={liked ? "accent" : "default"} label={liked ? t("work.unlike") : t("work.like")} size={40} disabled={liking || likedQuery.data === undefined} onPress={() => void toggleLike()} />}
+          {detail && <IconButton name={liked ? "heart-fill" : "heart"} tone={liked ? "accent" : "default"} label={liked ? t("work.unlike") : t("work.like")} size={40} disabled={likedQuery.data === undefined} onPress={toggleLike} />}
           {detail && fundable ? <IconButton name="wallet" label={t("wallet.fund.title", { space: detail.space.name || t("space.fallbackName") })} size={40} onPress={() => router.push({ pathname: "/space/[spaceId]/fund", params: { spaceId: detail.space.id } })} /> : null}
           {detail && <IconButton name="settings" label={t("app.manage.title")} size={40} onPress={() => router.push({ pathname: "/work/[appId]/edit", params: { appId: detail.app.id } })} />}
           {contentUrl && <IconButton name="external-link" label={t("file.openExternally")} size={40} onPress={() => void openWebLink(contentUrl).catch(() => undefined)} />}

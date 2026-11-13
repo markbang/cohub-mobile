@@ -1,7 +1,7 @@
 import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { AnchoredActionMenu, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
@@ -156,8 +156,6 @@ export default function SpaceScreen() {
   const tasksLoadingMore = taskList.loadingMore;
   const [pageRefreshing, setPageRefreshing] = useState(false);
   const spaceActionsRef = useRef<View>(null);
-  const [pinning, setPinning] = useState(false);
-  const [pinError, setPinError] = useState<string | null>(null);
   const [checkpointing, setCheckpointing] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
 
@@ -197,18 +195,7 @@ export default function SpaceScreen() {
   }
 
   const name = displaySpaceName(space);
-  const togglePin = async () => {
-    if (pinning) return;
-    setPinning(true);
-    setPinError(null);
-    try {
-      await toggleSpacePin(space.id);
-    } catch (error) {
-      setPinError(error instanceof Error ? error.message : t("spaces.pin.error"));
-    } finally {
-      setPinning(false);
-    }
-  };
+  const togglePin = () => void toggleSpacePin(space.id).catch((error: unknown) => toast({ title: t("spaces.pin.error"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
   const activeTasks = resources.tasks.filter((task) => task.status === "pending" || task.status === "running").length;
   const createCheckpoint = async () => {
     if (checkpointing || !client) return;
@@ -232,7 +219,7 @@ export default function SpaceScreen() {
     ] },
     { actions: [
       { icon: "square-pen", title: t("space.edit.action"), onPress: () => router.push({ pathname: "/space/[spaceId]/edit", params: { spaceId: space.id } }) },
-      { icon: space.isPinned ? "pin-off" : "pin", title: space.isPinned ? t("space.unpin") : t("space.pin"), disabled: pinning, onPress: () => void togglePin() },
+      { icon: space.isPinned ? "pin-off" : "pin", title: space.isPinned ? t("space.unpin") : t("space.pin"), onPress: togglePin },
       { icon: "bookmark", title: checkpointing ? t("space.saveCheckpointSaving") : t("space.saveCheckpoint"), disabled: checkpointing, onPress: () => void createCheckpoint() },
     ] },
   ];
@@ -268,7 +255,6 @@ export default function SpaceScreen() {
       actions={<><IconButton name="folder-open" label={t("space.openFilesPanel")} onPress={() => setActivePanel("files")} /><IconButton name="settings" label={t("space.settings")} onPress={() => router.push({ pathname: "/space/[spaceId]/settings", params: { spaceId: space.id } })} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("space.actions")} sections={spaceSections} testID="space-actions-menu" /> : <SpaceActionsTrigger anchorRef={spaceActionsRef} label={t("space.actions")} />}</>}
     />
     {realtimeError ? <Text selectable className="text-caption text-danger mx-4 mt-2">{realtimeError}</Text> : null}
-    {pinError ? <Pressable accessibilityRole="button" accessibilityLabel={t("space.pin.dismiss")} onPress={() => setPinError(null)} className="mx-4 mt-2 p-2 rounded-sm bg-danger-soft"><Text className="text-caption text-danger">{pinError}</Text></Pressable> : null}
     <ScrollView
       className="flex-1 bg-background"
       contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}

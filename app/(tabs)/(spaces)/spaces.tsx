@@ -86,8 +86,6 @@ export default function SpacesScreen() {
   const [filter, setFilter] = useState<SpacesTabFilter>("recent");
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterButtonRef = useRef<View>(null);
-  const [pinningSpaceId, setPinningSpaceId] = useState<string | null>(null);
-  const [pinError, setPinError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -169,29 +167,21 @@ export default function SpacesScreen() {
   // LegendList memoizes each row on [item, extraData]; async counts and pin state are
   // read by renderItem but never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(
-    () => ({ client, pinningSpaceId, spaceSessionCounts, t, theme }),
-    [client, pinningSpaceId, spaceSessionCounts, t, theme],
+    () => ({ client, spaceSessionCounts, t, theme }),
+    [client, spaceSessionCounts, t, theme],
   );
 
-  const togglePin = async (spaceId: string, name: string) => {
-    if (pinningSpaceId) return;
-    setPinningSpaceId(spaceId);
-    setPinError(null);
-    try {
-      const pinned = await toggleSpacePin(spaceId);
-      // Unpinning moves the row out of the pinned group, so a stray swipe needs a way back.
-      if (!pinned) toast({ title: t("space.unpinnedNamed", { name }), tone: "neutral", action: {
-        label: t("common.undo"),
-        onPress: () => {
-          if (getAppState().spaces.find((space) => space.id === spaceId)?.isPinned) return;
-          void togglePin(spaceId, name);
-        },
-      } });
-    } catch (error) {
-      setPinError(error instanceof Error ? error.message : t("spaces.pin.error"));
-    } finally {
-      setPinningSpaceId(null);
-    }
+  const togglePin = (spaceId: string, name: string) => {
+    const unpinning = getAppState().spaces.find((space) => space.id === spaceId)?.isPinned === true;
+    void toggleSpacePin(spaceId).catch((error: unknown) => toast({ title: t("spaces.pin.error"), message: error instanceof Error ? error.message : undefined, tone: "danger" }));
+    // Unpinning moves the row out of the pinned group, so a stray swipe needs a way back.
+    if (unpinning) toast({ title: t("space.unpinnedNamed", { name }), tone: "neutral", action: {
+      label: t("common.undo"),
+      onPress: () => {
+        if (getAppState().spaces.find((space) => space.id === spaceId)?.isPinned) return;
+        togglePin(spaceId, name);
+      },
+    } });
   };
 
   const closeCreate = () => {
@@ -305,7 +295,7 @@ export default function SpacesScreen() {
       extraData={rowExtraData}
       estimatedItemSize={80}
       keyExtractor={spaceItemKey}
-      renderItem={({ item }) => <ListContinuityRow rowKey={spaceItemKey(item)}>{item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} pinning={pinningSpaceId === item.space.id} onTogglePin={client ? () => void togglePin(item.space.id, displaySpaceName(item.space)) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}</ListContinuityRow>}
+      renderItem={({ item }) => <ListContinuityRow rowKey={spaceItemKey(item)}>{item.kind === "device" ? <DeviceSpaceRow instance={item.instance} space={item.space} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.instance.spaceId } })} /> : item.kind === "remote" ? <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} /> : <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onTogglePin={client ? () => togglePin(item.space.id, displaySpaceName(item.space)) : undefined} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />}</ListContinuityRow>}
       {...pullRefresh.listProps}
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
@@ -322,7 +312,6 @@ export default function SpacesScreen() {
         {nativeHeaders ? <><ConnectionBanner visible={connectionUnavailable} />{dataError && !emptyError ? <DataError message={dataError} onRetry={() => void refresh()} /> : null}</> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.loading && listItems.length > 0 ? <ListEdgeLoader label={t("spaces.searching")} /> : null}
         {remoteSearch.query === trimmedQuery && remoteSearch.error && trimmedQuery.length >= 2 ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{remoteSearch.error}</Text><IconButton name="refresh" label={t("spaces.search.retry")} onPress={remoteSearch.retry} tone="accent" /></View> : null}
-        {pinError ? <View className="flex-row items-center gap-2 pl-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable numberOfLines={2} className="flex-1 text-caption text-danger">{pinError}</Text><IconButton name="x" label={t("spaces.pin.dismiss")} onPress={() => setPinError(null)} /></View> : null}
         </View>
       </View>}
       ListEmptyComponent={listLoading ? <LoadingRows count={4} /> : emptyError ? <EmptyState icon="cloud-off" title={t("spaces.error.title")} description={t("spaces.error.body")} action={{ icon: "refresh", label: t("common.retry"), onPress: () => void refresh() }} /> : searchEmpty}

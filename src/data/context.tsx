@@ -77,7 +77,8 @@ import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-
 import { extractSpaceMentions } from "@/src/data/space-mentions";
 import { createSendQueue, shouldQueueFollowup, type SendQueue } from "@/src/data/followup-queue";
 import { createSessionLifecycle } from "@/src/data/session-lifecycle";
-import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, toggleResourcePin } from "@/src/data/resource-pins";
+import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, loadResourcePinStates, setResourcePin } from "@/src/data/resource-pins";
+import { createOptimisticWrites } from "@/src/data/optimistic-write";
 import { getInstallationId } from "@/src/platform/installation";
 import { isAppActive, subscribeAppActive } from "@/src/platform/app-lifecycle";
 import { useDeviceDisplayInterrupts, useDeviceRuntimeSession } from "@/src/platform/device-runtime";
@@ -501,6 +502,8 @@ function placeRunningSession(state: AppState, sessionId: string, found?: UserSes
 function isListedSession(session: Pick<SessionRecord, "archivedAt">) {
   return !session.archivedAt;
 }
+
+const spacePinKey = (spaceId: string) => `space-pin:${spaceId}`;
 
 function preserveSpacePin(current: SpaceRecord | undefined, incoming: SpaceRecord) {
   return incoming.isPinned === undefined && current?.isPinned !== undefined
@@ -1140,9 +1143,8 @@ export function AppProvider({
   const sendQueueRef = useRef(createSendQueue());
   const lastSendOrderRef = useRef(0);
   const sessionsMoreRequestRef = useRef<Promise<void> | null>(null);
-  const spacePinMutationVersionsRef = useRef(new Map<string, number>());
-  const spacePinPendingMutationsRef = useRef(new Map<string, number>());
-  const spacePinMutationSequenceRef = useRef(0);
+  // Pins, renames and archives show at once; this owns their requests, rollbacks, and which answer is current.
+  const writesRef = useRef(createOptimisticWrites());
   // Prod keeps the historical scope; other environments are namespaced so a separate
   // deployment never reuses another environment's cached Spaces, Chats, or read state.
   const userKey = config.environment === "prod" ? userUuid : `${config.environment}:${userUuid}`;
@@ -1297,7 +1299,7 @@ export function AppProvider({
       const spacesError = spacesResult.status === "rejected"
         ? `Spaces could not be refreshed: ${errorMessage(spacesResult.reason, translate("data.requestFailed"))}`
         : undefined;
-      const pinRequestVersions = new Map(spaces.map((space) => [space.id, spacePinMutationVersionsRef.current.get(space.id) ?? 0]));
+      const pinRequestVersions = new Map(spaces.map((space) => [space.id, writesRef.current.revision(spacePinKey(space.id))]));
       const spacesMissingPinState = remoteSpaces?.filter((space) => space.isPinned === undefined).map((space) => space.id) ?? [];
       let pinStates: Record<string, boolean> = {};
       if (spacesMissingPinState.length > 0) {
@@ -1313,8 +1315,7 @@ export function AppProvider({
       }
       if (generation !== homeRefreshGenerationRef.current) return;
       spaces = spaces.map((space) => {
-        const mutationVersion = spacePinMutationVersionsRef.current.get(space.id) ?? 0;
-        if (spacePinPendingMutationsRef.current.has(space.id) || mutationVersion !== pinRequestVersions.get(space.id)) {
+        if (writesRef.current.pending(spacePinKey(space.id)) || writesRef.current.revision(spacePinKey(space.id)) !== pinRequestVersions.get(space.id)) {
           const current = stateRef.current.spaces.find((item) => item.id === space.id);
           return current?.isPinned === undefined ? space : { ...space, isPinned: current.isPinned };
         }
@@ -2554,16 +2555,13 @@ export function AppProvider({
 
   const refreshSpacePin = useCallback(async (spaceId: string) => {
     if (!client) throw new Error(translate("data.stillConnecting"));
-    const currentBeforeRequest = stateRef.current.spaces.find((space) => space.id === spaceId);
-    if (spacePinPendingMutationsRef.current.has(spaceId)) return currentBeforeRequest?.isPinned ?? false;
-    const requestVersion = spacePinMutationVersionsRef.current.get(spaceId) ?? 0;
+    const writes = writesRef.current;
+    const key = spacePinKey(spaceId);
+    const local = () => stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned;
+    if (writes.pending(key)) return local() ?? false;
+    const requestVersion = writes.revision(key);
     const pinned = await getResourcePinState(client, "space", spaceId, { force: true });
-    if (spacePinPendingMutationsRef.current.has(spaceId)) {
-      return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
-    }
-    if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== requestVersion) {
-      return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
-    }
+    if (writes.pending(key) || writes.revision(key) !== requestVersion) return local() ?? pinned;
     const current = stateRef.current.spaces.find((space) => space.id === spaceId);
     if (current) {
       const next = { ...current, isPinned: pinned };
@@ -2573,42 +2571,28 @@ export function AppProvider({
     return pinned;
   }, [client, dispatch, userKey, stateRef]);
 
-  const toggleSpacePin = useCallback(async (spaceId: string) => {
-    if (!client) throw new Error(translate("data.stillConnecting"));
-    const mutationVersion = ++spacePinMutationSequenceRef.current;
-    spacePinMutationVersionsRef.current.set(spaceId, mutationVersion);
-    spacePinPendingMutationsRef.current.set(spaceId, mutationVersion);
-    let current: SpaceRecord | null = null;
-    let wasPinned = false;
-    try {
-      current = stateRef.current.spaces.find((space) => space.id === spaceId) ?? null;
-      wasPinned = current?.isPinned ?? await getResourcePinState(client, "space", spaceId, { force: true });
-      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
-        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? wasPinned;
-      }
-      if (current) dispatch({ type: "space-upsert", space: { ...current, isPinned: !wasPinned } });
-      const pinned = await toggleResourcePin(client, "space", spaceId, wasPinned);
-      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
-        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? pinned;
-      }
-      const latest = stateRef.current.spaces.find((space) => space.id === spaceId) ?? current;
-      if (latest) {
-        const next = { ...latest, isPinned: pinned };
-        dispatch({ type: "space-upsert", space: next });
-        void saveSpaces(userKey, [next]).catch(() => undefined);
-      }
-      return pinned;
-    } catch (error) {
-      if ((spacePinMutationVersionsRef.current.get(spaceId) ?? 0) !== mutationVersion) {
-        return stateRef.current.spaces.find((space) => space.id === spaceId)?.isPinned ?? !wasPinned;
-      }
-      if (current) dispatch({ type: "space-upsert", space: current });
-      throw error;
-    } finally {
-      if (spacePinPendingMutationsRef.current.get(spaceId) === mutationVersion) {
-        spacePinPendingMutationsRef.current.delete(spaceId);
-      }
-    }
+  const toggleSpacePin = useCallback((spaceId: string) => {
+    if (!client) return Promise.reject(new Error(translate("data.stillConnecting")));
+    const current = stateRef.current.spaces.find((space) => space.id === spaceId);
+    const pinned = current?.isPinned === true;
+    const write = (isPinned: boolean | undefined) => {
+      const latest = stateRef.current.spaces.find((space) => space.id === spaceId);
+      if (!latest || latest.isPinned === isPinned) return latest ?? null;
+      const next = { ...latest, isPinned };
+      dispatch({ type: "space-upsert", space: next });
+      return next;
+    };
+    // A pin is written as the state the user chose, never as a flip of an answer still on its way.
+    return writesRef.current.run<boolean | undefined>(spacePinKey(spaceId), {
+      value: !pinned,
+      confirmed: current?.isPinned,
+      apply: write,
+      send: (value) => setResourcePin(client, "space", spaceId, value === true),
+      settled: (value) => {
+        const next = write(value);
+        if (next) void saveSpaces(userKey, [next]).catch(() => undefined);
+      },
+    }).then((value) => value === true);
   }, [client, dispatch, userKey, stateRef]);
 
   useEffect(() => {
@@ -2621,6 +2605,8 @@ export function AppProvider({
         assignments?: unknown;
       };
       if (payload.resourceType !== "space" || typeof payload.resourceRef !== "string" || !Array.isArray(payload.assignments)) return;
+      // An echo of a write still settling would flip the row back to an intent the user has since changed.
+      if (writesRef.current.pending(spacePinKey(payload.resourceRef))) return;
       const current = stateRef.current.spaces.find((space) => space.id === payload.resourceRef);
       if (!current) return;
       const pinned = isResourcePinned(payload.assignments as { labelSystemKey?: string | null }[]);
@@ -2660,37 +2646,54 @@ export function AppProvider({
   }, [dispatch, userKey]);
 
   const renameSession = useCallback(
-    async (sessionId: string, title: string) => {
-      if (!client) throw new Error(translate("data.stillConnecting"));
+    (sessionId: string, title: string) => {
+      if (!client) return Promise.reject(new Error(translate("data.stillConnecting")));
       const view = stateRef.current.sessionViews[sessionId];
       const summary = stateRef.current.sessions.find((item) => item.id === sessionId);
       const spaceId = view?.session?.spaceId ?? summary?.spaceId;
-      if (!spaceId) throw new Error(translate("data.chatContextUnavailable"));
-      const result = await client.space(spaceId).session(sessionId).rename(title.trim() || null);
-      dispatch({ type: "session-upsert", session: { ...result.session, space: summary?.space ?? null } });
-      const currentView = stateRef.current.sessionViews[sessionId];
-      if (currentView) dispatch({ type: "session-meta", sessionId, session: result.session, space: currentView.space });
-      void queryClient.invalidateQueries();
+      if (!spaceId) return Promise.reject(new Error(translate("data.chatContextUnavailable")));
+      let answered: SessionRecord | null = null;
+      const apply = (session: SessionRecord) => {
+        const listed = stateRef.current.sessions.find((item) => item.id === sessionId);
+        dispatch({ type: "session-upsert", session: { ...session, space: listed?.space ?? summary?.space ?? null } });
+        const currentView = stateRef.current.sessionViews[sessionId];
+        if (currentView?.session) dispatch({ type: "session-meta", sessionId, session, space: currentView.space });
+      };
+      const base = () => stateRef.current.sessionViews[sessionId]?.session ?? stateRef.current.sessions.find((item) => item.id === sessionId) ?? view?.session ?? summary;
+      return writesRef.current.run<string | null>(`session-title:${sessionId}`, {
+        value: title.trim() || null,
+        confirmed: (view?.session ?? summary)?.title ?? null,
+        apply: (value) => {
+          const session = base();
+          if (session && session.title !== value) apply({ ...session, title: value });
+        },
+        send: async (value) => {
+          answered = (await client.space(spaceId).session(sessionId).rename(value)).session;
+          return answered.title ?? null;
+        },
+        settled: () => {
+          if (answered) apply(answered);
+          void queryClient.invalidateQueries();
+        },
+      }).then(() => undefined);
     },
     [client, dispatch, queryClient, stateRef],
   );
 
   const setSessionArchived = useCallback(
-    async (target: SessionRecord & { space?: UserSessionListItem["space"] }, archived: boolean) => {
-      if (!client) throw new Error(translate("data.stillConnecting"));
+    (target: SessionRecord & { space?: UserSessionListItem["space"] }, archived: boolean) => {
+      if (!client) return Promise.reject(new Error(translate("data.stillConnecting")));
       const sessionId = target.id;
       const previousView = stateRef.current.sessionViews[sessionId];
       const previousSummary = stateRef.current.sessions.find((item) => item.id === sessionId);
       const viewSpace = previousView?.space;
       const space = previousSummary?.space ?? target.space ?? (viewSpace ? { id: viewSpace.id, name: displaySpaceName(viewSpace), slug: viewSpace.slug, publicProfile: viewSpace.publicProfile ?? null } : null);
+      const base = previousView?.session ?? previousSummary ?? target;
       const apply = (session: SessionRecord) => {
         dispatch({ type: "session-upsert", session: { ...session, space } });
         if (stateRef.current.sessionViews[sessionId]?.session) dispatch({ type: "session-meta", sessionId, session, space: stateRef.current.sessionViews[sessionId]?.space });
       };
-      const base = previousView?.session ?? previousSummary ?? target;
-      const stamp = archived ? new Date().toISOString() : null;
-      apply({ ...base, archivedAt: stamp });
-      // Archiving moves a Chat between these lists either way, so it leaves the one it is in; the refetch below settles them.
+      // Archiving moves a Chat between these lists either way, so it leaves the one it is in; the refetch once settled places it.
       queryClient.setQueriesData<{ sessions?: UserSessionListItem[]; items?: UserSessionListItem[] }>(
         { predicate: (query) => { const key = String(query.queryKey[0]); return key.startsWith("chats:source:") || key.endsWith(":chat-panel") || key.endsWith(":archived-chats"); } },
         (data) => data && {
@@ -2699,19 +2702,27 @@ export function AppProvider({
           ...(data.items ? { items: data.items.filter((item) => item.id !== sessionId) } : {}),
         },
       );
-      try {
-        const sessionClient = client.space(target.spaceId).session(sessionId);
-        const result = await (archived ? sessionClient.archive() : sessionClient.unarchive());
-        const session = result.session.archivedAt === undefined ? { ...result.session, archivedAt: stamp } : result.session;
-        apply(session);
-        void saveSessions(userKey, [{ ...session, space }]).catch(() => undefined);
-      } catch (error) {
-        dispatch({ type: "session-upsert", session: previousSummary ?? { ...base, space } });
-        if (previousView?.session) dispatch({ type: "session-meta", sessionId, session: previousView.session, space: previousView.space });
-        throw error;
-      } finally {
-        void queryClient.invalidateQueries();
-      }
+      let answered: SessionRecord | null = null;
+      const sessionClient = client.space(target.spaceId).session(sessionId);
+      return writesRef.current.run<boolean>(`session-archive:${sessionId}`, {
+        value: archived,
+        confirmed: Boolean(base.archivedAt),
+        apply: (value) => {
+          const current = stateRef.current.sessionViews[sessionId]?.session ?? stateRef.current.sessions.find((item) => item.id === sessionId) ?? base;
+          if (Boolean(current.archivedAt) !== value) apply({ ...current, archivedAt: value ? new Date().toISOString() : null });
+        },
+        send: async (value) => {
+          const result = await (value ? sessionClient.archive() : sessionClient.unarchive());
+          answered = result.session.archivedAt === undefined ? { ...result.session, archivedAt: value ? new Date().toISOString() : null } : result.session;
+          return Boolean(answered.archivedAt);
+        },
+        settled: () => {
+          if (answered) {
+            apply(answered);
+            void saveSessions(userKey, [{ ...answered, space }]).catch(() => undefined);
+          }
+        },
+      }).then(() => undefined).finally(() => void queryClient.invalidateQueries());
     },
     [client, dispatch, queryClient, stateRef, userKey],
   );
@@ -2738,8 +2749,7 @@ export function AppProvider({
     // A fresh baseline keeps every cleared Chat read instead of marking them all unread.
     await reloadSessionSeen().catch(() => undefined);
     paginationRequestsRef.current.clear();
-    spacePinMutationVersionsRef.current.clear();
-    spacePinPendingMutationsRef.current.clear();
+    writesRef.current.clear();
     store.setState({ state: { ...initialState, booting: false, refreshing: false } });
     void queryClient.resetQueries();
   }, [queryClient, reloadSessionSeen, resetSpaceList, store, userKey]);
