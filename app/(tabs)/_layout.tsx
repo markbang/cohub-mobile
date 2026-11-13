@@ -7,6 +7,9 @@ import { useTranslation } from "@/src/i18n";
 import { useDesktopSplit } from "@/src/ui/pane";
 import { TabBarMinimizeProvider } from "@/src/ui/tab-bar-minimize";
 
+// Seeds the tab app on Chats when a link opens a screen above it; without it Expo Router seeds the first route of its own route sort, (me).
+export const unstable_settings = { anchor: "(chats)" };
+
 export default function TabLayout() {
   const { t } = useTranslation();
   const rail = useDesktopSplit();
