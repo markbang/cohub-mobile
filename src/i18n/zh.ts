@@ -1582,6 +1582,10 @@ export const zh: Record<TranslationKey, string> = {
   "imageViewer.failed": "图片加载失败",
   "imageViewer.unavailable": "此图片已无法显示",
   "imageViewer.page": "第 {current} 张，共 {total} 张",
+  "imageViewer.zoomIn": "放大",
+  "imageViewer.zoomOut": "缩小",
+  "imageViewer.previous": "上一张",
+  "imageViewer.next": "下一张",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "无法打开对话",

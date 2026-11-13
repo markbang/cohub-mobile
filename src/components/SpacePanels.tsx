@@ -239,7 +239,7 @@ export function SpacePanels({ spaceId, spaceName, spaceAvatarUrl, sessions, clie
 
   return (
     <View className="flex-1 min-h-0 overflow-hidden bg-background" collapsable={false}>
-      <GestureDetector gesture={swipe}>
+      <GestureDetector gesture={swipe} enableContextMenu>
       <ScrollView
         horizontal
         keyboardShouldPersistTaps="handled"

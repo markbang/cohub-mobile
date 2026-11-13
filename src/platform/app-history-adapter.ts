@@ -11,8 +11,8 @@ type Command = { op: "push" | "replace"; entryId: string; path: string } | { op:
 
 const base = (globalThis as { __cohubBase?: string }).__cohubBase;
 
-function toAddress(path: string) {
-  if (base === undefined || !path.startsWith(base)) return path;
+export function toAddress(path: string) {
+  if (base === undefined || !path.startsWith(`${base}/`)) return path;
   return `${base}/index.html#${path.slice(base.length) || "/"}`;
 }
 

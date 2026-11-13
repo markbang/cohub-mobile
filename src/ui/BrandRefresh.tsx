@@ -135,7 +135,7 @@ function AndroidPull({ refresh, top, children }: { refresh: BrandRefresh; top: n
   const listStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pull.get() }] }));
   const reveal = useReveal(pull, refreshing);
   const place = useAnimatedStyle(() => ({ transform: [{ translateY: top + (pull.get() - MASCOT) / 2 }] }));
-  return <GestureDetector gesture={gesture}>
+  return <GestureDetector gesture={gesture} enableContextMenu>
     <View className="flex-1" collapsable={false}>
       <Animated.View pointerEvents="none" className="absolute left-0 right-0 items-center" style={place}>
         <Animated.View style={reveal}><RefreshMascot refreshing={refreshing} /></Animated.View>

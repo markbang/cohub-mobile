@@ -1611,6 +1611,10 @@ export const en = {
   "imageViewer.failed": "Image failed to load",
   "imageViewer.unavailable": "This image is no longer available",
   "imageViewer.page": "Image {current} of {total}",
+  "imageViewer.zoomIn": "Zoom in",
+  "imageViewer.zoomOut": "Zoom out",
+  "imageViewer.previous": "Previous image",
+  "imageViewer.next": "Next image",
 
   // Chat thread placeholders / errors
   "chat.thread.couldNotLoad": "Unable to open Chat",
