@@ -28,7 +28,7 @@ import { EdgeBlurTarget, EdgeHeader, useEdgeChrome } from "@/src/ui/EdgeChrome";
 import { LargeTitle, LargeTitleBar, LargeTitleSearch, largeTitleScroll, LargeTitleSearchLift, useLargeTitleSearch, useLargeTitleSnap } from "@/src/ui/LargeTitle";
 import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { NAVIGATION_BAR_INSETS, nativeHeaders, useEmptyListFill, useNativeHeader } from "@/src/ui/NativeHeader";
-import { useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
+import { useDesktopSplit, useOpenChat, useScreenVisibleEffect, useSplitLayout } from "@/src/ui/pane";
 import { ListContinuityProvider, ListContinuityRow, useListContinuity } from "@/src/ui/list-continuity";
 import { BotRow, PinnedBots } from "@/src/components/BotRow";
 import { isBotSpace, pinnedBotEntries, PRIMARY_BOT_SLUG, type BotEntry } from "@/src/data/bot-mode";
@@ -55,6 +55,7 @@ export default function ChatsScreen() {
   const openChat = useOpenChat();
   // The right pane's Chat, highlighted in the list; null in a compact window.
   const { selectedChatId } = useSplitLayout();
+  const desktopSplit = useDesktopSplit();
   const theme = useAppTheme();
   const { t } = useTranslation();
   const tabBarInset = useFloatingTabBarInset();
@@ -231,8 +232,8 @@ export default function ChatsScreen() {
   // LegendList memoizes each row on [item, extraData]; cached space counts load after the
   // first render but never change `listItems`, so they must flow through extraData.
   const rowExtraData = useMemo(
-    () => ({ spaceSessionCounts, t, theme, prefetchSession, selectedChatId }),
-    [spaceSessionCounts, t, theme, prefetchSession, selectedChatId],
+    () => ({ spaceSessionCounts, t, theme, prefetchSession, selectedChatId, botsLoading: bots.loadingIds }),
+    [spaceSessionCounts, t, theme, prefetchSession, selectedChatId, bots.loadingIds],
   );
 
   const refresh = () => { if (botsView) void bots.refetch(); if (listFilter !== "all") sourceSessions.reload(); void loadSessionSourcePreference().catch(() => undefined); return refreshHome().catch(() => undefined); };
@@ -306,7 +307,7 @@ export default function ChatsScreen() {
     if (item.kind === "remote-session") return <SessionSearchRow hit={item.hit} onPress={(target) => openSearchSession(item.hit.sessionId, target)} onPressIn={() => prefetchSession(item.hit.sessionId)} />;
     if (item.kind === "local-session") return <SessionRow session={item.session} fork={item.fork} tree={item.tree} selected={item.session.id === selectedChatId} onPress={() => openSearchSession(item.session.id)} onPressIn={() => prefetchSession(item.session.id)} />;
     if (item.kind === "fork-toggle") return <SessionForkToggle hidden={item.hidden} expanded={item.expanded} onPress={() => { dropHeldOrder(); setExpandedForks((current) => toggleSetMember(current, item.rootId)); }} />;
-    if (item.kind === "bot") return <BotRow entry={item.entry} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!, { notesOnly: true }) : undefined} onTogglePin={() => toggleBotPin(item.entry.space.id)} />;
+    if (item.kind === "bot") return <BotRow entry={item.entry} loading={bots.loadingIds.has(item.entry.space.id)} onPress={() => void openBot(item.entry.space.id)} onPressIn={item.entry.chatId ? () => prefetchSession(item.entry.chatId!, { notesOnly: true }) : undefined} onTogglePin={() => toggleBotPin(item.entry.space.id)} />;
     if (item.kind === "remote-space") return <SpaceSearchRow hit={item.hit} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.hit.spaceId } })} />;
     return <SpaceRow space={item.space} sessionCount={spaceSessionCounts[item.space.id] ?? null} onPress={() => router.push({ pathname: "/space/[spaceId]", params: { spaceId: item.space.id } })} />;
   };
@@ -321,7 +322,8 @@ export default function ChatsScreen() {
         <IconButton name={newAction.icon} label={newAction.label} tone="accent" disabled={newAction.disabled} onPress={newAction.onPress} />
       </>} />
       <ConnectionBanner visible={connectionUnavailable} />
-      {dataError && !emptyError ? <DataError message={dataError} onRetry={refresh} /> : null}
+      {/* On a phone the Large Title below it brings its own room; on the desktop the search field comes next. */}
+      {dataError && !emptyError ? <View className={desktopSplit ? "pb-2" : undefined}><DataError message={dataError} onRetry={refresh} /></View> : null}
       </EdgeHeader>}
       <EdgeBlurTarget attach={attachBlurTarget}>
       <LargeTitleSearchLift search={nativeHeaders ? undefined : search}>

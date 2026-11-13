@@ -439,7 +439,7 @@ export function SearchField({ value, onChangeText, placeholder, inputRef, onFocu
   const { t } = useTranslation();
   const content = <>
     <AppIcon name="search" size={18} tone="fg" />
-    <TextInput ref={inputRef} value={value} onChangeText={onChangeText} onFocus={onFocus} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="flex-1 py-0 text-body text-fg" returnKeyType="search" />
+    <TextInput ref={inputRef} value={value} onChangeText={onChangeText} onFocus={onFocus} placeholder={placeholder ?? t("ui.search.placeholder")} placeholderTextColor={theme.colors.textFaint} className="min-w-0 flex-1 py-0 text-body text-fg" returnKeyType="search" />
     {value ? <Pressable accessibilityRole="button" accessibilityLabel={t("ui.search.clear")} onPress={() => onChangeText?.("")} hitSlop={CLEAR_SLOP} className="active:opacity-55"><AppIcon name="circle-x" size={18} tone="faint" /></Pressable> : null}
   </>;
   // The iOS 26 search field: a 44 pt capsule on the system fill, a black glyph, the text 58 pt in.
@@ -451,6 +451,9 @@ export function SearchField({ value, onChangeText, placeholder, inputRef, onFocu
 }
 
 const FIELD_END_PADDING = 16;
+// Native draws siblings in order; the web paints a positioned one over in-flow siblings (the glyph and the
+// text, placeholder included) unless it is stacked below them.
+const CAPSULE_LAYER = { ...StyleSheet.absoluteFill, zIndex: -1 };
 // The sliding end is at least a whole rounded cap, so the two pieces always join into one capsule.
 const CAPSULE_CAP = 44;
 
@@ -460,7 +463,7 @@ const CAPSULE_CAP = 44;
  */
 function ShrinkingCapsule({ inset, progress }: { inset: number; progress: SharedValue<number> }) {
   const endStyle = useAnimatedStyle(() => ({ transform: [{ translateX: -inset * progress.get() }] }));
-  return <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+  return <View pointerEvents="none" style={CAPSULE_LAYER}>
     <View className="absolute inset-y-0 left-0 rounded-full bg-control-track" style={{ right: inset }} />
     <Animated.View className="absolute inset-y-0 right-0 rounded-full bg-control-track" style={[{ width: inset + CAPSULE_CAP }, endStyle]} />
   </View>;

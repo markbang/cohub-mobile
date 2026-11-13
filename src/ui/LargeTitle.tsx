@@ -9,7 +9,7 @@ import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
 import { edgeChrome } from "@/src/theme";
 import { SearchField } from "@/src/ui";
 import { BarButtonContext } from "@/src/ui/bar-button-context";
-import { useScreenVisible } from "@/src/ui/pane";
+import { useDesktopSplit, useScreenVisible } from "@/src/ui/pane";
 import { useMinimizeTabBarOnScroll } from "@/src/ui/tab-bar-minimize";
 
 // The Large Title row: its padding puts the cap height 22 pt under the bar and a search field below it
@@ -21,6 +21,9 @@ const COLLAPSE_AT = 52;
 // its opacity trailing the rise, while the Large Title fades out; the reverse on the way back (iOS 26, frame by frame).
 const TITLE_SWAP = { duration: 170, easing: Easing.bezier(0.25, 0.1, 0.25, 1) };
 const TITLE_RISE = 14;
+
+/** The desktop bar's room above its row, which a status bar gives a phone's. */
+const INLINE_BAR_TOP = 12;
 
 /** 0 while the Large Title shows, 1 once the bar's title has taken over; timed, not scrubbed by the scroll. */
 function useTitleSwap(scrollY: SharedValue<number> | undefined, hold: number) {
@@ -55,11 +58,17 @@ export function largeTitleScroll(search: boolean) {
  */
 export function LargeTitleBar({ title, actions, scrollY, hold = 0 }: { title: string; actions?: ReactNode; scrollY?: SharedValue<number>; hold?: number }) {
   useMinimizeTabBarOnScroll(scrollY, hold + COLLAPSE_AT);
+  const inline = useDesktopSplit();
   const swap = useTitleSwap(scrollY, hold);
   const titleStyle = useAnimatedStyle(() => {
     const progress = swap.get();
     return { opacity: Math.pow(progress, 2.5), transform: [{ translateY: (1 - progress) * TITLE_RISE }] };
   });
+  // The desktop layout keeps the title on the actions' row, so the list starts higher and nothing swaps on scroll.
+  if (inline) return <View className="flex-row items-center gap-3 px-4 pb-1" style={{ minHeight: edgeChrome.headerMinHeight, paddingTop: INLINE_BAR_TOP }}>
+    <Text accessibilityRole="header" numberOfLines={1} className="min-w-0 flex-1 text-display font-bold text-fg">{title}</Text>
+    {actions ? <BarButtonContext.Provider value="system">{actions}</BarButtonContext.Provider> : null}
+  </View>;
   return <View className="flex-row items-center justify-end gap-3 px-4" style={{ minHeight: edgeChrome.headerMinHeight }}>
     {/* The Large Title is the header for screen readers; this copy only shows it while collapsed. */}
     <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="absolute inset-x-0 inset-y-0 items-center justify-center" style={titleStyle}>
@@ -74,6 +83,7 @@ export function LargeTitleBar({ title, actions, scrollY, hold = 0 }: { title: st
  * passed; a pull past the top stretches it, as UIKit does.
  */
 export function LargeTitle({ title, scrollY, hold = 0, search }: { title: string; scrollY?: SharedValue<number>; hold?: number; search?: LargeTitleSearchState }) {
+  const inline = useDesktopSplit();
   // The swap hides it once the bar's title shows, so it never rests half-veiled under the soft edge.
   const swap = useTitleSwap(scrollY, hold);
   const searching = search?.progress;
@@ -82,6 +92,7 @@ export function LargeTitle({ title, scrollY, hold = 0, search }: { title: string
     // An active search takes the title's place: it fades as the field rises over it.
     return { opacity: (1 - swap.get()) * (1 - (searching ? searching.get() : 0)), transform: [{ translateY: Math.min(Math.max(y, 0), hold) }, { scale: interpolate(y, [-120, 0], [1.1, 1], "clamp") }] };
   });
+  if (inline) return null;
   return <Animated.View style={[TITLE_ORIGIN, stretchStyle]}>
     <Text accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} className="px-4 pb-2 text-display font-bold text-fg" style={TITLE_INSET}>{title}</Text>
   </Animated.View>;
@@ -123,6 +134,7 @@ export function useLargeTitleSearch({ onQueryChange, scrollY, scrollRef, headerH
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const visible = useScreenVisible();
+  const inline = useDesktopSplit();
   const inputRef = useRef<TextInput>(null);
   const progress = useSharedValue(0);
   const [active, setActive] = useState(false);
@@ -136,7 +148,7 @@ export function useLargeTitleSearch({ onQueryChange, scrollY, scrollRef, headerH
     if (active) return;
     setStartOffset(scrollY.get());
     // From the field's row at rest up to the bar's row, which starts under the status bar.
-    setLift(Math.max(0, headerHeight + rowTop - insets.top));
+    setLift(Math.max(0, headerHeight + rowTop - insets.top - (inline ? INLINE_BAR_TOP : 0)));
     setActive(true);
     setHeld(true);
     progress.set(withTiming(1, timing));
