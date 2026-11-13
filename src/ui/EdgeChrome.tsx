@@ -166,7 +166,8 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? SOFT_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
       {soft
         ? <SoftEdge target={blurTarget} />
-        : Platform.OS === "android"
+        // The browser has no status bar to hold opaque and no blur behind the bar, so rows passing under it must be hidden as on Android.
+        : Platform.OS !== "ios"
           ? <><View className="flex-1 bg-background" /><View style={TOP_FADE_STRIP}><EdgeScrim edge="top" /></View></>
           : <EdgeScrim edge="top" solid={insets.top} />}
     </Animated.View>

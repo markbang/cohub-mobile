@@ -2,6 +2,7 @@ import { translate } from "@/src/i18n/core";
 import { fromUint8Array } from "js-base64";
 import { requestRecordingPermissionsAsync, useAudioStream } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { config } from "@/src/config";
 
 type VoiceCallbacks = {
@@ -32,6 +33,9 @@ function voiceErrorMessage(error: unknown, fallback = translate("voice.failed"))
   }
   return message || fallback;
 }
+
+/** expo-audio streams no microphone audio in the browser, so dictation exists only in the native apps. */
+export const voiceInputAvailable = Platform.OS !== "web";
 
 export function useNativeVoiceInput({ getAccessToken, onFinal }: VoiceCallbacks) {
   const socketRef = useRef<WebSocket | null>(null);

@@ -15,9 +15,12 @@ export const BUBBLE_PADDING_X = 14;
 export const BUBBLE_META_GAP = 8;
 export const BUBBLE_META_DROP = 2;
 
-// A wide pane keeps phone-sized bubbles and reading lines instead of centering a narrow column.
+// A wide pane keeps phone-sized bubbles and reading lines; only the browser also centers them in a column.
 const BUBBLE_MAX_WIDTH = 560;
 const REPLY_MAX_CONTENT_WIDTH = 680;
+
+/** The browser's reading column on a wide pane: a full reply row with room to set user bubbles apart from it. */
+export const CHAT_COLUMN_MAX_WIDTH = 768;
 
 export function getBubbleMaxWidth(availableWidth: number): number {
   return Math.max(0, Math.min(BUBBLE_MAX_WIDTH, availableWidth - 24, Math.round(availableWidth * 0.86) - 24));
