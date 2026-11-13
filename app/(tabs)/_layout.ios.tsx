@@ -4,6 +4,9 @@ import { useAppTheme } from "@/src/theme";
 import { useWindowDimensions } from "react-native";
 import { splitMode } from "@/src/data/split-navigation";
 
+// Seeds the tab app on Chats when a link opens a screen above it; without it Expo Router seeds the first route of its own route sort, (me).
+export const unstable_settings = { anchor: "(chats)" };
+
 /**
  * iOS uses the system tab bar: Liquid Glass, its lens, drag between tabs, and minimizing on scroll
  * are UIKit's. Android draws its own (`_layout.tsx`, `FloatingTabBar`). Each tab is a `TabStack` whose
