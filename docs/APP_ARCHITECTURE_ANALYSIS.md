@@ -1,47 +1,49 @@
-# Cohub App 架构分析与移动端实现建议
+English | [简体中文](APP_ARCHITECTURE_ANALYSIS.zh-CN.md)
 
-## 网页版 App 架构概览
+# Cohub App Architecture Analysis and Mobile Implementation Recommendations
 
-### 1. **App 运行机制**
+## Web App Architecture Overview
 
-根据对 Cohub 网页版代码的分析，App 的运行机制类似微信小程序：
+### 1. **How Apps Run**
 
-#### 关键组件：
+Based on an analysis of the Cohub web code, Apps run in a way similar to WeChat Mini Programs:
 
-**AppSurface.svelte** - App 的容器组件
-- 支持多种内容类型：
-  - `web`: 嵌入式网页（通过 iframe）
-  - `port`: 端口服务（通过 iframe）
-  - `board`: 原生 Board 渲染
-  - `file`: 原生文件渲染
-- 三种运行模式：
-  - `page`: 独立页面模式
-  - `background`: 后台运行模式
-  - `app`: 应用窗口模式
+#### Key components:
 
-**AppPreviewController** - App 预览控制器
-- 管理多个 App 的生命周期
-- 支持 App 的打开、关闭、切换
-- 处理 App 之间的通信
-- 类似浏览器的标签页管理
+**AppSurface.svelte** - the App container component
+- Supports several content kinds:
+  - `web`: embedded web page (via iframe)
+  - `port`: port service (via iframe)
+  - `board`: native Board rendering
+  - `file`: native file rendering
+- Three run modes:
+  - `page`: standalone page mode
+  - `background`: background mode
+  - `app`: app window mode
 
-**AppBridgeHost** - App 通信桥接
-- 提供 App 与宿主环境的通信通道
-- 处理权限请求（Authorization）
-- 管理 App 的运行时上下文（Invocation Context）
-- 处理导航、Commerce、Composer 等功能
+**AppPreviewController** - the App preview controller
+- Manages the lifecycle of multiple Apps
+- Supports opening, closing and switching Apps
+- Handles communication between Apps
+- Works like browser tab management
 
-### 2. **App 权限与授权**
+**AppBridgeHost** - the App communication bridge
+- Provides the channel between an App and the host environment
+- Handles permission requests (Authorization)
+- Manages the App's runtime context (Invocation Context)
+- Handles navigation, Commerce, Composer and related features
 
-**授权流程：**
-1. App 通过 `client.auth.request()` 请求权限
-2. 宿主显示授权对话框（AppAuthorizeDialog）
-3. 用户授予权限后，App 可以访问对应的 SDK API
-4. 权限与 Space 绑定，支持多种 scopes
+### 2. **App Permissions and Authorization**
 
-**关键 API：**
+**Authorization flow:**
+1. The App requests permissions with `client.auth.request()`
+2. The host shows an authorization dialog (AppAuthorizeDialog)
+3. Once the user grants permission, the App can call the matching SDK APIs
+4. Permissions are bound to a Space and support multiple scopes
+
+**Key APIs:**
 ```typescript
-// 请求权限
+// Request permissions
 await client.auth.request({
   scopes: Permission[],
   reason?: string,
@@ -49,14 +51,14 @@ await client.auth.request({
   alwaysAsk?: boolean
 });
 
-// 请求 Space 选择
+// Request a Space selection
 await client.auth.requestSpace({
   scopes: Permission[],
   reason?: string,
   alwaysAsk?: boolean
 });
 
-// 请求创建新 Space
+// Request creation of a new Space
 await client.auth.requestCreateSpace({
   scopes: Permission[],
   space: CreateSpaceInput,
@@ -64,51 +66,51 @@ await client.auth.requestCreateSpace({
 });
 ```
 
-### 3. **App 运行时上下文**
+### 3. **App Runtime Context**
 
-**Invocation Context（调用上下文）：**
-- `surface`: 运行表面（page/background/app）
-- `source`: 来源（如何被调用的）
-- `spaceId`: 当前 Space ID
-- `sessionId`: 当前 Session ID（如果在对话中）
-- `turnId`: 当前 Turn ID
-- `toolCallId`: Tool Call ID（如果作为工具被调用）
+**Invocation Context:**
+- `surface`: the run surface (page/background/app)
+- `source`: the source (how it was invoked)
+- `spaceId`: the current Space ID
+- `sessionId`: the current Session ID (when inside a conversation)
+- `turnId`: the current Turn ID
+- `toolCallId`: the Tool Call ID (when invoked as a tool)
 
-**Shell Context（外壳上下文）：**
-- 提供宿主环境信息
-- URL、导航状态等
+**Shell Context:**
+- Provides information about the host environment
+- URL, navigation state, and so on
 
-### 4. **App 通信机制**
+### 4. **App Communication**
 
-**PostMessage Bridge：**
-- App 通过 iframe 运行时，使用 postMessage 与宿主通信
-- 协议化的消息格式（@cohub/protocol）
-- 支持请求-响应模式
-- 类型安全的 API 调用
+**PostMessage Bridge:**
+- When an App runs in an iframe, it talks to the host via postMessage
+- Protocol-defined message format (@cohub/protocol)
+- Supports a request-response pattern
+- Type-safe API calls
 
-**Surface RPC：**
-- App 可以注册可调用的方法
-- 宿主可以通过 `callSurface` 调用 App 方法
-- 支持超时控制
-- 用于 Desktop Commands 等场景
+**Surface RPC:**
+- An App can register callable methods
+- The host can call App methods via `callSurface`
+- Supports timeouts
+- Used for Desktop Commands and similar cases
 
 ---
 
-## 移动端实现建议
+## Mobile Implementation Recommendations
 
-### 方案一：WebView + Bridge（推荐）
+### Option 1: WebView + Bridge (recommended)
 
-类似微信小程序的架构：
+An architecture similar to WeChat Mini Programs:
 
-#### 架构设计：
+#### Architecture design:
 
 ```typescript
-// App 容器组件
+// App container component
 <AppContainer>
-  {/* 原生导航栏 */}
+  {/* Native navigation bar */}
   <AppHeader />
   
-  {/* App 内容区 */}
+  {/* App content area */}
   {contentKind === 'web' || contentKind === 'port' ? (
     <WebView 
       source={{ uri: contentUrl }}
@@ -121,14 +123,14 @@ await client.auth.requestCreateSpace({
     <NativeFileView />
   )}
   
-  {/* 权限授权弹窗 */}
+  {/* Permission authorization dialog */}
   <AppAuthDialog />
 </AppContainer>
 ```
 
-#### 关键实现：
+#### Key implementation:
 
-**1. Bridge 通信层**
+**1. Bridge communication layer**
 ```typescript
 // src/features/app/AppBridge.ts
 export class AppBridge {
@@ -140,7 +142,7 @@ export class AppBridge {
     this.setupMessageHandler();
   }
   
-  // 处理来自 App 的消息
+  // Handle messages from the App
   handleMessage(event: WebViewMessageEvent) {
     const message = JSON.parse(event.nativeEvent.data);
     
@@ -151,11 +153,11 @@ export class AppBridge {
         return this.handleApiCall(message);
       case 'navigation.open':
         return this.handleNavigation(message);
-      // ... 更多消息类型
+      // ... more message types
     }
   }
   
-  // 向 App 发送消息
+  // Send a message to the App
   postMessage(message: any) {
     this.webview.injectJavaScript(`
       window.postMessage(${JSON.stringify(message)}, '*');
@@ -164,7 +166,7 @@ export class AppBridge {
 }
 ```
 
-**2. 权限管理**
+**2. Permission management**
 ```typescript
 // src/features/app/AppAuthorization.ts
 export function useAppAuthorization() {
@@ -173,11 +175,11 @@ export function useAppAuthorization() {
   async function requestAuthorization(request: AuthRequest) {
     setPendingAuth(request);
     
-    // 显示原生授权对话框
+    // Show the native authorization dialog
     const granted = await showAuthDialog(request);
     
     if (granted) {
-      // 保存授权记录
+      // Save the grant record
       await saveGrant(request.appId, request.scopes);
     }
     
@@ -189,7 +191,7 @@ export function useAppAuthorization() {
 }
 ```
 
-**3. App 容器管理**
+**3. App container management**
 ```typescript
 // src/features/app/AppContainer.tsx
 export function AppContainer({ appId }: { appId: string }) {
@@ -199,14 +201,14 @@ export function AppContainer({ appId }: { appId: string }) {
   const webviewRef = useRef<WebView>(null);
   
   useEffect(() => {
-    // 加载 App 详情
+    // Load App details
     client.apps.get(appId).then(setDetail);
   }, [appId]);
   
   useEffect(() => {
     if (!detail || !webviewRef.current) return;
     
-    // 创建 Bridge
+    // Create the Bridge
     const bridge = new AppBridge(webviewRef.current, detail.app);
     setBridge(bridge);
     
@@ -238,18 +240,18 @@ export function AppContainer({ appId }: { appId: string }) {
 }
 ```
 
-**4. Bridge 注入脚本**
+**4. Bridge injection script**
 ```javascript
 // src/features/app/bridge-script.js
 const BRIDGE_SCRIPT = `
 (function() {
-  // 拦截 SDK 的网络请求
+  // Intercept the SDK's network requests
   window.__cohubBridge = {
     postMessage: function(message) {
       window.ReactNativeWebView.postMessage(JSON.stringify(message));
     },
     
-    // SDK 通过这个方法调用 Native API
+    // The SDK calls Native APIs through this method
     request: function(method, params) {
       return new Promise((resolve, reject) => {
         const requestId = Math.random().toString(36);
@@ -268,7 +270,7 @@ const BRIDGE_SCRIPT = `
     pending: {}
   };
   
-  // 接收来自 Native 的响应
+  // Receive responses from Native
   window.addEventListener('message', function(event) {
     const message = event.data;
     if (message.requestId && window.__cohubBridge.pending[message.requestId]) {
@@ -286,97 +288,97 @@ const BRIDGE_SCRIPT = `
 `;
 ```
 
-#### 目录结构建议：
+#### Suggested directory layout:
 
 ```
 src/features/app/
-├── AppBridge.ts              # Bridge 通信核心
-├── AppContainer.tsx          # App 容器组件
-├── AppHeader.tsx             # App 顶部栏
-├── AppAuthDialog.tsx         # 授权对话框
-├── AppWebView.tsx            # WebView 封装
-├── AppBoardView.tsx          # Board 原生渲染
-├── AppFileView.tsx           # File 原生渲染
-├── bridge-script.js          # 注入脚本
-├── app-authorization.ts      # 权限管理
-├── app-lifecycle.ts          # 生命周期管理
-└── types.ts                  # 类型定义
+├── AppBridge.ts              # Bridge communication core
+├── AppContainer.tsx          # App container component
+├── AppHeader.tsx             # App top bar
+├── AppAuthDialog.tsx         # Authorization dialog
+├── AppWebView.tsx            # WebView wrapper
+├── AppBoardView.tsx          # Native Board rendering
+├── AppFileView.tsx           # Native File rendering
+├── bridge-script.js          # Injected script
+├── app-authorization.ts      # Permission management
+├── app-lifecycle.ts          # Lifecycle management
+└── types.ts                  # Type definitions
 ```
 
 ---
 
-### 方案二：原生组件（长期方案）
+### Option 2: Native components (long-term)
 
-为常用的 App 类型提供原生实现：
+Provide native implementations for common App kinds:
 
-1. **Board App**: 使用 React Native Skia 渲染
-2. **File App**: 原生文档查看器
-3. **Port App**: 保留 WebView 方案
-4. **Web App**: 保留 WebView 方案
-
----
-
-## 关键技术点
-
-### 1. **权限系统**
-- 使用 AsyncStorage 存储授权记录
-- 按 (appId, spaceId, scope) 三元组管理
-- 支持撤销和重新授权
-
-### 2. **生命周期管理**
-- App 打开/关闭事件
-- 前后台切换
-- 内存管理（限制同时运行的 App 数量）
-
-### 3. **安全性**
-- WebView 沙箱隔离
-- 权限最小化原则
-- 敏感 API（如支付）需要额外确认
-
-### 4. **性能优化**
-- App 预加载
-- WebView 池复用
-- 懒加载非必要功能
+1. **Board App**: render with React Native Skia
+2. **File App**: native document viewer
+3. **Port App**: keep the WebView approach
+4. **Web App**: keep the WebView approach
 
 ---
 
-## 实现路线图
+## Key Technical Points
 
-### Phase 1: 基础架构（2-3 周）
-1. ✅ App 详情页面和编辑功能（已完成）
-2. App Bridge 通信层
-3. WebView 容器组件
-4. 基础权限管理
+### 1. **Permission system**
+- Store grant records in AsyncStorage
+- Manage grants by the (appId, spaceId, scope) triple
+- Support revoking and re-granting
 
-### Phase 2: 完善功能（2-3 周）
-1. 授权对话框 UI
-2. App 多窗口管理
-3. Navigation API 支持
-4. Commerce API 支持
+### 2. **Lifecycle management**
+- App open/close events
+- Foreground/background switching
+- Memory management (cap the number of Apps running at once)
 
-### Phase 3: 原生优化（3-4 周）
-1. Board 原生渲染
-2. File 原生查看器
-3. 性能优化
-4. 错误处理和日志
+### 3. **Security**
+- WebView sandbox isolation
+- Principle of least privilege
+- Sensitive APIs (such as payments) require extra confirmation
 
-### Phase 4: 高级功能（按需）
-1. App 间通信
-2. Background 模式
+### 4. **Performance**
+- App preloading
+- WebView pool reuse
+- Lazy-load non-essential features
+
+---
+
+## Implementation Roadmap
+
+### Phase 1: Core architecture (2-3 weeks)
+1. ✅ App detail page and editing (done)
+2. App Bridge communication layer
+3. WebView container component
+4. Basic permission management
+
+### Phase 2: Feature completion (2-3 weeks)
+1. Authorization dialog UI
+2. Multi-window App management
+3. Navigation API support
+4. Commerce API support
+
+### Phase 3: Native optimization (3-4 weeks)
+1. Native Board rendering
+2. Native File viewer
+3. Performance optimization
+4. Error handling and logging
+
+### Phase 4: Advanced features (as needed)
+1. Inter-App communication
+2. Background mode
 3. Desktop Commands
-4. 推送通知集成
+4. Push notification integration
 
 ---
 
-## 总结
+## Summary
 
-Cohub 的 App 系统确实类似微信小程序，核心是：
+Cohub's App system is indeed similar to WeChat Mini Programs. At its core:
 
-1. **容器化运行**: App 在受控的 WebView 或原生容器中运行
-2. **权限隔离**: 通过权限系统控制 App 的能力
-3. **Bridge 通信**: 标准化的宿主-App 通信协议
-4. **生命周期管理**: 统一的打开、关闭、切换机制
+1. **Containerized execution**: Apps run inside a controlled WebView or native container
+2. **Permission isolation**: a permission system controls what an App can do
+3. **Bridge communication**: a standardized host-App communication protocol
+4. **Lifecycle management**: a unified open, close and switch mechanism
 
-移动端实现的关键是建立一个健壮的 Bridge 层，让 Web App 可以无缝运行，同时为原生渲染留出扩展空间。
+The key to the mobile implementation is a robust Bridge layer, so Web Apps run seamlessly while leaving room for native rendering.
 
-建议先实现 WebView + Bridge 方案，验证可行性后再逐步添加原生优化。
+Start with the WebView + Bridge approach, prove it works, then add native optimizations step by step.
