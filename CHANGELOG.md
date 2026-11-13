@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.3.15](https://github.com/markbang/cohub-mobile/compare/v2.3.14...v2.3.15) (2026-11-13)
+
+
+### Features
+
+* **web:** side rail and inline title for the desktop list pane ([#262](https://github.com/markbang/cohub-mobile/issues/262)) ([a575f04](https://github.com/markbang/cohub-mobile/commit/a575f046575ca0d6b613debbaacd5261c7d874d8))
+
+
+### Fixes
+
+* **data:** apply pins and other toggles locally and send only the latest intent ([#264](https://github.com/markbang/cohub-mobile/issues/264)) ([ee716a4](https://github.com/markbang/cohub-mobile/commit/ee716a43dac109c69406cc982bd26895c726dbaa))
+* **nav:** seed the tab app on Chats and hold a Bot chat until its page is known ([#263](https://github.com/markbang/cohub-mobile/issues/263)) ([0cd103d](https://github.com/markbang/cohub-mobile/commit/0cd103d6f57ebcc525c2578d948a30730201d486))
+* **web:** give the chat pane a solid header, a reading column, and working composer controls ([#261](https://github.com/markbang/cohub-mobile/issues/261)) ([040ade2](https://github.com/markbang/cohub-mobile/commit/040ade2147cc05a99d1139ffd861c4a20ea8d014))
+* **web:** open message images in the viewer and give them the browser's image menu ([#258](https://github.com/markbang/cohub-mobile/issues/258)) ([bcc5526](https://github.com/markbang/cohub-mobile/commit/bcc5526d260a973d48946607947a876fe520c78e))
+
+
+### Documentation
+
+* split app architecture analysis into English and Chinese files ([#260](https://github.com/markbang/cohub-mobile/issues/260)) ([757df95](https://github.com/markbang/cohub-mobile/commit/757df9578970e28fc094b7adb0a6025af4fa3d6c))
+
 ## [2.3.14](https://github.com/markbang/cohub-mobile/compare/v2.3.13...v2.3.14) (2026-11-12)
 
 
