@@ -4138,7 +4138,7 @@ const liveRowScope = {
   turnIndexBySequence: new Map(), turnsById: new Map(), turnsBySequence: new Map(),
   chatScrollTrace: { isRecording: () => false }, trackRow: () => {},
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
-  listWidth: 390, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
+  rowWidth: 390, WEB_COLUMN: undefined, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
   bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botExchange, openPeerBot: () => {}, BotNoteBubble: "BotNoteBubble", BotExchangeRow: "BotExchangeRow", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
