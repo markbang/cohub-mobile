@@ -83,6 +83,10 @@ export function redactText(value: string, limit = 400): string {
   return clean.length > limit ? `${clean.slice(0, limit)}…` : clean;
 }
 
+/** Error traces locate a failure by bundle line, often many frames below the first; redaction still applies. */
+const TRACE_TEXT_LIMIT = 4_000;
+const TRACE_KEYS = new Set(["stack", "componentStack"]);
+
 function sanitize(value: unknown, depth = 0): unknown {
   if (depth > 4) return "[depth-limited]";
   if (typeof value === "string") return redactText(value, 400);
@@ -92,7 +96,7 @@ function sanitize(value: unknown, depth = 0): unknown {
     const output: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value)) {
       if (REDACTED_KEYS.test(key) || REDACTED_FRAGMENTS.test(key)) continue;
-      output[key] = sanitize(item, depth + 1);
+      output[key] = typeof item === "string" && TRACE_KEYS.has(key) ? redactText(item, TRACE_TEXT_LIMIT) : sanitize(item, depth + 1);
     }
     return output;
   }

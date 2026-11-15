@@ -182,10 +182,14 @@ function installNetworkLogging() {
 
 function errorFields(error: unknown) {
   if (!(error instanceof Error)) return { message: redactText(String(error), 300) };
+  // React Native attaches the React component stack to errors an error boundary caught.
+  const componentStack = "componentStack" in error && typeof error.componentStack === "string" ? error.componentStack : null;
   return {
     name: error.name,
     message: redactText(error.message, 300),
-    stack: error.stack ? redactText(error.stack, 1_200) : null,
+    // `record` redacts and bounds both traces.
+    stack: error.stack ?? null,
+    componentStack,
     cause: "cause" in error && error.cause ? redactText(String(error.cause), 300) : null,
   };
 }
