@@ -731,18 +731,17 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
         </View>
         <View className="h-11 flex-row items-center gap-2">
           {attachButton}
-          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <MenuAnchor open={harnessMenuOpen} className="min-w-0 max-w-26 shrink"><Pressable ref={harnessButtonRef} testID="chat-composer-harness" hitSlop={HARNESS_CHIP_SLOP} accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`h-10 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-sm px-2 bg-surface-raised active:bg-surface-pressed ${blocked ? "opacity-50" : ""}`}>
-            <HarnessIcon harness={harness} size={16} />
-            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-caption text-fg shrink">{labelForHarness(harness)}</Text>
-            <AppIcon name="chevron-down" size={14} tone="muted" />
-          </Pressable></MenuAnchor> : null}
-          {onModelPress ? <MenuAnchor open={modelMenuOpen} className="min-w-0 shrink" style={{ maxWidth: "58%" }}><Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 flex-row items-center gap-2 overflow-hidden rounded-full px-3 active:opacity-70 ${blocked ? "opacity-50" : ""}`}>
+          {showHarnessPicker && nativeMenus && harnessSections ? <NativeMenuButton appearance="chip" icon="check" title={labelForHarness(harness)} label={t("runtime.harness.current", { harness: labelForHarness(harness) })} sections={harnessSections} disabled={blocked} testID="chat-composer-harness" /> : showHarnessPicker ? <MenuAnchor open={harnessMenuOpen}><Pressable ref={harnessButtonRef} testID="chat-composer-harness" accessibilityRole="button" accessibilityLabel={t("runtime.harness.current", { harness: labelForHarness(harness) })} accessibilityState={{ expanded: harnessMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(harnessButtonRef); traceAction("composer_harness", { harness }); Keyboard.dismiss(); onHarnessPress?.(); }} className={`size-11 items-center justify-center rounded-full active:opacity-70 ${blocked ? "opacity-45" : ""}`}>
+            {/* The Harness's own logo names it, so it is a glass control like its neighbours, not a labelled chip. */}
             <GlassBackground radius={22} surface="glassButton" blurTarget={null} />
-            <AppIcon name="zap" size={18} tone="secondary" />
-            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-body font-semibold text-fg shrink">{resolvedModelLabel}</Text>
+            <HarnessIcon harness={harness} size={22} />
+          </Pressable></MenuAnchor> : null}
+          {onModelPress ? <MenuAnchor open={modelMenuOpen} className="min-w-0 shrink"><Pressable ref={modelButtonRef} testID="chat-composer-model" accessibilityRole="button" accessibilityLabel={t("ui.composer.chooseModel", { model: modelDetail ? `${resolvedModelLabel}, ${modelDetail}` : resolvedModelLabel, status: modelStatusLabel })} accessibilityState={{ expanded: modelMenuOpen, disabled: blocked }} disabled={blocked} onPress={() => { markMenuSource(modelButtonRef); traceAction("composer_model", { model: resolvedModelLabel }); Keyboard.dismiss(); onModelPress(); }} className={`h-11 min-w-0 flex-row items-center gap-1.5 overflow-hidden rounded-full px-4 active:opacity-70 ${blocked ? "opacity-45" : ""}`}>
+            <GlassBackground radius={22} surface="glassButton" blurTarget={null} />
+            {/* The availability light leads, so the name keeps the room a glyph and a chevron took. */}
+            {modelStatus === "unknown" ? null : <View className={`size-2 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="text-subhead font-semibold text-fg shrink">{resolvedModelLabel}</Text>
             {modelDetail ? <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} className="min-w-0 text-subhead text-fg-muted" style={MODEL_DETAIL_SHRINK}>{modelDetail}</Text> : null}
-            {modelStatus === "unknown" ? null : <View className={`size-1.5 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
-            <AppIcon name="chevron-down" size={14} tone="muted" />
           </Pressable></MenuAnchor> : null}
           <View className="flex-1 min-w-0" />
           {voiceButton}
@@ -770,8 +769,6 @@ export function AttachmentChip({ name, uri, mimeType, upload = null, onPreview, 
 }
 
 const REMOVE_SLOP = { left: 12 } as const;
-// The 40pt harness chip reaches 44 without growing the composer row.
-const HARNESS_CHIP_SLOP = { top: 2, bottom: 2 } as const;
 
 // Shared across every mounted banner (each tab keeps its own), so one outage is read once and a link
 // flapping within the cooldown is not read again. A drop shorter than the delay is never read.

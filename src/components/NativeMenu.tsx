@@ -13,7 +13,7 @@ export type NativeMenuButtonProps = {
   sections?: readonly NativeMenuSection[];
   /**
    * `bar`: a top-bar button; `control`: a composer control; `plain`: a bare glyph in content;
-   * `chip`: a composer capsule that shows `title` and a disclosure chevron.
+   * `chip`: a composer capsule that shows `title`, sized like the composer's other controls.
    */
   appearance: "bar" | "control" | "plain" | "chip";
   title?: string;

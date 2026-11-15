@@ -1,4 +1,4 @@
-import { Button, Host, HStack, Image, Menu, Section, Text } from "@expo/ui/swift-ui";
+import { Button, Host, Image, Menu, Section, Text } from "@expo/ui/swift-ui";
 import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as disabledModifier, font, foregroundStyle, lineLimit } from "@expo/ui/swift-ui/modifiers";
 import { traceAction } from "@/src/data/interaction-trace";
 import { SF_SYMBOLS } from "@/src/sf-symbols";
@@ -36,14 +36,11 @@ export function NativeMenuButton({ icon, label, title, actions = [], sections, a
   const shape = appearance === "plain"
     ? [buttonStyle("borderless")]
     : appearance === "chip"
-      ? [buttonStyle(liquidGlass ? "glass" : "bordered"), buttonBorderShape("capsule")]
+      ? [buttonStyle(liquidGlass ? "glass" : "bordered"), buttonBorderShape("capsule"), controlSize("large")]
       : [buttonStyle(liquidGlass ? "glass" : "bordered"), buttonBorderShape("circle"), controlSize("large")];
   const color = active ? theme.colors.accent : appearance === "plain" ? theme.colors.textMuted : theme.colors.text;
   const trigger = appearance === "chip"
-    ? <HStack spacing={4}>
-      <Text modifiers={[font({ textStyle: "footnote", weight: "medium" }), foregroundStyle(color), lineLimit(1)]}>{title ?? label}</Text>
-      <Image systemName="chevron.down" size={11} color={theme.colors.textMuted} />
-    </HStack>
+    ? <Text modifiers={[font({ textStyle: "subheadline", weight: "semibold" }), foregroundStyle(color), lineLimit(1)]}>{title ?? label}</Text>
     : <Image systemName={symbol} size={appearance === "control" ? 20 : 17} color={color} />;
   return <Host matchContents colorScheme={theme.mode}>
     <Menu label={trigger} testID={testID} modifiers={[...shape, accessibilityLabel(label), disabledModifier(disabled)]}>
