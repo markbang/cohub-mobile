@@ -5491,6 +5491,21 @@ assert.equal(schemaRuns, 1, "writes do not repeat schema setup");
   assert.deepEqual(order.slice(-2), ["error.uncaught", "native:false"], "non-fatal errors hand off at once");
 }
 
+{
+  // A caught render error's trace must survive storage past its first frames, with React's component stack.
+  const redactText = (value, limit) => value.slice(0, limit);
+  const TRACE_TEXT_LIMIT = 4_000;
+  const errorFields = loadChromeComponent("../src/data/interaction-trace.ts", "errorFields", { redactText });
+  const sanitize = loadChromeComponent("../src/data/debug-session.ts", "sanitize", { redactText, TRACE_TEXT_LIMIT, TRACE_KEYS: new Set(["stack", "componentStack"]), REDACTED_KEYS: /^text$/, REDACTED_FRAGMENTS: /secret/ });
+  const error = new Error("Maximum update depth exceeded");
+  error.stack = `Error: ${error.message}\n${"    at frame (/tmp/index.js:1:1)\n".repeat(80)}`;
+  error.componentStack = "\n    in Container".repeat(40);
+  const stored = sanitize({ ...errorFields(error), note: "x".repeat(1_000) });
+  assert.ok(stored.stack.length > 2_000 && stored.stack.length <= TRACE_TEXT_LIMIT, "error stacks keep frames past the default field limit");
+  assert.equal(stored.componentStack, error.componentStack, "the component stack is recorded");
+  assert.equal(stored.note.length, 400, "other fields keep the default limit");
+}
+
 // LegendList memoizes each row on [item, extraData], unlike FlatList cells that re-rendered
 // with renderItem identity. Rows that read state outside `data` must forward it through
 // extraData, or in-place updates (thinking options, async counts, turn selection, fork/send
