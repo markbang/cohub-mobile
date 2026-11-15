@@ -15,6 +15,7 @@ import { activityContributorName } from "@/src/data/activity";
 import { usePagedQuery, useScreenQuery, useSyncQuery, type Page } from "@/src/data/query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSpaceRealtime } from "@/src/data/use-space-realtime";
+import { useSpaceRuntime } from "@/src/data/use-space-runtime";
 import { mergeTaskRuns, refreshTaskRuns } from "@/src/data/task-sync";
 import { publishSpaceSessionCount, SPACE_SESSION_COUNT_PAGE_SIZE } from "@/src/data/space-session-counts";
 import { useTranslation } from "@/src/i18n";
@@ -73,6 +74,9 @@ export default function SpaceScreen() {
   });
   useSyncQuery(`space:${spaceId}:pin`, () => refreshSpacePin(spaceId!), SPACE_REFRESH_INTERVAL_MS, ready && cachedSpace?.isPinned === undefined);
   const space = cachedSpace ?? spaceQuery.data ?? null;
+  const runtime = useSpaceRuntime(spaceId ?? "", ready);
+  // Screens a connected computer shares; the web shows them only while its file bridge is up.
+  const displays = runtime.status?.kind === "local" && runtime.status.online && runtime.status.workspace?.online !== false ? runtime.status.displays ?? [] : [];
   const spaceLoading = ready && !cachedSpace && spaceQuery.isFetching;
   const spaceError = spaceQuery.error ? spaceQuery.error.message.trim() || t("space.unavailable") : null;
 
@@ -311,6 +315,11 @@ export default function SpaceScreen() {
       </View>
     )}
     {detailsFailed ? <View className="mt-3 flex-row items-center gap-2 pl-4 pr-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable className="flex-1 text-caption text-danger">{t("space.resourcesFailed")}</Text><IconButton name="refresh" label={t("space.resourcesRetry")} tone="accent" disabled={loadingResources || sessionsLoading} onPress={() => void reloadDetails()} /></View> : null}
+
+    {displays.length > 0 ? <>
+      <SectionHeader title={t("display.section")} />
+      <View>{displays.map((display) => <ResourceRow key={display.id} icon="monitor" tone="accent" title={display.kind === "agent" ? t("display.agentScreen") : display.name || display.id} subtitle={display.activity ? display.activity.label ? t("display.activityLabel", { label: display.activity.label }) : t("display.activity") : t("display.size", { width: String(display.width), height: String(display.height) })} onPress={() => router.push({ pathname: "/space/[spaceId]/display", params: { spaceId: space.id, displayId: display.id } })} />)}</View>
+    </> : null}
 
     <SectionHeader title={t("space.section.chats")} action={{ icon: "plus", label: t("space.newChat"), onPress: () => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId: space.id } }) }} />
     <View>{sessions.length > 0 ? sessions.map((session) => <SessionRow key={session.id} swipeToRead={false} session={{ ...session, space: session.space ?? { id: space.id, name, slug: space.slug, publicProfile: space.publicProfile ?? null } }} onPress={() => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: session.id } })} onPressIn={() => prefetchSession(session.id)} />) : <ResourceEmpty text={sessionsLoading ? t("space.empty.chatsLoading") : sessionsFailed ? t("space.empty.loadFailed") : t("space.empty.chats")} />}</View>

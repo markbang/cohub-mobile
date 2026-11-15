@@ -1648,7 +1648,7 @@ for (const isPinned of [false, true]) {
   const screen = hookRunner();
   const renderScreen = loadChromeComponent(spaceRoute, "SpaceScreen", {
     ...chromeScope, ...screen.hooks,
-    useRouter: () => ({ back() {}, push() {} }), useLocalSearchParams: () => ({ spaceId: "space" }), useSpaceRealtime: () => {}, useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useToast: () => () => {},
+    useRouter: () => ({ back() {}, push() {} }), useLocalSearchParams: () => ({ spaceId: "space" }), useSpaceRealtime: () => {}, useSpaceRuntime: () => ({ status: null }), useSafeAreaInsets: () => ({ top: 0, bottom: 0 }), useToast: () => () => {},
     useAppActions: () => ({ client: {}, refreshHome: async () => {}, refreshSessionStatuses: async () => {}, refreshSpacePin: async () => false, toggleSpacePin: async () => {}, upsertSpace() {}, prefetchSession() {}, recordSpaceVisit() {} }),
     useAppSelector: (select) => select({ state: { booting: false, refreshing: false, realtimeError: null, spaces: [space], sessions: [] } }),
     shallowEqual: (left, right) => JSON.stringify(left) === JSON.stringify(right), useFocusEffect: () => {}, useQueryClient: () => ({}),
