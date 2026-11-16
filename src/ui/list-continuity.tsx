@@ -60,7 +60,8 @@ export function useListContinuity<T>({ items, keyOf, list, query, quiet, scrollY
     const nextKeys = items.map(keyOf);
     const fadeOnly = query !== "" && query === shown.query;
     const change = listContinuityChange(previousKeys, nextKeys, { sameList: shown.list === list, quiet: quiet(), fadeOnly });
-    const leavingRows = change === "fade" || change === "move" ? withLeavingRows(shown.items, items, keyOf) : null;
+    // Rows still fading out stay until they settle, though a zero-high row no longer reports as visible.
+    const leavingRows = change === "fade" || change === "move" ? withLeavingRows(shown.items, items, keyOf, new Set([...visibleKeys.current, ...shown.rows.leaving])) : null;
     const arriving = leavingRows ? arrivedKeys(previousKeys, nextKeys) : new Set<string>();
     const shouldMove = change === "move" && !reducedMotion && leavingRows !== null && touchesScreen(previousKeys, nextKeys, leavingRows.leaving, arriving, visibleKeys.current);
     // A change that must not move cuts short a move still armed from the one before.
@@ -74,7 +75,7 @@ export function useListContinuity<T>({ items, keyOf, list, query, quiet, scrollY
         movingUntil.set(until);
       });
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the rows reach the list a commit late on purpose, after the move is armed.
+    // The rows reach the list a commit late on purpose, after the move is armed.
     setShown(leavingRows
       ? { source: items, items: leavingRows.items, rows: { leaving: leavingRows.leaving, arriving }, list, query }
       : { source: items, items: [...items], rows: NO_ROWS, list, query });
