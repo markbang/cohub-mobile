@@ -2071,10 +2071,15 @@ assert.equal(imageViewerPageIndex(402, 402, 0), null);
   assert.equal(listContinuityChange([], ["r"], { ...moving, fadeOnly: true }), "fade", "remote results fade into an empty search");
   assert.equal(listContinuityChange(["a"], ["a", "r"], { ...moving, fadeOnly: true }), "fade", "remote results after the local rows fade in");
   const key = (item) => item.id;
-  const left = withLeavingRows([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], [{ id: "d" }, { id: "a" }], key);
+  const left = withLeavingRows([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], [{ id: "d" }, { id: "a" }], key, new Set(["a", "b", "c", "d"]));
   assert.deepEqual(left.items.map(key), ["d", "a", "b", "c"], "rows that left follow the row above them");
   assert.deepEqual([...left.leaving], ["b", "c"]);
-  assert.deepEqual(withLeavingRows([{ id: "a" }, { id: "b" }], [{ id: "b" }], key).items.map(key), ["a", "b"], "a first row that left keeps the top");
+  assert.deepEqual(withLeavingRows([{ id: "a" }, { id: "b" }], [{ id: "b" }], key, new Set(["a", "b"])).items.map(key), ["a", "b"], "a first row that left keeps the top");
+  // Off-screen leaving rows, zero high, drove LegendList past React's nested-update limit on a cold start.
+  const cachedRows = Array.from({ length: 400 }, (_, index) => ({ id: `s${index}` }));
+  const trimmed = withLeavingRows(cachedRows, cachedRows.filter((_, index) => index % 7 === 0), key, new Set(["s0", "s1", "s2", "s3"]));
+  assert.deepEqual([...trimmed.leaving], ["s1", "s2", "s3"], "only rows on screen stay to fade out");
+  assert.deepEqual(trimmed.items.map(key).slice(0, 5), ["s0", "s1", "s2", "s3", "s7"], "rows off screen leave at once");
   assert.deepEqual([...arrivedKeys(["a"], ["b", "a", "c"])], ["b", "c"]);
 }
 for (const viewport of [240, 320, 360, 390, 768]) {

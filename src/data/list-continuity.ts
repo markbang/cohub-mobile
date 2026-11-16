@@ -23,13 +23,17 @@ export function listContinuityChange(previous: readonly string[], next: readonly
 /**
  * `next` with the rows of `previous` it dropped put back where they stood, each after the nearest row above
  * it that is still listed, so they can fade out in place. `leaving` holds their keys.
+ *
+ * Only dropped rows in `onScreen` come back; the rest would fade unseen. A leaving row's slot is zero high, and
+ * LegendList pulls in the rows past each run of them in another synchronous measure pass, so an unbounded run
+ * (a cold start trimming a large cached list to the first page) reaches React's nested-update limit.
  */
-export function withLeavingRows<T>(previous: readonly T[], next: readonly T[], keyOf: (item: T) => string): { items: T[]; leaving: Set<string> } {
+export function withLeavingRows<T>(previous: readonly T[], next: readonly T[], keyOf: (item: T) => string, onScreen: ReadonlySet<string>): { items: T[]; leaving: Set<string> } {
   const nextKeys = new Set(next.map(keyOf));
   const leaving = new Set<string>();
   for (const item of previous) {
     const key = keyOf(item);
-    if (!nextKeys.has(key)) leaving.add(key);
+    if (!nextKeys.has(key) && onScreen.has(key)) leaving.add(key);
   }
   if (leaving.size === 0) return { items: [...next], leaving };
   const items = [...next];
