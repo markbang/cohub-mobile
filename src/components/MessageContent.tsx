@@ -28,9 +28,11 @@ import { usePaneWidth } from "@/src/ui/pane";
 import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
-import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
+import { answerBlocks, thinkingBlocks, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
 import { contentText, hasRenderableContent, hasRenderableMessage, messageText } from "@/src/utils";
 import { withForegroundHandoff } from "@/src/platform/app-lifecycle";
+import { useTurnSpeechPhase } from "@/src/platform/turn-speech";
+import { speechIcon, speechLabelKey } from "@/src/data/turn-speech";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 
 // Past three digits the decimal is noise: 245K, not 245.2K.
@@ -333,7 +335,18 @@ function ImageGallery({ uris, maxWidth }: { uris: string[]; maxWidth?: number })
   );
 }
 
+function ViewportReferences({ references, color }: { references: readonly ViewportReference[]; color?: string }) {
+  const theme = useAppTheme();
+  const muted = colorWithOpacity(color ?? theme.colors.text, 0.72);
+  return <View style={{ gap: 2 }}>{references.map((reference, index) => <View key={`${reference.kind}:${index}`} className="flex-row items-center gap-1.5">
+    <AppIcon name={viewportReferenceIcon(reference.kind)} size={13} color={muted} />
+    <Text numberOfLines={1} className="shrink text-caption" style={{ color: muted }}>{reference.label}</Text>
+  </View>)}</View>;
+}
+
 function Block({ block, color, linkColor, streaming = false, sandboxImages = false, footer }: { block: ContentBlock; color?: string; linkColor?: string; streaming?: boolean; sandboxImages?: boolean; footer?: ReactNode }) {
+  const references = viewportReferences(block);
+  if (references) return <ViewportReferences references={references} color={color} />;
   if (block.type === "text") return <TextBlock value={block.text} color={color} linkColor={linkColor} streaming={streaming} sandboxImages={sandboxImages} footer={footer} />;
   if (block.type === "thinking") return <TextBlock value={block.thinking} muted streaming={streaming} footer={footer} />;
   if (block.type === "system_note") return <SystemNoteRow block={block} />;
@@ -464,7 +477,8 @@ export function MessageContent({ content, active = false, color, linkColor, imag
   const last = blocks[lastVisibleIndex];
   // Appending text invalidates native line measurements. Keep the live clock out of that
   // measurement cycle so each chunk cannot add and then remove a footer row.
-  const textFooter = !active && (last?.type === "text" || last?.type === "thinking");
+  // References draw as rows of their own, so the footer follows them instead of sitting inside.
+  const textFooter = !active && ((last?.type === "text" && !viewportReferences(last)) || last?.type === "thinking");
   return <View className="gap-1 min-w-0">{blocks.map((block, index) => {
     // Tool results never render standalone. A paired one is shown inside its
     // ToolCall; a streaming message boundary can leave a partial result whose
@@ -584,7 +598,7 @@ export function fitReplyDetails(identity: string, parts: readonly string[], widt
   return line;
 }
 
-function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, forkDisabled, forking }: { message: MessageRecord; clock?: string; copyText: string; availableWidth: number; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean }) {
+function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, forkDisabled, forking, onSpeak }: { message: MessageRecord; clock?: string; copyText: string; availableWidth: number; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; forkDisabled: boolean; forking: boolean; onSpeak?: (turnId: string) => void }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const { fontScale } = useWindowDimensions();
@@ -598,8 +612,11 @@ function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, f
   const { identity, parts } = replyDetailParts(message, t);
   const details = [identity, ...parts].filter(Boolean).join(DETAIL_SEPARATOR);
   const canCopy = Boolean(onCopy && copyText);
-  const canFork = Boolean(onFork && typeof message.meta?.turnId === "string");
-  const actions = Number(canCopy) + Number(canFork);
+  const turnId = typeof message.meta?.turnId === "string" ? message.meta.turnId : null;
+  const canFork = Boolean(onFork && turnId);
+  const canSpeak = Boolean(onSpeak && turnId);
+  const speech = useTurnSpeechPhase(canSpeak ? turnId : null);
+  const actions = Number(canCopy) + Number(canFork) + Number(canSpeak);
   if (!actions && !details && !clock) return null;
   const fontSize = typography.micro.fontSize * fontScale;
   // The details get the column less the buttons (pulled 9 into the margin, text 3 after them) and the clock.
@@ -610,6 +627,7 @@ function ReplyMeta({ message, clock, copyText, availableWidth, onCopy, onFork, f
   return <View className="flex-row items-center" style={{ minHeight: REPLY_META_HEIGHT, marginLeft: actions ? -9 : 0 }}>
     {canCopy ? <Pressable accessibilityRole="button" accessibilityLabel={copied ? t("chat.copied") : t("chat.copy")} onPress={() => { void Promise.resolve(onCopy?.(copyText)).then(() => setCopied(true), () => setCopied(false)); }} hitSlop={6} className="size-8 items-center justify-center active:opacity-55"><AppIcon name={copied ? "check" : "copy"} size={14} tone={copied ? "success" : "faint"} /></Pressable> : null}
     {canFork ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.fork")} disabled={forkDisabled} onPress={() => onFork?.(message)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55 disabled:opacity-45">{forking ? <Loader color={theme.colors.textFaint} /> : <AppIcon name="git-fork" size={14} tone="faint" />}</Pressable> : null}
+    {canSpeak && turnId ? <Pressable accessibilityRole="button" accessibilityLabel={t(speechLabelKey(speech))} accessibilityState={{ selected: speech === "playing" }} onPress={() => onSpeak?.(turnId)} hitSlop={6} className="size-8 items-center justify-center active:opacity-55">{speech === "loading" ? <Loader color={theme.colors.textFaint} /> : <AppIcon name={speechIcon(speech)} size={14} color={speech === "error" ? theme.colors.warning : speech === "idle" ? theme.colors.textFaint : theme.colors.accent} />}</Pressable> : null}
     {/* One string child with a definite width: separate runs and shrink-wrapped layout have dropped the output segment on some Android devices. Not selectable: Android lays selectable text out without its line limit, so it wrapped out of the row instead of truncating. */}
     {fitted === details
       ? <Text numberOfLines={1} className="min-w-0 flex-1 text-micro text-fg-faint" style={detailsStyle}>{details}</Text>
@@ -625,7 +643,7 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, rowInset = 5 }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A user bubble's own top and bottom padding; a Bot's page packs its bubbles closer. */ rowInset?: number }) {
+export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onSpeak, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, rowInset = 5 }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; /** Set for a reply the viewer can hear read aloud. */ onSpeak?: (turnId: string) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A user bubble's own top and bottom padding; a Bot's page packs its bubbles closer. */ rowInset?: number }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const width = usePaneWidth();
@@ -663,7 +681,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
         {body}
         {message.errorMessage ? <View className={`${body ? "mt-2 " : ""}rounded-md bg-danger-soft px-3 py-2`} style={{ borderCurve: "continuous" }}><Text selectable className="text-caption text-danger">{message.errorMessage}</Text></View> : null}
       </BubbleContentWidth.Provider></BubbleTraceMessage.Provider>
-      <ReplyMeta message={message} clock={clock} copyText={thought ? contentText(answer).trim() : messageText(message)} availableWidth={rowWidth} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} />
+      <ReplyMeta message={message} clock={clock} copyText={thought ? contentText(answer).trim() : messageText(message)} availableWidth={rowWidth} onCopy={onCopy} onFork={onFork} forkDisabled={forkDisabled} forking={forking} onSpeak={onSpeak} />
     </View></BubbleContext.Provider>;
   }
   const textColor = theme.colors.userBubbleText;

@@ -8,7 +8,9 @@ import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex } from "..
 import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
-import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks } from "../src/data/chat-rendering.ts";
+import { isSpeakableTurn, mergeTurnSpeech, speechIcon, speechLabelKey, turnSpeechStep } from "../src/data/turn-speech.ts";
+import { composerInsertion, isLargeComposerPaste, pastedTextFileName } from "../src/data/composer-paste.ts";
+import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks, viewportReferences } from "../src/data/chat-rendering.ts";
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, chatTimelineSettledOffset, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatMessageClock, formatThreadTime } from "../src/data/chat-format.ts";
@@ -36,8 +38,8 @@ import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, setResourcePin } from "../src/data/resource-pins.ts";
 import { createOptimisticWrites } from "../src/data/optimistic-write.ts";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
-import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, isWebSessionSource, sessionSourceGroup, toUserSessionLabels } from "../src/data/session-labels.ts";
-import { sessionSourceFilterKeys, sessionSourceFilterOf } from "../src/data/session-source.ts";
+import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels } from "../src/data/session-labels.ts";
+import { sessionAttribution, sessionInitiatorFilterKeys, sessionInitiatorOf } from "../src/data/session-initiator.ts";
 import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, isSubmittingSend, placeAwaitingSends, settleInterruptedSends, submitAwaitingSend, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, noteWindowTail, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { appendVoiceText } from "../src/data/voice-append.ts";
@@ -72,7 +74,7 @@ import { nextCronRuns, parseCron, summarizeCron } from "../src/data/cron.ts";
 import { appDevicesRequest, appHostScript, appNavigationRequest, appRuntimeSignal, readAppHostMessage } from "../src/data/app-host.ts";
 import { dailyViews, promotionUrl, withCohubBar } from "../src/data/app-manage.ts";
 import { imageThumbnailUrl, modelFormat } from "../src/data/media.ts";
-import { createRelatedSessionStore, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
+import { createRelatedSessionStore, sentBy, sentFrom, sentSessions } from "../src/data/related-sessions.ts";
 import { resolveSandboxImage, sandboxImageQuery } from "../src/data/sandbox-images.ts";
 import { COHUB_WEB_ORIGIN_SOURCE as MESSAGE_LINK_ORIGIN_SOURCE, messageMarkdownImages, resolveMessageLink, workspaceFilePath } from "../src/data/message-links.ts";
 import { applyComposerDisplayEdit, COHUB_WEB_ORIGIN_SOURCE, draftMentions, extractSpaceMentions, mentionDisplayText, detectSpaceMentionTrigger, findCohubLinks, restoreDraftMentions, insertSpaceMention, replaceCohubLinks, selectSpaceMentionSuggestions, textMatchScore } from "../src/data/space-mentions.ts";
@@ -138,10 +140,10 @@ const accountRunning = await loadRunningSessions({ user: { listSessions: async (
   if (!options.cursor) return { sessions: Array.from({ length: 60 }, (_, index) => ({ ...runningFixture, id: String(index), activeTurn: null })), pageInfo: { hasMore: true, nextCursor: "older" } };
   if (options.cursor === "older") return { sessions: [], pageInfo: { hasMore: true, nextCursor: "oldest" } };
   return { sessions: [runningFixture], pageInfo: { hasMore: false, nextCursor: null } };
-} } }, { source: ["web"], signal: new AbortController().signal });
+} } }, { initiator: ["human"], signal: new AbortController().signal });
 assert.deepEqual(accountRunning, [runningFixture], "Running discovery reaches older pages and never stops at a time window");
 assert.equal(discoveryPages.length, 3);
-assert.ok(discoveryPages.every((page) => page.source[0] === "web"), "source membership is filtered by the server on every page");
+assert.ok(discoveryPages.every((page) => page.initiator[0] === "human"), "initiator membership is filtered by the server on every page");
 for (const malformed of [
   { sessions: [{ ...runningFixture, activeTurn: undefined }], pageInfo: { hasMore: false } },
   { sessions: [runningFixture] },
@@ -697,7 +699,7 @@ const formScope = {
     LIST_AVATAR_SIZE: 46, AVATAR_SIZE: 46, BRANCH_COLUMN: 16, TREE_STEP: 12,
     ContextMenu: "ContextMenu", NativeContextMenu: "NativeContextMenu", SwipeActions: "SwipeActions",
     haptics: { longPress() {} }, debugAlias: (_kind, id) => id,
-    sessionListStatus, sessionActivity,
+    sessionListStatus, sessionActivity, sessionAttribution, SESSION_SOURCE_NAMES: { scheduled_task: "Scheduled Task" },
     displayForkSessionTitle: () => "Chat", useRelativeTime: () => "now", previewText: () => "",
   });
   const staleSession = {
@@ -710,6 +712,11 @@ const formScope = {
   assert.equal(avatar.props.uri, "https://new", "a cached Chat row shows the latest Space avatar");
   assert.equal(row.props.unread, false);
   assert.equal(row.props.selected, false);
+  assert.equal(row.props.subtitle, "Renamed Space · session.noMessages", "a Chat started in a Cohub app names no entry point");
+  const scheduledRow = chromeNodes(renderSessionRow({ session: { ...staleSession, source: "scheduled_task", meta: {} }, onPress() {} })).find((node) => node.type === "ListRow");
+  assert.equal(scheduledRow.props.subtitle, "Renamed Space · Scheduled Task · session.noMessages", "a scheduled Chat names where it came in");
+  const agentRow = chromeNodes(renderSessionRow({ session: { ...staleSession, source: "mobile", initiator: "agent", meta: {} }, onPress() {} })).find((node) => node.type === "ListRow");
+  assert.equal(agentRow.props.subtitle, "Renamed Space · chats.source.agent · session.noMessages", "a Chat another Agent started says so");
   assert.equal(chromeNodes(renderSessionRow({ session: staleSession, onPress() {}, selected: true })).find((node) => node.type === "ListRow").props.selected, true, "the Chat open in the right pane marks its row");
   const swipe = chromeNodes(renderSessionRow({ session: staleSession, onPress() {} })).find((node) => node.type === "SwipeActions");
   assert.deepEqual(swipe.props.leading.map((action) => action.label), ["session.unread"], "a read Chat swipes to unread from the leading edge");
@@ -1272,7 +1279,7 @@ for (const [tab, component, expectedRequests] of [
     invalidateScopes, EMPTY_LABELS: [], EMPTY_IDS: new Set(), EMPTY_SESSIONS: [], reconcileSessionHead,
     ...appHooks(() => panelApp),
     useRemoteSearch: () => panelSearch,
-    buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionSourceGroup, normalizeSearchQuery,
+    buildSessionForkTree, fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels, sessionInitiatorOf, normalizeSearchQuery,
     mergePanelSessions: (current, incoming) => [...current, ...incoming],
     usePagedQuery: () => ({ query: { error: null, refetch: async () => {} }, items: null, hasMore: false, loadingMore: false, loadMoreError: null, loadMore: async () => {} }),
     Avatar: "Avatar", PrimaryButton: "PrimaryButton", SearchField: "SearchField", ScrollView: "ScrollView", LegendList: "LegendList", SessionLabelSheet: "SessionLabelSheet", Loader: "Loader", LoadingState: "LoadingState", ListEdgeLoader: "ListEdgeLoader", KeyboardAvoidingView: "KeyboardAvoidingView", PANEL_FILL: {},
@@ -2122,7 +2129,7 @@ const bubbleScope = {
   BubbleContext: null,
   BubbleContentWidth: null,
   View: "View", Text: "Text", BubbleText: "BubbleText",
-  ImageGallery: "ImageGallery", ToolCall: "ToolCall", SystemNoteRow: "SystemNoteRow",
+  ImageGallery: "ImageGallery", ToolCall: "ToolCall", SystemNoteRow: "SystemNoteRow", ViewportReferences: "ViewportReferences", viewportReferences,
   imageUri: (block) => block.source?.type === "url" ? block.source.url : null,
 };
 const bubbleModule = new Function(...Object.keys(bubbleScope), ts.transpileModule(`${bubbleFunctions.join("\n")}\nreturn { MessageContent, MarkdownDocument, enrichedMarkdownStyle };`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText)(...Object.values(bubbleScope));
@@ -2151,6 +2158,46 @@ for (const text of ["你好", "First paragraph.\n\nLast paragraph.", "## Heading
   for (const active of [false, true]) {
     assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text }], active, footer: footerMarker }), footerMarker), ["timestamp"], `native markdown keeps the clock on a sibling row: ${text}`);
   }
+}
+{
+  const asked = [
+    { type: "text", text: "What is in the corner?" },
+    { type: "text", text: "Referenced views:\n- image: `out/plot.png`", _meta: { attachmentKind: "viewport", viewports: [{ kind: "media", path: "out/plot.png" }, { kind: "app", appId: "app", key: "k", label: "Dashboard", content: "" }] } },
+  ];
+  assert.deepEqual(viewportReferences(asked[1]), [{ kind: "media", label: "plot.png" }, { kind: "app", label: "Dashboard" }], "references name the image and App, not the text the Agent reads");
+  assert.equal(viewportReferences(asked[0]), null);
+  assert.equal(viewportReferences({ type: "text", text: "x", _meta: { attachmentKind: "viewport", viewports: [{ kind: "unknown" }] } }), null, "unreadable references show as text");
+  const rendered = bubbleRender({ content: asked, footer: footerMarker });
+  assert.deepEqual(footerPlacements(rendered, footerMarker), ["timestamp"], "the clock follows references once, on its own row");
+  const rendersOf = (node, type, found = []) => {
+    if (Array.isArray(node)) { node.forEach((child) => rendersOf(child, type, found)); return found; }
+    if (!node || typeof node !== "object") return found;
+    if (typeof node.type === "function") return rendersOf(node.type(node.props), type, found);
+    if (node.type === type) found.push(node);
+    rendersOf(node.props?.children, type, found);
+    return found;
+  };
+  assert.equal(rendersOf(rendered, "ViewportReferences").length, 1, "references draw as rows instead of their reference text");
+}
+{
+  const speech = { voice: "v", segments: [{ taskId: "a", status: "completed", url: "https://a" }, { taskId: "b", status: "pending" }] };
+  assert.deepEqual([turnSpeechStep(speech, 0), turnSpeechStep(speech, 1), turnSpeechStep(speech, 2)], [{ kind: "play", url: "https://a" }, { kind: "wait" }, { kind: "done" }], "segments play in order and wait while rendering");
+  assert.deepEqual(turnSpeechStep({ voice: "v", segments: [{ taskId: "a", status: "failed" }] }, 0), { kind: "fail" });
+  const settled = mergeTurnSpeech(speech, { voice: "v", segments: [{ taskId: "a", status: "pending" }, { taskId: "b", status: "completed", url: "https://b" }] });
+  assert.deepEqual(settled.segments.map((segment) => segment.status), ["completed", "completed"], "a late response never returns a settled segment to pending");
+  assert.equal(mergeTurnSpeech(speech, { voice: "other", segments: [] }).voice, "other", "a new voice replaces the old segments");
+  assert.deepEqual([isSpeakableTurn({ status: "completed", executionKind: "agent", assistantText: "Hi" }), isSpeakableTurn({ status: "running", assistantText: "Hi" }), isSpeakableTurn({ status: "completed", executionKind: "generation", assistantText: "Hi" }), isSpeakableTurn({ status: "completed", assistantText: "  " })], [true, false, false, false], "only a finished Agent reply with text reads aloud");
+}
+{
+  assert.equal(isLargeComposerPaste("x".repeat(19_999)), false);
+  assert.equal(isLargeComposerPaste("x".repeat(20_000)), true);
+  assert.equal(isLargeComposerPaste("line\n".repeat(499)), true, "500 lines is long however short each is");
+  assert.deepEqual(composerInsertion("Look at this: ", `Look at this: ${"{}"}`), { inserted: "{}", rest: "Look at this: " });
+  assert.deepEqual(composerInsertion("a [selected] b", "a PASTE b"), { inserted: "PASTE", rest: "a  b" }, "a paste over a selection drops the selection too");
+  assert.equal(composerInsertion("abc", "ab"), null, "a deletion inserts nothing");
+  const stamp = new Date(2026, 10, 20, 9, 5, 7);
+  assert.deepEqual(pastedTextFileName('{"a":1}', stamp), { name: "pasted-20261120-090507.json", mimeType: "application/json" });
+  assert.deepEqual(pastedTextFileName("{not json", stamp), { name: "pasted-20261120-090507.txt", mimeType: "text/plain" });
 }
 const streamedFooterSample = "你好，逐字增长。\n\n## Heading\n\n- First\n- Last\n\nDone.";
 for (let length = 1; length <= streamedFooterSample.length; length++) {
@@ -2186,12 +2233,19 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
     ...chromeScope, replyDetailParts, fitReplyDetails, estimateTextWidth, formatTokenCount, turnSequenceForMessage, DETAIL_SEPARATOR: " · ", REPLY_META_HEIGHT: 44, Loader: "Loader",
     requestedThinkingLevel: (meta) => meta?.requestedThinkingLevel ?? null, formatThinkingLevel: (level) => level,
     getReplyContentWidth, getReplyRowWidth, typography: { micro: { fontSize: 11 } }, useWindowDimensions: () => ({ fontScale: 1 }),
-    useAppTheme: () => ({ colors: { textFaint: "faint" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
+    useAppTheme: () => ({ colors: { textFaint: "faint", accent: "accent", warning: "warning" } }), useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useEffect: () => {},
+    useTurnSpeechPhase: (turnId) => turnId === "playing-turn" ? "playing" : "idle", speechIcon, speechLabelKey,
   });
   const line = ReplyMeta({ message: { ...reply, usage: null }, clock: "14:32", copyText: "answer", availableWidth: 390, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
   const buttons = chromeNodes(line).filter((node) => node.type === "Pressable" && classes(node).has("size-8"));
   assert.deepEqual([line.props.style.minHeight, buttons.length], [44, 2], "copy and fork share the reply's one line");
   for (const button of buttons) assert.ok(classes(button).has("size-8") && button.props.hitSlop === 6, "32pt buttons reach 44pt touch targets inside their 44pt line, since hitSlop never extends past a parent");
+  const spoken = [];
+  const speaking = ReplyMeta({ message: { ...reply, usage: null, meta: { ...reply.meta, turnId: "playing-turn" } }, clock: "14:32", copyText: "answer", availableWidth: 390, onCopy: () => {}, forkDisabled: false, forking: false, onSpeak: (turnId) => spoken.push(turnId) });
+  const speakButton = chromeNodes(speaking).filter((node) => node.type === "Pressable" && classes(node).has("size-8")).at(-1);
+  assert.equal(speakButton.props.accessibilityState.selected, true, "the reply reading aloud shows its pause control");
+  speakButton.props.onPress();
+  assert.deepEqual(spoken, ["playing-turn"], "the control toggles its own Turn");
   const detailsText = chromeNodes(line).find((node) => node.type === "Text" && classes(node).has("flex-1"));
   assert.deepEqual([detailsText.props.numberOfLines, detailsText.props.selectable], [1, undefined], "the details stay on one line; selectable text on Android ignores the line limit and wraps out of the row");
   const narrow = ReplyMeta({ message: reported, clock: "12:09", copyText: "answer", availableWidth: 375, onCopy: () => {}, onFork: () => {}, forkDisabled: false, forking: false });
@@ -2370,7 +2424,7 @@ assert.equal(formatUsd(-3.2), "-$3.20");
 assert.equal(formatUsd(-0.001), "$0.00");
 assert.equal(formatUsd(1234.5), "$1,234.50");
 assert.equal(walletProductBalanceUsd({ display: { creditBenefits: [], creditsAmount: 500_000_000 }, pricing: { amountUsd: 9 } }), 5, "credits convert at 1e-8 USD");
-assert.deepEqual(appendWalletActivity([{ id: "a" }], { items: [{ id: "a" }, { id: "b" }], hasMore: false }).map((item) => item.id), ["a", "b"]);
+assert.deepEqual(appendWalletActivity([{ id: "a" }], { items: [{ id: "a" }, { id: "b" }], nextCursor: null }).map((item) => item.id), ["a", "b"]);
 assert.equal(sandboxSetupStatus(null), "unavailable");
 assert.equal(sandboxSetupStatus({ ran: true, exitCode: 2 }), "failed", "reports without a status fall back to the exit code");
 assert.equal(sandboxSetupInfo({ setup: { ran: "yes" } }), null, "a malformed report reads as none");
@@ -2411,6 +2465,9 @@ const relatedId = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}
 const [callerSpace, callerChat, callerTurn, reviewChat, otherSpace, docsChat] = [1, 2, 3, 4, 5, 6].map(relatedId);
 assert.deepEqual(sentFrom({ sessionId: reviewChat, meta: { origin: { kind: "prompt", spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn } } }), { spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn }, "prompted Turns link back to the caller Turn");
 assert.equal(sentFrom({ sessionId: callerChat, meta: { origin: { kind: "prompt", spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn } } }), null, "self follow-ups are already in the timeline");
+assert.equal(sentBy({ sessionId: reviewChat, meta: { origin: { kind: "prompt", spaceId: callerSpace, sessionId: callerChat, turnId: callerTurn } } }), null, "a message linked to its calling Chat names that Chat instead");
+assert.equal(sentBy({ sessionId: reviewChat, meta: { initiator: "automation", source: "scheduled_task" } }), "automation", "a scheduled message names its sender");
+assert.equal(sentBy({ sessionId: reviewChat, meta: { initiator: "human", source: "mobile" } }), null, "a person's message carries no sender label");
 assert.deepEqual(sentSessions({ sessionId: callerChat, meta: { messagesSent: [
   { sessionId: reviewChat, turnId: relatedId(11), kind: "prompt" },
   { spaceId: otherSpace, sessionId: docsChat, turnId: relatedId(12), kind: "prompt" },
@@ -2760,8 +2817,8 @@ assert.ok(paginationCallback && stateSyncHook && timeoutSource);
 const listReducerSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "reducer");
 const latestStatusSource = contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === "updateLatestTurn");
 const reducerHelperSources = ["isListedSession", "preferNewerSession", "mergeSessionItem", "placeRunningSession"].map((name) => contextSource.statements.find((statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name).getText(contextSource)).join("\n");
-const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionSourceFilterOf", "mergeSessionForks", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
-  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionSourceFilterOf, mergeSessionForks,
+const reduceListSync = new Function("sortByRecent", "reconcileSessionHead", "reconcileLatestTurn", "reconcileTurnStatusPatch", "emptyRunningSessions", "isActiveTurnStatus", "sessionListStatus", "sessionInitiatorOf", "mergeSessionForks", ts.transpileModule(`${latestStatusSource.getText(contextSource)}\n${reducerHelperSources}\n${listReducerSource.getText(contextSource)}\nreturn reducer;`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(
+  (rows) => [...rows].sort((left, right) => Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)), reconcileSessionHead, reconcileLatestTurn, reconcileTurnStatusPatch, emptyRunningSessions, (status) => ["queued", "running", "abort_requested"].includes(status), sessionListStatus, sessionInitiatorOf, mergeSessionForks,
 );
 const listSyncState = {
   sessions: syncRows, sessionsPagesLoaded: 2, sessionsHasMore: true, sessionsCursor: "tail-cursor", sessionsPageBoundary: { lastMessageAt: syncRows.at(-1).lastMessageAt },
@@ -2812,19 +2869,25 @@ assert.deepEqual(unrelatedEvent.runningSessions.all.sessions, discoveredState.ru
 assert.equal(unrelatedEvent.runningSessions, discoveredState.runningSessions, "an unknown Chat leaves Running untouched until it is read");
 const settledEventState = reduceListSync(discoveredState, { type: "session-realtime-turn", sessionId: runningFixture.id, turn: { id: "active", sequence: 9, status: "completed", updatedAt: completedTurn.updatedAt } });
 assert.deepEqual(settledEventState.runningSessions.all.sessions, [], "a settled Turn removes its Chat from Running without waiting for a scan");
-const sourceBuckets = { ...listSyncState, runningSessions: { all: { ...emptyRunningSessions, loaded: true }, web: { ...emptyRunningSessions, loaded: true }, other: { ...emptyRunningSessions, loaded: true } } };
-const cliChat = { ...runningFixture, id: "cli-chat", source: "cli", activeTurn: null };
-const foundState = reduceListSync(sourceBuckets, { type: "running-session-found", session: { ...cliChat, activeTurn: { id: "cli-turn", sequence: 1, status: "running" } } });
-assert.deepEqual([foundState.runningSessions.all.sessions.map((item) => item.id), foundState.runningSessions.other.sessions.map((item) => item.id), foundState.runningSessions.web.sessions.length], [["cli-chat"], ["cli-chat"], 0], "a Chat read after a live Turn joins All and its own source bucket");
+const sourceBuckets = { ...listSyncState, runningSessions: { all: { ...emptyRunningSessions, loaded: true }, human: { ...emptyRunningSessions, loaded: true }, automation: { ...emptyRunningSessions, loaded: true } } };
+const cliChat = { ...runningFixture, id: "cron-chat", source: "scheduled_task", meta: {}, activeTurn: null };
+const foundState = reduceListSync(sourceBuckets, { type: "running-session-found", session: { ...cliChat, activeTurn: { id: "cron-turn", sequence: 1, status: "running" } } });
+assert.deepEqual([foundState.runningSessions.all.sessions.map((item) => item.id), foundState.runningSessions.automation.sessions.map((item) => item.id), foundState.runningSessions.human.sessions.length], [["cron-chat"], ["cron-chat"], 0], "a Chat read after a live Turn joins All and its own initiator bucket");
 assert.equal(reduceListSync(sourceBuckets, { type: "running-session-found", session: cliChat }).runningSessions, sourceBuckets.runningSessions, "an idle Chat read does not join Running");
 const listedWebChat = { ...syncRows[0], source: null, activeTurn: null };
 const liveListedState = reduceListSync({ ...sourceBuckets, sessions: [listedWebChat] }, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "running", updatedAt: "2026-10-12T00:00:00Z" } });
-assert.deepEqual([liveListedState.runningSessions.all.sessions.length, liveListedState.runningSessions.web.sessions.length, liveListedState.runningSessions.other.sessions.length], [1, 1, 0], "a loaded legacy web Chat joins the web bucket live");
+assert.deepEqual([liveListedState.runningSessions.all.sessions.length, liveListedState.runningSessions.human.sessions.length, liveListedState.runningSessions.automation.sessions.length], [1, 1, 0], "a loaded legacy web Chat joins the human bucket live");
 const followupState = reduceListSync(reduceListSync(liveListedState, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-followup", sequence: 3, status: "queued", updatedAt: "2026-10-12T00:00:01Z" } }), { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "completed", updatedAt: "2026-10-12T00:00:02Z" } });
 assert.equal(followupState.runningSessions.all.sessions.length, 1, "a queued follow-up keeps the Chat in Running after the earlier Turn settles");
 const noScanBucket = reduceListSync({ ...listSyncState, sessions: [listedWebChat] }, { type: "session-realtime-turn", sessionId: listedWebChat.id, turn: { id: "web-turn", sequence: 2, status: "running", updatedAt: "2026-10-12T00:00:00Z" } });
-assert.deepEqual([noScanBucket.runningSessions.all.loaded, noScanBucket.runningSessions.web], [false, undefined], "live rows never claim scan coverage or create unscanned source buckets");
-assert.deepEqual(["web", "web_app", "Web App", null, "", "channel:web", "cli", "feishu:group", "channel_discord", "custom"].map(sessionSourceFilterOf), ["web", "web", "web", "web", "web", "web", "other", "other", "other", "other"], "source buckets mirror the server source keys");
+assert.deepEqual([noScanBucket.runningSessions.all.loaded, noScanBucket.runningSessions.human], [false, undefined], "live rows never claim scan coverage or create unscanned initiator buckets");
+assert.deepEqual([
+  { initiator: "agent", source: "web", meta: {} },
+  { source: "scheduled_task", meta: {} },
+  { source: "web", meta: { createdBy: "cronjob" } },
+  { source: "feishu:group", meta: {} },
+  { source: "cli" },
+].map(sessionInitiatorOf), ["agent", "automation", "automation", "human", "human"], "initiator buckets mirror the server's Initiator label");
 const pageTimeout = new Function("HOME_REQUEST_TIMEOUT_MS", "translate", `${ts.transpileModule(timeoutSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText}; return withTimeout;`)(15000, (_key, values) => `Timed out: ${values.label}`);
 function paginationHarness(listSessions) {
   const stateRef = { current: { sessionsLoadingMore: true, sessionsHasMore: true, sessionsCursor: "old-page", refreshing: false, sessionsPageBoundary: recentBoundary } };
@@ -3113,18 +3176,20 @@ let storedSource = null;
 const sourceStorage = { getItem: async () => storedSource, setItem: async (_key, value) => { storedSource = value; } };
 const sourcePreference = loadPreferenceModule(sourceStorage);
 assert.equal(await sourcePreference.loadSessionSourcePreference(), "all", "missing source preference defaults to all");
-assert.equal(sourcePreference.parseSessionSourceFilter("web"), "web");
+assert.equal(sourcePreference.parseSessionSourceFilter("web"), "human", "the retired Web source filter reads as Human, as on the web");
+assert.equal(sourcePreference.parseSessionSourceFilter("other"), "all", "the retired Other source filter widens to every Chat");
+assert.equal(sourcePreference.parseSessionSourceFilter("automation"), "automation");
 assert.equal(sourcePreference.parseSessionSourceFilter("nonsense"), "all");
-await sourcePreference.saveSessionSourcePreference("other");
-assert.equal(storedSource, "other");
-assert.equal(await sourcePreference.loadSessionSourcePreference(), "other");
-assert.equal(await loadPreferenceModule(sourceStorage).loadSessionSourcePreference(), "other", "a new module instance restores the saved source");
+await sourcePreference.saveSessionSourcePreference("agent");
+assert.equal(storedSource, "agent");
+assert.equal(await sourcePreference.loadSessionSourcePreference(), "agent");
+assert.equal(await loadPreferenceModule(sourceStorage).loadSessionSourcePreference(), "agent", "a new module instance restores the saved filter");
 let finishSourceRead;
 const concurrentSource = loadPreferenceModule({ ...sourceStorage, getItem: () => new Promise((resolve) => { finishSourceRead = resolve; }), setItem: async () => {} });
 const pendingSourceRead = concurrentSource.loadSessionSourcePreference();
-await concurrentSource.saveSessionSourcePreference("web");
-finishSourceRead("other");
-assert.equal(await pendingSourceRead, "web", "a late stored snapshot cannot overwrite a user source save");
+await concurrentSource.saveSessionSourcePreference("human");
+finishSourceRead("automation");
+assert.equal(await pendingSourceRead, "human", "a late stored snapshot cannot overwrite a user filter save");
 
 const statusCalls = [];
 const statusResults = new Map();
@@ -3417,16 +3482,8 @@ try {
   mock.timers.reset();
 }
 
-assert.equal(isWebSessionSource({ source: "web" }), true);
-assert.equal(isWebSessionSource({ source: "web_app" }), true);
-assert.equal(isWebSessionSource({ source: null }), true);
-assert.equal(isWebSessionSource({ source: "mobile" }), true);
-assert.equal(sessionSourceGroup({ source: "mobile" }), "web");
-assert.equal(sessionSourceGroup({ source: "Web App" }), "web");
-assert.equal(sessionSourceFilterKeys("all"), null);
-assert.deepEqual(sessionSourceFilterKeys("web"), ["web"]);
-assert.ok(sessionSourceFilterKeys("other")?.includes("other"));
-assert.ok(!sessionSourceFilterKeys("other")?.includes("web"));
+assert.equal(sessionInitiatorFilterKeys("all"), null);
+assert.deepEqual(sessionInitiatorFilterKeys("human"), ["human"]);
 assert.deepEqual(toUserSessionLabels([
   { id: "src", name: "Source", source: "system", systemKey: null, children: [{ id: "web", name: "Web App", source: "system", systemKey: "session-source:web", children: [] }] },
   { id: "work", name: "Work", source: "user", systemKey: null, children: [{ id: "urgent", name: "Urgent", source: "user", systemKey: null, children: [] }] },
@@ -4197,6 +4254,7 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   rowWidth: 390, WEB_COLUMN: undefined, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
+  speechVoice: null, speakTurn: () => {}, isSpeakableTurn,
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
   bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botExchange, openPeerBot: () => {}, BotNoteBubble: "BotNoteBubble", BotExchangeRow: "BotExchangeRow", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
@@ -5368,7 +5426,7 @@ assert.equal(classifySaveConflict({ ...textFile, content: "draft" }, "base", "dr
 assert.equal(classifySaveConflict({ ...textFile, content: "base" }, "base", "draft"), "retry");
 assert.equal(classifySaveConflict({ ...textFile, content: "other" }, "base", "draft"), "conflict");
 assert.equal(classifySaveConflict(null, "base", "draft"), "conflict");
-assert.equal(isFileConflictError({ status: 409 }), true);
+assert.equal(isFileConflictError({ status: 409, code: "sandbox_offline" }), false, "an offline local sandbox is not a stale write");
 assert.equal(isFileConflictError({ code: "file_conflict" }), true);
 assert.equal(isFileConflictError(new Error("nope")), false);
 

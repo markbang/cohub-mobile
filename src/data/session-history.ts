@@ -4,6 +4,7 @@ import type {
 	MessageRecord,
 	SessionTurnIndexItem,
 	SessionTurnRecord,
+	ViewportContext,
 } from "@neta-art/cohub";
 import type { AttachmentDraft, ChatModelSelection } from "./types";
 
@@ -13,6 +14,8 @@ export type SendDraft = {
 	attachments: AttachmentDraft[];
 	model: ChatModelSelection | null;
 	harness: HarnessKind | null;
+	/** Images and views the message asks about; a retry sends them again. */
+	viewports?: ViewportContext[];
 };
 
 export function isFailedSend(message: Pick<MessageRecord, "role" | "meta">) {
@@ -78,7 +81,7 @@ export function submitAwaitingSend(messages: MessageRecord[], clientMessageId: s
 export function failedSendDraft(message: Pick<MessageRecord, "meta">): SendDraft | null {
 	const draft = message.meta?.sendDraft as Partial<SendDraft> | undefined;
 	if (!draft || typeof draft !== "object" || typeof draft.text !== "string" || !Array.isArray(draft.attachments)) return null;
-	return { text: draft.text, attachments: draft.attachments, model: draft.model ?? null, harness: draft.harness ?? null };
+	return { text: draft.text, attachments: draft.attachments, model: draft.model ?? null, harness: draft.harness ?? null, ...(Array.isArray(draft.viewports) && draft.viewports.length > 0 ? { viewports: draft.viewports } : {}) };
 }
 
 /**

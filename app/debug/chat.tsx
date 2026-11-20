@@ -115,6 +115,8 @@ export default function DebugChatScreen() {
         onRetry={NOOP}
         onDiscard={NOOP}
         onFork={NOOP}
+        speechEnabled={false}
+        onSpeak={NOOP}
         onLoadOlder={NOOP}
         onLoadNewer={NOOP}
         onFollowingChange={NOOP}

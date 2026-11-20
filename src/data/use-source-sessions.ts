@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { translate } from "@/src/i18n/core";
 import { sessionPageState, type SessionPageBoundary } from "@/src/data/session-status";
-import { sessionSourceFilterKeys, type SessionSourceFilter } from "@/src/data/session-source";
+import { sessionInitiatorFilterKeys, type SessionInitiatorFilter } from "@/src/data/session-initiator";
 import { mergeSessionPages, reconcileSessionHead } from "./session-list-sync";
 import { useScreenQuery } from "./query";
 import { sortByRecent } from "@/src/utils";
@@ -33,16 +33,16 @@ function errorMessage(error: unknown) {
 
 type SourcePages = { sessions: UserSessionListItem[]; cursor: string | null; boundary: SessionPageBoundary | null; hasMore: boolean; pagesLoaded: number };
 
-/** Every source, or only the Chats archived in their Space. */
-export type ChatsListFilter = SessionSourceFilter | "archived";
+/** Chats by who started them, or only the Chats archived in their Space. */
+export type ChatsListFilter = SessionInitiatorFilter | "archived";
 
 /**
- * Server-filtered global Chats list for a source filter or the archive. The shared home list stays
+ * Server-filtered global Chats list for an initiator filter or the archive. The shared home list stays
  * unfiltered for cache hydration and cross-screen lookups, so this keeps its own
  * pages and cursor. `all` resolves to the empty state; callers use the home list.
  */
 export function useSourceSessions(client: CohubClient | null, filter: ChatsListFilter) {
-  const scope = useMemo(() => filter === "archived" ? { archived: "only" as const } : { source: sessionSourceFilterKeys(filter) ?? undefined }, [filter]);
+  const scope = useMemo(() => filter === "archived" ? { archived: "only" as const } : { initiator: sessionInitiatorFilterKeys(filter) ?? undefined }, [filter]);
   const enabled = filter !== "all" && Boolean(client);
   const queryClient = useQueryClient();
   const queryKey = useMemo(() => [`chats:source:${filter}`], [filter]);

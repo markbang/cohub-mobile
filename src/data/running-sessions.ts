@@ -1,4 +1,4 @@
-import type { CohubClient, UserSessionListItem, UserSessionSourceKey } from "@neta-art/cohub";
+import type { CohubClient, SessionInitiator, UserSessionListItem } from "@neta-art/cohub";
 
 export type RunningSessionsSnapshot = {
   sessions: UserSessionListItem[];
@@ -9,7 +9,7 @@ export type RunningSessionsSnapshot = {
 
 export const emptyRunningSessions: RunningSessionsSnapshot = { sessions: [], loading: false, loaded: false, error: null };
 
-/** The last complete account scan for one source, replayed before the next scan finishes. */
+/** The last complete account scan for one initiator filter, replayed before the next scan finishes. */
 export type CachedRunningSessions = {
   sessions: UserSessionListItem[];
   scannedAt: number;
@@ -28,7 +28,7 @@ export function runningSessionCandidates(discovered: UserSessionListItem[], know
 /** The SDK has no active-session filter; scan the authoritative user list without a recency cutoff. */
 export async function loadRunningSessions(
   client: CohubClient,
-  options: { source?: readonly UserSessionSourceKey[]; signal: AbortSignal; onPage?: (sessions: UserSessionListItem[]) => void },
+  options: { initiator?: readonly SessionInitiator[]; signal: AbortSignal; onPage?: (sessions: UserSessionListItem[]) => void },
 ): Promise<UserSessionListItem[]> {
   const sessions = new Map<string, UserSessionListItem>();
   const cursors = new Set<string>();
@@ -41,7 +41,7 @@ export async function loadRunningSessions(
     const timeout = setTimeout(abort, 15_000);
     const requestFetch: typeof fetch = (input, init) => fetch(input, { ...init, signal: controller.signal });
     try {
-      const response = await client.user.listSessions({ limit: 60, ...(cursor ? { cursor } : {}), ...(options.source ? { source: options.source } : {}) }, requestFetch);
+      const response = await client.user.listSessions({ limit: 60, ...(cursor ? { cursor } : {}), ...(options.initiator ? { initiator: options.initiator } : {}) }, requestFetch);
       if (options.signal.aborted) throw new Error("Running Chat discovery was cancelled.");
       if (controller.signal.aborted) throw new Error("Running Chat discovery timed out. Check your connection and retry.");
       for (const session of response.sessions) {

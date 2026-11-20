@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import { botOnly } from "./bot-mode-preference";
-import type { SessionSourceFilter } from "./session-source";
+import type { SessionInitiatorFilter } from "./session-initiator";
 
-/** The Bots view sits in the source menu while Bot mode is on; it is not a server source filter. */
-export type ChatsSource = SessionSourceFilter | "bots";
+/** The Bots view sits in the filter menu while Bot mode is on; it is not a server filter. */
+export type ChatsSource = SessionInitiatorFilter | "bots";
 
 const SOURCE_STORAGE_KEY = "cohub:mobile:session-filter-source:v1";
 let source: ChatsSource = botOnly ? "bots" : "all";
@@ -17,9 +17,13 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-/** Anything other than a known source filter is treated as the unfiltered default. */
+/**
+ * Anything other than a known filter is treated as the unfiltered default. The retired `web` source filter
+ * reads as Human, as on the web; `other` mixed people on channels with automations, so it widens to every Chat.
+ */
 export function parseSessionSourceFilter(raw: string | null): ChatsSource {
-  return raw === "web" || raw === "other" || raw === "bots" ? raw : "all";
+  if (raw === "web") return "human";
+  return raw === "human" || raw === "agent" || raw === "automation" || raw === "bots" ? raw : "all";
 }
 
 export function loadSessionSourcePreference(): Promise<ChatsSource> {

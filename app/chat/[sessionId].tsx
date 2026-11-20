@@ -15,7 +15,7 @@ import { AnchoredActionMenu, type AnchoredMenuAction, type AnchoredMenuSection }
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { ToastViewport, useToast } from "@/src/components/Toast";
-import { copyMessageText, MessageBubble, StreamCard } from "@/src/components/MessageContent";
+import { copyMessageText, formatTokenCount, MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import { SendBubbleOverlay } from "@/src/components/SendBubbleOverlay";
 import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
 import { createSendFlight, isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
@@ -55,6 +55,14 @@ import { cancelQueuedFollowup, followupQueueItems, isOptimisticFollowup, isSendQ
 import { isActiveTurnStatus, isLiveStreamStatus, isTerminalTurnStatus, shouldShowLiveStream } from "@/src/data/chat-stream";
 import { liveReplyAnchor, MessageMeasurements, rowHeightMeasurement, thinkingBlocks } from "@/src/data/chat-rendering";
 import type { AttachmentDraft, ChatModelSelection } from "@/src/data/types";
+import { useColdResend } from "@/src/data/use-cold-resend";
+import { mediaContextName, registerMediaAskTarget, sameMediaContext, type MediaAsk } from "@/src/data/media-ask";
+import { composerInsertion, isLargeComposerPaste } from "@/src/data/composer-paste";
+import { pastedTextAttachment } from "@/src/data/attachment-file";
+import { useSpeechVoice } from "@/src/data/use-speech-voice";
+import { isSpeakableTurn } from "@/src/data/turn-speech";
+import { stopTurnSpeech, toggleTurnSpeech } from "@/src/platform/turn-speech";
+import { formatUsd } from "@/src/data/space-wallet";
 import type { UploadTarget } from "@/src/data/attachment-uploads";
 import { useAttachmentUploadState } from "@/src/data/use-attachment-upload";
 import { approvalModeFromTurns, approvalModesFor, canUseRuntimeHarness, fastServiceTier, FAST_SERVICE_TIER, localModelsForHarness, runtimeHarnessFromTurn, runtimeModelFor, supportsFast, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
@@ -809,6 +817,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }) ?? (timelineReady && !listLoaded ? "opening" : null);
   const threadPlaceholder = placeholder === "opening" && !openingDelayElapsed ? null : placeholder;
   const running = Boolean(sessionId) && (latestTurnStatus === "running" || submitting || (liveStream && isLiveStreamStatus(view.stream?.status ?? "")));
+  const coldResendTurns = useMemo(() => [...view.turns, ...view.turnIndex], [view.turnIndex, view.turns]);
+  const coldResend = useColdResend({ eligible: Boolean(sessionId) && !bot && composerHarness === "cohub" && !running, turns: coldResendTurns, model: activeModel, models });
   const appendVoiceText = useCallback((text: string) => {
     updateInput(appendDictation(inputRef.current, text));
   }, [updateInput]);
@@ -1032,6 +1042,27 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const appendAttachments = (next: AttachmentDraft[]) => {
     if (attachments.length + next.length > MAX_ATTACHMENTS) showToast({ title: t("chat.attachmentLimit", { count: MAX_ATTACHMENTS }), tone: "danger" });
     setAttachments((current) => [...current, ...next].slice(0, MAX_ATTACHMENTS));
+  };
+  // Images asked about from the viewer go with the next message as references the Agent can open.
+  const [mediaAsks, setMediaAsks] = useState<MediaAsk[]>([]);
+  const mediaAsksRef = useRef(mediaAsks);
+  useLayoutEffect(() => { mediaAsksRef.current = mediaAsks; }, [mediaAsks]);
+  useEffect(() => {
+    if (!sessionId || bot) return;
+    return registerMediaAskTarget((ask) => setMediaAsks((current) => current.some((item) => sameMediaContext(item.context, ask.context)) ? current : [...current, ask]));
+  }, [bot, sessionId]);
+  // A long paste goes with the message as a file, as on the web; with no room for one it stays text.
+  const changeComposerText = (next: string) => {
+    const insertion = composerInsertion(mentions.displayValue, next);
+    if (!insertion || !isLargeComposerPaste(insertion.inserted) || attachmentsRef.current.length >= MAX_ATTACHMENTS) {
+      mentions.onChangeText(next);
+      return;
+    }
+    mentions.onChangeText(insertion.rest);
+    void pastedTextAttachment(insertion.inserted).then((attachment) => appendAttachments([attachment]), (error: unknown) => {
+      mentions.onChangeText(next);
+      showToast({ title: t("chat.pasteAttachFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" });
+    });
   };
   // What another app shared fills a new Chat's composer once; the user reviews it and sends it themselves.
   const shareTakenRef = useRef(false);
@@ -1367,6 +1398,14 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }
   }, [forkSession, forkingTurnId, refreshHome, router, sessionId, showToast, spaceId, t, view.turns]);
 
+  const speechVoice = useSpeechVoice(client, spaceId || null, Boolean(sessionId) && !bot);
+  const speakTurn = useCallback((turnId: string) => {
+    if (!client || !spaceId || !sessionId) return;
+    toggleTurnSpeech(turnId, async () => (await client.space(spaceId).session(sessionId).turn(turnId).speak()).speech);
+  }, [client, sessionId, spaceId]);
+  // A reply reads only while its Chat is open.
+  useEffect(() => () => stopTurnSpeech(), [sessionId]);
+
   // Reading on demand keeps related-Chat links from re-rendering every row on each dispatch.
   const lookupSession = useCallback((id: string): SessionRecord | null => {
     const state = getAppState();
@@ -1509,9 +1548,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     void clearComposerDraft(spaceId, draftScope).catch(() => undefined);
     recordDebugEvent("chat.send.composer_cleared");
     let optimisticCreated = false;
+    coldResend.setCompactFirst(false);
+    const asks = mediaAsksRef.current;
+    setMediaAsks([]);
     sendMessage(sessionId, text, files, {
+      ...(asks.length > 0 ? { viewports: asks.map((ask) => ask.context) } : {}),
       // On a Bot's page the words go to the Bot, then are written here as a note.
-      ...(bot ? { note: true, relay: relayToBotChat } : { model: activeModel, harness, ...(execution ? { execution } : {}) }),
+      ...(bot ? { note: true, relay: relayToBotChat } : { model: activeModel, harness, ...(execution ? { execution } : {}), ...(coldResend.compactFirst ? { compactFirst: true } : {}) }),
       onOptimistic: (message) => {
         optimisticCreated = true;
         flight.inserted(message);
@@ -1525,6 +1568,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       // Once the bubble exists it carries the failure and its retry.
       if (optimisticCreated) return;
       restoreComposer(text, files);
+      setMediaAsks(asks);
       showToast({ title: t("chat.sendFailed.title"), message: error instanceof Error ? error.message : t("data.messageSendFailed"), tone: "danger" });
     });
   };
@@ -1545,6 +1589,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     let replaced = false;
     sendMessage(sessionId, draft.text, draft.attachments, {
       ...(bot ? { note: true, relay: relayToBotChat } : { model: draft.model, ...(draft.harness ? { harness: draft.harness } : {}) }),
+      ...(draft.viewports ? { viewports: draft.viewports } : {}),
       retryOf: message,
       onOptimistic: (optimistic) => {
         replaced = true;
@@ -1649,8 +1694,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       : writer
       ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={rowWidth} />
       : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
-      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={rowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, rowWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence]);
+      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} onSpeak={speechVoice && isSpeakableTurn(messageTurn) ? speakTurn : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={rowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
+  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, speakTurn, speechVoice, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, rowWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1711,6 +1756,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           onRetry={retryRow}
           onDiscard={discardSend}
           onFork={forkMessage}
+          speechEnabled={Boolean(speechVoice)}
+          onSpeak={speakTurn}
           onLoadOlder={timelineLoadOlder}
           onLoadNewer={timelineLoadNewer}
           onFollowingChange={setFollowingTail}
@@ -1784,13 +1831,16 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
             })}
           </ScrollView>
         </Animated.View> : null}
+        {mediaAsks.length > 0 ? <View className="px-3 pt-1 bg-background gap-2">{mediaAsks.map((ask) => <AttachmentChip key={ask.context.path ?? ask.context.url} name={mediaContextName(ask.context)} uri={ask.thumbnail} mimeType="image/*" onRemove={() => setMediaAsks((current) => current.filter((item) => item !== ask))} />)}</View> : null}
         {attachments.length > 0 ? <View className="px-3 pt-1 bg-background"><View ref={attachmentSourceRef} collapsable={false} style={{ maxHeight: ATTACHMENT_LIST_MAX_HEIGHT }}><ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onScroll={(event) => { attachmentScrollYRef.current = event.nativeEvent.contentOffset.y; }}>{attachments.map((attachment, index) => <ComposerAttachmentChip key={`${attachment.uri}-${index}`} target={uploadTarget} attachment={attachment} onRemove={() => { releaseUpload(attachment); setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index)); }} />)}</ScrollView></View></View> : null}
         {/* Only local Harnesses ask for approval, so Cloud-only Chats never read for it. */}
         {sessionId && spaceId && (composerHarness !== "cohub" || view.turns.some((turn) => runtimeHarnessFromTurn(turn) !== "cohub")) ? <SessionApprovals client={client} spaceId={spaceId} sessionId={sessionId} running={running} harnessOf={(turnId) => runtimeHarnessFromTurn(view.turns.find((turn) => turn.id === turnId))} /> : null}
         {billingStopped ? <ComposerNotice icon="wallet" text={t("chat.billingStopped.notice")} action={t("chat.billingStopped.action")} onAction={() => router.push("/settings/billing")} /> : null}
         {archived ? <ComposerNotice icon="archive" text={t("chat.archived.notice")} action={t("session.unarchive")} onAction={toggleArchive} /> : null}
+        {!archived && coldResend.compactFirst ? <ComposerNotice icon="layers" text={t("chat.cache.compactQueued")} action={t("common.undo")} onAction={() => coldResend.setCompactFirst(false)} /> : null}
+        {!archived && !coldResend.compactFirst && coldResend.notice ? <ComposerNotice icon="clock" text={t("chat.cache.cold", { tokens: formatTokenCount(coldResend.notice.contextTokens), cost: formatUsd(coldResend.notice.costUsd) })} action={t("chat.cache.compactFirst")} onAction={() => coldResend.setCompactFirst(true)} onDismiss={coldResend.dismiss} /> : null}
         {voice.partial || voice.error ? <VoiceStatusRow error={voice.error} partial={voice.partial} /> : null}
-        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh(), execution: executionMenu })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={!bot && runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={mentions.onChangeText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
+        <ComposerInput onPasteImages={appendAttachments} menuSourceRef={composerMenuSourceRef} harnessSections={harnessMenuSections({ value: composerHarness, status: runtime.status, t, onSelect: setSelectedHarness, onRefresh: () => void runtime.refresh(), execution: executionMenu })} anchorRef={composerRef} measurementRef={composerMeasurementRef} attachmentMenuOpen={attachmentMenuOpen} modelMenuOpen={modelSelectorOpen} showHarnessPicker={!bot && runtime.status?.kind === "local"} harness={composerHarness} harnessMenuOpen={harnessMenuOpen} onHarnessPress={() => { freezeListForComposerMenu(); closeOverlay("model"); setOverlay("harness"); void runtime.refresh(); }} sendFeedback={sendFeedback} value={mentions.displayValue} onChangeText={changeComposerText} onSelectionChange={mentions.onSelectionChange} onFocusChange={handleComposerFocus} onSend={submit} onStop={sessionId ? () => void stopGeneration() : undefined} onAttach={() => { freezeListForComposerMenu(); closeOverlay("model"); closeOverlay("harness"); setOverlay("attachments"); }} attachmentActions={[
           { icon: "camera", title: t("chat.attachment.camera"), onPress: () => void takePhoto() },
           { icon: "images", title: t("chat.attachment.photos"), onPress: () => void pickPhotos() },
           { icon: "paperclip", title: t("chat.attachment.file"), onPress: () => void pickAttachments() },
@@ -1930,13 +1980,15 @@ function WorkLogButton({ labeled, disabled, onPress }: { labeled: boolean; disab
 }
 
 /** A state of the Chat the composer answers, with the one action that changes it. */
-function ComposerNotice({ icon, text, action, onAction }: { icon: IconName; text: string; action: string; onAction: () => void }) {
+function ComposerNotice({ icon, text, action, onAction, onDismiss }: { icon: IconName; text: string; action: string; onAction: () => void; onDismiss?: () => void }) {
+  const { t } = useTranslation();
   return <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} accessibilityRole="summary" className="flex-row items-center gap-2 bg-background pl-4 pr-2">
     <AppIcon name={icon} size={14} tone="muted" />
     <Text className="flex-1 text-caption text-fg-muted">{text}</Text>
     <Pressable accessibilityRole="button" onPress={onAction} className="min-h-11 justify-center px-2 active:opacity-70">
       <Text className="text-caption font-semibold text-accent">{action}</Text>
     </Pressable>
+    {onDismiss ? <IconButton name="x" label={t("common.close")} size={32} onPress={onDismiss} /> : null}
   </Animated.View>;
 }
 

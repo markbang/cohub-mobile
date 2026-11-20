@@ -1,11 +1,9 @@
-import type { CohubClient, LabelAssignmentRecord, LabelListItem } from "@neta-art/cohub";
+import { SESSION_INITIATOR_LABEL_SYSTEM_KEY_PREFIX, type CohubClient, type LabelAssignmentRecord, type LabelListItem } from "@neta-art/cohub";
 
 export const SESSION_SOURCE_LABEL_SYSTEM_KEY_PREFIX = "session-source:";
 export const SESSION_USER_LABEL_SYSTEM_KEY_PREFIX = "session-user:";
 export const SESSION_CHANNEL_LABEL_SYSTEM_KEY_PREFIX = "session-channel:";
 export const WEB_APP_SOURCE_LABEL_SYSTEM_KEY = `${SESSION_SOURCE_LABEL_SYSTEM_KEY_PREFIX}web`;
-
-export type SessionSourceGroup = "web" | "other";
 
 export type SessionLabel = {
   id: string;
@@ -20,7 +18,7 @@ function hasSessionSystemKey(label: Pick<LabelListItem, "systemKey">) {
   const systemKey = label.systemKey?.trim();
   return Boolean(
     systemKey &&
-      [SESSION_SOURCE_LABEL_SYSTEM_KEY_PREFIX, SESSION_USER_LABEL_SYSTEM_KEY_PREFIX, SESSION_CHANNEL_LABEL_SYSTEM_KEY_PREFIX].some((prefix) => systemKey.startsWith(prefix)),
+      [SESSION_SOURCE_LABEL_SYSTEM_KEY_PREFIX, SESSION_INITIATOR_LABEL_SYSTEM_KEY_PREFIX, SESSION_USER_LABEL_SYSTEM_KEY_PREFIX, SESSION_CHANNEL_LABEL_SYSTEM_KEY_PREFIX].some((prefix) => systemKey.startsWith(prefix)),
   );
 }
 
@@ -37,16 +35,6 @@ export function isSystemSessionLabel(label: LabelListItem, allLabels: LabelListI
 
 export function isWebAppSourceLabel(label: LabelListItem) {
   return label.systemKey === WEB_APP_SOURCE_LABEL_SYSTEM_KEY || label.name === "Web App";
-}
-
-/** Natural chat origin, independent of user labels. Missing source follows the web client; the server taxonomy has no mobile bucket, so first-party app sessions count as Web App. */
-export function isWebSessionSource(session: { source?: string | null }) {
-  const source = session.source?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? "web";
-  return source === "web" || source === "web_app" || source === "mobile";
-}
-
-export function sessionSourceGroup(session: { source?: string | null }): SessionSourceGroup {
-  return isWebSessionSource(session) ? "web" : "other";
 }
 
 export function toSessionLabel(label: LabelListItem, ref = label.name): SessionLabel {

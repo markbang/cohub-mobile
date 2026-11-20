@@ -1,4 +1,4 @@
-import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
+import type { AppRecord, CheckpointRecord, SpaceActivityResponse, SpaceOverview, SpaceRecord, TaskRunRecord, UserSessionListItem } from "@neta-art/cohub";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -22,6 +22,7 @@ import { useTranslation } from "@/src/i18n";
 import { AppIcon, AppRefreshControl, Avatar, TopBar, IconButton, LoadingState, PrimaryButton, Screen, SectionHeader, type IconName, type IconTone } from "@/src/ui";
 import { LIST_AVATAR_SIZE, ListRow, Meta } from "@/src/ui/ListRow";
 import { displaySpaceName, formatNumber, formatRelativeTime, sortByRecent } from "@/src/utils";
+import { formatUsd } from "@/src/data/space-wallet";
 
 type Params = { spaceId?: string | string[] };
 
@@ -127,6 +128,13 @@ export default function SpaceScreen() {
     },
     ...resourceOptions,
   });
+  // App reach is all-time; schedule runs cover the last `days`. Optional, so a failure only hides the numbers.
+  const overviewQuery = useScreenQuery({
+    queryKey: [`space:${spaceId}:resources`, "overview"],
+    queryFn: (): Promise<SpaceOverview> => client!.space(spaceId!).overview.get(),
+    ...resourceOptions,
+  });
+  const overview = overviewQuery.data ?? null;
   const taskList = usePagedQuery<TaskRunRecord>({
     queryKey: [`space:${spaceId}:tasks`],
     enabled: ready,
@@ -273,6 +281,10 @@ export default function SpaceScreen() {
           <Meta icon="messages" value={`${sessions.length}${spaceSessionsHasMore ? "+" : ""}`} label={`${t("space.metric.chats")}: ${sessions.length}`} />
           <Meta icon="rocket" value={String(resources.apps.length)} label={`${t("space.metric.works")}: ${resources.apps.length}`} />
           <Meta icon="sync" value={String(activeTasks)} label={`${t("space.metric.running")}: ${activeTasks}`} tone={activeTasks > 0 ? "accent" : "muted"} />
+          {overview && overview.apps.views > 0 ? <Meta icon="eye" value={formatNumber(overview.apps.views)} label={`${t("space.metric.appViews")}: ${overview.apps.views.toLocaleString()}`} /> : null}
+          {overview && overview.apps.likes > 0 ? <Meta icon="heart" value={formatNumber(overview.apps.likes)} label={`${t("space.metric.likes")}: ${overview.apps.likes.toLocaleString()}`} /> : null}
+          {overview?.apps.revenue && overview.apps.revenue.usd > 0 ? <Meta icon="wallet" value={formatUsd(overview.apps.revenue.usd)} label={`${t("space.metric.revenue")}: ${formatUsd(overview.apps.revenue.usd)}`} /> : null}
+          {overview?.schedules && overview.schedules.runs > 0 ? <Meta icon="calendar-clock" value={overview.schedules.failed > 0 ? `${overview.schedules.runs} · ${t("space.metric.failed", { count: overview.schedules.failed })}` : String(overview.schedules.runs)} label={t("space.metric.scheduleRuns", { days: overview.days, runs: overview.schedules.runs, failed: overview.schedules.failed })} /> : null}
         </View>
       </View>
     </View>

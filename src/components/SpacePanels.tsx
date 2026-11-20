@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect -- controlled panel state synchronizes the native animation surface. */
-import type { CohubClient, SessionListFork, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
+import type { CohubClient, SessionInitiator, SessionListFork, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -28,11 +28,10 @@ import {
   fetchLabelSessionIds,
   fetchSessionLabels,
   formatLabelRef,
-  sessionSourceGroup,
   toUserSessionLabels,
   type SessionLabel,
-  type SessionSourceGroup,
 } from "@/src/data/session-labels";
+import { sessionInitiatorOf } from "@/src/data/session-initiator";
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget, type PanelName } from "@/src/data/space-panel-pager";
 import { record as recordDebugEvent } from "@/src/data/debug-session";
 import { usePredictiveBackBlock } from "@/src/platform/predictive-back";
@@ -326,7 +325,7 @@ type ChatPanelItem =
 
 type ChatListFilter =
   | { kind: "all" }
-  | { kind: "source"; source: SessionSourceGroup }
+  | { kind: "initiator"; initiator: SessionInitiator }
   | { kind: "label"; label: SessionLabel; ref: string }
   | { kind: "archived" };
 
@@ -427,7 +426,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
   const filteredSessions = useMemo(() => {
     const matchesListFilter = (session: UserSessionListItem) => {
       if (listFilter.kind === "all" || listFilter.kind === "archived") return true;
-      if (listFilter.kind === "source") return sessionSourceGroup(session) === listFilter.source;
+      if (listFilter.kind === "initiator") return sessionInitiatorOf(session) === listFilter.initiator;
       return labelSessionIds.has(session.id);
     };
     return (listFilter.kind === "archived" ? archivedSessions : displaySessions).filter((session) =>
@@ -450,7 +449,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
       ? remoteSearch.sessions.filter((hit) => {
         const session = sessionsById.get(hit.sessionId);
         if (listFilter.kind === "all") return true;
-        if (listFilter.kind === "source") return session ? sessionSourceGroup(session) === listFilter.source : false;
+        if (listFilter.kind === "initiator") return session ? sessionInitiatorOf(session) === listFilter.initiator : false;
         return labelSessionIds.has(hit.sessionId);
       })
       : [];
@@ -505,15 +504,16 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
     ? t("space.panel.empty.archived")
     : listFilter.kind === "label"
     ? t("space.panel.empty.labeled", { name: listFilter.label.name })
-    : listFilter.kind === "source"
-      ? listFilter.source === "web" ? t("space.panel.empty.web") : t("space.panel.empty.other")
+    : listFilter.kind === "initiator"
+      ? t(`space.panel.empty.${listFilter.initiator}`)
     : trimmedQuery
       ? t("space.panel.empty.matching")
       : t("space.panel.empty.none");
   const filterChips: { key: string; label: string; icon?: React.ComponentProps<typeof AppIcon>["name"]; filter: ChatListFilter }[] = [
     { key: "all", label: t("space.panel.filter.all"), filter: { kind: "all" } },
-    { key: "web", label: t("space.panel.filter.webApp"), icon: "globe", filter: { kind: "source", source: "web" } },
-    { key: "other", label: t("space.panel.filter.other"), icon: "globe", filter: { kind: "source", source: "other" } },
+    { key: "human", label: t("space.panel.filter.human"), icon: "user", filter: { kind: "initiator", initiator: "human" } },
+    { key: "agent", label: t("space.panel.filter.agent"), icon: "brain", filter: { kind: "initiator", initiator: "agent" } },
+    { key: "automation", label: t("space.panel.filter.automation"), icon: "zap", filter: { kind: "initiator", initiator: "automation" } },
     ...labels.map((label) => ({ key: `label:${label.id}`, label: label.name, filter: { kind: "label" as const, label, ref: formatLabelRef(label) } })),
     { key: "archived", label: t("chats.archived"), icon: "archive", filter: { kind: "archived" } },
   ];
@@ -523,7 +523,7 @@ function ChatPanel({ spaceId, spaceName, spaceAvatarUrl, sessions, client, onChi
         key={chip.key}
         label={chip.label}
         icon={chip.icon}
-        selected={chip.filter.kind === "all" || chip.filter.kind === "archived" ? listFilter.kind === chip.filter.kind : chip.filter.kind === "source" ? listFilter.kind === "source" && listFilter.source === chip.filter.source : listFilter.kind === "label" && listFilter.label.id === chip.filter.label.id}
+        selected={chip.filter.kind === "all" || chip.filter.kind === "archived" ? listFilter.kind === chip.filter.kind : chip.filter.kind === "initiator" ? listFilter.kind === "initiator" && listFilter.initiator === chip.filter.initiator : listFilter.kind === "label" && listFilter.label.id === chip.filter.label.id}
         onPress={() => setListFilter(chip.filter)}
       />
     ))}

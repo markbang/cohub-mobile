@@ -8,6 +8,8 @@ export const settingsSections = {
   rules: { labelKey: "settings.section.rules", icon: "file-text" },
   activity: { labelKey: "settings.section.activity", icon: "activity" },
   billing: { labelKey: "settings.section.billing", icon: "database" },
+  apps: { labelKey: "settings.section.apps", icon: "box" },
+  schedules: { labelKey: "settings.section.schedules", icon: "calendar-clock" },
   referrals: { labelKey: "settings.section.referrals", icon: "gift" },
   browser: { labelKey: "settings.browser.title", icon: "external-link" },
 } as const satisfies Record<string, { labelKey: TranslationKey; icon: IconName }>;
@@ -26,7 +28,7 @@ export const settingsMenu = [
     { labelKey: "profile.language.title", icon: "globe", href: "/language" },
     { labelKey: "settings.browser.title", icon: "external-link", href: "/settings/browser" },
   ] },
-  { labelKey: "settings.group.workspace", items: (["notifications", "channels", "rules"] as const).map((section) => ({
+  { labelKey: "settings.group.workspace", items: (["apps", "schedules", "notifications", "channels", "rules"] as const).map((section) => ({
     ...settingsSections[section], href: `/settings/${section}` as const,
   })) },
   { labelKey: "settings.group.app", items: [
