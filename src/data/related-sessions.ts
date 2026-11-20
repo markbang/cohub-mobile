@@ -1,4 +1,4 @@
-import { readSentTurns, readSessionTurnOrigin, type CohubClient, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
+import { readSentTurns, readSessionTurnOrigin, readTurnInitiator, type CohubClient, type SessionInitiator, type SessionRecord, type SessionTurnRecord } from "@neta-art/cohub";
 
 export type RelatedSessionRef = { spaceId: string; sessionId: string; turnId: string };
 
@@ -11,6 +11,16 @@ export function sentFrom(turn: Pick<SessionTurnRecord, "sessionId" | "meta">): R
   const origin = readSessionTurnOrigin(turn.meta);
   if (!origin || origin.sessionId === turn.sessionId) return null;
   return { spaceId: origin.spaceId, sessionId: origin.sessionId, turnId: origin.turnId };
+}
+
+/**
+ * Who sent a user message that no calling Chat links to: another Agent or an automation, or `null` for a
+ * person. A background task's report is the Chat's own work and is not labelled, as on the web.
+ */
+export function sentBy(turn: Pick<SessionTurnRecord, "sessionId" | "meta">): Exclude<SessionInitiator, "human"> | null {
+  if (sentFrom(turn) || readSessionTurnOrigin(turn.meta)?.kind === "background_task") return null;
+  const initiator = readTurnInitiator(turn.meta);
+  return initiator === "human" ? null : initiator;
 }
 
 /** Entries recorded before `spaceId` was mirrored belong to the caller's Space. */

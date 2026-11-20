@@ -7,6 +7,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withDecay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { scheduleOnRN } from "react-native-worklets";
+import { askAboutMedia, hasMediaAskTarget, mediaAskContext } from "@/src/data/media-ask";
 import { clearImageViewerPayload, getImageViewerPayload, imageViewerFlightStart, imageViewerOriginUsable, imageViewerPanBounds, imageViewerReleasePage, imageViewerShouldDismiss, type ImageViewerRect } from "@/src/data/image-viewer";
 import { useTranslation } from "@/src/i18n";
 import { continuity, curves, motion, springs } from "@/src/motion";
@@ -57,9 +58,12 @@ export default function ImageViewerScreen() {
   const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
   const [payload] = useState(() => getImageViewerPayload());
+  // Fixed at open: only a viewer opened over a Chat's composer can hand an image to it.
+  const [askable] = useState(hasMediaAskTarget);
   const count = payload?.uris.length ?? 0;
   const [index, setIndex] = useState(() => Math.min(Math.max(payload?.index ?? 0, 0), Math.max(count - 1, 0)));
   const [zoomed, setZoomed] = useState(false);
+  const askContext = askable && payload ? mediaAskContext(payload.uris[index] ?? "") : null;
   const [sizes, setSizes] = useState<Record<number, Size>>({});
   // The system zoom-back only lands right from the page it opened on; elsewhere the viewer's own swipe dismisses.
   const zoomTransition = payload?.zoom === true && index === payload.index && Platform.OS === "ios" && Number.parseInt(String(Platform.Version), 10) >= 18;
@@ -525,6 +529,12 @@ export default function ImageViewerScreen() {
           <Text className="text-caption tabular-nums" style={{ color: VIEWER.foreground }}>{index + 1} / {count}</Text>
         </View>
       </Animated.View>
+      {askContext ? <Animated.View style={[{ position: "absolute", right: 0, bottom: insets.bottom + 16, left: 0, zIndex: 2, alignItems: "center" }, chromeStyle]} pointerEvents="box-none">
+        <Pressable accessibilityRole="button" accessibilityLabel={t("imageViewer.ask")} hitSlop={6} onPress={() => { if (askAboutMedia({ context: askContext, thumbnail: payload?.uris[index] ?? "" })) close(); }} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 18, borderRadius: 22, backgroundColor: VIEWER.control }}>
+          <AppIcon name="message-square" size={18} color={VIEWER.foreground} />
+          <Text className="text-subhead font-semibold" style={{ color: VIEWER.foreground }}>{t("imageViewer.ask")}</Text>
+        </Pressable>
+      </Animated.View> : null}
     </View>
   );
 }

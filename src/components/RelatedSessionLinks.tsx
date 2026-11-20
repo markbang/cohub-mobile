@@ -1,7 +1,7 @@
 import type { CohubClient, SessionRecord, SessionTurnRecord } from "@neta-art/cohub";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { sentFrom, sentSessions, type RelatedSessionRef, type RelatedSessionView, type SentSession } from "@/src/data/related-sessions";
+import { sentBy, sentFrom, sentSessions, type RelatedSessionRef, type RelatedSessionView, type SentSession } from "@/src/data/related-sessions";
 import { useRelatedSession } from "@/src/data/use-related-session";
 import { useTranslation } from "@/src/i18n";
 import { colorWithOpacity, useAppTheme } from "@/src/theme";
@@ -26,8 +26,11 @@ function Dot() {
 }
 
 export function SentFromLink({ turn, client, lookupSession, onOpen }: RelatedSessionLinkProps & { turn: Pick<SessionTurnRecord, "sessionId" | "meta"> }) {
+  const { t } = useTranslation();
   const ref = sentFrom(turn);
-  return ref ? <SentFromRow sourceRef={ref} client={client} lookupSession={lookupSession} onOpen={onOpen} /> : null;
+  if (ref) return <SentFromRow sourceRef={ref} client={client} lookupSession={lookupSession} onOpen={onOpen} />;
+  const by = sentBy(turn);
+  return by ? <View className="items-end px-4 mt-1"><Text numberOfLines={1} className="text-caption text-fg-faint">{t(by === "agent" ? "turn.sentBy.agent" : "turn.sentBy.automation")}</Text></View> : null;
 }
 
 function SentFromRow({ sourceRef, client, lookupSession, onOpen }: RelatedSessionLinkProps & { sourceRef: RelatedSessionRef }) {

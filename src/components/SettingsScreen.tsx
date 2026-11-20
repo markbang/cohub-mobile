@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { ConfirmSheet, NoticeSheet } from "@/src/components/SystemDialogs";
 import { BrowserSettings } from "@/src/components/BrowserSettings";
+import { AppsSection, SchedulesSection } from "@/src/components/LibrarySections";
 import { ChannelBindingSheet } from "@/src/components/ChannelBindingSheet";
 import { channelHealthState } from "@/src/data/channel-settings";
 import { useUserRules } from "@/src/data/use-user-rules";
@@ -97,6 +98,8 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 				{section === "channels" ? (
 					<ChannelsSection client={client} onNotice={setNotice} />
 				) : null}
+				{section === "apps" ? <AppsSection client={client} /> : null}
+				{section === "schedules" ? <SchedulesSection client={client} /> : null}
 				{section === "billing" ? (
 					<BillingSection client={client} onNotice={setNotice} />
 				) : null}

@@ -90,3 +90,34 @@ export function createStreamBatch<T>(publish: (value: T) => void) {
     cancel,
   };
 }
+
+export type ViewportReference = { kind: "media" | "file" | "board" | "app" | "port"; label: string };
+
+const lastSegment = (value: string | undefined) => value?.split(/[?#]/)[0]?.split("/").filter(Boolean).pop() ?? "";
+
+/**
+ * What the sender was looking at when they wrote: images, files, Boards, Apps, and ports, which clients send
+ * as one text block for the Agent. `null` for any other block, or one whose references cannot be read, so
+ * it shows as text.
+ */
+export function viewportReferences(block: ContentBlock): ViewportReference[] | null {
+  if (block.type !== "text" || block._meta?.attachmentKind !== "viewport" || !Array.isArray(block._meta.viewports)) return null;
+  const references = block._meta.viewports.flatMap((value: unknown): ViewportReference[] => {
+    if (!value || typeof value !== "object") return [];
+    const item = value as Record<string, unknown>;
+    const string = (key: string) => (typeof item[key] === "string" ? (item[key] as string).trim() : "");
+    switch (item.kind) {
+      case "media": return [{ kind: "media", label: string("title") || lastSegment(string("path") || string("url")) || "image" }];
+      case "file":
+      case "board": return string("path") ? [{ kind: item.kind, label: lastSegment(string("path")) }] : [];
+      case "app": return string("label") ? [{ kind: "app", label: string("label") }] : [];
+      case "port": return item.port !== undefined ? [{ kind: "port", label: `:${String(item.port)}` }] : [];
+      default: return [];
+    }
+  });
+  return references.length > 0 ? references : null;
+}
+
+export function viewportReferenceIcon(kind: ViewportReference["kind"]): "images" | "file-text" | "layers" | "box" | "globe" {
+  return kind === "media" ? "images" : kind === "file" ? "file-text" : kind === "board" ? "layers" : kind === "app" ? "box" : "globe";
+}

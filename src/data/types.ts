@@ -14,7 +14,7 @@ import type {
 import type { SessionForks } from "./session-fork-tree";
 import type { LatestSessionTurn, SessionPageBoundary } from "./session-status";
 import type { RunningSessionsSnapshot } from "./running-sessions";
-import type { SessionSourceFilter } from "./session-source";
+import type { SessionInitiatorFilter } from "./session-initiator";
 
 export type ConnectionState = "idle" | "connecting" | "reconnecting" | "open" | "closed" | "error";
 
@@ -112,7 +112,7 @@ export type AppState = {
   sessionStatusRequests: number;
   sessionStatusError: string | null;
   sessionViews: Record<string, SessionView>;
-  runningSessions: Partial<Record<SessionSourceFilter, RunningSessionsSnapshot>>;
+  runningSessions: Partial<Record<SessionInitiatorFilter, RunningSessionsSnapshot>>;
   realtimeError: string | null;
   usage: UsageSummary;
 };

@@ -8,7 +8,7 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { BOT_BUBBLE_INSET, botExchange, botMessageSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
@@ -18,7 +18,9 @@ import { compactionFromMessage } from "@/src/data/compaction";
 import { useAppSelector, useSessionStream } from "@/src/data/context";
 import { debugAlias, record as recordDebugEvent } from "@/src/data/debug-session";
 import { setImageViewerPayload, type ImageViewerOrigin, type ImageViewerRect } from "@/src/data/image-viewer";
-import { sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
+import { sentBy, sentFrom, sentSessions, type RelatedSessionRef } from "@/src/data/related-sessions";
+import { isSpeakableTurn } from "@/src/data/turn-speech";
+import { useTurnSpeechState } from "@/src/platform/turn-speech";
 import { useRelatedSessions } from "@/src/data/use-related-session";
 import { useSandboxImageUrls } from "@/src/data/use-message-images";
 import { useTranslation } from "@/src/i18n";
@@ -76,6 +78,9 @@ type Props = {
   lookupSession: (sessionId: string) => SessionRecord | null;
   onOpenRelated: (ref: RelatedSessionRef) => void;
   onCopy: (text: string) => Promise<void>;
+  /** Replies offer read aloud only once the viewer has a voice in this Space. */
+  speechEnabled: boolean;
+  onSpeak: (turnId: string) => void;
   onRetry: (message: MessageRecord) => void;
   onDiscard: (message: MessageRecord) => void;
   onFork: (message: MessageRecord) => void;
@@ -211,7 +216,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
 
   const ctx = useMemo<NodeContext>(() => ({ theme, t, width: rowWidth, fontScale, reducedMotion: props.reducedMotion, expanded }), [expanded, fontScale, props.reducedMotion, rowWidth, t, theme]);
   const cacheRef = useRef(new Map<string, Cached>());
-  const { flight, forkingTurnId, retryDisabled, arrivalBaseline } = props;
+  const { flight, forkingTurnId, retryDisabled, arrivalBaseline, speechEnabled } = props;
+  const speechState = useTurnSpeechState();
   const specs = useMemo(() => {
     const cache = cacheRef.current;
     const next = new Map<string, Cached>();
@@ -282,12 +288,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
             const copied = copiedKey === row.key;
             const forking = forkingTurnId !== null && forkingTurnId === turnId;
             const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images], () => {
+            const speech = speechEnabled && isSpeakableTurn(turn) ? (speechState.turnId === turnId ? speechState.phase : "idle") : null;
+            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, speech], () => {
               const compaction = compactionFromMessage(message);
               if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
               if (!hasRenderableMessage(message)) return { type: "empty", node: null };
               if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
-              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages }) };
+              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages, speech }) };
             });
           }
           break;
@@ -296,7 +303,8 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           // On a Bot's page every `say` comes from the Bot's working Chat; that link is not shown.
           const source = bot ? null : sentFrom(row.turn);
           const view = source ? relatedView(source.sessionId) : null;
-          build([source?.sessionId, view], () => ({ type: "related", node: source && view ? sentFromNode(ctx, source, view, displaySessionTitle) : null }));
+          const by = bot ? null : sentBy(row.turn);
+          build([source?.sessionId, view, by], () => ({ type: "related", node: source && view ? sentFromNode(ctx, source, view, displaySessionTitle) : by ? sentByNode(ctx, by) : null }));
           break;
         }
         case "sentTo": {
@@ -343,7 +351,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: rows.map((row) => row.key), rows: out };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages]);
+  }, [rows, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages, speechEnabled, speechState]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());
@@ -405,7 +413,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return node ? { x: offset.x + node.x, y: offset.y + node.y - lift, width: node.width, height: node.height } : null;
   }, []);
 
-  const { onCopy, onRetry, onDiscard, onFork, onOpenRelated, onOpenBot, onLoadOlder, onLoadNewer } = props;
+  const { onCopy, onRetry, onDiscard, onFork, onSpeak, onOpenRelated, onOpenBot, onLoadOlder, onLoadNewer } = props;
   const handleAction = useCallback(({ nativeEvent }: { nativeEvent: { key: string | null; action: string; nodeId: string | null; payload: Record<string, unknown> | null } }) => {
     const { key, action, nodeId, payload } = nativeEvent;
     const row = key ? rowsRef.current.find((item) => item.key === key) : undefined;
@@ -429,6 +437,9 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         return;
       case "fork":
         if (message) onFork(message);
+        return;
+      case "speak":
+        if (typeof message?.meta?.turnId === "string") onSpeak(message.meta.turnId);
         return;
       case "retry":
         if (message) onRetry(message);
@@ -474,7 +485,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
         }
         return;
     }
-  }, [measureInWindow, onCopy, onDiscard, onFork, onLoadNewer, onLoadOlder, onOpenBot, onOpenRelated, onRetry, openLink, router, sessionId]);
+  }, [measureInWindow, onCopy, onDiscard, onFork, onSpeak, onLoadNewer, onLoadOlder, onOpenBot, onOpenRelated, onRetry, openLink, router, sessionId]);
 
   useImperativeHandle(ref, () => ({
     scrollToEnd: (animated) => { void nativeRef.current?.scrollToEnd(animated); },

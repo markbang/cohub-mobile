@@ -6,7 +6,7 @@ import { DETAIL_SEPARATOR, enrichedMarkdownStyle, estimateTextWidth, fitReplyDet
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
-import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
+import { answerBlocks, thinkingBlocks, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
 import { formatMessageClock, formatThreadTime } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { imageThumbnailUrl } from "@/src/data/media";
@@ -14,6 +14,7 @@ import { messageMarkdownImages } from "@/src/data/message-links";
 import type { RelatedSessionView } from "@/src/data/related-sessions";
 import { isFailedSend } from "@/src/data/session-history";
 import { toolCallPreview } from "@/src/data/tool-call";
+import { speechIcon, speechLabelKey, type TurnSpeechPhase } from "@/src/data/turn-speech";
 import type { StreamView } from "@/src/data/types";
 import { BRAND, MASCOT_PATHS } from "@/src/design/brand";
 import type { Translate } from "@/src/i18n";
@@ -246,6 +247,18 @@ export function replyImagePaths(message: MessageRecord): string[] {
 }
 
 /** `MessageContent`: the blocks of one message or step list, in order. */
+/** What the sender was looking at, one quiet line each, in place of the reference text the Agent reads. */
+function viewportReferencesNode(references: readonly ViewportReference[], tint: string): TimelineNode {
+  const muted = colorWithOpacity(tint, 0.72);
+  return {
+    type: "view", style: { gap: 2 },
+    children: references.map((reference) => ({
+      type: "view", style: { flexDirection: "row", alignItems: "center", gap: 6 },
+      children: [icon(viewportReferenceIcon(reference.kind), 13, muted), text(reference.label, textStyle("caption", muted), { numberOfLines: 1, style: { flexShrink: 1 } })],
+    })),
+  };
+}
+
 export function contentNodes(ctx: NodeContext, scope: string, content: ContentBlock[] | null | undefined, options: { width: number; color?: string; linkColor?: string; onUser?: boolean; onSurface?: boolean; active?: boolean; streamingText?: string | null; sandboxImages?: SandboxImages }): TimelineNode[] {
   const blocks = content ?? [];
   const results = new Map<string, Extract<ContentBlock, { type: "tool_result" }>>();
@@ -257,6 +270,11 @@ export function contentNodes(ctx: NodeContext, scope: string, content: ContentBl
   const nodes: TimelineNode[] = [];
   blocks.forEach((block, index) => {
     if (block.type === "tool_result") return;
+    const references = viewportReferences(block);
+    if (references) {
+      nodes.push(viewportReferencesNode(references, tint));
+      return;
+    }
     if (block.type === "text") {
       if (!block.text.trim()) return;
       // Only the trailing text block is still being written; it gets the paced prefix.
@@ -332,13 +350,14 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
   };
 }
 
-function replyMeta(ctx: NodeContext, key: string, message: MessageRecord, options: { copyText: string; copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean }): TimelineNode | null {
+function replyMeta(ctx: NodeContext, key: string, message: MessageRecord, options: { copyText: string; copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean; speech: TurnSpeechPhase | null }): TimelineNode | null {
   const { theme, t } = ctx;
   const clock = formatMessageClock(message.createdAt);
   const { identity, parts } = replyDetailParts(message, t);
   const details = [identity, ...parts].filter(Boolean).join(DETAIL_SEPARATOR);
   const canCopy = Boolean(options.copyText);
-  const actions = Number(canCopy) + Number(options.canFork);
+  const speech = options.speech ?? null;
+  const actions = Number(canCopy) + Number(options.canFork) + Number(speech !== null);
   if (!actions && !details && !clock) return null;
   const fontSize = typography.micro.fontSize * ctx.fontScale;
   const detailsWidth = getReplyContentWidth(ctx.width) - (actions ? actions * 32 - 6 : 0) - (clock ? 8 + estimateTextWidth(clock, fontSize) : 0);
@@ -355,6 +374,7 @@ function replyMeta(ctx: NodeContext, key: string, message: MessageRecord, option
     children: [
       ...(canCopy ? [button("copy", options.copied ? t("chat.copied") : t("chat.copy"), icon(options.copied ? "check" : "copy", 14, options.copied ? theme.colors.success : faint))] : []),
       ...(options.canFork ? [button("fork", t("chat.fork"), options.forking ? loader(ctx, faint) : icon("git-fork", 14, faint), options.forkDisabled)] : []),
+      ...(speech !== null ? [button("speak", t(speechLabelKey(speech)), speech === "loading" ? loader(ctx, faint) : icon(speechIcon(speech), 14, speech === "error" ? theme.colors.warning : speech === "idle" ? faint : theme.colors.accent))] : []),
       fitted === details
         ? text(details, textStyle("micro", faint), { numberOfLines: 1, style: detailsStyle })
         : pressable({ action: "toggle", payload: { id: detailsId }, accessibilityLabel: details, accessibilityState: { expanded }, pressedOpacity: 0.6, style: { ...detailsStyle, alignSelf: "stretch", justifyContent: "center" }, children: [text(expanded ? details : fitted, textStyle("micro", faint), { numberOfLines: expanded ? undefined : 1 })] }),
@@ -363,7 +383,7 @@ function replyMeta(ctx: NodeContext, key: string, message: MessageRecord, option
   };
 }
 
-export function assistantMessageNode(ctx: NodeContext, key: string, message: MessageRecord, options: { copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean; sandboxImages: SandboxImages }): TimelineNode {
+export function assistantMessageNode(ctx: NodeContext, key: string, message: MessageRecord, options: { copied: boolean; canFork: boolean; forkDisabled: boolean; forking: boolean; sandboxImages: SandboxImages; speech: TurnSpeechPhase | null }): TimelineNode {
   const { theme } = ctx;
   const contentWidth = getReplyContentWidth(ctx.width);
   const tint = theme.colors.assistantBubbleText;
@@ -619,6 +639,15 @@ export function sentFromNode(ctx: NodeContext, ref: { spaceId: string; sessionId
       style: { maxWidth: "86%", minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 },
       children: [dot(ctx), text(label, textStyle("caption", unavailable ? theme.colors.textFaint : theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } }), ...(unavailable ? [] : [icon("chevron-right", 14, theme.colors.textFaint)])],
     })],
+  };
+}
+
+/** A user message another Agent or an automation sent, where no calling Chat links to it. */
+export function sentByNode(ctx: NodeContext, by: "agent" | "automation"): TimelineNode {
+  const { theme, t } = ctx;
+  return {
+    type: "view", style: { alignItems: "flex-end", paddingHorizontal: 16, marginTop: 4 },
+    children: [text(t(by === "agent" ? "turn.sentBy.agent" : "turn.sentBy.automation"), textStyle("caption", theme.colors.textFaint), { numberOfLines: 1 })],
   };
 }
 

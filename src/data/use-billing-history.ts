@@ -5,7 +5,7 @@ import { useAppActions } from "@/src/data/context";
 import { useTranslation } from "@/src/i18n";
 import { useScreenQuery } from "./query";
 
-type HistoryData = { kind: "history"; list: BillingBalanceActivityList } | { kind: "subscriptions"; list: BillingSubscriptionHistoryList };
+type HistoryData = ({ kind: "history"; list: BillingBalanceActivityList } | { kind: "subscriptions"; list: BillingSubscriptionHistoryList }) & { page: number };
 export type SubscriptionCancellation = { subscription: BillingSubscriptionHistoryStatus; kind: "checkout" | "renewal" };
 
 export function useBillingHistory(kind: HistoryData["kind"]) {
@@ -13,12 +13,15 @@ export function useBillingHistory(kind: HistoryData["kind"]) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const queryKey = ["billing", kind, page];
+  // Balance activity pages by cursor; entry `n` opens page `n + 1`, so going back reuses a known cursor.
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const cursor = cursors[page - 1] ?? null;
+  const queryKey = ["billing", kind, page, cursor];
   const query = useScreenQuery({
     queryKey,
     queryFn: async (): Promise<HistoryData> => kind === "history"
-      ? { kind, list: (await client!.billing.getBalanceActivities({ page, limit: 20 })).activities }
-      : { kind, list: (await client!.billing.getSubscriptions({ page, limit: 20 })).subscriptions },
+      ? { kind, page, list: (await client!.billing.getBalanceActivities({ cursor, limit: 20 })).activities }
+      : { kind, page, list: (await client!.billing.getSubscriptions({ page, limit: 20 })).subscriptions },
     enabled: Boolean(client),
     placeholderData: keepPreviousData,
   });
@@ -45,5 +48,16 @@ export function useBillingHistory(kind: HistoryData["kind"]) {
     }
   };
   const load = async () => { setSaveError(null); await query.refetch(); };
-  return { data: query.data ?? null, page, setPage, loading: Boolean(client) && query.isFetching && (query.isPending || query.isPlaceholderData), saving, error: saveError ?? loadError, load, cancel };
+  const data = query.data?.page === page ? query.data : null;
+  const nextCursor = data?.kind === "history" ? data.list.nextCursor : null;
+  const nextPage = data?.kind === "subscriptions" && data.list.pagination.hasMore ? data.list.pagination.nextPage : null;
+  const hasNext = nextCursor !== null || nextPage !== null;
+  const next = () => {
+    if (nextCursor !== null) {
+      setCursors((current) => [...current.slice(0, page), nextCursor]);
+      setPage(page + 1);
+    } else if (nextPage !== null) setPage(nextPage);
+  };
+  const previous = () => setPage((current) => Math.max(1, current - 1));
+  return { data, page, hasNext, next, previous, loading: Boolean(client) && query.isFetching && (query.isPending || query.isPlaceholderData), saving, error: saveError ?? loadError, load, cancel };
 }

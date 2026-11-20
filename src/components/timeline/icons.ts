@@ -2,6 +2,7 @@ import type { LucideIconData } from "lucide-react-native";
 import { __iconData as alert } from "lucide-react-native/icons/circle-alert";
 import { __iconData as archive } from "lucide-react-native/icons/archive";
 import { __iconData as bookOpen } from "lucide-react-native/icons/book-open";
+import { __iconData as box } from "lucide-react-native/icons/box";
 import { __iconData as brain } from "lucide-react-native/icons/brain";
 import { __iconData as check } from "lucide-react-native/icons/check";
 import { __iconData as checkCheck } from "lucide-react-native/icons/check-check";
@@ -16,19 +17,23 @@ import { __iconData as folder } from "lucide-react-native/icons/folder";
 import { __iconData as gitFork } from "lucide-react-native/icons/git-fork";
 import { __iconData as globe } from "lucide-react-native/icons/globe";
 import { __iconData as images } from "lucide-react-native/icons/images";
+import { __iconData as layers } from "lucide-react-native/icons/layers";
+import { __iconData as pause } from "lucide-react-native/icons/pause";
+import { __iconData as play } from "lucide-react-native/icons/play";
 import { __iconData as refresh } from "lucide-react-native/icons/refresh-cw";
 import { __iconData as search } from "lucide-react-native/icons/search";
 import { __iconData as squarePen } from "lucide-react-native/icons/square-pen";
 // SF Symbols' terminal is boxed, so Android draws Lucide's boxed one rather than the bare prompt.
 import { __iconData as terminal } from "lucide-react-native/icons/square-terminal";
 import { __iconData as trash } from "lucide-react-native/icons/trash";
+import { __iconData as volume } from "lucide-react-native/icons/volume-2";
 import type { IconName } from "@/src/icons";
 
 /** The glyphs the native timeline draws, by the app's icon names. */
 const ICONS = {
-  alert, archive, "book-open": bookOpen, brain, check, "check-check": checkCheck, "chevron-down": chevronDown,
+  alert, archive, "book-open": bookOpen, box, brain, check, "check-check": checkCheck, "chevron-down": chevronDown,
   "chevron-right": chevronRight, "chevrons-down": chevronsDown, "chevrons-up": chevronsUp, code, copy,
-  "file-text": fileText, folder, "git-fork": gitFork, globe, images, refresh, search, "square-pen": squarePen, terminal, trash,
+  "file-text": fileText, folder, "git-fork": gitFork, globe, images, layers, pause, play, refresh, search, "square-pen": squarePen, terminal, trash, volume,
 } satisfies Partial<Record<IconName, LucideIconData>>;
 
 export type TimelineIconName = keyof typeof ICONS;

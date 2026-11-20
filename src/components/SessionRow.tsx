@@ -1,4 +1,4 @@
-import type { SessionListFork, UserSessionListItem } from "@neta-art/cohub";
+import { SESSION_SOURCE_NAMES, type SessionListFork, type UserSessionListItem } from "@neta-art/cohub";
 import { useEffect, useReducer, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { AppIcon, Avatar } from "@/src/ui";
@@ -8,6 +8,7 @@ import { useRelativeTime } from "@/src/data/use-relative-time";
 import type { SessionTreePosition } from "@/src/data/session-fork-tree";
 import { sessionListStatus } from "@/src/data/session-status";
 import { sessionActivity } from "@/src/data/session-activity";
+import { sessionAttribution } from "@/src/data/session-initiator";
 import { shallowEqual, useAppActions, useAppSelector } from "@/src/data/context";
 import { isSessionUnread } from "@/src/data/chat-read-state";
 import { useToast } from "@/src/components/Toast";
@@ -107,7 +108,9 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
   const preview = previewText(session.latestMessageText, 84) || previewText(turnText, 84);
   const hasMessages = Boolean(session.lastMessageId);
   const detail = activity?.text || preview || (hasMessages ? "" : t("session.noMessages"));
-  const subtitle = showSpace && !branch ? [spaceName, detail].filter(Boolean).join(" · ") : detail || undefined;
+  const attribution = sessionAttribution(session);
+  const attributionLabel = attribution === "agent" ? t("chats.source.agent") : attribution === "other" ? t("session.source.other") : attribution ? SESSION_SOURCE_NAMES[attribution] : null;
+  const subtitle = [showSpace && !branch ? spaceName : null, attributionLabel, detail].filter(Boolean).join(" · ") || undefined;
   const subtitleNode = typeof subtitle === "string" && activity?.tone === "danger"
     ? <Text numberOfLines={1} className="text-subhead text-danger">{subtitle}</Text>
     : subtitle;
@@ -146,7 +149,7 @@ export function SessionRow({ session, onPress, onPressIn, onLongPress, labels = 
     group={!tree ? "single" : tree.depth === 0 ? (tree.lastInGroup ? "single" : "first") : tree.lastInGroup ? "last" : "middle"}
     unread={unread}
     selected={selected}
-    accessibilityLabel={[t("ui.openNamed", { name: title }), unread ? t("session.unread") : null, statusLabel, forkLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
+    accessibilityLabel={[t("ui.openNamed", { name: title }), unread ? t("session.unread") : null, statusLabel, forkLabel, attributionLabel, ...labels.map((label) => label.name)].filter(Boolean).join(", ")}
     accessibilityActions={[{ name: "toggleRead", label: readAction.title }, ...(canToggleArchive ? [{ name: "toggleArchive", label: archiveAction.title }] : [])]}
     onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === "toggleRead") toggleRead(); else if (event.nativeEvent.actionName === "toggleArchive") toggleArchive(); }}
     onPress={() => { traceAction("session_row", { session: debugAlias("session", session.id), status }); onPress(); }}

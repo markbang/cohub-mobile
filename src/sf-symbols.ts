@@ -97,6 +97,8 @@ export const SF_SYMBOLS: Record<IconName, SFSymbol> = {
   link: "link",
   megaphone: "megaphone",
   play: "play",
+  pause: "pause",
+  volume: "speaker.wave.2",
   history: "arrow.counterclockwise",
   wallet: "creditcard",
 };

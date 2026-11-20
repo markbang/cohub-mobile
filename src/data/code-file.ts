@@ -28,8 +28,8 @@ export function classifySaveConflict(
   return "conflict";
 }
 
+/** Only the write precondition; a 409 also answers `sandbox_offline` when the Space's own machine is away. */
 export function isFileConflictError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
-  const candidate = error as { status?: unknown; code?: unknown };
-  return candidate.status === 409 || candidate.code === "file_conflict";
+  return (error as { code?: unknown }).code === "file_conflict";
 }

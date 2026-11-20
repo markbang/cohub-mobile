@@ -56,13 +56,12 @@ export function useSpaceWallet(spaceId: string) {
     intervalMs: 60_000,
     id: (item) => item.id,
     fetchPage: async (cursor) => {
-      const page = cursor ? Number(cursor) : 1;
-      const result = await client!.space(spaceId).wallet.activities(page);
-      return { items: result.items, cursor: result.hasMore ? String(page + 1) : null };
+      const result = await client!.space(spaceId).wallet.activities(cursor);
+      return { items: result.items, cursor: result.nextCursor };
     },
     // Later pages stay loaded under a refreshed first page.
     mergeHead: (loaded, head) => loaded.items.length > head.items.length
-      ? { items: appendWalletActivity(head.items, { items: loaded.items, hasMore: loaded.cursor !== null }), cursor: loaded.cursor }
+      ? { items: appendWalletActivity(head.items, { items: loaded.items, nextCursor: loaded.cursor }), cursor: loaded.cursor }
       : head,
   });
   const activity = activityList.items ? { items: activityList.items, hasMore: activityList.hasMore } : null;

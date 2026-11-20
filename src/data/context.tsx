@@ -14,7 +14,9 @@ import type {
   SpaceUsageSummary,
   UnauthorizedContext,
   UserSessionListItem,
+  ViewportContext,
 } from "@neta-art/cohub";
+import { buildViewportContentBlock } from "@neta-art/cohub";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useStore } from "zustand";
@@ -31,7 +33,7 @@ import { reconcileSessionHead } from "@/src/data/session-list-sync";
 import { emptyRunningSessions, loadRunningSessions, parseCachedRunningSessions, reconcileRunningSessions, runningSessionsForCache, type CachedRunningSessions } from "@/src/data/running-sessions";
 import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realtime";
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
-import { sessionSourceFilterKeys, sessionSourceFilterOf, type SessionSourceFilter } from "@/src/data/session-source";
+import { sessionInitiatorFilterKeys, sessionInitiatorOf, type SessionInitiatorFilter } from "@/src/data/session-initiator";
 import { hydrateBotCache } from "@/src/data/bot-cache";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
@@ -180,14 +182,17 @@ function releaseSettledFailures(queue: SendQueue, state: AppState) {
 }
 
 /** The local bubble of a send, drawn the moment the user sends; the accepted Turn replaces it by `clientMessageId`. */
-function optimisticSend(input: { sessionId: string; clientMessageId: string; text: string; attachments: AttachmentDraft[]; model: ChatModelSelection | null; harness: HarnessKind | null; authorUuid: string; turnSequence: number; meta?: Record<string, unknown> }): MessageRecord {
+function optimisticSend(input: { sessionId: string; clientMessageId: string; text: string; attachments: AttachmentDraft[]; viewports?: ViewportContext[]; model: ChatModelSelection | null; harness: HarnessKind | null; authorUuid: string; turnSequence: number; meta?: Record<string, unknown> }): MessageRecord {
   const { text, attachments, model, harness } = input;
+  const viewports = input.viewports?.length ? input.viewports : undefined;
+  const viewportBlock = viewports ? buildViewportContentBlock(viewports) : null;
   return {
     id: `local-${input.clientMessageId}`,
     sessionId: input.sessionId,
     role: "user",
     content: [
       ...(text ? [mentionTextBlock(text, text)] : []),
+      ...(viewportBlock ? [viewportBlock] : []),
       ...attachments.filter((item) => item.mimeType.startsWith("image/")).map((item) => ({
         type: "image" as const,
         source: { type: "url" as const, url: item.uri },
@@ -207,7 +212,7 @@ function optimisticSend(input: { sessionId: string; clientMessageId: string; tex
       ...input.meta,
       clientMessageId: input.clientMessageId,
       turnSequence: input.turnSequence,
-      sendDraft: { text, attachments, model, harness } satisfies SendDraft,
+      sendDraft: { text, attachments, model, harness, ...(viewports ? { viewports } : {}) } satisfies SendDraft,
       ...(harness ? { harness } : {}),
       ...(model?.thinkingLevel ? { requestedThinkingLevel: model.thinkingLevel } : {}),
     },
@@ -230,6 +235,7 @@ async function buildPromptContent(
   text: string,
   attachments: AttachmentDraft[],
   resolveUpload: (attachment: AttachmentDraft) => Promise<UploadedAttachment>,
+  viewports?: ViewportContext[],
 ) {
   let promptText = text;
   const content: ContentBlock[] = [];
@@ -256,6 +262,8 @@ async function buildPromptContent(
     }
   });
   if (promptText) content.push(mentionTextBlock(promptText, text));
+  const viewportBlock = viewports?.length ? buildViewportContentBlock(viewports) : null;
+  if (viewportBlock) content.push(viewportBlock);
   content.push(...imageBlocks);
   return content;
 }
@@ -328,10 +336,10 @@ type Action =
   | { type: "home-success"; spaces: SpaceRecord[]; sessions: UserSessionListItem[]; sessionsHasMore?: boolean; sessionsCursor?: string | null; sessionsPageBoundary: SessionPageBoundary | null; spacesError?: string; sessionsError?: string; silent?: boolean; requestStartedAt: number; forks: SessionListFork[] }
   | { type: "sessions-head-success"; sessions: UserSessionListItem[]; forks: SessionListFork[]; hasMore: boolean; cursor: string | null; boundary: SessionPageBoundary | null; requestStartedAt: number }
   | { type: "sessions-head-error"; message: string }
-  | { type: "running-start"; source: SessionSourceFilter }
-  | { type: "running-success"; source: SessionSourceFilter; sessions: UserSessionListItem[]; changedSessionIds: string[]; complete?: boolean }
-  | { type: "running-end"; source: SessionSourceFilter; error?: string }
-  | { type: "running-cached"; source: SessionSourceFilter; cache: CachedRunningSessions }
+  | { type: "running-start"; source: SessionInitiatorFilter }
+  | { type: "running-success"; source: SessionInitiatorFilter; sessions: UserSessionListItem[]; changedSessionIds: string[]; complete?: boolean }
+  | { type: "running-end"; source: SessionInitiatorFilter; error?: string }
+  | { type: "running-cached"; source: SessionInitiatorFilter; cache: CachedRunningSessions }
   | { type: "realtime-error"; message: string | null }
   | { type: "session-realtime-turn"; sessionId: string; turn: Partial<LatestSessionTurn> }
   | { type: "running-session-found"; session: UserSessionListItem }
@@ -480,10 +488,10 @@ function placeRunningSession(state: AppState, sessionId: string, found?: UserSes
     ?? buckets.flatMap((query) => query?.sessions ?? []).find((item) => item.id === sessionId);
   if (!session) return state.runningSessions;
   const running = sessionListStatus(session, state.sessionLatestTurns[sessionId], state.sessionTurnStatuses) === "running";
-  const source = sessionSourceFilterOf(session.source);
+  const source = sessionInitiatorOf(session);
   const runningSessions = { ...state.runningSessions };
   let changed = false;
-  for (const filter of ["all", "web", "other"] as const) {
+  for (const filter of ["all", "human", "agent", "automation"] as const) {
     const current = runningSessions[filter];
     // Source buckets exist only after their own scan; a live row must not imply coverage.
     if (!current && filter !== "all") continue;
@@ -586,7 +594,7 @@ function reducer(state: AppState, action: Action): AppState {
       // A live scan always wins; the cache only fills a bucket that has not painted rows yet.
       if (current.loaded || current.loading || current.sessions.length > 0) return state;
       const sessions = reconcileRunningSessions(current.sessions, action.cache.sessions);
-      return { ...state, runningSessions: { ...state.runningSessions, [action.source]: { ...current, sessions: sortByRecent(action.source === "all" ? sessions : sessions.filter((session) => sessionSourceFilterOf(session.source) === action.source)), loaded: true } } };
+      return { ...state, runningSessions: { ...state.runningSessions, [action.source]: { ...current, sessions: sortByRecent(action.source === "all" ? sessions : sessions.filter((session) => sessionInitiatorOf(session) === action.source)), loaded: true } } };
     }
     case "realtime-error":
       recordDebugEvent("realtime.error", { message: action.message });
@@ -606,7 +614,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "session-realtime-meta": {
       const patch = (session: UserSessionListItem) => session.id === action.sessionId ? { ...session, ...preferNewerSession(session, { ...session, ...action.session }) } : session;
       const runningSessions = { ...state.runningSessions };
-      for (const source of ["all", "web", "other"] as const) {
+      for (const source of ["all", "human", "agent", "automation"] as const) {
         const current = runningSessions[source];
         if (current) runningSessions[source] = { ...current, sessions: sortByRecent(current.sessions.map(patch).filter(isListedSession)) };
       }
@@ -1002,11 +1010,11 @@ export type AppActions = {
   userKey: string;
   spaceRealtime: SpaceRealtime | null;
   refreshChats: () => Promise<void>;
-  discoverRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
+  discoverRunningSessions: (source?: SessionInitiatorFilter) => Promise<void>;
   /** Restarts account-wide Running discovery for the filter that now shows it. */
-  requestRunningSessions: (source?: SessionSourceFilter) => Promise<void>;
+  requestRunningSessions: (source?: SessionInitiatorFilter) => Promise<void>;
   /** Stops a scan the filter no longer shows, after a short grace for back-to-back requests. */
-  releaseRunningSessions: (source?: SessionSourceFilter) => void;
+  releaseRunningSessions: (source?: SessionInitiatorFilter) => void;
   installationId: string | null;
   getAccessToken: (options?: { forceRefresh?: boolean }) => Promise<string | null>;
   refreshHome: (options?: { silent?: boolean }) => Promise<void>;
@@ -1023,7 +1031,7 @@ export type AppActions = {
   /** Resolves true when the newest page replaced the loaded turns instead of joining them. */
   loadLatestTurns: (sessionId: string) => Promise<boolean>;
   /** Inserts the bubble before returning; resolves once the server accepts the send. */
-  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void }) => Promise<void>;
+  sendMessage: (sessionId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void; /** Compact the Chat's context before this Turn runs, so a cold prompt cache does not resend it whole. */ compactFirst?: boolean; /** Images and views the message asks about. */ viewports?: ViewportContext[] }) => Promise<void>;
   /** `onOptimistic` receives the pending bubble synchronously; it has no Chat until the server answers. */
   sendNewMessage: (spaceId: string, text: string, attachments?: AttachmentDraft[], options?: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; onOptimistic?: (message: MessageRecord) => void }) => Promise<NewChatMessageResult>;
   discardFailedSend: (sessionId: string, messageId: string) => void;
@@ -1125,9 +1133,9 @@ export function AppProvider({
   const statusGenerationRef = useRef(0);
   const homeRefreshRequestRef = useRef<Promise<void> | null>(null);
   const chatsRefreshRequestRef = useRef<Promise<void> | null>(null);
-  const runningDiscoveryRequests = useRef(new Map<SessionSourceFilter, Promise<void>>());
-  const runningDiscoveryControllers = useRef(new Map<SessionSourceFilter, AbortController>());
-  const runningDiscoveryRequestedAt = useRef(new Map<SessionSourceFilter, number>());
+  const runningDiscoveryRequests = useRef(new Map<SessionInitiatorFilter, Promise<void>>());
+  const runningDiscoveryControllers = useRef(new Map<SessionInitiatorFilter, AbortController>());
+  const runningDiscoveryRequestedAt = useRef(new Map<SessionInitiatorFilter, number>());
   const sessionEventRevisions = useRef(new Map<string, number>());
   const sessionEventRevision = useRef(0);
   const statusSessionsRef = useRef(new Map<string, StatusSession>());
@@ -1386,7 +1394,7 @@ export function AppProvider({
     return request;
   }, [client, dispatch, refreshSessionStatuses, userKey]);
 
-  const cancelRunningDiscovery = useCallback((source?: SessionSourceFilter) => {
+  const cancelRunningDiscovery = useCallback((source?: SessionInitiatorFilter) => {
     const sources = source ? [source] : [...runningDiscoveryControllers.current.keys()];
     for (const key of sources) {
       const controller = runningDiscoveryControllers.current.get(key);
@@ -1400,7 +1408,7 @@ export function AppProvider({
     }
   }, [dispatch]);
 
-  const discoverRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
+  const discoverRunningSessions = useCallback((source: SessionInitiatorFilter = "all"): Promise<void> => {
     const pending = runningDiscoveryRequests.current.get(source);
     if (pending) return pending;
     if (!client || !isAppActive()) return Promise.resolve();
@@ -1412,7 +1420,7 @@ export function AppProvider({
     const request = (async () => {
       try {
         const sessions = await loadRunningSessions(client, {
-          source: sessionSourceFilterKeys(source) ?? undefined,
+          initiator: sessionInitiatorFilterKeys(source) ?? undefined,
           signal: controller.signal,
           onPage: (page) => {
             if (generation !== statusGenerationRef.current || controller.signal.aborted) return;
@@ -1451,12 +1459,12 @@ export function AppProvider({
   }, [client, dispatch, userKey]);
 
   /** The Chats screen asks for Running data only while its filter shows; each request restarts the check. */
-  const requestRunningSessions = useCallback((source: SessionSourceFilter = "all"): Promise<void> => {
+  const requestRunningSessions = useCallback((source: SessionInitiatorFilter = "all"): Promise<void> => {
     runningDiscoveryRequestedAt.current.set(source, Date.now());
     return discoverRunningSessions(source);
   }, [discoverRunningSessions]);
 
-  const releaseRunningSessions = useCallback((source: SessionSourceFilter = "all") => {
+  const releaseRunningSessions = useCallback((source: SessionInitiatorFilter = "all") => {
     const requestedAt = runningDiscoveryRequestedAt.current.get(source);
     runningDiscoveryRequestedAt.current.delete(source);
     if (!requestedAt || Date.now() - requestedAt < RUNNING_RELEASE_GRACE_MS) return;
@@ -1506,7 +1514,7 @@ export function AppProvider({
     const activeResyncCoordinator = resyncCoordinatorRef.current;
     const activeSessionLifecycle = sessionLifecycleRef.current;
     const hydrateRunningCache = async () => {
-      for (const source of ["all", "web", "other"] as const) {
+      for (const source of ["all", "human", "agent", "automation"] as const) {
         try {
           const row = await loadRunningSessionCache(userKey, source);
           const cache = row ? parseCachedRunningSessions(row.payload, row.scannedAt) : null;
@@ -2311,7 +2319,7 @@ export function AppProvider({
       sessionId: string,
       rawText: string,
       attachments: AttachmentDraft[] = [],
-      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void } = {},
+      options: { model?: ChatModelSelection | null; harness?: HarnessKind; execution?: LocalExecution; note?: boolean; relay?: (content: ContentBlock[]) => Promise<unknown>; retryOf?: MessageRecord; onOptimistic?: (message: MessageRecord) => void; compactFirst?: boolean; viewports?: ViewportContext[] } = {},
     ) => {
       if (!client) throw new Error(translate("data.stillConnecting"));
       const text = rawText.trim();
@@ -2327,7 +2335,7 @@ export function AppProvider({
       lastSendOrderRef.current = Math.max(lastSendOrderRef.current, order);
       const turnSequence = nextTurnSequence(view?.turns ?? [], messages);
       const optimistic = optimisticSend({
-        sessionId, clientMessageId, text, attachments, model: options.model ?? null, harness: options.harness ?? null, authorUuid: userUuid, turnSequence,
+        sessionId, clientMessageId, text, attachments, viewports: options.viewports, model: options.model ?? null, harness: options.harness ?? null, authorUuid: userUuid, turnSequence,
         // Behind another unaccepted send, this one will find a Turn running.
         meta: { awaitingSubmit: true, sendOrder: order, queuedFollowup: shouldQueueFollowup(view?.turns ?? [], view?.stream) || messages.some((message) => isLocalSend(message) && message.id !== retried?.id), ...(retried?.meta?.relayed === true ? { relayed: true } : {}) },
       });
@@ -2358,7 +2366,7 @@ export function AppProvider({
           void saveMessages(userKey, sessionId, [submitted]).catch(() => undefined);
           uploadTarget = { spaceId, sessionId };
           const target = uploadTarget;
-          const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, target, attachment));
+          const content = await buildPromptContent(text, attachments, (attachment) => claimAttachmentUpload(attachmentUploads, target, attachment), options.viewports);
           const withContent = { ...(row() ?? submitted), content, text: text || submitted.text };
           dispatch({ type: "message-optimistic", sessionId, message: withContent });
           void saveMessages(userKey, sessionId, [withContent]).catch(() => undefined);
@@ -2375,8 +2383,7 @@ export function AppProvider({
             mode: options.note ? "note" : "agent",
             sessionId,
             content,
-            // First-party app sessions belong to the Web App source bucket; request provenance still reports via=mobile.
-            source: "web",
+            source: "mobile",
             clientMessageId,
             accessMode: "full_access",
             intent: "followup",
@@ -2385,6 +2392,7 @@ export function AppProvider({
             ...(options.harness ? { harness: options.harness } : {}),
             ...(options.model?.thinkingLevel ? { thinkingLevel: options.model.thinkingLevel } : {}),
             ...options.execution,
+            ...(options.compactFirst && !options.note ? { compactFirst: true } : {}),
           });
           const upsert = (response: Awaited<typeof request>) => {
             if (response.mode !== "immediate") throw new Error(translate("data.messageNotAccepted"));
@@ -2460,7 +2468,7 @@ export function AppProvider({
       const result = await client.space(spaceId).prompt({
         mode: "agent",
         content,
-        source: "web",
+        source: "mobile",
         clientMessageId,
         accessMode: "full_access",
         intent: "followup",

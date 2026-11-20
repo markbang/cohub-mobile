@@ -18,7 +18,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
   const { t } = useTranslation();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { data, page, setPage, loading, saving, error, load, cancel } = useBillingHistory(kind);
+  const { data, page, hasNext, next, previous, loading, saving, error, load, cancel } = useBillingHistory(kind);
   const [candidate, setCandidate] = useState<SubscriptionCancellation | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
@@ -32,7 +32,7 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
         <Text accessibilityRole="alert" className="text-body text-danger">{error || paymentError}</Text>
         <PrimaryButton label={t("common.retry")} icon="refresh" disabled={busy} onPress={() => { setPaymentError(null); void load(); }} />
       </View> : null}
-      {!loading && data?.list.page === page ? <>
+      {!loading && data ? <>
         {data.kind === "history" ? data.list.items.length ? <SettingsGroup>{data.list.items.map((item, index) => <SettingsRow key={item.id} icon={item.amountUsd < 0 ? "arrow-up" : "arrow-down"} title={item.title} value={[new Date(item.createdAt).toLocaleString(), item.description, item.status && item.status !== "covered" ? billingStatusLabel(item.status) : null].filter(Boolean).join(" · ")} last={index === data.list.items.length - 1}>
           <Text className={`text-subhead font-semibold tabular-nums ${item.amountUsd < 0 ? "text-fg" : "text-success"}`} style={{ maxWidth: "35%" }}>{item.amountUsd > 0 ? "+" : ""}{formatUsd(item.amountUsd)}</Text>
         </SettingsRow>)}</SettingsGroup> : null : data.list.items.map((item) => <SettingsGroup key={item.id}><View className="gap-2 p-4">
@@ -56,9 +56,9 @@ export function BillingHistoryScreen({ kind }: { kind: "history" | "subscription
       </> : null}
     </ScrollView>
     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: theme.spacing.md, paddingBottom: insets.bottom }}>
-      <IconButton name="arrow-left" label={t("settings.billing.previous")} disabled={busy || page <= 1} onPress={() => setPage(page - 1)} />
+      <IconButton name="arrow-left" label={t("settings.billing.previous")} disabled={busy || page <= 1} onPress={previous} />
       <Text className="text-caption text-fg-muted">{page}</Text>
-      <IconButton name="arrow-right" label={t("settings.billing.next")} disabled={busy || data?.list.page !== page || !data?.list.pagination.hasMore || data.list.pagination.nextPage === null} onPress={() => { const next = data?.list.pagination.nextPage; if (next) setPage(next); }} />
+      <IconButton name="arrow-right" label={t("settings.billing.next")} disabled={busy || !hasNext} onPress={next} />
     </View>
     <ConfirmSheet
       visible={candidate !== null}

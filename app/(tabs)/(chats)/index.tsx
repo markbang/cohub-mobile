@@ -269,8 +269,9 @@ export default function ChatsScreen() {
   const sourceOptions: readonly { value: ChatsSource; label: string; detail?: string; icon: NativeMenuAction["icon"] }[] = [
     ...(botOnly ? [] : [
       { value: "all" as const, label: t("chats.source.all"), icon: "messages" as const },
-      { value: "web" as const, label: t("chats.source.web"), detail: t("chats.source.web.detail"), icon: "globe" as const },
-      { value: "other" as const, label: t("chats.source.other"), detail: t("chats.source.other.detail"), icon: "link" as const },
+      { value: "human" as const, label: t("chats.source.human"), detail: t("chats.source.human.detail"), icon: "user" as const },
+      { value: "agent" as const, label: t("chats.source.agent"), detail: t("chats.source.agent.detail"), icon: "brain" as const },
+      { value: "automation" as const, label: t("chats.source.automation"), detail: t("chats.source.automation.detail"), icon: "zap" as const },
     ]),
     ...(botMode ? [{ value: "bots" as const, label: t("chats.source.bots"), detail: t("chats.source.bots.detail"), icon: "sparkles" as const }] : []),
   ];

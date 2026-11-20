@@ -23,7 +23,7 @@ export async function relayToBot(client: CohubClient, input: { spaceId: string; 
     mode: "agent",
     sessionId,
     content: relayContent(input.content, input.reminder),
-    source: "web",
+    source: "mobile",
     accessMode: "full_access",
     intent: "followup",
     schedule: { mode: "immediate" },

@@ -92,6 +92,8 @@ import GitCompare from "lucide-react-native/icons/git-compare";
 import Link from "lucide-react-native/icons/link";
 import Megaphone from "lucide-react-native/icons/megaphone";
 import Play from "lucide-react-native/icons/play";
+import Pause from "lucide-react-native/icons/pause";
+import Volume2 from "lucide-react-native/icons/volume-2";
 import RotateCcw from "lucide-react-native/icons/rotate-ccw";
 import Wallet from "lucide-react-native/icons/wallet";
 
@@ -191,6 +193,8 @@ export const icons = {
   link: Link,
   megaphone: Megaphone,
   play: Play,
+  pause: Pause,
+  volume: Volume2,
   history: RotateCcw,
   wallet: Wallet,
 } satisfies Record<string, LucideIcon>;
