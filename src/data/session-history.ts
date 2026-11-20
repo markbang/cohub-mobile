@@ -209,6 +209,21 @@ export function messagesFromTurns(turns: SessionTurnRecord[]) {
 	return messages.sort((a, b) => a.sequence - b.sequence);
 }
 
+/**
+ * The runtime's own record of a compaction. It carries the message counter, not a Turn position, so it
+ * is never a timeline row: a compaction between Turns shows as its compact Turn, and one inside a Turn
+ * as a step of that Turn.
+ */
+export function isCompactionRecord(message: Pick<MessageRecord, "role" | "meta">) {
+	return message.role === "system" && message.meta?.messageKind === "compacted";
+}
+
+/** A compaction between Turns inserts its compact Turn and renumbers the Turns after it. */
+export function compactionInsertsTurn(message: Pick<MessageRecord, "meta">) {
+	const compaction = message.meta?.compaction;
+	return typeof compaction === "object" && compaction !== null && (compaction as { scope?: unknown }).scope === "between_turns";
+}
+
 /** Merges live message events over the projected turn history without duplicating a turn. */
 export function mergeDisplayMessages(
 	history: MessageRecord[],
@@ -224,7 +239,7 @@ export function mergeDisplayMessages(
 	}
 	for (const message of live) {
 		// Intermediate events belong to the execution trace, not the final reply slot.
-		if (message.meta?.messageKind === "assistant_intermediate") continue;
+		if (message.meta?.messageKind === "assistant_intermediate" || isCompactionRecord(message)) continue;
 		const turnId = message.meta?.turnId;
 		if (typeof turnId === "string") {
 			const key = `${turnId}:${message.role}`;

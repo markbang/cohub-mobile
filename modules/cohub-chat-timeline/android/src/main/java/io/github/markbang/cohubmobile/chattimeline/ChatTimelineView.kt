@@ -6,17 +6,21 @@ import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Rect
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.NestedScrollView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -692,6 +696,46 @@ class ChatTimelineView(
   private inner class TimelineRecyclerView(
     context: Context,
   ) : RecyclerView(context) {
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var touchedScroll: View? = null
+    private var touchDownY = 0f
+
+    // The list checks a drag before its rows and would take every vertical one, so a scroll box in a
+    // row (an expanded tool call or compaction summary) gets a drag that has a direction it can still
+    // scroll in. A drag toward an edge the box rests on still moves the list.
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          touchedScroll = verticalScrollAt(this, event.x, event.y)
+          touchDownY = event.y
+        }
+        MotionEvent.ACTION_MOVE -> {
+          val dy = event.y - touchDownY
+          val inner = touchedScroll
+          if (inner != null && abs(dy) > touchSlop && inner.canScrollVertically(if (dy > 0) -1 else 1)) return false
+        }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> touchedScroll = null
+      }
+      return super.onInterceptTouchEvent(event)
+    }
+
+    private fun verticalScrollAt(
+      group: ViewGroup,
+      x: Float,
+      y: Float,
+    ): View? {
+      for (index in group.childCount - 1 downTo 0) {
+        val child = group.getChildAt(index)
+        if (child.visibility != View.VISIBLE) continue
+        val localX = x + group.scrollX - child.left - child.translationX
+        val localY = y + group.scrollY - child.top - child.translationY
+        if (localX < 0f || localY < 0f || localX >= child.width || localY >= child.height) continue
+        if (child is NestedScrollView) return child
+        if (child is ViewGroup) verticalScrollAt(child, localX, localY)?.let { return it }
+      }
+      return null
+    }
+
     override fun onLayout(
       changed: Boolean,
       l: Int,

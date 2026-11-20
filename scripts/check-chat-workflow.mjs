@@ -40,7 +40,7 @@ import { createOptimisticWrites } from "../src/data/optimistic-write.ts";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, shouldShowLiveStream, streamRecoveryFromTail } from "../src/data/chat-stream.ts";
 import { fetchSessionLabels, fetchLabelSessionIds, formatLabelRef, toUserSessionLabels } from "../src/data/session-labels.ts";
 import { sessionAttribution, sessionInitiatorFilterKeys, sessionInitiatorOf } from "../src/data/session-initiator.ts";
-import { chatThreadPlaceholder, claimedFailedSends, failedSendDraft, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, isSubmittingSend, placeAwaitingSends, settleInterruptedSends, submitAwaitingSend, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, noteWindowTail, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
+import { chatThreadPlaceholder, claimedFailedSends, compactionInsertsTurn, isCompactionRecord, failedSendDraft, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, isSubmittingSend, placeAwaitingSends, settleInterruptedSends, submitAwaitingSend, mergeDisplayMessages, mergeTurnWindows, messageIndexForTurn, messageRowKey, messagesFromTurns, messagesInWindow, nextTurnSequence, noteWindowTail, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, withTurnSequences } from "../src/data/session-history.ts";
 import { compactionFromMessage, compactionStats } from "../src/data/compaction.ts";
 import { appendVoiceText } from "../src/data/voice-append.ts";
 import { mapRemoteSearchResults, normalizeSearchQuery } from "../src/data/session-search.ts";
@@ -2677,6 +2677,16 @@ assert.equal(compactInfo?.meta.summarizedMessageCount, 12);
 assert.deepEqual(compactionStats(compactInfo?.meta ?? {}), { summarizedMessageCount: 12, tokensBefore: 372_700, tokensAfter: 44_000 });
 assert.equal(compactionFromMessage({ content: [{ type: "text", text: "hello" }], meta: {} }), null, "Regular messages are not compaction");
 assert.equal(compactionFromMessage({ content: [], meta: { messageKind: "compacted" } })?.summary, "", "Compacted system messages still render a notice");
+{
+  const laterTurn = { ...compactTurn, id: "turn-after-compact", sequence: 4, intent: "followup", userText: "Next question", userContent: [{ type: "text", text: "Next question" }], assistantText: "Answer", assistantContent: [{ type: "text", text: "Answer" }], meta: {} };
+  const record = { id: "msg-compaction", sessionId: "session-1", role: "system", content: [{ type: "system_note", note_type: "compacted", text: "Earlier context summary" }], text: null, sequence: 262, meta: { messageKind: "compacted", turnId: compactTurn.id, turnSequence: 3, compaction: { scope: "between_turns" }, _mobileLive: true }, createdAt: "2026-09-10T09:12:00.000Z" };
+  assert.equal(isCompactionRecord(record), true);
+  assert.equal(compactionInsertsTurn(record), true);
+  assert.equal(compactionInsertsTurn({ meta: { compaction: { scope: "within_turn" } } }), false);
+  assert.equal(isCompactionRecord(compactMessages[0]), false, "The compact Turn's projected row is the compaction notice");
+  const merged = mergeDisplayMessages(messagesFromTurns([compactTurn, laterTurn]), [record]);
+  assert.deepEqual(merged.map((message) => message.id), [`${compactTurn.id}:assistant`, "turn-after-compact:user", "turn-after-compact:assistant"], "A compaction stays at its Turn; the record's message counter must not sink it below newer Turns");
+}
 assert.equal(chatThreadPlaceholder({ messageCount: 0, historyLoaded: false, hasLiveActivity: true }), null);
 assert.equal(liveStreamStatusFromPatch("idle"), null);
 assert.equal(liveStreamStatusFromPatch("completed"), null);
@@ -6253,7 +6263,7 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
     emptyView: () => ({ messages: [], turns: [], hasMoreOlder: false, hasMoreNewer: false, windowGeneration: 0, stream: null }),
     updateView: (state, id, patch) => ({ ...state, sessionViews: { ...state.sessionViews, [id]: { ...state.sessionViews[id], ...patch } } }),
     updateLatestTurn: (state) => state, recordDebugEvent: () => {}, sortByRecent: (rows) => rows, preferNewerSession: (_current, incoming) => incoming, reconcileTurnStatusPatch: (_known, turn) => turn,
-    mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage, turnFitsWindow, latestTurn, isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, hasFinalAssistantForTurn, isAwaitingSubmit, isFailedSend, isLocalSend,
+    mergeDisplayMessages, messagesFromTurns, turnSequenceForMessage, turnFitsWindow, latestTurn, isTerminalTurnStatus, isActiveTurnStatus, pendingStreamForTurn, hasFinalAssistantForTurn, isAwaitingSubmit, isFailedSend, isLocalSend, isCompactionRecord,
   };
   const { reducer, mergeMessages, isLiveMessage } = new Function(...Object.keys(scope), ts.transpileModule(`${helpers}\n${contextFunctionSource("reducer")}\nreturn { reducer, mergeMessages, isLiveMessage };`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText)(...Object.values(scope));
   const note = (id, sequence, text, meta) => ({ id, sessionId: "fixture", sequence, executionKind: "note", status: "completed", intent: "followup", userUuid: "user", userContent: [{ type: "text", text }], userText: text, assistantContent: null, assistantText: null, provider: null, model: null, stopReason: null, errorMessage: null, finalUsage: null, meta, startedAt: null, completedAt: `2026-11-11T04:3${sequence}:00Z`, durationMs: 0, createdAt: `2026-11-11T04:3${sequence}:00Z`, updatedAt: `2026-11-11T04:3${sequence}:00Z` });
@@ -6263,13 +6273,13 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   const created = { type: "session.turn.created", payload: { turn: said } };
   const history = [note("t1", 1, "hi", { clientMessageId: "c1" }), note("t2", 2, "Hi, I'm here.", { origin: BOT_SAY_ORIGIN }), note("t3", 3, "Are you our new engineer?", { clientMessageId: "c3" })];
 
-  const deliver = (events, view = { turns: history, messages: messagesFromTurns(history), historyLoaded: true }) => {
+  const deliver = (events, view = { turns: history, messages: messagesFromTurns(history), historyLoaded: true }, refreshSession = async () => {}) => {
     let state = { sessions: [], sessionViews: { fixture: { ...scope.emptyView(), ...view } } };
     let handlers;
     const session = { subscribeGeneration: () => () => {}, subscribe: (next) => { handlers = next; return () => {}; } };
     const attach = compileCallback(sessionCallbacks.attachSessionRealtime, {
       subscriptions: { current: new Map() }, sessionSpaces: { current: new Map() }, markChatEntry: () => {}, recordDebugEvent: () => {}, debugAlias: (_kind, id) => id,
-      createStreamBatch, liveStreamStatusFromPatch, resyncCoordinatorRef: { current: { request: () => false } }, refreshSession: async () => {}, preferNewerSession: scope.preferNewerSession,
+      createStreamBatch, liveStreamStatusFromPatch, resyncCoordinatorRef: { current: { request: () => false } }, refreshSession, preferNewerSession: scope.preferNewerSession, isCompactionRecord, compactionInsertsTurn,
       dispatch: (action) => { state = reducer(state, action); }, stateRef: { get current() { return state; } }, userKey: "user", saveMessages: async () => {}, saveSessions: async () => {}, mergeMessages,
     });
     attach({ space: () => ({ session: () => session }) }, "space", "fixture");
@@ -6304,6 +6314,12 @@ assert.equal(await relay.relayToBot(client, { spaceId: "bot", sessionId: "work",
   const toldRow = compileRenderMessage({ ...liveRowScope, bot, spaceId: BOT_SAY_ORIGIN.spaceId, messages: [toldCached], client: null, streamTurnId: null, replyAnchor: null, turnsById: new Map(), turnsBySequence: new Map() })({ item: toldCached, index: 0 });
   assert.equal(chromeNodes(toldRow).find((node) => node.type === "BotExchangeRow")?.props.exchange.peer, PEER_SPACE_ID, "a cached note from another Bot keeps its sender before its Turn loads");
   assert.deepEqual(page(live, null).map(([text, bubble, native]) => [text, bubble || native]), expected.map(([text]) => [text, false]), "an ordinary Chat keeps every note as a user message, in server order");
+  // A compaction record carries the session's message counter; its Turn, not the record, places the notice.
+  const refreshes = [];
+  const compactedRecord = (scope, id) => ({ type: "session.message.persisted", payload: { message: { id, sessionId: "fixture", role: "system", sequence: 262, content: [{ type: "system_note", note_type: "compacted", text: "Summary" }], text: null, meta: { messageKind: "compacted", turnId: "t2", compaction: { scope } }, createdAt: said.createdAt } } });
+  const compacted = deliver([compactedRecord("between_turns", "m-compact"), compactedRecord("within_turn", "m-inline")], undefined, async (sessionId, options) => { refreshes.push([sessionId, options]); });
+  assert.deepEqual(compacted.messages.map((message) => message.id), messagesFromTurns(history).map((message) => message.id), "a compaction record never becomes a row below the newest Turn");
+  assert.deepEqual(refreshes, [["fixture", { silent: true }]], "a compaction between Turns reloads the renumbered Turns with its compact Turn");
   const opening = deliver([created], { turns: [], messages: messagesFromTurns(history), historyLoaded: false });
   assert.deepEqual([opening.turns.length, opening.messages.length, opening.historyLoaded], [0, 3, false], "a note created while the Chat opens leaves the cached thread to the first page");
 

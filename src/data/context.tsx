@@ -73,7 +73,7 @@ import type {
   StreamView,
 } from "@/src/data/types";
 import { hasFinalAssistantForTurn, isActiveTurnStatus, isTerminalTurnStatus, liveStreamStatusFromPatch, pendingStreamForTurn, streamRecoveryFromTail } from "@/src/data/chat-stream";
-import { claimedFailedSends, failedSendMessage, isAwaitingSubmit, isFailedSend, isLocalSend, mergeDisplayMessages, placeAwaitingSends, submitAwaitingSend, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, noteWindowTail, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
+import { claimedFailedSends, compactionInsertsTurn, failedSendMessage, isAwaitingSubmit, isFailedSend, isCompactionRecord, isLocalSend, mergeDisplayMessages, placeAwaitingSends, submitAwaitingSend, mergeTurns, mergeTurnWindows, messagesFromTurns, nextTurnSequence, noteWindowTail, settleInterruptedSends, turnFitsWindow, turnSequenceForMessage, turnWindowsJoin, withFallbackUserContent, type SendDraft } from "@/src/data/session-history";
 import { forkSessionTurn } from "@/src/data/session-fork";
 import { mergeSessionForks, realtimeSessionFork } from "@/src/data/session-fork-tree";
 import { extractSpaceMentions } from "@/src/data/space-mentions";
@@ -888,6 +888,7 @@ function reducer(state: AppState, action: Action): AppState {
       return updateView(state, action.sessionId, { turnIndexLoading: false });
     case "message-add": {
       recordDebugEvent("chat.message.added", { role: action.message.role, sequence: action.message.sequence, optimistic: action.message.meta?.optimistic === true, messageKind: action.message.meta?.messageKind ?? null });
+      if (isCompactionRecord(action.message)) return state;
       const view = state.sessionViews[action.sessionId] ?? emptyView();
       const incomingMeta = action.message.meta ?? {};
       const turnId = typeof incomingMeta.turnId === "string" ? incomingMeta.turnId : null;
@@ -2102,6 +2103,10 @@ export function AppProvider({
         if (event.type !== "session.message.persisted") return;
         const message = (event.payload as { message?: MessageRecord }).message;
         if (!message) return;
+        if (isCompactionRecord(message)) {
+          if (compactionInsertsTurn(message)) void refreshSession(sessionId, { silent: true });
+          return;
+        }
         const currentMessages = stateRef.current.sessionViews[sessionId]?.messages ?? [];
         dispatch({ type: "message-add", sessionId, message });
         void saveMessages(userKey, sessionId, mergeMessages(currentMessages, message).filter((row) => row.meta?.optimistic !== true)).catch(() => undefined);
