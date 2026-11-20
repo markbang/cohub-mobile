@@ -25,7 +25,7 @@ Logto 1.3 supports SDK 57 peer dependencies, so `npm ci` no longer uses `legacy-
 
 The next native release moves to Expo SDK 58 (React Native 0.88, React 19.3). It changes the native fingerprint, so it needs a new APK/IPA before OTA can target it; older binaries keep their SDK 57 runtime.
 
-- `@logto/rn` 1.3.0 caps `expo-crypto`, `expo-secure-store`, and `expo-web-browser` at `<58`. A scoped `overrides` entry pins them to the app's SDK 58 versions; the APIs Logto calls are unchanged. Drop the override once Logto widens its peer range.
+- `@logto/rn` 1.3.0 caps its `expo-crypto`, `expo-secure-store`, and `expo-web-browser` peers at `<58`. Bun reports the mismatch as a warning and links the app's SDK 58 versions; the APIs Logto calls are unchanged.
 - `react-native-gesture-handler` is pinned to 3.4.0 above SDK 58's `~3.3.0` and listed in `expo.install.exclude`: 3.3.0 crashes on Android with `IllegalStateException: Manually handled gesture had not been assigned to any detector` when a touch-cancel callback finishes its handler mid-cancellation (fixed upstream in #4584). Drop the exclusion once the SDK's expected version reaches 3.4.
 - `fingerprint.config.js` sets `preset: "strict"`, because SDK 58's `balanced` default hashes native modules by version and would ignore edits to the vendored `modules/react-native-enriched-markdown`.
 - `tsconfig.json` opts out of React Native's Strict TypeScript API with `react-native-legacy-deep-imports`. Migrate the ref types before React Native 0.89 removes the opt-out.
@@ -36,7 +36,8 @@ The next native release moves to Expo SDK 58 (React Native 0.88, React 19.3). It
 
 Native changes for the release after v2.3.1. Each one changes the fingerprint, so land them on `main` just before merging the release PR: OTA stops reaching installed binaries once they land.
 
-- Expo SDK 58 patch versions match `npx expo install --check` (Expo 58.0.19, Expo Router 58.0.26, Expo Updates 58.0.18). React stays on the SDK's 19.3.0, which React Native 0.88's renderer requires.
+- Bun replaces npm: `bun.lock` replaces `package-lock.json`, and the vendored `modules/react-native-enriched-markdown` and `modules/react-native-screens` install as workspaces. Native package versions are unchanged, but Bun hoists build tooling differently, which changes the fingerprint. `fingerprint.config.js` now skips package.json scripts, so later tooling script edits stay OTA-compatible.
+- Expo SDK 58 patch versions match `bunx expo install --check` (Expo 58.0.19, Expo Router 58.0.26, Expo Updates 58.0.18). React stays on the SDK's 19.3.0, which React Native 0.88's renderer requires.
 - iOS camera and microphone purpose strings also name Works, which can use them after the viewer allows it, and `locales/zh-Hans.json` translates the purpose strings for Chinese devices.
 - New app icon, splash logo, and notification icon. The Android adaptive icon now draws its gradient from `android-icon-background.png` instead of a flat background color.
 - iOS takes the Icon Composer icon `assets/images/cohub.icon` (Liquid Glass, dark, and tinted styles on iOS 26; Xcode 26 flattens it for older iOS). The launch screen shows the mascot on the app background (`#f6f3ee`, dark `#0c0a09`), and the notification accent is the icon's orange. Check the icon on the home screen in each style and the launch screen in both themes.
@@ -120,7 +121,7 @@ Migration: users must install a new signed native APK containing `expo-intent-la
 - Use the same production environment values when building the native binary and exporting OTA bundles. `EXPO_PUBLIC_*` values are public.
 - The deployed service is [markbang/yaota](https://github.com/markbang/yaota). The manifest endpoint is `https://mobile.talesofai.com/manifest`; the Worker serves content-addressed assets from the `expo-updates` R2 bucket through `/ota-assets/ID/HASH`. Repository variables `EXPO_PUBLIC_UPDATES_URL` and `OTA_SERVER` are configured.
 - A push to `main` publishes production Android and iOS OTA automatically. The workflow exports that commit, resolves each platform's runtime from its installed native binary (`assets/fingerprint` in the latest arm64 APK, `cohub-ios-native-fingerprint.txt` from the newest release that has it), then uploads both platforms immediately. Android also downloads that same release's `cohub-android-native-fingerprint.txt` and compares the selected commit's source fingerprint before contacting the publisher. This protects the first OTA on a runtime, when the server has no baseline yet; the embedded runtime and source fingerprint are separate values. A missing iOS fingerprint fails the iOS export job only; Android publishing still completes. Manual Actions > Publish OTA remains for staging or a specific SHA. There is no environment approval gate.
-- Staging previews unmerged work: push the branch, then **from `main`** run Publish OTA with `channel=staging` and that branch's full commit SHA (production still requires a commit on `main`; a dispatch from any other ref fails with an explanation). Jobs that hold `OTA_API_KEY` only check out and run the dispatching `main` commit. The selected commit runs only in secretless jobs: a check job runs `npm run check` on it beside the exports (both uploads wait for it), and the export jobs build the bundle, source fingerprint, and public OTA config and upload them as artifacts. The native-fingerprint gate trusts those artifacts: it catches honest native changes, not a deliberately falsified fingerprint. Anyone who can push a branch can already merge to `main`, staging only reaches installs opted in from the debug menu. expo-updates only rolls back an update that crashes during launch, to the last working update; a bundle that launches but misbehaves stays active until a fixed bundle is published or the device switches back to production in the debug menu. On a device, open the debug menu (tap the Settings version row five times) > Updates > "切换到 staging". The Settings version row then shows `· staging`. If staging has no bundle for the installed runtime, the switch rolls back to production, so an install is never stranded off production. Switch back the same way when done.
+- Staging previews unmerged work: push the branch, then **from `main`** run Publish OTA with `channel=staging` and that branch's full commit SHA (production still requires a commit on `main`; a dispatch from any other ref fails with an explanation). Jobs that hold `OTA_API_KEY` only check out and run the dispatching `main` commit. The selected commit runs only in secretless jobs: a check job runs `bun run verify` on it beside the exports (both uploads wait for it), and the export jobs build the bundle, source fingerprint, and public OTA config and upload them as artifacts. The native-fingerprint gate trusts those artifacts: it catches honest native changes, not a deliberately falsified fingerprint. Anyone who can push a branch can already merge to `main`, staging only reaches installs opted in from the debug menu. expo-updates only rolls back an update that crashes during launch, to the last working update; a bundle that launches but misbehaves stays active until a fixed bundle is published or the device switches back to production in the debug menu. On a device, open the debug menu (tap the Settings version row five times) > Updates > "切换到 staging". The Settings version row then shows `· staging`. If staging has no bundle for the installed runtime, the switch rolls back to production, so an install is never stranded off production. Switch back the same way when done.
 - Each platform's upload retries transient failures (network errors, timeouts, HTTP 5xx/429) up to three times with a growing delay. Auth errors, fingerprint mismatches, and other rejections fail or skip immediately. Repeating is safe: blobs are content-addressed, an interrupted attempt leaves at most an unserved Staged release, and the per-channel concurrency group keeps a retry from overtaking a newer commit.
 - Native Release attaches `cohub-android-native-fingerprint.txt` to signed Android distributions and `cohub-ios-native-fingerprint.txt` to the GitHub Release when a production iOS build is submitted to TestFlight. Bootstrap each platform once with an OTA-capable native binary; after that, JS-only work does not need a new package. OTA is indexed with the runtime embedded in that binary (`assets/fingerprint` in the APK, `EXUpdates.bundle/fingerprint` in the IPA) so installed devices can receive it.
 - An existing iOS build cannot gain `expo-updates` configuration through OTA. Ship one new TestFlight build with `EXPO_PUBLIC_UPDATES_URL` set before iOS OTA can serve devices.
@@ -208,7 +209,7 @@ Replace the placeholders with the validated release version and commit. Merely c
 
 1. Merge feature PRs with Conventional Commit titles. For breaking changes, include the explicit next-MINOR `Release-As` footer described above.
 2. Wait for Release Please to open or update the Release PR.
-3. Review the generated `CHANGELOG.md`, `package.json`, `package-lock.json`, and `app.json` version changes.
+3. Review the generated `CHANGELOG.md`, `package.json`, and `app.json` version changes.
 4. Confirm the required CI and Security checks are green.
 5. Merge the Release Please PR.
 6. Release Please creates the `vX.Y.Z` tag and release using `RELEASE_PLEASE_TOKEN`.
@@ -231,10 +232,10 @@ Open Actions -> `Native Release` -> Run workflow. Choose:
 Equivalent local commands:
 
 ```bash
-npm run native:android:distribution
+bun run native:android:distribution
 ```
 
-The regular `npm run native:android` command remains a debug build for local development. It is not a release artifact.
+The regular `bun run native:android` command remains a debug build for local development. It is not a release artifact.
 
 The iOS command requires macOS and Xcode. The Android command requires the Android SDK and Java 17.
 

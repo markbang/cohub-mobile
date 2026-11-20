@@ -40,4 +40,4 @@ For a failure, report case number/group, role, viewport mode, font size, theme, 
 
 ## Automated Coverage
 
-`npm run test:workflow` checks metadata geometry at multiple widths/scales and executes the real Markdown JSX composition with lightweight native leaf stubs to verify footer forwarding, uniqueness, and a separate streaming footer across every prefix of a mixed Markdown reply. These are not native screenshot tests. Use `npm run check`, `npm run export:android`, and `npm run export:ios` for code/bundle validation.
+`bun run test:workflow` checks metadata geometry at multiple widths/scales and executes the real Markdown JSX composition with lightweight native leaf stubs to verify footer forwarding, uniqueness, and a separate streaming footer across every prefix of a mixed Markdown reply. These are not native screenshot tests. Use `bun run verify`, `bun run export:android`, and `bun run export:ios` for code/bundle validation.

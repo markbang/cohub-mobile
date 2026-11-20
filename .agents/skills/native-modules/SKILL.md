@@ -14,7 +14,7 @@ The design rule is **mechanism in native, policy in JS**. Native code owns what 
 - `modules/*/android`, `modules/*/ios`: local Expo modules. `modules/cohub-device-runtime` uses the Expo Modules API (`expo-module.config.json`, `NativeModule` typed in `index.ts`), and app code reaches it only through `src/platform/device-runtime.ts`. Follow that module's pattern for new local modules.
 - `modules/*/app.plugin.js` and native fields in `app.config.ts`: config plugins and native config.
 - `scripts/patch-*.mjs`, run by `postinstall`: these write into a dependency's native sources under `node_modules`. They live in `scripts/` but count as native. The fingerprint hashes the whole patched package for both platforms, so even a comment edit in the generated Kotlin stops Android and iOS OTA.
-- Native dependencies and their versions in `package.json` / `package-lock.json`.
+- Native dependencies and their versions in `package.json` / `bun.lock`.
 
 ## Steps
 
@@ -41,9 +41,9 @@ Absolute hashes depend on the local environment (a generated `android/` director
 
 ```bash
 base=$(git describe --tags --abbrev=0)    # latest release
-git worktree add /tmp/fingerprint "$base" && cd /tmp/fingerprint && npm ci
-fp() { git checkout -q "$1" && npm run postinstall --silent >/dev/null && npx @expo/fingerprint fingerprint:generate --platform "$2" 2>/dev/null | node -e 'let r="";process.stdin.on("data",c=>r+=c).on("end",()=>console.log(JSON.parse(r).hash))'; }
+git worktree add /tmp/fingerprint "$base" && cd /tmp/fingerprint
+fp() { git checkout -q "$1" && bun install --frozen-lockfile >/dev/null && bunx @expo/fingerprint fingerprint:generate --platform "$2" 2>/dev/null | node -e 'let r="";process.stdin.on("data",c=>r+=c).on("end",()=>console.log(JSON.parse(r).hash))'; }
 for platform in android ios; do echo "$platform $(fp "$base" "$platform") $(fp <commit> "$platform")"; done
 ```
 
-Rerun `postinstall` after each checkout, because patches apply only on install. Equal hashes mean the commit can ship over OTA. Remove the worktree with `git worktree remove /tmp/fingerprint` when done.
+Reinstall after each checkout, because the lockfile and patches apply only on install. Equal hashes mean the commit can ship over OTA. Remove the worktree with `git worktree remove /tmp/fingerprint` when done.

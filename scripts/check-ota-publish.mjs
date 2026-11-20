@@ -51,7 +51,7 @@ assert.ok(
   fingerprintConfig.sourceSkips.includes("ExpoConfigVersions"),
   "Release version bumps must not change the OTA runtime fingerprint",
 );
-assert.ok(fingerprintConfig.sourceSkips.includes("PackageJsonAndroidAndIosScriptsIfNotContainRun"));
+assert.ok(fingerprintConfig.sourceSkips.includes("PackageJsonScriptsAll"), "Changing a tooling script must not change the OTA runtime fingerprint");
 assert.equal(fingerprintConfig.preset, "strict", "Patched native sources in node_modules must change the fingerprint");
 
 const parse = (file) => YAML.parse(readFileSync(file, "utf8"), { uniqueKeys: true });
@@ -71,7 +71,7 @@ const publishAndroid = ota.jobs["publish-android"];
 const publishIos = ota.jobs["publish-ios"];
 assert.deepEqual(publishAndroid.needs, ["prepare", "check", "android"]);
 assert.deepEqual(publishIos.needs, ["prepare", "check", "ios"]);
-assert.ok(ota.jobs.check.steps.some((step) => step.run === "npm run check"), "a failed quality check must block both uploads");
+assert.ok(ota.jobs.check.steps.some((step) => step.run === "bun run verify"), "a failed quality check must block both uploads");
 for (const publish of [publishAndroid, publishIos]) {
   assert.equal(Object.hasOwn(publish, "environment"), false);
   assert.equal(JSON.stringify(publish.steps).includes("apps/easc/bin/easc.js"), false);
@@ -93,7 +93,8 @@ for (const publish of [publishAndroid, publishIos]) {
   const checkout = publish.steps.find((step) => step.uses?.startsWith("actions/checkout"));
   assert.equal(checkout.with.ref, "${{ github.sha }}", "the secret-bearing job checks out the trusted dispatching commit");
   assert.equal(JSON.stringify(publish.steps).includes("needs.prepare.outputs.sha }}\"}"), false);
-  assert.equal(publish.steps.some((step) => /(^|\s)(npm ci|npx )/.test((step.run ?? "").replace(/npm ci --prefix "\$RUNNER_TEMP\/ota-cli"/, ""))), false, "no target dependencies or app config run beside OTA_API_KEY");
+  assert.equal(publish.steps.some((step) => /(^|\s)(npm ci|npx |bun install|bunx |bun run )/.test((step.run ?? "").replace(/npm ci --prefix "\$RUNNER_TEMP\/ota-cli"/, ""))), false, "no target dependencies or app config run beside OTA_API_KEY");
+  assert.equal(publish.steps.some((step) => String(step.uses).includes("install-dependencies")), false, "no target dependencies install beside OTA_API_KEY");
   assert.match(publishStep.run, /PIPESTATUS/, "The publish step must capture the CLI exit status before deciding");
   assert.match(publishStep.run, /Fingerprint mismatch/, "A fingerprint-mismatch rejection must be explained");
   assert.match(publishStep.run, /GITHUB_STEP_SUMMARY/, "A publish that did not happen must explain itself in the run summary");
@@ -211,7 +212,7 @@ assert.match(JSON.stringify(ota.jobs.android.steps), /cohub-ota-android-/);
 assert.match(JSON.stringify(ota.jobs.ios.steps), /cohub-ota-ios-/);
 for (const platform of ["android", "ios"]) {
   const inputs = ota.jobs[platform].steps.find((step) => step.name === "Record publish inputs");
-  assert.match(inputs.run, new RegExp(`env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform ${platform}`), "the source fingerprint ignores the runtime override");
+  assert.match(inputs.run, new RegExp(`env -u COHUB_OTA_RUNTIME_VERSION bunx @expo/fingerprint fingerprint:generate --platform ${platform}`), "the source fingerprint ignores the runtime override");
   assert.match(inputs.run, /expo config --type public --json/);
   assert.equal(inputs.env.COHUB_OTA_RUNTIME_VERSION, "${{ steps.fingerprint.outputs.runtime }}", "the uploaded config carries the installed runtime");
   assert.equal(JSON.stringify(ota.jobs[platform]).includes("OTA_API_KEY"), false, "export jobs run the selected commit and must never see the key");
@@ -236,15 +237,16 @@ for (const [file, workflow] of [["native-ci.yml", nativeCi], ["native-release.ym
   assert.ok(gradleCache, `${file} must restore the Gradle caches`);
   assert.match(gradleCache.with.path, /~\/\.gradle\/caches/, `${file} must cache the Gradle dependency caches`);
   assert.match(gradleCache.with.path, /~\/\.gradle\/wrapper/, `${file} must cache the Gradle wrapper distributions`);
-  assert.match(gradleCache.with.key, /hashFiles\('package-lock\.json'\)/, `${file} must key the Gradle cache on the committed dependency set`);
+  assert.match(gradleCache.with.key, /hashFiles\('bun\.lock'\)/, `${file} must key the Gradle cache on the committed dependency set`);
   assert.match(gradleCache.with["restore-keys"], /gradle-\$\{\{ runner\.os \}\}-/, `${file} must fall back to the previous Gradle cache so dependency updates stay warm`);
 }
 
 const ci = parse(".github/workflows/ci.yml");
 assert.deepEqual(ci.jobs.bundle.strategy.matrix.platform, ["android", "ios", "web"], "CI must still export both platform bundles and the web App");
+assert.ok(ci.jobs.quality.steps.some((step) => step.run === "bun run verify"), "CI must run the same checks that gate OTA and native releases");
 assert.equal(Object.hasOwn(ci.jobs.bundle, "needs"), false, "CI exports must not serialize behind Quality: they are independent and serializing them doubled every run's wall clock");
 
-assert.ok(nativeRelease.jobs.check.steps.some((step) => step.run === "npm run check"));
+assert.ok(nativeRelease.jobs.check.steps.some((step) => step.run === "bun run verify"));
 for (const job of ["submit-android", "submit-ios"]) {
   assert.ok(nativeRelease.jobs[job].needs.includes("check"), `${job} must wait for the quality checks`);
 }

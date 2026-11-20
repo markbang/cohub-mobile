@@ -156,53 +156,11 @@ jobs:
         with:
           ref: ${{ needs.metadata.outputs.target_sha }}
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Saved before anything else runs: later steps write build output into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+        uses: ./.github/actions/install-dependencies
 
       - name: Run quality checks
-        run: npm run check
+        run: bun run verify
 
   android:
     name: Android ${{ inputs.profile }}
@@ -222,50 +180,8 @@ jobs:
           fetch-depth: 0
           submodules: true
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Saved before anything else runs: later steps write build output into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+        uses: ./.github/actions/install-dependencies
 
       # sandboxd, the device Runtime's file bridge, is built from the pinned reference/cohub submodule.
       - name: Set up Go
@@ -278,7 +194,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/native-release
-          fingerprint=$(npx @expo/fingerprint fingerprint:generate --platform android | node -e 'let raw="";process.stdin.on("data",chunk=>raw+=chunk).on("end",()=>{const hash=String(JSON.parse(raw).hash||"").trim().toLowerCase(); if(!/^[a-f0-9]{40,64}$/.test(hash)) process.exit(1); process.stdout.write(hash)})')
+          fingerprint=$(bunx @expo/fingerprint fingerprint:generate --platform android | node -e 'let raw="";process.stdin.on("data",chunk=>raw+=chunk).on("end",()=>{const hash=String(JSON.parse(raw).hash||"").trim().toLowerCase(); if(!/^[a-f0-9]{40,64}$/.test(hash)) process.exit(1); process.stdout.write(hash)})')
           printf '%s\n' "$fingerprint" > build/native-release/cohub-android-native-fingerprint.txt
 
       - name: Validate source metadata
@@ -286,7 +202,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           if [[ "${{ inputs.profile }}" == "distribution" || "${{ inputs.profile }}" == "production" ]]; then
-            npm run release:check -- --require-native-tag
+            bun run release:check --require-native-tag
           fi
 
       - name: Prepare Firebase configuration
@@ -304,7 +220,7 @@ jobs:
           fi
 
       - name: Generate Android project
-        run: npm run native:android:prepare
+        run: bun run native:android:prepare
 
       # This also makes recovery builds work for tags created before the helper changed.
       - name: Configure Android release heap
@@ -347,7 +263,7 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
             !~/.gradle/caches/build-cache-1
-          key: gradle-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: gradle-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
@@ -410,11 +326,11 @@ jobs:
         if: inputs.profile == 'distribution'
         env:
           COHUB_ANDROID_ARCHITECTURES: armeabi-v7a,arm64-v8a,x86,x86_64
-        run: npm run native:android:distribution
+        run: bun run native:android:distribution
 
       - name: Build production AAB
         if: inputs.profile == 'production'
-        run: npm run native:android:release
+        run: bun run native:android:release
 
       - name: Show ccache stats
         if: success() || failure()
@@ -484,57 +400,15 @@ jobs:
           ref: ${{ needs.metadata.outputs.target_sha }}
           fetch-depth: 0
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
       - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Saved before anything else runs: later steps write build output into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+        uses: ./.github/actions/install-dependencies
 
       - name: Validate source metadata
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           if [[ "${{ inputs.profile }}" == "production" ]]; then
-            npm run release:check -- --require-native-tag
+            bun run release:check --require-native-tag
           fi
 
       # CocoaPods' download cache, mostly React Native's prebuilt frameworks. pod install still
@@ -543,12 +417,12 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/Library/Caches/CocoaPods
-          key: cocoapods-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: cocoapods-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: |
             cocoapods-${{ runner.os }}-
 
       - name: Generate iOS project and install pods
-        run: npm run native:ios:prepare
+        run: bun run native:ios:prepare
 
       - name: Resolve iOS identifier
         id: identifiers
@@ -605,7 +479,7 @@ jobs:
 
       - name: Build production IPA
         if: inputs.profile == 'production'
-        run: npm run native:ios:release
+        run: bun run native:ios:release
 
       # Publish OTA resolves the iOS runtime from this file, mirroring assets/fingerprint in the Android APK.
       - name: Record iOS OTA fingerprint

@@ -1,7 +1,7 @@
 /**
  * Writes global.css from src/design/tokens.ts so className utilities and JS colors share
  * one source. `--check` fails when the committed file is stale (CI Quality runs it).
- * Regenerate with `node --no-warnings --experimental-strip-types scripts/design-tokens.mjs`.
+ * Regenerate with `bun scripts/design-tokens.mjs`.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -79,7 +79,7 @@ ${indent(colors(darkPalette), 3)}
 
 if (process.argv.includes("--check")) {
   if (readFileSync(TARGET, "utf8") !== css) {
-    console.error(`${TARGET} is stale. Run \`node --no-warnings --experimental-strip-types scripts/design-tokens.mjs\` and commit the result.`);
+    console.error(`${TARGET} is stale. Run \`bun scripts/design-tokens.mjs\` and commit the result.`);
     process.exit(1);
   }
   console.log(`${TARGET} matches src/design/tokens.ts.`);

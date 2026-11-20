@@ -1,7 +1,7 @@
 # Cohub Mobile Design System
 
 The rules every screen follows, and the plan for moving the app onto them. Tokens live in
-`src/design/tokens.ts`; `global.css` is generated from them (`node --no-warnings --experimental-strip-types scripts/design-tokens.mjs`). Styling
+`src/design/tokens.ts`; `global.css` is generated from them (`bun scripts/design-tokens.mjs`). Styling
 uses Uniwind `className` utilities; `useAppTheme()` remains only for values that native props
 need as JS (icon colors, Reanimated, `RefreshControl`, `placeholderTextColor`, gradients).
 

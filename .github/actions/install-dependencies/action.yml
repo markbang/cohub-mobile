@@ -1,0 +1,63 @@
+name: Install dependencies
+description: Set up Node and Bun, then restore or install node_modules from bun.lock.
+
+inputs:
+  save-cache:
+    description: Whether a fresh install may save the node_modules cache. Pass false for runs that may select unreviewed code.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # Expo CLI, Metro, Gradle and CocoaPods still run their scripts on Node; Bun installs
+    # dependencies and runs the repository's checks.
+    - name: Set up Node
+      id: node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22
+
+    - name: Set up Bun
+      id: bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: package.json
+
+    # The vendored modules are workspaces, so they install as symlinks into the checkout and the
+    # cache holds only the links; their package.json files are in the key for the dependencies they
+    # declare. The vendored Markdown renderer's postinstall downloads native sources into its
+    # checkout folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          node_modules
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+          modules/react-native-enriched-markdown/ios/vendor
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-bun${{ steps.bun.outputs.bun-version }}-${{ hashFiles('bun.lock', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
+
+    # The postinstall only warns when a download fails; an incomplete set is never cached.
+    - name: Install dependencies
+      id: install
+      if: steps.node-modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        bun install --frozen-lockfile
+        vendor=modules/react-native-enriched-markdown
+        if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
+          echo "complete=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Saved before anything else runs: later steps write build output into node_modules.
+    - name: Save node_modules
+      if: steps.install.outputs.complete == 'true' && inputs.save-cache == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          node_modules
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+          modules/react-native-enriched-markdown/ios/vendor
+        key: ${{ steps.node-modules.outputs.cache-primary-key }}

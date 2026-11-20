@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import process from "node:process";
+import { runtimePackages } from "./bun-lock.mjs";
 
 // High/critical advisories with no patched release, accepted only because the
 // vulnerable package runs in build tooling and never ships in the app bundle.
@@ -12,26 +14,28 @@ const accepted = new Map([
 ]);
 const failingSeverities = new Set(["high", "critical"]);
 
-const result = spawnSync("npm", ["audit", "--omit=dev", "--json"], { encoding: "utf8" });
+const result = spawnSync(process.execPath, ["audit", "--json"], { encoding: "utf8" });
 let report;
 try {
   report = JSON.parse(result.stdout);
 } catch {
-  console.error("npm audit did not return JSON.");
+  console.error("bun audit did not return JSON.");
   console.error(result.stderr || result.stdout);
   process.exit(1);
 }
-if (report.error) {
-  console.error(`npm audit failed: ${report.error.summary ?? JSON.stringify(report.error)}`);
-  process.exit(1);
-}
 
+// bun audit reports dev dependencies too; keep advisories matching an installed runtime package.
+const { dependencies } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const runtime = runtimePackages(Object.keys(dependencies));
 const advisories = new Map();
-for (const vulnerability of Object.values(report.vulnerabilities ?? {})) {
-  for (const via of vulnerability.via) {
-    if (typeof via !== "object" || !failingSeverities.has(via.severity)) continue;
-    const id = via.url.split("/").pop();
-    advisories.set(id, `${via.severity} ${via.name} ${via.range}: ${via.title} (${via.url})`);
+for (const [name, entries] of Object.entries(report)) {
+  for (const advisory of entries) {
+    if (!failingSeverities.has(advisory.severity)) continue;
+    const installed = runtime.filter((item) => item.name === name && Bun.semver.satisfies(item.version, advisory.vulnerable_versions));
+    if (installed.length === 0) continue;
+    const id = advisory.url.split("/").pop();
+    const versions = [...new Set(installed.map((item) => item.version))].join(", ");
+    advisories.set(id, `${advisory.severity} ${name} ${versions} (${advisory.vulnerable_versions}): ${advisory.title} (${advisory.url})`);
   }
 }
 
@@ -47,7 +51,7 @@ if (stale.length > 0) {
 if (unaccepted.length > 0) {
   console.error("Production dependencies have high or critical advisories:");
   for (const [, summary] of unaccepted) console.error(`- ${summary}`);
-  console.error("Update the affected dependency (for example `npm update <package>`) and rerun.");
+  console.error("Update the affected dependency (for example `bun update <package>`) and rerun.");
 }
 if (stale.length > 0 || unaccepted.length > 0) process.exit(1);
 console.log("No unaccepted high or critical advisories in production dependencies.");

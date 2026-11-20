@@ -16,7 +16,7 @@ const PLACEHOLDER = "/__cohub_base__";
 const out = process.argv[2] ?? "dist-web";
 
 rmSync(out, { recursive: true, force: true });
-execFileSync("npx", ["expo", "export", "--platform", "web", "--output-dir", out], {
+execFileSync("bunx", ["expo", "export", "--platform", "web", "--output-dir", out], {
   stdio: "inherit",
   env: { ...process.env, COHUB_WEB_BASE: PLACEHOLDER },
 });

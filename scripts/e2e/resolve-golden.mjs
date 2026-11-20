@@ -77,7 +77,7 @@ function computeSourceFingerprint() {
   }
   const env = { ...process.env };
   delete env.COHUB_OTA_RUNTIME_VERSION;
-  const raw = run("npx", ["--no-install", "@expo/fingerprint", "fingerprint:generate", "--platform", "android"], { env });
+  const raw = run("bunx", ["--no-install", "@expo/fingerprint", "fingerprint:generate", "--platform", "android"], { env });
   let parsed;
   try {
     parsed = JSON.parse(raw);

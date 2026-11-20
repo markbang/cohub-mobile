@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 
 export async function getNativeIdentifiers(root = process.cwd()) {
   const { stdout } = await execFileAsync(
-    "npx",
+    "bunx",
     ["expo", "config", "--type", "public", "--json"],
     { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
   );

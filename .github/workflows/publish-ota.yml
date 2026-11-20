@@ -92,54 +92,15 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
-      - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
       # Only a production target (a main commit) may write caches main-scope runs restore;
-      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
-        uses: actions/cache/save@v6
+      # staging may select an unreviewed branch.
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
         with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+          save-cache: ${{ needs.prepare.outputs.channel == 'production' }}
 
       - name: Run quality checks
-        run: npm run check
+        run: bun run verify
 
   android:
     name: Export Android bundle
@@ -158,51 +119,12 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
-      - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
       # Only a production target (a main commit) may write caches main-scope runs restore;
-      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
-        uses: actions/cache/save@v6
+      # staging may select an unreviewed branch.
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
         with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+          save-cache: ${{ needs.prepare.outputs.channel == 'production' }}
 
       - name: Resolve installed APK runtime
         id: fingerprint
@@ -246,19 +168,19 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
           restore-keys: |
-            metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-
+            metro-ota-${{ runner.os }}-android-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-
 
       - name: Export Android bundle
-        run: npx expo export --platform android --output-dir dist/android
+        run: bunx expo export --platform android --output-dir dist/android
 
       - name: Save Metro cache
         if: needs.prepare.outputs.channel == 'production'
         uses: actions/cache/save@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          key: metro-ota-${{ runner.os }}-android-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
 
       # The selected commit's code (app config, fingerprint inputs) only runs in this job,
       # which holds no publishing secret. The upload job consumes these files as data.
@@ -268,8 +190,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/publish-inputs
-          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform android > dist/publish-inputs/source-fingerprint.json
-          npx expo config --type public --json > dist/publish-inputs/ota-config.json
+          env -u COHUB_OTA_RUNTIME_VERSION bunx @expo/fingerprint fingerprint:generate --platform android > dist/publish-inputs/source-fingerprint.json
+          bunx expo config --type public --json > dist/publish-inputs/ota-config.json
 
       - name: Upload publish inputs
         uses: actions/upload-artifact@v7
@@ -325,51 +247,12 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
-      - name: Set up Node
-        id: node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # file: dependencies (modules/*) install as symlinks into the checkout, so the cache holds
-      # only the links; their package.json files are in the key for the dependencies they declare.
-      # The vendored Markdown renderer's postinstall downloads native sources into its checkout
-      # folder; they are cached alongside, as both native builds and the OTA fingerprint read them.
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'modules/*/package.json', 'modules/react-native-enriched-markdown/*.mjs', 'modules/react-native-enriched-markdown/ratex-version.json', 'modules/react-native-enriched-markdown/cpp/highlight/grammar-versions.json') }}
-
-      # The postinstall only warns when a download fails; an incomplete set is never cached.
-      - name: Install dependencies
-        id: npm-ci
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: |
-          npm ci
-          vendor=modules/react-native-enriched-markdown
-          if [ -f "$vendor/cpp/highlight/vendor/grammars/.stamp" ] && [ -f "$vendor/cpp/highlight/vendor/tree-sitter/.stamp" ] && [ -f "$vendor/ios/vendor/.stamp" ]; then
-            echo "complete=true" >> "$GITHUB_OUTPUT"
-          fi
-
       # Only a production target (a main commit) may write caches main-scope runs restore;
-      # staging may select an unreviewed branch. Saved before later steps write into node_modules.
-      - name: Save node_modules
-        if: steps.npm-ci.outputs.complete == 'true' && needs.prepare.outputs.channel == 'production'
-        uses: actions/cache/save@v6
+      # staging may select an unreviewed branch.
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
         with:
-          path: |
-            node_modules
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
-            modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
-            modules/react-native-enriched-markdown/ios/vendor
-          key: ${{ steps.node-modules.outputs.cache-primary-key }}
+          save-cache: ${{ needs.prepare.outputs.channel == 'production' }}
 
       # Native Release extracts this asset from the built IPA and attaches it only for submitted TestFlight builds.
       - name: Resolve installed iOS runtime
@@ -408,19 +291,19 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
           restore-keys: |
-            metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-
+            metro-ota-${{ runner.os }}-ios-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-
 
       - name: Export iOS bundle
-        run: npx expo export --platform ios --output-dir dist/ios
+        run: bunx expo export --platform ios --output-dir dist/ios
 
       - name: Save Metro cache
         if: needs.prepare.outputs.channel == 'production'
         uses: actions/cache/save@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('package-lock.json') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
+          key: metro-ota-${{ runner.os }}-ios-${{ hashFiles('bun.lock') }}-${{ steps.metro.outputs.env }}-${{ github.run_id }}
 
       # The selected commit's code (app config, fingerprint inputs) only runs in this job,
       # which holds no publishing secret. The upload job consumes these files as data.
@@ -430,8 +313,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/publish-inputs
-          env -u COHUB_OTA_RUNTIME_VERSION npx @expo/fingerprint fingerprint:generate --platform ios > dist/publish-inputs/source-fingerprint.json
-          npx expo config --type public --json > dist/publish-inputs/ota-config.json
+          env -u COHUB_OTA_RUNTIME_VERSION bunx @expo/fingerprint fingerprint:generate --platform ios > dist/publish-inputs/source-fingerprint.json
+          bunx expo config --type public --json > dist/publish-inputs/ota-config.json
 
       - name: Upload publish inputs
         uses: actions/upload-artifact@v7
