@@ -303,10 +303,11 @@ export function contentNodes(ctx: NodeContext, scope: string, content: ContentBl
   return nodes;
 }
 
-function bubbleMeta(ctx: NodeContext, clock: string | undefined, local: boolean, failed: boolean): TimelineNode | null {
-  if (!clock && !local && !failed) return null;
+/** The receipt on a user bubble: a spinner-dot while sending, the alert when it failed, else the delivered check. */
+function bubbleMeta(ctx: NodeContext, clock: string | undefined, local: boolean, alert: boolean): TimelineNode | null {
+  if (!clock && !local && !alert) return null;
   const tint = ctx.theme.colors.userBubbleMeta;
-  const receipt: TimelineNode = failed
+  const receipt: TimelineNode = alert
     ? { ...icon("alert", 11, tint, 2.4), accessibilityLabel: ctx.t("chat.sendFailed") }
     : local
       ? { type: "view", accessibilityLabel: ctx.t("chat.sending"), style: { width: 11, height: 11, alignItems: "center", justifyContent: "center" }, children: [{ type: "view", style: { width: 6, height: 6, borderRadius: 3, backgroundColor: color(tint) } }] }
@@ -327,8 +328,9 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
   const body = hasRenderableContent(message.content)
     ? contentNodes(ctx, message.id, message.content, { width: inner, color: tint, linkColor: theme.colors.userBubbleLink, onUser: true })
     : message.text?.trim() ? [markdown(ctx, message.text, { color: tint, linkColor: theme.colors.userBubbleLink, onUser: true })] : [];
-  const meta = bubbleMeta(ctx, clock, options.local, failed);
-  const error = message.errorMessage ? text(message.errorMessage, textStyle("caption", tint), { selectable: true, style: { marginTop: 6 } }) : null;
+  const meta = bubbleMeta(ctx, clock, options.local, failed || Boolean(message.errorMessage));
+  // Below the bubble, in the danger tone: on the accent bubble a red line would not read.
+  const error = message.errorMessage ? { type: "view" as const, style: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 6, maxWidth, marginTop: 4, paddingHorizontal: 8 }, children: [icon("alert", 14, theme.colors.danger), text(message.errorMessage, textStyle("caption", theme.colors.danger), { selectable: true, style: { flexShrink: 1 } })] } : null;
   const action = (name: "retry" | "discard", label: string, glyph: TimelineIconName, tone: string, disabled = false): TimelineNode => pressable({
     action: name, disabled, accessibilityLabel: label, accessibilityState: { disabled },
     style: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, opacity: disabled ? 0.45 : 1 },
@@ -340,8 +342,9 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
       {
         type: "view", id: "bubble",
         style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.userBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
-        children: [...body, ...(error ? [error] : []), ...(meta ? [meta] : [])],
+        children: [...body, ...(meta ? [meta] : [])],
       },
+      ...(error ? [error] : []),
       ...(failed ? [{
         type: "view" as const, style: { flexDirection: "row", alignItems: "center", marginRight: -8 },
         children: [action("discard", t("chat.sendFailed.delete"), "trash", theme.colors.textMuted), action("retry", t("common.retry"), "refresh", theme.colors.accent, options.retryDisabled)],
@@ -575,7 +578,7 @@ export function botPlacedNode(ctx: NodeContext, node: TimelineNode | null, place
   if (!placement.time) return node && placement.gap ? { type: "view", style: { paddingTop: placement.gap }, children: [node] } : node;
   const label = formatThreadTime(placement.time, ctx.t, getActiveLocale());
   // The padding sits on a view: Android's timeline text does not lay out its own padding.
-  const row: TimelineNode = { type: "view", style: { alignItems: "center", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 }, children: [text(label, textStyle("caption", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }))] };
+  const row: TimelineNode = { type: "view", style: { alignItems: "center", paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 }, children: [text(label, textStyle("micro", ctx.theme.colors.textFaint, { fontVariant: ["tabular-nums"] }))] };
   return { type: "view", children: [row, ...(node ? [node] : [])] };
 }
 

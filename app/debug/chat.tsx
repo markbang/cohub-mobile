@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { unreadAssistantTurnCount } from "@/src/data/chat-read-state";
 import { BotTitle } from "@/src/components/BotTitle";
 import { JumpToLatest } from "@/src/components/JumpToLatest";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
@@ -45,6 +46,8 @@ export default function DebugChatScreen() {
   }, [arrivalKey, arriveCount, baseMessages]);
   const messages = useMemo(() => [...baseMessages, ...(arrival?.key === arrivalKey ? arrival.messages : [])], [arrival, arrivalKey, baseMessages]);
   const [following, setFollowing] = useState(true);
+  // The fixture's replies count as read; `arrive` replies land after them.
+  const seenSequence = useMemo(() => baseMessages.reduce((latest, message) => message.role === "assistant" ? Math.max(latest, Number(message.meta?.turnSequence ?? 0)) : latest, 0), [baseMessages]);
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
   // As the Chat screen: a reply is the page's Bot, a note is whoever wrote it.
@@ -80,7 +83,7 @@ export default function DebugChatScreen() {
   }, [fixture, useNative]);
 
   return <Screen edgeToEdge blurTarget={blurTarget}>
-    <EdgeHeader onLayout={onHeaderLayout}>
+    <EdgeHeader onLayout={onHeaderLayout} blurBar>
       {bot ? <TopBar transparent title={bot.name} onBack={() => router.back()} actions={<IconButton name="list-tree" label="Work log" size={38} onPress={NOOP} />}>
         <BotTitle name={bot.name} avatarUrl={null} onPress={NOOP} />
       </TopBar> : <TopBar transparent title="Fix the Android sheet height" subtitle="Home" onBack={() => router.back()} actions={<>
@@ -162,8 +165,8 @@ export default function DebugChatScreen() {
     </EdgeBlurTarget>
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
-      {following ? null : <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={false} onPress={NOOP} /></Animated.View>}
-      {bot ? <BotTyping /> : null}
+      {following ? null : <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={false} unread={unreadAssistantTurnCount(messages, seenSequence)} onPress={NOOP} /></Animated.View>}
+      {bot ? <BotTyping bot={bot} /> : null}
       <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" {...(bot ? { variant: "bot" as const, onVoice: NOOP, placeholder: `Message ${bot.name}` } : {})} />
     </EdgeFooter>
   </Screen>;

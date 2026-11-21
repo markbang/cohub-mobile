@@ -110,8 +110,12 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   filters, segmented controls, and other capsules `rounded-full`. Pair every rounded rectangle with
   `borderCurve: "continuous"` where the platform supports it (iOS).
 - **Concentric corners.** A shape nested in another at an inset takes `outer = inner + inset`.
-  The composer's corner is its 8 pt padding plus half its 44 pt corner controls (30); a
-  `Segmented` control is a capsule in a capsule, concentric at any height.
+  A `Segmented` control is a capsule in a capsule, concentric at any height.
+- **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
+  control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
+  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. With text, the
+  model chip keeps its icon and availability light so the field keeps the room; its name stays in the
+  label. Web has no mic, so its send stays visible and disabled.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
@@ -258,7 +262,7 @@ Shared primitives keep their current names and props so screens migrate without 
 | `SettingsGroup`/`SettingsRow` | 52 pt rows, the glyph on an `accent-soft` tile, inset separators, `rounded-md` group. |
 | `SettingsSelectRow` | A settings row that picks one of a few values in place, as an iOS pop-up button: the value and `chevrons-up-down` at the trailing edge, a glass menu that springs out of it with a check on the current value. Tap opens it; a press held 120 ms opens it under the finger, and sliding onto a value and letting go picks it, with a selection haptic per row. Used for Language and Web browsing; longer or richer choices keep their own page. iOS renders the system pop-up button (`@expo/ui` SwiftUI `Picker`, `SettingsSelectRow.ios.tsx`); Android renders the drawn one with the same props. |
 | `EmptyState`, `DataError`, skeletons | A skeleton traces the content it stands in for (`src/ui/Skeleton.tsx`): `LoadingRows` for `ListRow` cards, `LoadingFlatRows` for bordered file and picker rows, `LoadingDocument` for code and diffs, `LoadingSections` for settings-style pages; content of unknown shape (web previews) uses `LoadingState`. Errors use an icon retry button. |
-| `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`, balanced against the actions; `transparent` puts it on a content-width glass capsule that drops the leading balance, centering between the back button and the actions so long titles use the slack beside the back button; `large` puts a `text-display` Large Title under the bar (Settings); `titleHidden` leaves tab roots (Chats, Spaces, Activity) with only their buttons, the selected tab naming the screen, and keeps the title as the screen reader's header. |
+| `TopBar`, `EdgeHeader` | Title `text-headline font-semibold`, balanced against the actions; `transparent` puts it on a content-width glass capsule that drops the leading balance, centering between the back button and the actions so long titles use the slack beside the back button; `large` puts a `text-display` Large Title under the bar (Settings); `titleHidden` leaves tab roots (Chats, Spaces, Activity) with only their buttons, the selected tab naming the screen, and keeps the title as the screen reader's header. On iOS, `blurBar` (the Chat screen) blurs the whole bar behind its content, as Messages does; Reduce Transparency keeps the veil. |
 | `FloatingTabBar` | Icon + label, 62 pt, content-width capsule, `shadow-float`, a lens that lifts and follows a drag. Scrolling a tab root down minimizes it to a 48 pt circle holding the selected glyph, as UIKit's `onScrollDown`; scrolling up or tapping the circle restores it. |
 
 ## 4. Screens

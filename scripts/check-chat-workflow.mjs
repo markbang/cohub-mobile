@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
-import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex } from "../src/data/chat-read-state.ts";
+import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex, unreadAssistantTurnCount } from "../src/data/chat-read-state.ts";
 import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
@@ -4042,10 +4042,10 @@ assert.equal(estimateComposerContentHeight("a\nb\nc", lineHeight), 3 * lineHeigh
 assert.equal(estimateComposerContentHeight("a short dictation transcript", lineHeight), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).scrollEnabled, true, "the estimate alone unsticks the overflow signal when the native measurement is stale");
 assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).height, 120, "the estimated overflow still respects the collapsed height cap");
-assert.equal(COMPOSER_CHROME_HEIGHT, 130);
-assert.equal(collapsedComposerHeight(34), 164);
-assert.equal(collapsedComposerHeight(0), 130);
-assert.equal(collapsedComposerHeight(-1), 130);
+assert.equal(COMPOSER_CHROME_HEIGHT, 60);
+assert.equal(collapsedComposerHeight(34), 94);
+assert.equal(collapsedComposerHeight(0), 60);
+assert.equal(collapsedComposerHeight(-1), 60);
 assert.equal(keyboardOverlap({ screenY: 620, height: 336 }, 956), 336, "a docked keyboard covers its own height");
 assert.equal(keyboardOverlap({ screenY: 0, height: 0 }, 956), 0, "the iOS resume frame must not cover the whole screen");
 assert.equal(keyboardOverlap({ screenY: 0, height: 956 }, 956), 0, "a zero-origin frame is never a docked keyboard");
@@ -4386,6 +4386,10 @@ assert.equal(latestUnreadAssistantIndex(messages, null), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 6), 2);
 assert.equal(latestUnreadAssistantIndex(messages, 7), -1);
 assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta: null }], null), -1);
+// The jump button counts turns, not messages: a turn's two assistant messages are one reply.
+assert.equal(unreadAssistantTurnCount(messages, 6), 1, "only the turn after the read sequence is unread");
+assert.equal(unreadAssistantTurnCount([...messages, { role: "assistant", meta: { turnSequence: 9 } }, { role: "assistant", meta: { turnSequence: 9 } }, { role: "assistant", meta: { turnSequence: 10 } }], 7), 2, "two newer turns count once each");
+assert.equal(unreadAssistantTurnCount(messages, 7), 0, "a read sequence at the newest turn leaves nothing to count");
 {
   const at = (iso) => Date.parse(iso);
   const chat = (lastMessageId, lastMessageAt) => ({ id: "s1", lastMessageId, lastMessageAt });
@@ -4636,7 +4640,12 @@ assert.equal(toolCallPreview("read", { path: "src/app.ts" }), "src/app.ts");
 assert.equal(toolCallPreview("unknown", {}), "");
 assert.equal(formatToolCallCaption("skill_view", { skill: "github-pr-workflow" }), "skill_view: \"github-pr-workflow\"");
 assert.equal(formatToolCallCaption("terminal", {}), "terminal");
-assert.equal(formatMessageClock(new Date(2026, 0, 1, 19, 3).toISOString()), "19:03");
+const evening = new Date(2026, 0, 1, 19, 3).toISOString();
+assert.equal(formatMessageClock(evening, "en"), "7:03 PM", "English keeps the 12-hour clock");
+assert.equal(formatMessageClock(evening, "zh"), "19:03", "a 24-hour locale pads the hour");
+assert.equal(formatMessageClock(new Date(2026, 0, 1, 9, 41).toISOString(), "en"), "9:41 AM", "ICU's narrow no-break space is plain spacing");
+assert.equal(formatMessageClock(new Date(2026, 0, 1, 9, 41).toISOString(), "zh"), "09:41");
+assert.equal(formatMessageClock("not a date"), "");
 assert.equal(formatMessageClock("not-a-date"), "");
 
 const apkOrigin = "https://mobile.talesofai.com";
@@ -6171,10 +6180,10 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   ], "the time shows first, after a long pause, and on a new day; the gap opens only where the writer changes");
   const label = (key, params) => `${key === "bots.time.today" ? "Today" : "Yesterday"} ${params.time}`;
   const now = Date.parse("2026-11-11T12:00:00");
-  assert.equal(formatThreadTime("2026-11-11T08:00:00", label, "en", now), "Today 08:00");
-  assert.equal(formatThreadTime("2026-11-10T23:59:00", label, "en", now), "Yesterday 23:59");
-  assert.equal(formatThreadTime("2026-11-02T07:05:00", label, "en", now), "Nov 2 07:05");
-  assert.equal(formatThreadTime("2025-11-02T07:05:00", label, "en", now), "Nov 2, 2025 07:05");
+  assert.equal(formatThreadTime("2026-11-11T08:00:00", label, "en", now), "Today 8:00 AM");
+  assert.equal(formatThreadTime("2026-11-10T23:59:00", label, "en", now), "Yesterday 11:59 PM");
+  assert.equal(formatThreadTime("2026-11-02T07:05:00", label, "en", now), "Nov 2 7:05 AM");
+  assert.equal(formatThreadTime("2025-11-02T07:05:00", label, "en", now), "Nov 2, 2025 7:05 AM");
 }
 
 // Handing the user's words to the Bot: the reminder, the Bot window, Cohub, and a steer when the Bot is mid-run.
