@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.16](https://github.com/markbang/cohub-mobile/compare/v2.3.15...v2.3.16) (2026-11-21)
+
+
+### Fixes
+
+* **android:** give the drawn alert iOS's measured card shadow ([#275](https://github.com/markbang/cohub-mobile/issues/275)) ([9a91757](https://github.com/markbang/cohub-mobile/commit/9a91757d91f7ab6db1364ff1e138f1540bb61433))
+
+
+### CI
+
+* build iOS with the Xcode 27 SDK ([d6347e2](https://github.com/markbang/cohub-mobile/commit/d6347e20a44d96c0e14df0417bf91178cbe9717e))
+
 ## [2.3.15](https://github.com/markbang/cohub-mobile/compare/v2.3.14...v2.3.15) (2026-11-21)
 
 
