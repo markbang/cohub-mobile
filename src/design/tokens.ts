@@ -254,3 +254,5 @@ export const LIST_AVATAR_SIZE = 46;
 export const SHADOW_FLOAT = "0 6px 20px rgba(0, 0, 0, 0.14)";
 /** iOS 26's glass bar buttons and menus, fitted to their measured falloff: a wide, faint shadow sunk below. */
 export const SHADOW_GLASS = "0 8px 36px rgba(0, 0, 0, 0.1)";
+/** iOS 26's centred alert card over its dimmed screen, fitted to its falloff: darker than the glass controls' shadow. */
+export const SHADOW_ALERT = "0 8px 34px rgba(0, 0, 0, 0.23)";

@@ -98,8 +98,8 @@ function AlertCard({ visible, onClose, testID, title, lines, error = null, child
     <View className="flex-1 items-center justify-center" testID={testID}>
       {/* design-system: the scrim dims whatever sits underneath, so it stays black; iOS dims more in dark mode. */}
       <Pressable accessible={false} style={[StyleSheet.absoluteFill, theme.mode === "dark" ? SCRIM_DARK : SCRIM_LIGHT]} onPress={onClose} />
-      {/* iOS's alert glass casts a soft shadow over the dimmed screen. */}
-      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="shadow-glass" style={cardStyle}>
+      {/* iOS's alert card casts a darker shadow over the dimmed screen than its glass controls do. */}
+      <Reanimated.View entering={alertEntering} accessibilityViewIsModal accessibilityRole="alert" className="shadow-alert" style={cardStyle}>
         <GlassBackground radius={CARD_RADIUS} surface="dialogSurface" />
         <View style={CONTENT_INSET}>
           <Text accessibilityRole="header" className="text-headline font-semibold text-fg">{title}</Text>
