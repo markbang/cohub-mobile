@@ -38,10 +38,10 @@ Follow the root `AGENTS.md`. Reproduce on the reported platform when the environ
 
 Run the checks that cover the change:
 
-- `npm run lint`
-- `npm run typecheck`
-- `npm run test:workflow` when chat workflow or state transitions change
-- `npm run check` before PR handoff when the environment permits
+- `bun run lint`
+- `bun run typecheck`
+- `bun run test:workflow` when chat workflow or state transitions change
+- `bun run verify` before PR handoff when the environment permits
 
 Record loading, empty, error, and reconnect behavior actually checked. Distinguish pre-existing failures from regressions.
 

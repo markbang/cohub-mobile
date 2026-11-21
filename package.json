@@ -2,6 +2,10 @@
   "name": "cohub-mobile",
   "main": "expo-router/entry",
   "version": "2.3.14",
+  "workspaces": [
+    "modules/react-native-enriched-markdown",
+    "modules/react-native-screens"
+  ],
   "dependencies": {
     "@expo/ui": "~58.0.23",
     "@legendapp/list": "^3.6.0",
@@ -49,12 +53,12 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.0",
-    "react-native-enriched-markdown": "file:./modules/react-native-enriched-markdown",
+    "react-native-enriched-markdown": "workspace:*",
     "react-native-gesture-handler": "3.4.0",
     "react-native-keyboard-controller": "1.22.7",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
-    "react-native-screens": "file:./modules/react-native-screens",
+    "react-native-screens": "workspace:*",
     "react-native-svg": "15.16.0",
     "react-native-web": "^0.21.4",
     "react-native-webview": "14.0.1",
@@ -68,9 +72,10 @@
   "devDependencies": {
     "@types/culori": "^4.0.1",
     "@types/react": "~19.3.0",
-    "eslint": "9.39.5",
-    "eslint-config-expo": "~58.0.4",
+    "eslint-plugin-expo": "1.2.1",
+    "eslint-plugin-react-hooks": "7.1.1",
     "expo-doctor": "1.21.5",
+    "oxlint": "1.94.0",
     "typescript": "~6.0.3",
     "yaml": "^2.9.1"
   },
@@ -78,28 +83,34 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
-    "test:workflow": "node --no-warnings --experimental-strip-types scripts/check-chat-workflow.mjs && node --no-warnings --experimental-strip-types scripts/check-ota-publish.mjs",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives",
+    "typecheck": "bun check --noUnusedLocals --noUnusedParameters",
+    "test:workflow": "bun scripts/check-chat-workflow.mjs && bun scripts/check-ota-publish.mjs",
+    "check:design-tokens": "bun scripts/design-tokens.mjs --check",
+    "check:design-system": "bun scripts/check-design-system.mjs",
+    "check:module-graph": "bun scripts/check-module-graph.mjs",
+    "check:licenses": "bun scripts/open-source-licenses.mjs --check",
+    "check:expo-go": "bun scripts/check-expo-go-notifications.mjs",
     "doctor": "node scripts/check-expo-baseline.mjs",
     "doctor:upstream": "expo-doctor",
     "diagnostics:server": "node scripts/diagnostics-server.mjs",
     "release:check": "node scripts/check-release.mjs",
-    "check": "npm run lint && npm run typecheck && npm run test:workflow && node scripts/check-expo-go-notifications.mjs && npm run release:check && npm run doctor",
+    "verify": "bun run --parallel --no-exit-on-error lint typecheck test:workflow check:design-tokens check:design-system check:module-graph check:licenses check:expo-go release:check doctor",
     "export:android": "expo export --platform android --output-dir dist/android",
     "export:ios": "expo export --platform ios --output-dir dist/ios",
     "prebuild": "expo prebuild",
-    "native:android": "npm run native:android:prepare && npm run native:android:build",
-    "native:android:prepare": "npx expo prebuild --platform android --no-install",
+    "native:android": "bun run native:android:prepare && bun run native:android:build",
+    "native:android:prepare": "expo prebuild --platform android --no-install",
     "native:android:build": "node scripts/build-android-debug.mjs",
     "native:android:distribution": "node scripts/build-android-distribution.mjs",
-    "native:ios": "npm run native:ios:prepare && npm run native:ios:build",
-    "native:ios:prepare": "npx expo prebuild --platform ios --no-install && pod install --project-directory=ios",
+    "native:ios": "bun run native:ios:prepare && bun run native:ios:build",
+    "native:ios:prepare": "expo prebuild --platform ios --no-install && pod install --project-directory=ios",
     "native:ios:build": "node scripts/build-ios-simulator.mjs",
     "native:android:release": "node scripts/build-android-release.mjs",
     "native:ios:release": "node scripts/build-ios-release.mjs"
   },
   "private": true,
+  "packageManager": "bun@1.4.3",
   "expo": {
     "install": {
       "exclude": [
@@ -108,11 +119,6 @@
     }
   },
   "overrides": {
-    "@logto/rn": {
-      "expo-crypto": "$expo-crypto",
-      "expo-secure-store": "$expo-secure-store",
-      "expo-web-browser": "$expo-web-browser"
-    },
     "decode-uri-component": "^0.5.0",
     "react-dom": "$react",
     "uuid": "^11.1.1"

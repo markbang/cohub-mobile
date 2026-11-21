@@ -4,7 +4,7 @@
 
 ## Verification
 
-- [ ] `npm run check`
+- [ ] `bun run verify`
 - [ ] Relevant platform bundle exported or tested
 - [ ] User-facing states and error paths reviewed
 

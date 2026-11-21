@@ -227,7 +227,7 @@ const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseco
 const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
 async function startMetro({ frameProbe }) {
-  const metro = spawn("npx", ["expo", "start", "--port", String(METRO_PORT)], {
+  const metro = spawn("bunx", ["expo", "start", "--port", String(METRO_PORT)], {
     env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}) },
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,

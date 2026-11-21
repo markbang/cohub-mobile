@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect -- controlled panel state synchronizes the native animation surface. */
+/* eslint-disable react-hooks-js/set-state-in-effect -- controlled panel state synchronizes the native animation surface. */
 import type { CohubClient, SessionInitiator, SessionListFork, SpaceFsEntry, UserSessionListItem } from "@neta-art/cohub";
 import { buildSessionForkTree, type SessionTreePosition } from "@/src/data/session-fork-tree";
 import { useIsFocused } from "expo-router";

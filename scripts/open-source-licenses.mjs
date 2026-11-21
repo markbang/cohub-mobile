@@ -2,10 +2,11 @@
  * Writes src/data/open-source-licenses.json from the installed runtime dependencies so the About
  * screen lists what ships in the app, with each package's full license text. `--check` fails when
  * the committed file is stale (CI Quality runs it).
- * Regenerate with `node scripts/open-source-licenses.mjs` after changing dependencies.
+ * Regenerate with `bun scripts/open-source-licenses.mjs` after changing dependencies.
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { runtimePackages } from "./bun-lock.mjs";
 
 const root = new URL("../", import.meta.url);
 const TARGET = fileURLToPath(new URL("src/data/open-source-licenses.json", root));
@@ -56,17 +57,12 @@ const BUNDLED_ASSETS = [
 ];
 packages.push(...BUNDLED_ASSETS);
 
-const transitive = new Set();
-for (const [path, entry] of Object.entries(readJson("package-lock.json").packages)) {
-  if (!path.startsWith("node_modules/") || entry.dev || entry.devOptional || entry.link) continue;
-  const name = path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length);
-  if (!(name in dependencies)) transitive.add(name);
-}
+const transitive = new Set(runtimePackages(Object.keys(dependencies)).map((item) => item.name).filter((name) => !(name in dependencies)));
 
 const output = `${JSON.stringify({ transitiveCount: transitive.size, packages }, null, 2)}\n`;
 if (process.argv.includes("--check")) {
   if (readFileSync(TARGET, "utf8") !== output) {
-    console.error("src/data/open-source-licenses.json is stale. Run `node scripts/open-source-licenses.mjs`.");
+    console.error("src/data/open-source-licenses.json is stale. Run `bun scripts/open-source-licenses.mjs`.");
     process.exit(1);
   }
   console.log("Open-source license list is up to date.");

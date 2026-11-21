@@ -81,8 +81,8 @@ This repository is the native iOS/Android client. There is no web target.
 ## Verification And Handoff
 
 1. Inspect `git status` before work and review the final diff, including submodule pointers. Change only files needed for the task.
-2. For code changes, run `npm run lint` and `npm run typecheck`. For workflow behavior changes, extend the focused assertions in `scripts/check-chat-workflow.mjs` and run `npm run test:workflow`.
-3. Before PR handoff, run `npm run check` when the environment permits. Use the relevant export and native build commands from `CONTRIBUTING.md` for bundling, dependencies, configuration, or native integration changes. Do not bypass a failing check to claim success.
+2. For code changes, run `bun run lint` and `bun run typecheck`. For workflow behavior changes, extend the focused assertions in `scripts/check-chat-workflow.mjs` and run `bun run test:workflow`.
+3. Before PR handoff, run `bun run verify` when the environment permits. Use the relevant export and native build commands from `CONTRIBUTING.md` for bundling, dependencies, configuration, or native integration changes. Do not bypass a failing check to claim success.
 4. Verify user-facing changes in the affected flow, including relevant loading, empty, error, and reconnect states. Report the platform/device actually checked.
 5. Report what changed, checks run and their results, and any blockers or unverified behavior. Distinguish pre-existing failures from regressions. For breaking changes, include a concise migration note.
 
