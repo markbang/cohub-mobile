@@ -78,6 +78,12 @@ export const SCREENS = [
   { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
   { name: "chat-long", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long" },
   { name: "chat-states", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=states" },
+  // The jump to latest once the timeline is scrolled up: arrow alone with nothing new, then the count of replies that arrived.
+  { name: "chat-scrolled", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }] },
+  { name: "chat-arrival", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long&arrive=2", steps: [{ waitFor: "arrivals 2" }, { swipe: "down" }] },
+  // The composer tapped, so the keyboard is up; then a drag down on the timeline, which should take it away.
+  { name: "chat-keyboard", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }] },
+  { name: "chat-keyboard-drag", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }, { swipe: "down" }, { settle: true }] },
   // A Bot's page and the Bots view over fixed Bots, then the Bot page's JS list.
   { name: "chat-bot", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot" },
   { name: "chat-bot-js", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot&native=0" },
@@ -360,6 +366,8 @@ function pushSteps(lines, platform, steps = []) {
     if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${step.waitFor}.*`)}`, "    timeout: 20000");
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
+    // A pause with nothing to wait for, as a keyboard needs after a tap before it is drawn.
+    else if (step.settle) lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 2500", "    optional: true");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
     // The root link selects Chats on iPad, where a minimized system tab bar can hide the label.
     else if (step.chatsTab && platform === "ios") lines.push("- openLink: \"cohub:///\"", "- extendedWaitUntil:", "    visible: \".*Chats.*\"", "    timeout: 20000");

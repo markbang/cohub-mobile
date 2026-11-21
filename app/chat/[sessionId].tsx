@@ -13,6 +13,7 @@ import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
 import { AnchoredActionMenu, type AnchoredMenuAction, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
+import { JumpToLatest } from "@/src/components/JumpToLatest";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { ToastViewport, useToast } from "@/src/components/Toast";
 import { copyMessageText, formatTokenCount, MessageBubble, StreamCard } from "@/src/components/MessageContent";
@@ -1819,7 +1820,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         <EdgeFooter keyboard onLayout={onFooterLayout}><ChatColumn>
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
-        {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
+        {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={jumpingToLatest} onPress={() => void jumpToLatest()} /></Animated.View> : null}
         {bot && botWorking ? <BotTyping /> : null}
         {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
