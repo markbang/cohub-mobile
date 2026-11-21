@@ -389,9 +389,12 @@ jobs:
     name: iOS release
     needs: metadata
     if: inputs.profile == 'production' && (inputs.platform == 'all' || inputs.platform == 'ios')
-    runs-on: macos-latest
+    # App Store Connect requires the iOS 27 SDK from April 2027 (ITMS-90725). The image's default
+    # Xcode can change, so the release Xcode is pinned; keep native-ci.yml on the same one.
+    runs-on: xcode-27
     timeout-minutes: 65
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
       EXPO_PUBLIC_UPDATES_URL: ${{ vars.EXPO_PUBLIC_UPDATES_URL }}
     steps:
       - name: Checkout validated ref

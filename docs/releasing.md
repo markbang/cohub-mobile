@@ -167,6 +167,8 @@ Create an App Store Connect API key with App Manager access, an App Store distri
 | Actions secret | `APPSTORE_CERTIFICATES_FILE_BASE64` | Base64-encoded distribution `.p12` |
 | Actions secret | `APPSTORE_CERTIFICATES_PASSWORD` | `.p12` password |
 
+iOS release and CI builds run on GitHub's `xcode-27` image with Xcode 27.1 pinned through `DEVELOPER_DIR`, because App Store Connect rejects uploads built with an SDK older than iOS 27 from April 2027 (ITMS-90725). To move Xcode, change `DEVELOPER_DIR` in `native-release.yml` and `native-ci.yml` together, and pick a release Xcode from the image readme; App Store Connect rejects beta Xcode builds.
+
 The native workflow uses `apple-actions/import-codesign-certs`, `apple-actions/download-provisioning-profiles`, and `apple-actions/upload-testflight-build`. The bundle identifier is `io.github.markbang.cohubmobile`. `app.json` declares `ITSAppUsesNonExemptEncryption=false`, so each build carries its export-compliance answer and the upload action does not patch build metadata through the App Store Connect API (that request needs an App Manager or Admin key).
 
 Register `cohub://callback` in the Native Logto application. Logto credentials are runtime application configuration, not build-service credentials.
