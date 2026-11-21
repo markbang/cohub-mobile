@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.3.15](https://github.com/markbang/cohub-mobile/compare/v2.3.14...v2.3.15) (2026-11-21)
+
+
+### Features
+
+* align with Cohub 13.26 sessions, speech, and Library ([#268](https://github.com/markbang/cohub-mobile/issues/268)) ([009fc51](https://github.com/markbang/cohub-mobile/commit/009fc5184dec74240b385093cd03ea3029ffa2ab))
+* **space:** view and control a local Space's computer screens ([65c3441](https://github.com/markbang/cohub-mobile/commit/65c3441010d63443a4b4f04a574deefda7c6e2a8))
+* **web:** side rail and inline title for the desktop list pane ([#262](https://github.com/markbang/cohub-mobile/issues/262)) ([a575f04](https://github.com/markbang/cohub-mobile/commit/a575f046575ca0d6b613debbaacd5261c7d874d8))
+
+
+### Fixes
+
+* **chat:** place compaction at its Turn and let row scroll boxes scroll on Android ([e28bcb4](https://github.com/markbang/cohub-mobile/commit/e28bcb4a477e74fe29d021a68b0ecf0ad255d724))
+* **chats:** keep only on-screen rows fading out so a trimmed list cannot exhaust React's update limit ([#266](https://github.com/markbang/cohub-mobile/issues/266)) ([ceaf403](https://github.com/markbang/cohub-mobile/commit/ceaf40344993cb839fd58bbc2ee8492f3586c4b1))
+* **composer:** draw the harness and model pickers as glass controls without chevrons ([4b3ecf0](https://github.com/markbang/cohub-mobile/commit/4b3ecf0e36c5546dc6acf54493e9d7f067450b51))
+* **data:** apply pins and other toggles locally and send only the latest intent ([#264](https://github.com/markbang/cohub-mobile/issues/264)) ([ee716a4](https://github.com/markbang/cohub-mobile/commit/ee716a43dac109c69406cc982bd26895c726dbaa))
+* **diagnostics:** keep full error stacks and the React component stack ([#265](https://github.com/markbang/cohub-mobile/issues/265)) ([7b635db](https://github.com/markbang/cohub-mobile/commit/7b635dbf104310bd04e765ad27469a5c74865d6c))
+* **nav:** seed the tab app on Chats and hold a Bot chat until its page is known ([#263](https://github.com/markbang/cohub-mobile/issues/263)) ([0cd103d](https://github.com/markbang/cohub-mobile/commit/0cd103d6f57ebcc525c2578d948a30730201d486))
+* **web:** give the chat pane a solid header, a reading column, and working composer controls ([#261](https://github.com/markbang/cohub-mobile/issues/261)) ([040ade2](https://github.com/markbang/cohub-mobile/commit/040ade2147cc05a99d1139ffd861c4a20ea8d014))
+* **web:** open message images in the viewer and give them the browser's image menu ([#258](https://github.com/markbang/cohub-mobile/issues/258)) ([bcc5526](https://github.com/markbang/cohub-mobile/commit/bcc5526d260a973d48946607947a876fe520c78e))
+
+
+### Documentation
+
+* split app architecture analysis into English and Chinese files ([#260](https://github.com/markbang/cohub-mobile/issues/260)) ([757df95](https://github.com/markbang/cohub-mobile/commit/757df9578970e28fc094b7adb0a6025af4fa3d6c))
+
+
+### Build
+
+* migrate tooling to Bun and oxlint ([#269](https://github.com/markbang/cohub-mobile/issues/269)) ([dd6d4e7](https://github.com/markbang/cohub-mobile/commit/dd6d4e7d32a4120826c85b93ef26764de802b973))
+
 ## [2.3.14](https://github.com/markbang/cohub-mobile/compare/v2.3.13...v2.3.14) (2026-11-12)
 
 
