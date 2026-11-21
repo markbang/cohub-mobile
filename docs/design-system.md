@@ -90,7 +90,8 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
 - **Flat content, floating chrome.** Only the tab bar, menus, toasts, and banners use
   `shadow-float`. Cards are separated by surface color, not shadow. Android's solid stand-ins for
   iOS glass bar buttons, drawn menus, and the composer use `bg-glass-control` / `bg-glass-menu` with
-  `shadow-glass`, and the tab bar's lens `bg-glass-lens`, measured from the iOS 26 captures.
+  `shadow-glass`, and the tab bar's lens `bg-glass-lens`, measured from the iOS 26 captures. The drawn
+  alert card uses `shadow-alert`, fitted to iOS's own card over its dimmed screen (`0 8px 34px` at 23%).
 - **Surfaces step, borders don't.** A surface stands out from what it sits on by a step in
   lightness, not an outline. Floating chrome without raised blocks inside (tab bar, action and
   context menus, toasts, the offline banner, jump-to-latest) uses `bg-surface-float`: the card

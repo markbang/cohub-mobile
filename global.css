@@ -100,6 +100,7 @@
   --text-code--line-height: 20px;
   --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.14);
   --shadow-glass: 0 8px 36px rgba(0, 0, 0, 0.1);
+  --shadow-alert: 0 8px 34px rgba(0, 0, 0, 0.23);
 }
 
 @media android {
