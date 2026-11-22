@@ -32,7 +32,7 @@ export default function DebugChatScreen() {
   const router = useRouter();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
-  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string }>();
   const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
   const baseMessages = useMemo(() => conversation(fixture), [fixture]);
@@ -56,7 +56,9 @@ export default function DebugChatScreen() {
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
-  const [draft, setDraft] = useState("");
+  // `?draft=` seeds the composer as a Chat's saved draft does; typing replaces it.
+  const [typed, setDraft] = useState<string | null>(null);
+  const draft = typed ?? params.draft ?? "";
   const width = usePaneWidth();
   // With `?probe=1`, printed under the bar so a snapshot shows whether rows were laid out (frame) even when none
   // is painted. Otherwise it stays an accessibility label only, which captures can wait on without the text
@@ -167,7 +169,7 @@ export default function DebugChatScreen() {
     <EdgeFooter keyboard onLayout={onFooterLayout}>
       {following ? null : <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={false} unread={unreadAssistantTurnCount(messages, seenSequence)} onPress={NOOP} /></Animated.View>}
       {bot ? <BotTyping bot={bot} /> : null}
-      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" {...(bot ? { variant: "bot" as const, onVoice: NOOP, placeholder: `Message ${bot.name}` } : {})} />
+      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" onVoice={NOOP} {...(bot ? { variant: "bot" as const, placeholder: `Message ${bot.name}` } : {})} />
     </EdgeFooter>
   </Screen>;
 }

@@ -82,6 +82,8 @@ export const SCREENS = [
   { name: "chat-scrolled", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long", steps: [{ swipe: "down" }] },
   { name: "chat-arrival", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long&arrive=2", steps: [{ waitFor: "arrivals 2" }, { swipe: "down" }] },
   // The composer tapped, so the keyboard is up; then a drag down on the timeline, which should take it away.
+  // The composer with text: send replaces the mic, and the model chip gives way to its icon.
+  { name: "chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
   { name: "chat-keyboard", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }] },
   { name: "chat-keyboard-drag", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }, { swipe: "down" }, { settle: true }] },
   // A Bot's page and the Bots view over fixed Bots, then the Bot page's JS list.
