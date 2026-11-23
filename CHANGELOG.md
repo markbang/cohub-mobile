@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.3.17](https://github.com/markbang/cohub-mobile/compare/v2.3.16...v2.3.17) (2026-11-23)
+
+
+### Fixes
+
+* **chat:** match iOS 26 on header, composer, receipts and failure states ([#278](https://github.com/markbang/cohub-mobile/issues/278)) ([04b66ef](https://github.com/markbang/cohub-mobile/commit/04b66ef5ef4afe3a64359edef539041b47c6dece))
+* **chat:** restore the iOS timeline keyboard until the next native build ([#280](https://github.com/markbang/cohub-mobile/issues/280)) ([3dc116d](https://github.com/markbang/cohub-mobile/commit/3dc116dcd1efb62cfae64d7b726cdc35708bc6b3))
+* **chat:** show delivery once and mark where unread messages start ([#277](https://github.com/markbang/cohub-mobile/issues/277)) ([1d44531](https://github.com/markbang/cohub-mobile/commit/1d44531fc9be68f99ddbb8d4ad1f05f1711d755c))
+* **e2e:** sign snapshot runs in without a sign-in code email ([#281](https://github.com/markbang/cohub-mobile/issues/281)) ([df12724](https://github.com/markbang/cohub-mobile/commit/df12724cf5f2bc4608f097d2e7cbdd9ae3973a06))
+
 ## [2.3.16](https://github.com/markbang/cohub-mobile/compare/v2.3.15...v2.3.16) (2026-11-21)
 
 
