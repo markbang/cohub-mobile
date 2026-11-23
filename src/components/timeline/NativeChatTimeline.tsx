@@ -8,7 +8,7 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, unreadDividerNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, UNREAD_DIVIDER_PAD, unreadDividerNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
 import { isDeliveredMessage } from "@/src/data/chat-read-state";
 import { messageRowKey } from "@/src/data/session-history";
@@ -28,13 +28,16 @@ import { useSandboxImageUrls } from "@/src/data/use-message-images";
 import { useTranslation } from "@/src/i18n";
 import { ChatTimelineView } from "@/src/platform/chat-timeline";
 import { motion } from "@/src/motion";
-import { useAppTheme } from "@/src/theme";
+import { edgeChrome, useAppTheme } from "@/src/theme";
 import { usePaneWidth } from "@/src/ui/pane";
 import { contentText, displaySessionTitle, hasRenderableMessage, messageText } from "@/src/utils";
 
 const COPIED_MS = 1600;
 const TURN_START_PADDING = 8;
 const TARGET_POSITION = { viewPosition: 0.15, viewOffset: 8 };
+// The header bar's frosted layer reaches `edgeChrome.topFade` below the header. The open at unread puts the divider's
+// label 8 pt below that, so the row top sits the divider's own padding above it.
+const UNREAD_OPEN_POSITION = { viewPosition: 0, viewOffset: edgeChrome.topFade + 8 - UNREAD_DIVIDER_PAD };
 const IDLE_STEPS: StepsState = { status: "idle", content: null, error: null };
 const ROWS_RETRY_MAX_MS = 1000;
 const SCROLL_LOG_MS = 250;
@@ -191,7 +194,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     const message = initialMessageId ? messages.find((item) => item.id === initialMessageId) : undefined;
     return message ? timelineTargetKey(rows, messageRowKey(message)) : null;
   }, [initialMessageId, messages, rows]);
-  const initialTarget = useMemo(() => initialRowKey ? { key: initialRowKey, viewPosition: TARGET_POSITION.viewPosition, viewOffset: TARGET_POSITION.viewOffset } : null, [initialRowKey]);
+  const initialTarget = useMemo(() => initialRowKey ? { key: initialRowKey, viewPosition: UNREAD_OPEN_POSITION.viewPosition, viewOffset: UNREAD_OPEN_POSITION.viewOffset } : null, [initialRowKey]);
 
   const relatedRefs = useMemo(() => {
     const refs: RelatedSessionRef[] = [];

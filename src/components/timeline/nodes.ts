@@ -402,11 +402,14 @@ export function assistantMessageNode(ctx: NodeContext, key: string, message: Mes
 }
 
 /** `UnreadDivider`: a hairline either side of the label, above the first Turn the device has not read. */
+/** The space above a divider's label; the open places the row so the label clears the header bar. */
+export const UNREAD_DIVIDER_PAD = 10;
+
 export function unreadDividerNode(ctx: NodeContext): TimelineNode {
   const { theme, t } = ctx;
   const rule: TimelineNode = { type: "view", style: { height: 1 / PixelRatio.get(), flex: 1, backgroundColor: color(theme.colors.accent), opacity: 0.5 } };
   return {
-    type: "view", style: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+    type: "view", style: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: UNREAD_DIVIDER_PAD },
     children: [rule, text(t("chat.newMessages"), textStyle("caption", theme.colors.accent, { fontWeight: "600" }), { style: { flexShrink: 0 } }), rule],
   };
 }
