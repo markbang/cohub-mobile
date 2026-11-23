@@ -1,191 +1,192 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "animate": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/animate/SKILL.md",
-      "computedHash": "f76ddd3d4446c3c56a143ea98650c370b3e8f88e6203d1e22082d2082bf1eed7",
+      "computedHash": "60613e9badee4110074d32e1f5d8bf63b720961c2acb9eefe962cd0e591e2e58",
       "installMode": "copy"
     },
     "animate-expo": {
       "source": "emilkowalski/skills",
+      "commit": "64eb3deb9a5fbfa041faf783e0bc3fd635872e9c",
       "sourceType": "github",
       "skillPath": "skills/animate-expo/SKILL.md",
-      "computedHash": "5de09593d564091f9db60aabede7bed760251e118548272050a247c653c417d2",
+      "computedHash": "f221c9cfe03d9255ac3e2383bfb8b1481036142fe2fe9567403eb071d21092bb",
       "installMode": "copy"
     },
     "animation-performance": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/animation-performance/SKILL.md",
-      "computedHash": "333f6a387124d0eda927614671f8be3a00d1ddeb9f43cf8b7fa7032630414311",
+      "computedHash": "cbd338b7c961d1a2f2f61a30905adf1db94206595e8da593fef1b44265d5d08f",
       "installMode": "copy"
     },
     "animation-vocabulary": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/animation-vocabulary/SKILL.md",
-      "computedHash": "0058036865ecbb864fd0c4132efcc62425355d6e99c7e6ef6a936742d62a5dea",
+      "computedHash": "1c50a737b755ff021f5216c7b89af3734ba0f9a908d0b540d3e9979f52fef3e2",
       "installMode": "copy"
     },
     "apple-design": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/apple-design/SKILL.md",
-      "computedHash": "0190417d092a0df447b000154e39733ea6d97efad6d3bec8a6ce3845aeb88914",
+      "computedHash": "118d450c2d6ca54fee5f56cf8883fa3231bc2d917bb8f5a3f87488162c55fac9",
       "installMode": "copy"
     },
     "appllama-app-design-skill": {
       "source": "Appllama/appllama-skills",
       "sourceType": "github",
       "skillPath": "skills/appllama-app-design-skill/SKILL.md",
-      "computedHash": "023b25559a5e9a4ab85ccffc9612d0d0f650608eb7f281dce8408a32649b2340"
+      "computedHash": "72e277fb3fd2baa1429824132269715feac74ab8cabbf7067a0fb1cddf666ffa"
     },
     "ask-sonner": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/ask-sonner/SKILL.md",
-      "computedHash": "8bd257b845985f4b35b603b510a126604176521094af79c4b7347ffeb8a8f7ab",
+      "computedHash": "3d53f948bd8b19993b70d66929f70fa5ddb44bca6018e2c29f9cec6c8bf2b9cf",
       "installMode": "copy"
     },
     "better-ui": {
       "source": "jakubkrehel/skills",
       "sourceType": "github",
       "skillPath": "skills/better-ui/SKILL.md",
-      "computedHash": "d05cf568f197e47b15e71e21b19be1897eba2bf187ef7b0a341bc5ffaf3ffd4d"
+      "computedHash": "086bb100281b79da584d6c5355730ce3828f23451b73da8d944b4a5069ff7f03"
     },
     "break-ui": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/break-ui/SKILL.md",
-      "computedHash": "60ada67662925f4df5e3c6ff41cac3ab241b66f8898100a5ffcd7ba7196cb868",
+      "computedHash": "accfc40025b4cc57475bebdcef52153a1598beec2794d6f11dec5cbbd79481c9",
       "installMode": "copy"
     },
     "cfeed": {
       "source": "netaart/cfeed",
       "sourceType": "github",
       "skillPath": "skills/cfeed/SKILL.md",
-      "computedHash": "93265e96168e351a29d988ea463ede0fa73689cfc394c6a875b67694417ada9c"
+      "computedHash": "f32e83f871e81b780d1866a8987ed6ebf47f5b319936a5d928a73c779807a879"
     },
     "choreograph": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/choreograph/SKILL.md",
-      "computedHash": "4c0615e0cd41ffbca0c7912dba1f1dd1d84b8a3499a5c393be53df9d1b9dec16",
+      "computedHash": "2d76cff124bbbd01c46007e3ee6c971962288ca2daaf11e5d8455ece6c73e7fe",
       "installMode": "copy"
     },
     "emil-design-eng": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/emil-design-eng/SKILL.md",
-      "computedHash": "2483020b5bbaab030d6b3463bfba49c8d9c2cd8dea4d9fba836dbd471f1fb706",
+      "computedHash": "55735a70a886326ee8ba1dd4d1ee040e4e9503a536891467e4ed7e114a69b0dd",
       "installMode": "copy"
     },
     "expo-data-fetching": {
       "source": "expo/skills",
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-data-fetching/SKILL.md",
-      "computedHash": "f09e886fe2bd6dcfaf6094a7ca0d8029c4f4a8cfb3264b5cc23d4a21cb4b2cbe"
+      "computedHash": "8f59642281966b3b27fb2fa39c41f7de3712f84f89097dbd15f1a35b7088b1e1"
     },
     "expo-examples": {
       "source": "expo/skills",
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-examples/SKILL.md",
-      "computedHash": "fd52b5e5db25dca8ccd482b3d2258e45a87390d7ff9ecd191514d431947bf24e"
+      "computedHash": "03c8d467fb01ec987affe4adccf269dc094efc1d94dec17562363ea48888e5b1"
     },
     "expo-native-ui": {
       "source": "expo/skills",
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-native-ui/SKILL.md",
-      "computedHash": "83cb03d9d8629bc15f4be47c5c326151bc2b1e285fd51bd32c211ebb24e5ff8a"
+      "computedHash": "393f23099a146769fe5a7124942a228aa862286d3e932db9ed7815a6ff5a46df"
     },
     "expo-web-to-native": {
       "source": "expo/skills",
       "sourceType": "github",
       "skillPath": "plugins/expo/skills/expo-web-to-native/SKILL.md",
-      "computedHash": "1535f5a384a7b2c1d23829149bc6d9852154eef3f96f2bff81f6dcc96d58e260"
+      "computedHash": "9fbfa7bfc1dfeeb27df8828d0ff43d828f978c30f5e3e767a9605f9fe8078fc4"
     },
     "find-animation-opportunities": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/find-animation-opportunities/SKILL.md",
-      "computedHash": "465d087c41768e4f14ed640dd049036009f613feb55baaa5831b68b33178f9d2",
+      "computedHash": "6912a27a684feba9dd220349940d8a44e0d7b720cab71042f268a7ed93bf4bab",
       "installMode": "copy"
     },
     "gestures": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/gestures/SKILL.md",
-      "computedHash": "d89c81c2ddb0ecb44b9f244a69e41073d74277422f80e675fb424f51ffab955b",
+      "computedHash": "aa2f387479e32471d04dc7bbe6aa40cd69b299a61a05d4353989e1d70da2406e",
       "installMode": "copy"
     },
     "impeccable": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "skillPath": ".agents/skills/impeccable/SKILL.md",
-      "computedHash": "0e56cc00ab154fe34524e218232a21afbd5400a3096a1a3b4b37de75fd6861a5",
+      "computedHash": "5ec970ff95ffcb8e1dec2ffd82fefaf089280440721ca828af2f54615c1eca30",
       "installMode": "copy"
     },
     "improve-animations": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/improve-animations/SKILL.md",
-      "computedHash": "f6652a3bb94950baa33c684cc0966c838eb65cf22ebb5769a4f51ea205c254fe",
+      "computedHash": "197db8a2e4a2f009ad5aeef57fb9aafbec83f9023bfff269a4bf5ede1106584a",
       "installMode": "copy"
     },
     "mobile-native": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/mobile-native/SKILL.md",
-      "computedHash": "f221cea36642168df6d3d6d7f236237cbf1ae669138ff7df07775674223d49ad",
+      "computedHash": "2141766c0a370128cbee3dc004d3f254a411e54f8352e154e73b040e52070e38",
       "installMode": "copy"
     },
     "pick-ui-library": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/pick-ui-library/SKILL.md",
-      "computedHash": "5d2a77bf0ecafbda85aa95fb49999b6d77945d9066ec83d970b62e5b388cd686",
+      "computedHash": "c5d418c22e298c1c85856dc838190ec366782c0b476752dfae71d32ae8342cd5",
       "installMode": "copy"
     },
     "prototype": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/prototype/SKILL.md",
-      "computedHash": "77be567d8c946608fdd15e61b62ab383cdf289a194dce2479828b7eda860d3ba",
+      "computedHash": "c9b2890f9c5f4cff4e05d097549dd633c3f17db3c7378b5b7baa823c9f220bf2",
       "installMode": "copy"
     },
     "remove-animations": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/remove-animations/SKILL.md",
-      "computedHash": "5d738305c722c25e054a9e3b67e68d4429617d9fbae4bc8861b73cc25c8ba84c",
+      "computedHash": "f6eec22d000b9d9779b7f1b1734f930d37d37ead204f36f1b4b097cd47f9f16d",
       "installMode": "copy"
     },
     "review-animations": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/review-animations/SKILL.md",
-      "computedHash": "b1aca2c16876b8f00e2a1eb161714e63ec41099269d5f95c2f307230749b9dcd",
+      "computedHash": "7d23a794b6cb0191a68485b87d546adc9bb5ea93aa4168b299e2fefeea940790",
       "installMode": "copy"
     },
     "transitions-polish": {
       "source": "Jakubantalik/transitions.dev",
       "sourceType": "github",
       "skillPath": "skills/transitions-polish/SKILL.md",
-      "computedHash": "95aec18ac2c9fb2c545c2bf2e7419a8001b8e7f1fb640cdb89db0a543548d27f"
+      "computedHash": "fc27eb67e61b81307f314d531805a2fe2ba3116f9d0aa28fc036f9015676f8c1"
     },
     "vercel-react-native-skills": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/react-native-skills/SKILL.md",
-      "computedHash": "2e9088a7333666d8c2833b8ff58bd51b955501c42b4c7244f72b4cbf22dafcc4"
+      "computedHash": ""
     },
     "write-swift": {
       "source": "emilkowalski/skills",
       "sourceType": "github",
       "skillPath": "skills/write-swift/SKILL.md",
-      "computedHash": "f20bb9cf51dbee1900b264820a12f1d3d378dc4d23ac758e7ba9e644c49a2459",
+      "computedHash": "aba96f69500a765c53e6230e036aacaf1e98f81d5eefd1a15d10d6706dd27b97",
       "installMode": "copy"
     }
   }
