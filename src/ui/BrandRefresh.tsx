@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 import { useTranslation } from "@/src/i18n";
 import { springs } from "@/src/motion";
@@ -101,6 +101,7 @@ function AndroidPull({ refresh, top, children }: { refresh: BrandRefresh; top: n
   const { refreshing, onRefresh, pull, atTop } = refresh;
   const dragging = useSharedValue(false);
   const touchStart = useSharedValue({ x: 0, y: 0 });
+  const grabbedAt = useSharedValue(0);
   // While a refresh runs the band stays open; when it ends the list springs back unless a finger holds it.
   useEffect(() => {
     if (dragging.get()) return;
@@ -122,15 +123,16 @@ function AndroidPull({ refresh, top, children }: { refresh: BrandRefresh; top: n
       if (!atTop.get() || dy < -2 || Math.abs(dx) > Math.abs(dy)) state.fail();
       else if (dy > 4) state.activate();
     })
-    .onStart(() => { dragging.set(true); })
-    .onUpdate((event) => { pull.set((refreshing ? BAND : 0) + rubberBand(event.translationY)); })
+    // A grab during the spring back holds the list where it is instead of snapping it to the band's rest.
+    .onStart(() => { cancelAnimation(pull); grabbedAt.set(pull.get()); dragging.set(true); })
+    .onUpdate((event) => { pull.set(grabbedAt.get() + rubberBand(event.translationY)); })
     // Only the release decides, so a pull that dips back under the band before letting go does not refresh.
     .onEnd(() => {
       const commit = pull.get() >= BAND;
       pull.set(withSpring(commit || refreshing ? BAND : 0, springs.sheet));
       if (commit && !refreshing) scheduleOnRN(onRefresh);
     })
-    .onFinalize(() => { dragging.set(false); }), [atTop, dragging, onRefresh, pull, refreshing, touchStart]);
+    .onFinalize(() => { dragging.set(false); }), [atTop, dragging, grabbedAt, onRefresh, pull, refreshing, touchStart]);
 
   const listStyle = useAnimatedStyle(() => ({ transform: [{ translateY: pull.get() }] }));
   const reveal = useReveal(pull, refreshing);
