@@ -31,6 +31,12 @@ const NO_TURN_SEQUENCES: ReadonlyMap<number, SessionTurnRecord[]> = new Map();
 const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string; unread?: string; tail?: string }>();
+  // A new link is a new snapshot: its state starts over, as a fresh launch would, rather than carrying the last link's scroll and read state.
+  return <DebugChatView key={[params.fixture, params.native, params.probe, params.arrive, params.draft, params.unread, params.tail].join("|")} />;
+}
+
+function DebugChatView() {
   const router = useRouter();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
