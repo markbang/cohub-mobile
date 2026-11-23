@@ -303,32 +303,26 @@ export function contentNodes(ctx: NodeContext, scope: string, content: ContentBl
   return nodes;
 }
 
-/** The receipt on a user bubble: a spinner-dot while sending, the alert when it failed, else the delivered check. */
-function bubbleMeta(ctx: NodeContext, clock: string | undefined, local: boolean, alert: boolean): TimelineNode | null {
-  if (!clock && !local && !alert) return null;
+/** The receipt on a user bubble: a spinner-dot while sending, the alert when it failed; a delivered message shows nothing here. */
+function bubbleMeta(ctx: NodeContext, local: boolean, alert: boolean): TimelineNode | null {
+  if (!local && !alert) return null;
   const tint = ctx.theme.colors.userBubbleMeta;
   const receipt: TimelineNode = alert
     ? { ...icon("alert", 11, tint, 2.4), accessibilityLabel: ctx.t("chat.sendFailed") }
-    : local
-      ? { type: "view", accessibilityLabel: ctx.t("chat.sending"), style: { width: 11, height: 11, alignItems: "center", justifyContent: "center" }, children: [{ type: "view", style: { width: 6, height: 6, borderRadius: 3, backgroundColor: color(tint) } }] }
-      : icon("check-check", 11, tint, 2.4);
-  return {
-    type: "view", style: { flexShrink: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 3, alignSelf: "flex-end", marginTop: 2 },
-    children: [...(clock ? [text(clock, textStyle("micro", tint, { fontVariant: ["tabular-nums"] }))] : []), receipt],
-  };
+    : { type: "view", accessibilityLabel: ctx.t("chat.sending"), style: { width: 11, height: 11, alignItems: "center", justifyContent: "center" }, children: [{ type: "view", style: { width: 6, height: 6, borderRadius: 3, backgroundColor: color(tint) } }] };
+  return { type: "view", style: { flexShrink: 0, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", alignSelf: "flex-end", marginTop: 2 }, children: [receipt] };
 }
 
-export function userMessageNode(ctx: NodeContext, message: MessageRecord, options: { local: boolean; retryDisabled: boolean; topPadding: number; inset?: number }): TimelineNode {
+export function userMessageNode(ctx: NodeContext, message: MessageRecord, options: { local: boolean; retryDisabled: boolean; delivered: boolean; topPadding: number; inset?: number }): TimelineNode {
   const { theme, t } = ctx;
   const maxWidth = getBubbleMaxWidth(ctx.width);
   const inner = maxWidth - BUBBLE_PADDING_X * 2;
   const failed = isFailedSend(message);
-  const clock = formatMessageClock(message.createdAt);
   const tint = theme.colors.userBubbleText;
   const body = hasRenderableContent(message.content)
     ? contentNodes(ctx, message.id, message.content, { width: inner, color: tint, linkColor: theme.colors.userBubbleLink, onUser: true })
     : message.text?.trim() ? [markdown(ctx, message.text, { color: tint, linkColor: theme.colors.userBubbleLink, onUser: true })] : [];
-  const meta = bubbleMeta(ctx, clock, options.local, failed || Boolean(message.errorMessage));
+  const meta = bubbleMeta(ctx, options.local, failed || Boolean(message.errorMessage));
   // Below the bubble, in the danger tone: on the accent bubble a red line would not read.
   const error = message.errorMessage ? { type: "view" as const, style: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 6, maxWidth, marginTop: 4, paddingHorizontal: 8 }, children: [icon("alert", 14, theme.colors.danger), text(message.errorMessage, textStyle("caption", theme.colors.danger), { selectable: true, style: { flexShrink: 1 } })] } : null;
   const action = (name: "retry" | "discard", label: string, glyph: TimelineIconName, tone: string, disabled = false): TimelineNode => pressable({
@@ -344,6 +338,7 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
         style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.userBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
         children: [...body, ...(meta ? [meta] : [])],
       },
+      ...(options.delivered ? [text(t("chat.delivered"), textStyle("micro", theme.colors.textFaint), { style: { marginTop: 3 } })] : []),
       ...(error ? [error] : []),
       ...(failed ? [{
         type: "view" as const, style: { flexDirection: "row", alignItems: "center", marginRight: -8 },
@@ -403,6 +398,16 @@ export function assistantMessageNode(ctx: NodeContext, key: string, message: Mes
       ...(message.errorMessage ? [{ type: "view" as const, style: { marginTop: body.length ? 8 : 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.dangerSoft), paddingHorizontal: 12, paddingVertical: 8 }, children: [text(message.errorMessage, textStyle("caption", theme.colors.danger), { selectable: true })] }] : []),
       ...(meta ? [meta] : []),
     ],
+  };
+}
+
+/** `UnreadDivider`: a hairline either side of the label, above the first Turn the device has not read. */
+export function unreadDividerNode(ctx: NodeContext): TimelineNode {
+  const { theme, t } = ctx;
+  const rule: TimelineNode = { type: "view", style: { height: 1 / PixelRatio.get(), flex: 1, backgroundColor: color(theme.colors.accent), opacity: 0.5 } };
+  return {
+    type: "view", style: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+    children: [rule, text(t("chat.newMessages"), textStyle("caption", theme.colors.accent, { fontWeight: "600" }), { style: { flexShrink: 0 } }), rule],
   };
 }
 

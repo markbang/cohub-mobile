@@ -900,6 +900,8 @@ export const en = {
   "chat.model.agent": "Agent",
   "chat.systemUpdate": "System update",
   "chat.sending": "Sending",
+  "chat.delivered": "Delivered",
+  "chat.newMessages": "New Messages",
   "chat.sendFailed": "Not sent",
   "chat.sendFailed.title": "Message not sent",
   "chat.sendFailed.retry": "Retry sending",

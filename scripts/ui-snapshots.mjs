@@ -86,6 +86,12 @@ export const SCREENS = [
   { name: "chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
   { name: "chat-keyboard", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }] },
   { name: "chat-keyboard-drag", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }, { swipe: "down" }, { settle: true }] },
+  // Unread: the Chat opens at the first message of the turn the device has not read (the 14th message).
+  { name: "chat-unread", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long&unread=14" },
+  // The Delivered line: a Chat that ends on the prompt, with no reply under it yet.
+  { name: "chat-delivered", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&tail=user" },
+  // The same Chat after a few swipes to the end: the read sequence has passed the divider's Turn, so the divider is gone.
+  { name: "chat-unread-end", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=long&unread=14", steps: [{ swipe: "up" }, { swipe: "up" }, { swipe: "up" }] },
   // A Bot's page and the Bots view over fixed Bots, then the Bot page's JS list.
   { name: "chat-bot", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot" },
   { name: "chat-bot-js", ready: "Chief of staff", link: "cohub://debug/chat?fixture=bot&native=0" },

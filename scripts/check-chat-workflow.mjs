@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { Buffer } from "node:buffer";
 import { mock } from "node:test";
 import ts from "typescript";
-import { isSessionUnread, latestMessageId, latestUnreadAssistantIndex, unreadAssistantTurnCount } from "../src/data/chat-read-state.ts";
+import { isDeliveredMessage, isSessionUnread, latestMessageId, latestUnreadAssistantIndex, readThrough, reachesUnread, unreadAssistantTurnCount, unreadStart } from "../src/data/chat-read-state.ts";
 import { markdownPlainText } from "../src/data/markdown-plain.ts";
 import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
@@ -1231,13 +1231,14 @@ for (const [tab, component, expectedRequests] of [
   }
 }
 
-// The bubble clock and read receipt share one row; a wrapping row pushed the receipt outside a short bubble.
+// A delivered own bubble has no meta; a send in flight or failed has one row the bubble must fit, since a wrapping row pushed the receipt outside a short bubble.
 {
   const renderMeta = loadChromeComponent("../src/components/MessageContent.tsx", "BubbleMeta", { ...formScope, useAppTheme: () => ({ colors: { userBubbleMeta: "meta", textFaint: "faint" } }) });
-  for (const local of [false, true]) {
-    const row = renderMeta({ clock: "00:40", local, t: (key) => key });
+  assert.equal(renderMeta({ local: false, failed: false, t: (key) => key }), null, "a delivered bubble shows no clock or receipt");
+  for (const flags of [{ local: true, failed: false }, { local: false, failed: true }]) {
+    const row = renderMeta({ ...flags, t: (key) => key });
     assert.equal(row.props.style?.flexWrap, undefined, "the meta row never wraps");
-    assert.ok(classes(row).has("flex-row") && classes(row).has("shrink-0") && !classes(row).has("flex-wrap"), "clock and receipt stay on one row the bubble must fit");
+    assert.ok(classes(row).has("flex-row") && classes(row).has("shrink-0") && !classes(row).has("flex-wrap"), "the status stays on one row the bubble must fit");
   }
 }
 
@@ -4269,7 +4270,7 @@ const liveRowScope = {
   MessageBubble: "MessageBubble", LiveReply: "LiveReply", TURN_START_STYLE: { paddingTop: 8 },
   rowWidth: 390, WEB_COLUMN: undefined, windowWidth: 390, sessionId: "fixture", spaceId: "space", streamTurnId: "turn-a",
   handleCopyMessage: () => {}, retryRow: () => {}, retryDisabled: false, pendingReply: false, discardSend: () => {}, view: { historyLoaded: true }, forkMessage: () => {}, forkingTurnId: null, forkOrigin: null, ForkedFromDivider: "ForkedFromDivider",
-  speechVoice: null, speakTurn: () => {}, isSpeakableTurn,
+  speechVoice: null, speakTurn: () => {}, isSpeakableTurn, unreadMessageId: null, deliveredMessageId: null, UnreadDivider: "UnreadDivider",
   ArrivalRow: "ArrivalRow", arrivalBaseline: null, reducedMotion: false, isCatchUpArrival: () => false, messageRowKey,
   bot: null, botLayout: null, botPeers: new Map(), botMessageSpace, botExchange, openPeerBot: () => {}, BotNoteBubble: "BotNoteBubble", BotExchangeRow: "BotExchangeRow", BotTimeDivider: "BotTimeDivider", BOT_BUBBLE_INSET,
 };
@@ -4284,6 +4285,17 @@ const renderLiveRow = compileRenderMessage(liveRowScope);
   const renderForkRow = compileRenderMessage({ ...liveRowScope, client: null, lookupSession: () => null, openRelatedSession: () => {}, messages: forkMessages, replyAnchor: null, forkOrigin: { sequence: 1, ref: { spaceId: "space", sessionId: "parent", turnId: "anchor" } } });
   const dividers = forkMessages.map((item, index) => chromeNodes(renderForkRow({ item, index })).filter((node) => node.type === "ForkedFromDivider").length);
   assert.deepEqual(dividers, [0, 1, 0], "the fork divider closes the anchor Turn's last row, before the fork's own Turns");
+}
+{
+  const unreadMessages = [
+    { id: "read", role: "user", meta: { turnSequence: 1 } },
+    { id: "unread", role: "user", meta: { turnSequence: 2 } },
+  ];
+  const renderUnreadRow = compileRenderMessage({ ...liveRowScope, client: null, lookupSession: () => null, openRelatedSession: () => {}, messages: unreadMessages, replyAnchor: null, forkOrigin: null, unreadMessageId: "unread", deliveredMessageId: "unread" });
+  const dividers = unreadMessages.map((item, index) => chromeNodes(renderUnreadRow({ item, index })).filter((node) => node.type === "UnreadDivider").length);
+  assert.deepEqual(dividers, [0, 1], "the New Messages divider opens the first unseen row");
+  const delivered = unreadMessages.map((item, index) => chromeNodes(renderUnreadRow({ item, index })).find((node) => node.type === "MessageBubble")?.props.delivered);
+  assert.deepEqual(delivered, [false, true], "only the newest own message the server accepted carries the Delivered line");
 }
 const BOT_SAY_ORIGIN = { kind: "prompt", depth: 1, turnId: "e130c767-6785-4f62-9ff8-1ffecbd10b96", spaceId: "0aec405e-90c4-4a99-840c-d890a67f60f5", sessionId: "79e168c0-c2e4-4815-abf0-65c41a1074bc", toolCallId: "4f3eb83c-ff0f-4bf0-8f3e-bb7e4907d8c7" };
 const PEER_SPACE_ID = "5b0c2d4e-6f70-4a81-9b92-a3b4c5d6e7f8";
@@ -4390,6 +4402,21 @@ assert.equal(latestUnreadAssistantIndex([{ role: "assistant", sequence: 1, meta:
 assert.equal(unreadAssistantTurnCount(messages, 6), 1, "only the turn after the read sequence is unread");
 assert.equal(unreadAssistantTurnCount([...messages, { role: "assistant", meta: { turnSequence: 9 } }, { role: "assistant", meta: { turnSequence: 9 } }, { role: "assistant", meta: { turnSequence: 10 } }], 7), 2, "two newer turns count once each");
 assert.equal(unreadAssistantTurnCount(messages, 7), 0, "a read sequence at the newest turn leaves nothing to count");
+assert.equal(unreadStart(messages, null), null);
+assert.equal(unreadStart(messages, 6)?.turnSequence, 7, "the Turn's user message opens the run");
+assert.equal(unreadStart(messages, 6)?.atEnd, false);
+assert.equal(unreadStart(messages, 8), null);
+assert.equal(unreadStart([{ id: "last", role: "user", meta: { turnSequence: 9 } }], 8)?.atEnd, true, "a run that is only the last message opens at the tail");
+assert.equal(reachesUnread(messages, 5), true);
+assert.equal(reachesUnread([{ meta: { turnSequence: 40 } }], 10), false, "a window that starts past the Turn after the read sequence does not reach the unread run");
+assert.equal(readThrough(null, []), null);
+assert.equal(readThrough(7, [{ role: "user", meta: { turnSequence: 9 } }]), 7, "user messages never advance the read sequence");
+assert.equal(readThrough(7, [{ role: "assistant", meta: { turnSequence: 9 } }, { role: "assistant", meta: { turnSequence: 8 } }]), 9);
+assert.equal(readThrough(9, [{ role: "assistant", meta: { turnSequence: 8 } }]), 9, "the read sequence never moves back");
+assert.equal(isDeliveredMessage({ role: "user", meta: null }), true);
+assert.equal(isDeliveredMessage({ role: "user", meta: { optimistic: true } }), false, "a send in flight is not delivered");
+assert.equal(isDeliveredMessage({ role: "user", meta: { sendFailed: true } }), false, "a failed send is not delivered");
+assert.equal(isDeliveredMessage({ role: "assistant", meta: null }), false);
 {
   const at = (iso) => Date.parse(iso);
   const chat = (lastMessageId, lastMessageAt) => ({ id: "s1", lastMessageId, lastMessageAt });

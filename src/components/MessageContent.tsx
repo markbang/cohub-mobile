@@ -535,18 +535,17 @@ function TypingIndicator() {
   return <View className="flex-row items-center"><MascotLoader size={22} accessibilityLabel={t("message.stream.starting")} /></View>;
 }
 
-function BubbleMeta({ clock, local = false, failed = false, t }: { clock?: string; local?: boolean; failed?: boolean; t: Translate }) {
+/** A send in flight or one that failed; a delivered message shows nothing here, its Delivered line sits below. */
+function BubbleMeta({ local = false, failed = false, t }: { local?: boolean; failed?: boolean; t: Translate }) {
   const theme = useAppTheme();
   const color = theme.colors.userBubbleMeta;
-  if (!clock && !local && !failed) return null;
+  if (!local && !failed) return null;
   // Never wraps: the bubble shrink-wraps to this row, and fractional text widths can leave it a
   // sub-pixel short of its own content, which wrapped the receipt out under the bubble.
-  return <View className="shrink-0 flex-row items-center justify-end" style={{ gap: 3 }}>
+  return <View className="shrink-0 flex-row items-center justify-end">
     {/* design-system: the bubble meta color depends on the bubble it sits in; its width feeds the inline-meta layout. */}
-    {clock ? <Text style={[typography.micro, { color, fontVariant: ["tabular-nums"] }]}>{clock}</Text> : null}
     {failed ? <View accessible accessibilityLabel={t("chat.sendFailed")}><AppIcon name="alert" size={11} color={color} strokeWidth={2.4} /></View>
-      : local ? <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View>
-      : <AppIcon name="check-check" size={11} color={color} strokeWidth={2.4} />}
+      : <View accessibilityLabel={t("chat.sending")} style={{ width: 11, height: 11, alignItems: "center", justifyContent: "center" }}><View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} /></View>}
   </View>;
 }
 
@@ -643,7 +642,7 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onSpeak, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, rowInset = 5 }: { message: MessageRecord; local?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; /** Set for a reply the viewer can hear read aloud. */ onSpeak?: (turnId: string) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A user bubble's own top and bottom padding; a Bot's page packs its bubbles closer. */ rowInset?: number }) {
+export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onSpeak, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, rowInset = 5, delivered = false }: { message: MessageRecord; local?: boolean; /** The newest own message the server accepted: it carries the Delivered line. */ delivered?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; /** Set for a reply the viewer can hear read aloud. */ onSpeak?: (turnId: string) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A user bubble's own top and bottom padding; a Bot's page packs its bubbles closer. */ rowInset?: number }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const width = usePaneWidth();
@@ -688,11 +687,12 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   const maxWidth = getBubbleMaxWidth(rowWidth);
   const failed = isFailedSend(message);
   // A message with an error never shows the delivered check: its receipt is the alert, as for a failed send.
-  const footer = clock || local || failed || message.errorMessage ? <BubbleMeta clock={clock} local={local} failed={failed || Boolean(message.errorMessage)} t={t} /> : undefined;
+  const footer = local || failed || message.errorMessage ? <BubbleMeta local={local} failed={failed || Boolean(message.errorMessage)} t={t} /> : undefined;
   return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: rowInset, alignItems: "flex-end" }}>
     <BubbleTraceMessage.Provider value={message}><UserBubbleFrame maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
       {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={footer} /> : footer}
     </UserBubbleFrame></BubbleTraceMessage.Provider>
+    {delivered ? <Text className="text-micro text-fg-faint" style={{ marginTop: 3 }}>{t("chat.delivered")}</Text> : null}
     {message.errorMessage ? <View className="flex-row items-start gap-1.5 px-2 pt-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable className="shrink text-caption text-danger">{message.errorMessage}</Text></View> : null}
     {failed && (onRetry || onDiscard) ? <View className="flex-row items-center" style={{ marginRight: -8 }}>
       {onDiscard ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.delete")} onPress={() => onDiscard(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="trash" size={14} tone="muted" /><Text className="text-caption font-semibold text-fg-muted">{t("chat.sendFailed.delete")}</Text></Pressable> : null}

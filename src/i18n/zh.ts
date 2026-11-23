@@ -874,6 +874,8 @@ export const zh: Record<TranslationKey, string> = {
   "chat.model.agent": "智能体",
   "chat.systemUpdate": "系统更新",
   "chat.sending": "发送中",
+  "chat.delivered": "已送达",
+  "chat.newMessages": "新消息",
   "chat.sendFailed": "未发送",
   "chat.sendFailed.title": "消息未发送",
   "chat.sendFailed.retry": "重新发送",

@@ -8,8 +8,10 @@ import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
-import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
+import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, unreadDividerNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
+import { isDeliveredMessage } from "@/src/data/chat-read-state";
+import { messageRowKey } from "@/src/data/session-history";
 import { BOT_BUBBLE_INSET, botExchange, botMessageSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
 import { CHAT_PAGE_THRESHOLD, CHAT_TAIL_LEAVE_THRESHOLD, CHAT_TAIL_THRESHOLD, chatTimelineSettledOffset } from "@/src/data/chat-scroll";
 import { isActiveTurnStatus, isTerminalTurnStatus } from "@/src/data/chat-stream";
@@ -52,6 +54,10 @@ type Props = {
   spaceId: string;
   client: CohubClient | null;
   messages: MessageRecord[];
+  /** The message the New Messages divider sits above, or null when the Chat has nothing unread to show. */
+  unreadMessageId: string | null;
+  /** Before the first load, the timeline is placed on this message's row at the top of the viewport; null places it at the tail. */
+  initialMessageId: string | null;
   turnsById: ReadonlyMap<string, SessionTurnRecord>;
   turnsBySequence: ReadonlyMap<number, SessionTurnRecord[]>;
   streamTurnId: string | null;
@@ -105,7 +111,7 @@ type Props = {
   onOpenBot?: (spaceId: string) => void;
 };
 
-type Cached = { deps: unknown[]; spec: TimelineRowSpec };
+type Cached = { deps: unknown[]; spec: TimelineRowSpec; visible: boolean };
 
 function sameDeps(left: unknown[], right: unknown[]) {
   return left.length === right.length && left.every((value, index) => Object.is(value, right[index]));
@@ -133,7 +139,7 @@ function expandedIn(expanded: ReadonlySet<string>, scopes: readonly string[]) {
  * scrolls, follows the tail, and animates. Only rows whose description changed cross to native.
  */
 export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(function NativeChatTimeline(props, ref) {
-  const { sessionId, spaceId, client, messages, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession, bot = null, botPeers } = props;
+  const { sessionId, spaceId, client, messages, unreadMessageId, initialMessageId, turnsById, turnsBySequence, streamTurnId, replyAnchor, forkOrigin, lookupSession, bot = null, botPeers } = props;
   const NativeView = ChatTimelineView!;
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -180,6 +186,13 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
   const rowsRef = useRef<TimelineRow[]>(rows);
   rowsRef.current = rows;
 
+  // The native list places itself on this row before its first load, so opening at unread shows no tail first.
+  const initialRowKey = useMemo(() => {
+    const message = initialMessageId ? messages.find((item) => item.id === initialMessageId) : undefined;
+    return message ? timelineTargetKey(rows, messageRowKey(message)) : null;
+  }, [initialMessageId, messages, rows]);
+  const initialTarget = useMemo(() => initialRowKey ? { key: initialRowKey, viewPosition: TARGET_POSITION.viewPosition, viewOffset: TARGET_POSITION.viewOffset } : null, [initialRowKey]);
+
   const relatedRefs = useMemo(() => {
     const refs: RelatedSessionRef[] = [];
     for (const row of rows) {
@@ -216,142 +229,162 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
 
   const ctx = useMemo<NodeContext>(() => ({ theme, t, width: rowWidth, fontScale, reducedMotion: props.reducedMotion, expanded }), [expanded, fontScale, props.reducedMotion, rowWidth, t, theme]);
   const cacheRef = useRef(new Map<string, Cached>());
+  // The row the Delivered line sits under, as the last build found it.
+  const deliveredRef = useRef<string | null>(null);
   const { flight, forkingTurnId, retryDisabled, arrivalBaseline, speechEnabled } = props;
   const speechState = useTurnSpeechState();
   const specs = useMemo(() => {
-    const cache = cacheRef.current;
-    const next = new Map<string, Cached>();
-    const out: Record<string, TimelineRowSpec> = {};
-    const base = [theme, t, rowWidth, fontScale, props.reducedMotion];
-    const firstOfOwner = new Set<string>();
-    const appear = arrivalAnimations(props.reducedMotion);
-    const messageByKey = new Map<string, MessageRecord>();
-    for (const row of rows) if (row.kind === "message") messageByKey.set(row.key, row.message);
-    // A Bot's page spaces its bubbles by side and time instead of by Turn.
-    const placed = bot ? [...messageByKey.values()] : [];
-    const voice = (message: MessageRecord) => { const writer = noteWriter(message); return botVoice(writer ? botExchange(message, writer, spaceId) : null, writer); };
-    const placements = new Map(botPlacements(placed, (message) => message.role !== "user" ? spaceId : voice(message)).map((placement, index) => [placed[index]!, placement]));
-    for (const row of rows) {
-      const owner = row.owner ? messageByKey.get(row.owner) : undefined;
-      const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
-      if (row.owner) firstOfOwner.add(row.owner);
-      const arrival = owner ? isCatchUpArrival(arrivalBaseline, owner) : false;
-      const placement = row.kind === "message" ? placements.get(row.message) : undefined;
-      const build = (deps: unknown[], make: () => { type: string; node: TimelineNode | null; flight?: TimelineFlight; anchor?: false }) => {
-        const all = [...base, turnStart, arrival, placement?.time, placement?.gap, ...deps];
-        const cached = cache.get(row.key);
-        if (cached && sameDeps(cached.deps, all)) {
-          next.set(row.key, cached);
-          out[row.key] = cached.spec;
-          return;
-        }
-        const made = make();
-        const node = made.node ?? EMPTY_NODE;
-        const spec: TimelineRowSpec = {
-          type: made.type,
-          ...(made.anchor === false ? { anchor: false } : {}),
-          node: turnStart ? { type: "view", style: { paddingTop: TURN_START_PADDING }, children: [node] } : placement ? botPlacedNode(ctx, made.node, placement) ?? EMPTY_NODE : node,
-          ...(arrival ? { appear } : {}),
-          ...(made.flight ? { flight: made.flight } : {}),
+    const buildSpecs = (deliveredId: string | null) => {
+      const cache = cacheRef.current;
+      const next = new Map<string, Cached>();
+      const out: Record<string, TimelineRowSpec> = {};
+      const base = [theme, t, rowWidth, fontScale, props.reducedMotion];
+      const firstOfOwner = new Set<string>();
+      const appear = arrivalAnimations(props.reducedMotion);
+      const messageByKey = new Map<string, MessageRecord>();
+      for (const row of rows) if (row.kind === "message") messageByKey.set(row.key, row.message);
+      // A Bot's page spaces its bubbles by side and time instead of by Turn.
+      const placed = bot ? [...messageByKey.values()] : [];
+      const voice = (message: MessageRecord) => { const writer = noteWriter(message); return botVoice(writer ? botExchange(message, writer, spaceId) : null, writer); };
+      const placements = new Map(botPlacements(placed, (message) => message.role !== "user" ? spaceId : voice(message)).map((placement, index) => [placed[index]!, placement]));
+      // The last row that renders anything decides the Delivered line: a reply, steps, or a pending reply below the prompt replace it.
+      let candidate: string | null = null;
+      for (const row of rows) {
+        const owner = row.owner ? messageByKey.get(row.owner) : undefined;
+        const turnStart = !bot && row.owner !== null && !firstOfOwner.has(row.owner) && owner?.role === "user";
+        if (row.owner) firstOfOwner.add(row.owner);
+        const arrival = owner ? isCatchUpArrival(arrivalBaseline, owner) : false;
+        const placement = row.kind === "message" ? placements.get(row.message) : undefined;
+        const unseen = row.kind === "message" && row.message.id === unreadMessageId;
+        const delivered = row.kind === "message" && row.message.id === deliveredId;
+        // The row a Delivered line would sit under, if nothing renders after it; see `candidate` below.
+        const eligible = row.kind === "message" && isDeliveredMessage(row.message) && hasRenderableMessage(row.message) && noteWriter(row.message) === null ? row.message.id : null;
+        const build = (deps: unknown[], make: () => { type: string; node: TimelineNode | null; flight?: TimelineFlight; anchor?: false }) => {
+          const all = [...base, turnStart, arrival, unseen, delivered, placement?.time, placement?.gap, ...deps];
+          const cached = cache.get(row.key);
+          if (cached && sameDeps(cached.deps, all)) {
+            next.set(row.key, cached);
+            out[row.key] = cached.spec;
+            if (cached.visible) candidate = eligible;
+            return;
+          }
+          const made = make();
+          const visible = made.node !== null;
+          if (visible) candidate = eligible;
+          const node = made.node ?? EMPTY_NODE;
+          const positioned = turnStart ? { type: "view" as const, style: { paddingTop: TURN_START_PADDING }, children: [node] } : placement ? botPlacedNode(ctx, made.node, placement) ?? EMPTY_NODE : node;
+          const spec: TimelineRowSpec = {
+            type: made.type,
+            ...(made.anchor === false ? { anchor: false } : {}),
+            node: unseen ? { type: "view", children: [unreadDividerNode(ctx), positioned] } : positioned,
+            ...(arrival ? { appear } : {}),
+            ...(made.flight ? { flight: made.flight } : {}),
+          };
+          next.set(row.key, { deps: all, spec, visible });
+          out[row.key] = spec;
         };
-        next.set(row.key, { deps: all, spec });
-        out[row.key] = spec;
-      };
-      switch (row.kind) {
-        case "older":
-        case "newer": {
-          const loading = row.kind === "older" ? props.loadingOlder : props.loadingNewer;
-          build([loading], () => ({ type: "capsule", node: loadMoreNode(ctx, row.kind, loading), anchor: false }));
-          break;
-        }
-        case "message": {
-          const message = row.message;
-          const sig = expandedIn(expanded, [message.id, row.key]);
-          const writer = noteWriter(message);
-          const exchange = writer ? botExchange(message, writer, spaceId) : null;
-          if (exchange && bot) {
-            const peer = botPeers.get(exchange.peer) ?? null;
-            build([message, sandboxImages, sig, bot.name, peer?.name, peer?.avatarUrl], () => ({ type: "botExchange", node: botExchangeNode(ctx, message.id, exchange, bot, peer, sandboxImages) }));
-          } else if (writer) {
-            build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
-          } else if (message.role === "user") {
-            const flies = flight && flight.matches(message) ? flight.source : null;
-            build([message, retryDisabled, sig, flies], () => ({
-              type: "user",
-              node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, topPadding: 0, inset: placement ? BOT_BUBBLE_INSET : undefined }) : null,
-              flight: flies ? { nodeId: "bubble", ...flies, duration: motion.sendBubble.duration, easing: SEND_FLIGHT_EASING } : undefined,
-            }));
-          } else {
-            const turnId = typeof message.meta?.turnId === "string" ? message.meta.turnId : null;
-            const turn = turnId ? turnsById.get(turnId) ?? null : null;
-            const canFork = Boolean(turn && isTerminalTurnStatus(turn.status));
-            const copied = copiedKey === row.key;
-            const forking = forkingTurnId !== null && forkingTurnId === turnId;
-            const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
-            const speech = speechEnabled && isSpeakableTurn(turn) ? (speechState.turnId === turnId ? speechState.phase : "idle") : null;
-            build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, speech], () => {
-              const compaction = compactionFromMessage(message);
-              if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
-              if (!hasRenderableMessage(message)) return { type: "empty", node: null };
-              if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
-              return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages, speech }) };
-            });
+        switch (row.kind) {
+          case "older":
+          case "newer": {
+            const loading = row.kind === "older" ? props.loadingOlder : props.loadingNewer;
+            build([loading], () => ({ type: "capsule", node: loadMoreNode(ctx, row.kind, loading), anchor: false }));
+            break;
           }
-          break;
-        }
-        case "sentFrom": {
-          // On a Bot's page every `say` comes from the Bot's working Chat; that link is not shown.
-          const source = bot ? null : sentFrom(row.turn);
-          const view = source ? relatedView(source.sessionId) : null;
-          const by = bot ? null : sentBy(row.turn);
-          build([source?.sessionId, view, by], () => ({ type: "related", node: source && view ? sentFromNode(ctx, source, view, displaySessionTitle) : by ? sentByNode(ctx, by) : null }));
-          break;
-        }
-        case "sentTo": {
-          const sessions = sentSessions(row.turn, spaceId);
-          const views = sessions.map((session) => relatedView(session.sessionId));
-          build([row.turn.meta, expandedIn(expanded, [`sentTo:${row.turn.id}`]), ...views], () => ({ type: "related", node: sentToNode(ctx, row.turn.id, sessions, relatedView, displaySessionTitle) }));
-          break;
-        }
-        case "fork": {
-          const view = forkOrigin ? relatedView(forkOrigin.ref.sessionId) : null;
-          build([forkOrigin?.ref, view], () => ({ type: "fork", node: forkOrigin && view ? forkDividerNode(ctx, forkOrigin.ref, view, displaySessionTitle) : null }));
-          break;
-        }
-        case "process": {
-          const turn = row.turn;
-          const sig = expandedIn(expanded, [turn.id]);
-          const thinking = row.live && stream?.turnId === turn.id ? thinkingBlocks(stream.contentBlocks) : [];
-          if (row.live && stream?.turnId === turn.id && (stream.intermediateMessages.length > 0 || thinking.length > 0)) {
-            // Collapsed, only the step count shows, so token batches do not touch this row.
-            const open = expanded.has(`steps:${turn.id}`);
-            build([stream.intermediateMessages, open ? stream.contentBlocks : thinking.length > 0, sig, "live"], () => ({ type: "process", node: streamingProcessNode(ctx, turn.id, stream.intermediateMessages, thinking) }));
-          } else {
-            const steps = stepsByTurn.get(turn.id) ?? IDLE_STEPS;
-            build([turn, sig, steps.status, steps.content, Boolean(client)], () => ({ type: "process", node: turnProcessNode(ctx, turn, steps, Boolean(client)) }));
-          }
-          break;
-        }
-        case "live": {
-          const show = props.liveStream && stream;
-          build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
-            if (show) {
-              const live = stream.status === "pending" || stream.status === "streaming";
-              const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: stream.outputAt ?? streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
-              const process = row.processInRow ? null : streamingProcessNode(ctx, stream.turnId ?? "live", stream.intermediateMessages, thinkingBlocks(stream.contentBlocks));
-              return { type: "live", node: { type: "view", children: process ? [process, card] : [card] } };
+          case "message": {
+            const message = row.message;
+            const sig = expandedIn(expanded, [message.id, row.key]);
+            const writer = noteWriter(message);
+            const exchange = writer ? botExchange(message, writer, spaceId) : null;
+            if (exchange && bot) {
+              const peer = botPeers.get(exchange.peer) ?? null;
+              build([message, sandboxImages, sig, bot.name, peer?.name, peer?.avatarUrl], () => ({ type: "botExchange", node: botExchangeNode(ctx, message.id, exchange, bot, peer, sandboxImages) }));
+            } else if (writer) {
+              build([message, sandboxImages], () => ({ type: "botNote", node: botNoteNode(ctx, message, sandboxImages) }));
+            } else if (message.role === "user") {
+              const flies = flight && flight.matches(message) ? flight.source : null;
+              build([message, retryDisabled, sig, flies], () => ({
+                type: "user",
+                node: hasRenderableMessage(message) ? userMessageNode(ctx, message, { local: message.meta?.optimistic === true, retryDisabled, delivered, topPadding: 0, inset: placement ? BOT_BUBBLE_INSET : undefined }) : null,
+                flight: flies ? { nodeId: "bubble", ...flies, duration: motion.sendBubble.duration, easing: SEND_FLIGHT_EASING } : undefined,
+              }));
+            } else {
+              const turnId = typeof message.meta?.turnId === "string" ? message.meta.turnId : null;
+              const turn = turnId ? turnsById.get(turnId) ?? null : null;
+              const canFork = Boolean(turn && isTerminalTurnStatus(turn.status));
+              const copied = copiedKey === row.key;
+              const forking = forkingTurnId !== null && forkingTurnId === turnId;
+              const images = replyImagePaths(message).map((path) => sandboxImages.get(path) ?? "").join("\n");
+              const speech = speechEnabled && isSpeakableTurn(turn) ? (speechState.turnId === turnId ? speechState.phase : "idle") : null;
+              build([message, sig, canFork, copied, forkingTurnId !== null, forking, images, speech], () => {
+                const compaction = compactionFromMessage(message);
+                if (compaction && (message.content ?? []).every((block) => block.type === "system_note")) return { type: "compaction", node: compactionNode(ctx, row.key, compaction) };
+                if (!hasRenderableMessage(message)) return { type: "empty", node: null };
+                if (message.role === "system") return { type: "system", node: systemMessageNode(ctx, message) };
+                return { type: "assistant", node: assistantMessageNode(ctx, row.key, message, { copied, canFork, forkDisabled: forkingTurnId !== null, forking, sandboxImages, speech }) };
+              });
             }
-            return { type: "live", node: pendingReply ? streamCardNode(ctx, { content: [], status: "pending", runtimePhase: null, runtimeModel: null, startedAt: firstSeenAt, streamingText: null }) : null };
-          });
-          break;
+            break;
+          }
+          case "sentFrom": {
+            // On a Bot's page every `say` comes from the Bot's working Chat; that link is not shown.
+            const source = bot ? null : sentFrom(row.turn);
+            const view = source ? relatedView(source.sessionId) : null;
+            const by = bot ? null : sentBy(row.turn);
+            build([source?.sessionId, view, by], () => ({ type: "related", node: source && view ? sentFromNode(ctx, source, view, displaySessionTitle) : by ? sentByNode(ctx, by) : null }));
+            break;
+          }
+          case "sentTo": {
+            const sessions = sentSessions(row.turn, spaceId);
+            const views = sessions.map((session) => relatedView(session.sessionId));
+            build([row.turn.meta, expandedIn(expanded, [`sentTo:${row.turn.id}`]), ...views], () => ({ type: "related", node: sentToNode(ctx, row.turn.id, sessions, relatedView, displaySessionTitle) }));
+            break;
+          }
+          case "fork": {
+            const view = forkOrigin ? relatedView(forkOrigin.ref.sessionId) : null;
+            build([forkOrigin?.ref, view], () => ({ type: "fork", node: forkOrigin && view ? forkDividerNode(ctx, forkOrigin.ref, view, displaySessionTitle) : null }));
+            break;
+          }
+          case "process": {
+            const turn = row.turn;
+            const sig = expandedIn(expanded, [turn.id]);
+            const thinking = row.live && stream?.turnId === turn.id ? thinkingBlocks(stream.contentBlocks) : [];
+            if (row.live && stream?.turnId === turn.id && (stream.intermediateMessages.length > 0 || thinking.length > 0)) {
+              // Collapsed, only the step count shows, so token batches do not touch this row.
+              const open = expanded.has(`steps:${turn.id}`);
+              build([stream.intermediateMessages, open ? stream.contentBlocks : thinking.length > 0, sig, "live"], () => ({ type: "process", node: streamingProcessNode(ctx, turn.id, stream.intermediateMessages, thinking) }));
+            } else {
+              const steps = stepsByTurn.get(turn.id) ?? IDLE_STEPS;
+              build([turn, sig, steps.status, steps.content, Boolean(client)], () => ({ type: "process", node: turnProcessNode(ctx, turn, steps, Boolean(client)) }));
+            }
+            break;
+          }
+          case "live": {
+            const show = props.liveStream && stream;
+            build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
+              if (show) {
+                const live = stream.status === "pending" || stream.status === "streaming";
+                const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: stream.outputAt ?? streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
+                const process = row.processInRow ? null : streamingProcessNode(ctx, stream.turnId ?? "live", stream.intermediateMessages, thinkingBlocks(stream.contentBlocks));
+                return { type: "live", node: { type: "view", children: process ? [process, card] : [card] } };
+              }
+              return { type: "live", node: pendingReply ? streamCardNode(ctx, { content: [], status: "pending", runtimePhase: null, runtimeModel: null, startedAt: firstSeenAt, streamingText: null }) : null };
+            });
+            break;
+          }
         }
       }
-    }
-    cacheRef.current = next;
-    return { keys: rows.map((row) => row.key), rows: out };
+      cacheRef.current = next;
+      cacheRef.current = next;
+      return { keys: rows.map((row) => row.key), rows: out, candidate };
+    };
+    // Usually the last guess still holds, so one pass builds the rows; a changed candidate rebuilds them once more.
+    let built = buildSpecs(deliveredRef.current);
+    if (built.candidate !== deliveredRef.current) built = buildSpecs(built.candidate);
+    deliveredRef.current = built.candidate;
+    return { keys: built.keys, rows: built.rows };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages, speechEnabled, speechState]);
+  }, [rows, unreadMessageId, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages, speechEnabled, speechState]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());
@@ -541,6 +574,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     <NativeView
       ref={nativeRef}
       style={{ flex: 1 }}
+      initialTarget={initialTarget}
       contentInset={contentInset}
       viewportInset={viewportInset}
       thresholds={thresholds}
