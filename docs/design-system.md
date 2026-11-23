@@ -111,12 +111,15 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   `borderCurve: "continuous"` where the platform supports it (iOS).
 - **Concentric corners.** A shape nested in another at an inset takes `outer = inner + inset`.
   A `Segmented` control is a capsule in a capsule, concentric at any height.
-- **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
-  control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
-  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. On iOS the `+` is a bare 20 pt glyph in a 36 pt target (a borderless SwiftUI menu), not a bordered circle. The model is a
+- **Composer** has two layouts, and `getComposerLayout` in `src/ui/composer-layout.ts` is the only place that decides which.
+  - **One row** (empty, or text that fits one line): a 44 pt capsule with everything inline: `+` at the left, the field, then the trailing control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
+  - **Two rows** (text that wraps or has a newline, or an expanded field): row 1 is the field alone across the full width of the capsule, inside its 4 pt padding and the field's own 4 pt; row 2 is `+`, harness and model on the left, a flexible spacer, then expand and the trailing control on the right. A wrapped composer stays in two rows until its draft is cleared, so the wider row cannot flip it back to one line.
+  - Every 36 pt control keeps a 44 pt target and sits inset 4 pt. The `bot` variant has no harness or model, so its row 2 is `+` left and expand/send right.
+  - **Corner radius** follows the drawn height: `min(height / 2, 22)`. The 22 pt corner is half the one-row capsule and concentric with the 36 pt controls inset 4 pt, so a wrapped capsule keeps the same corner. A capsule under 44 pt keeps fully round ends. Liquid, frosted and solid glass take the same radius.
+  - On iOS the `+` is a bare 20 pt glyph in a 36 pt target (a borderless SwiftUI menu), not a bordered circle. The model is a
   36 pt sparkles control, like the harness, that opens the picker; its availability is an 8 pt dot badge
   on its top-right corner, shown only when the status is known. Its label keeps the name, thinking level
-  and status. At 402 pt the field keeps about 250 pt. Web has no mic, so its send stays visible and disabled.
+  and status. Web has no mic, so its send stays visible and disabled.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |

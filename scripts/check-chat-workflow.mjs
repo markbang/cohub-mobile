@@ -26,7 +26,7 @@ import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, s
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
-import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
+import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, composerCapsuleRadius, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
@@ -3996,7 +3996,7 @@ assert.deepEqual(
 assert.equal(getComposerActionState({ text: "hi", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true }).queues, false, "an idle Chat sends instead of queueing");
 assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true, sendFeedback: "success" }).glyph, "sent");
 assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: true, hasStopHandler: true, sendFeedback: "success" }).glyph, "stop", "a running turn shows stop over the sent check");
-const composerLayoutInput = { text: "hello", contentHeight: 30, lineHeight: 22, availableHeight: 800, expanded: false };
+const composerLayoutInput = { text: "hello", contentHeight: 30, lineHeight: 22, availableHeight: 800, expanded: false, wrapped: false };
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "" }), {
   expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,
 });
@@ -4016,6 +4016,12 @@ assert.deepEqual(getComposerLayout({ ...composerLayoutInput, contentHeight: 600,
 assert.equal(getComposerLayout({ ...composerLayoutInput, contentHeight: 52, expanded: true }).height, 320, "an expanded editor keeps its height even when the content fits");
 assert.equal(getComposerLayout({ ...composerLayoutInput, contentHeight: 52, expanded: true }).scrollEnabled, true, "an expanded editor stays scrollable because the estimate may undershoot real wraps");
 assert.equal(getComposerLayout({ ...composerLayoutInput, expanded: true }).showExpandButton, true, "collapse remains available after deleting back to one line");
+// A wrapped draft keeps its two rows: the full-width row measures shorter, which would flip a one-row draft back and forth.
+assert.equal(getComposerLayout({ ...composerLayoutInput, wrapped: true }).showExpandButton, true, "a wrapped draft stays in two rows while its text is kept");
+assert.equal(getComposerLayout({ ...composerLayoutInput, wrapped: true, text: "" }).showExpandButton, false, "clearing the draft returns to one row");
+assert.equal(composerCapsuleRadius(44), 22, "the one-row capsule is fully round");
+assert.equal(composerCapsuleRadius(30), 15, "a shorter capsule keeps its ends fully round");
+assert.equal(composerCapsuleRadius(120), 22, "a wrapped capsule keeps the 22 pt corner concentric with its 36 pt controls");
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "", contentHeight: 600, expanded: true }), {
   expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,
 }, "clearing or sending resets the layout even before the native measurement catches up");

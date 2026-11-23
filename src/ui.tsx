@@ -34,7 +34,7 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_TEXT_PADDING, composerCapsuleRadius, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, MAX_FONT_SCALE, useAppTheme, typography } from "@/src/theme";
@@ -563,6 +563,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // updates bail out, so typing never pays an extra render.
   const [lastUserText, setLastUserText] = useState(value);
   const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
+  // Two rows (the wrapped layout) once a draft has wrapped; see getComposerLayout.
+  const [wrapped, setWrapped] = useState(false);
+  const [capsuleHeight, setCapsuleHeight] = useState(44);
   const inputRef = useRef<TextInput | null>(null);
   const attachButtonRef = useRef<View>(null);
   const harnessButtonRef = useRef<View>(null);
@@ -603,7 +606,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
     lineHeight,
     availableHeight: Math.min(windowHeight, keyboardTop ?? windowHeight) - insets.top - (keyboardVisible ? 0 : insets.bottom),
     expanded,
+    wrapped,
   });
+  if (layout.showExpandButton !== wrapped) setWrapped(layout.showExpandButton);
   // Dictation appends a whole transcript at once, and the overflowing final can land after
   // the mic already stopped, so auto-expand keys off the missing onChangeText round-trip
   // instead of active recording. It fires once per append so a manual collapse sticks while
@@ -712,19 +717,33 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <AppIcon name="sparkles" size={18} tone="secondary" />
             {modelStatus === "unknown" ? null : <View className={`absolute right-0.5 top-0.5 size-2 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
           </Pressable></MenuAnchor> : null;
+  const trailing = showVoice ? voiceButton : sendButton;
+  const harnessSlot = variant === "chat" ? harnessControl : null;
+  const modelSlot = variant === "chat" ? modelControl : null;
+  const radius = composerCapsuleRadius(capsuleHeight);
   // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`. Glyphs pop only when they change, not when the composer first appears.
+  // The field keeps the first row's slot in both layouts, so crossing the wrap does not remount the text input.
   return (
     <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
       <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`flex-row gap-1 overflow-hidden ${layout.showExpandButton ? "items-end" : "items-center"} ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerCapsule}>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }]}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
-        <GlassBackground radius={styles.composerCapsule.borderRadius} surface="glassComposer" />
-        {attachButton}
-        {variant === "chat" ? harnessControl : null}
-        {variant === "chat" ? modelControl : null}
-        {inputField}
-        {expandButton}
-        {showVoice ? voiceButton : sendButton}
+        <GlassBackground radius={radius} surface="glassComposer" />
+        <View className="flex-row items-center gap-1">
+          {layout.showExpandButton ? null : attachButton}
+          {layout.showExpandButton ? null : harnessSlot}
+          {layout.showExpandButton ? null : modelSlot}
+          {inputField}
+          {layout.showExpandButton ? null : trailing}
+        </View>
+        {layout.showExpandButton ? <View className="flex-row items-center gap-1">
+          {attachButton}
+          {harnessSlot}
+          {modelSlot}
+          <View className="flex-1" />
+          {expandButton}
+          {trailing}
+        </View> : null}
       </View>
       </LayoutAnimationConfig>
     </View>
@@ -824,9 +843,9 @@ function controlIconExiting() {
 
 const styles = StyleSheet.create({
   composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
-  // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
-  // One 44 pt row: 36 pt controls inset 4, so the capsule's ends stay round at any text height.
-  composerCapsule: { minHeight: 44, paddingHorizontal: 4, paddingVertical: 4, borderRadius: 22, borderCurve: "continuous" },
+  // One 44 pt row holds 36 pt controls inset 4. Wrapped, the field takes a full row above the controls;
+  // the corner radius is set from the drawn height (composerCapsuleRadius).
+  composerCapsule: { minHeight: 44, paddingHorizontal: 4, paddingVertical: 4, borderCurve: "continuous" },
   composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
   composerPasteTarget: { flex: 1, minWidth: 0 },
 });

@@ -25,6 +25,8 @@ export type ComposerLayoutInput = {
   lineHeight: number;
   availableHeight: number;
   expanded: boolean;
+  /** The composer drew two rows on the last layout. Wider rows make the measurement shorter, so a wrapped composer stays wrapped until its text is cleared. */
+  wrapped: boolean;
 };
 
 export type ComposerLayout = {
@@ -66,6 +68,16 @@ export function shouldAutoExpandComposer(input: {
   return input.autoExpandedFor !== input.value;
 }
 
+/**
+ * The capsule's corner: half the 44 pt one-row capsule, which is concentric with the 36 pt controls inset 4 pt.
+ * A capsule shorter than 44 pt keeps its ends fully round.
+ */
+export const COMPOSER_CAPSULE_RADIUS = 22;
+
+export function composerCapsuleRadius(height: number) {
+  return Math.min(height / 2, COMPOSER_CAPSULE_RADIUS);
+}
+
 export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   const hasText = input.text.length > 0;
   const expanded = hasText && input.expanded;
@@ -75,7 +87,7 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   const contentHeight = hasText ? input.contentHeight : 0;
   const height = expanded ? maxHeight : Math.min(maxHeight, Math.max(minHeight, Math.ceil(contentHeight)));
   // Native measurements include soft wraps; the threshold tolerates platform rounding.
-  const multiline = hasText && (input.text.includes("\n") || contentHeight > input.lineHeight * 1.5 + COMPOSER_TEXT_PADDING);
+  const multiline = hasText && (input.text.includes("\n") || input.wrapped || contentHeight > input.lineHeight * 1.5 + COMPOSER_TEXT_PADDING);
 
   return {
     expanded,
