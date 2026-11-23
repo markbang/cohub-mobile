@@ -34,7 +34,7 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -604,10 +604,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
   const textPadding = COMPOSER_TEXT_PADDING * fontScale;
   // The native content size includes the field's padding (the text container inset) on both platforms.
-  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding));
+  const columns = composerColumnsPerLine(fontScale);
+  const placeholderText = placeholder ?? t("ui.composer.placeholder");
+  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding, columns));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
+    placeholderHeight: estimateComposerContentHeight(placeholderText, lineHeight, textPadding, columns),
     lineHeight,
     textPadding,
     availableHeight: Math.min(windowHeight, keyboardTop ?? windowHeight) - insets.top - (keyboardVisible ? 0 : insets.bottom),
@@ -626,9 +629,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const resolvedModelLabel = modelLabel ?? t("ui.composer.modelAutomatic");
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
-  const singleLine = !layout.expanded && !layout.showExpandButton;
+  const singleLine = !layout.twoRows;
   const fieldHeight = singleLine ? lineHeight + textPadding : layout.height;
-  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.showExpandButton, fontScale), paddingVertical: textPadding / 2 };
+  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: textPadding / 2 };
   const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
@@ -671,9 +674,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               multiline
               scrollEnabled={layout.scrollEnabled}
               maxLength={12000}
-              placeholder={placeholder ?? t("ui.composer.placeholder")}
+              placeholder={placeholderText}
               placeholderTextColor={theme.colors.textFaint}
-              className="min-w-0 text-body text-fg"
+              className="min-w-0 flex-1 text-body text-fg"
               style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
               onSelectionChange={(event) => {
                 const now = Date.now();
@@ -738,13 +741,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
         <GlassBackground radius={radius} surface="glassComposer" />
         <View className="flex-row items-center gap-1">
-          {layout.showExpandButton ? null : attachButton}
-          {layout.showExpandButton ? null : harnessSlot}
-          {layout.showExpandButton ? null : modelSlot}
+          {layout.twoRows ? null : attachButton}
+          {layout.twoRows ? null : harnessSlot}
+          {layout.twoRows ? null : modelSlot}
           {inputField}
-          {layout.showExpandButton ? null : trailing}
+          {layout.twoRows ? null : trailing}
         </View>
-        {layout.showExpandButton ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
+        {layout.twoRows ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
           {attachButton}
           {harnessSlot}
           {modelSlot}

@@ -11,7 +11,7 @@ export const COMPOSER_ONE_ROW_HEIGHT = 48;
 export const COMPOSER_CONTROL_ROW_HEIGHT = 44;
 /** Gap between the text and the controls in one row (the 4 pt row gap plus the field's own padding). */
 export const COMPOSER_TEXT_GAP = 12;
-/** Text inset from the capsule's edge in two rows. */
+/** Text inset from the capsule's edge in two rows. It stays 14 pt at every text size so the wrapped text keeps full width. */
 export const COMPOSER_TEXT_INSET = 14;
 /** The capsule's horizontal padding: the controls sit this far in from the edge. */
 export const COMPOSER_CAPSULE_INSET = 4;
@@ -21,21 +21,26 @@ export const COMPOSER_ROW_GAP = 4;
 export const COMPOSER_CHROME_HEIGHT = COMPOSER_TOP_PADDING + COMPOSER_ONE_ROW_HEIGHT;
 
 /**
- * Layout columns per rendered line at `typography.body` width, measured in Latin glyphs. The
- * estimate only needs to be close: typed text carries a real native measurement, and a
- * JS-appended dictation final is corrected by one on iOS and carried by the estimate on
- * Android until the user types.
+ * Columns that fit on one line of the inline row at the default text size, measured in Latin glyphs.
+ * The controls keep their width at every text size, so the row holds fewer columns as the glyphs grow:
+ * `composerColumnsPerLine`. The estimate only needs to be close: typed text carries a real native
+ * measurement, and a JS-set draft (a dictation final, a restored draft, the placeholder) is estimated.
  */
 const COLUMNS_PER_LINE = 30;
+
+/** Columns per line of the inline row at a Dynamic Type scale: the glyphs grow, the controls do not. */
+export function composerColumnsPerLine(fontScale: number) {
+  return Math.max(1, Math.floor(COLUMNS_PER_LINE / fontScale));
+}
 
 /** CJK, Hangul, Kana, and fullwidth punctuation occupy roughly two Latin columns. */
 function columnWidth(ch: string) {
   return ch.charCodeAt(0) >= 0x2e80 ? 2 : 1;
 }
 
-/** The composer's horizontal padding inside the field: one row keeps the text COMPOSER_TEXT_GAP from the controls, two rows COMPOSER_TEXT_INSET from the edge. */
+/** The composer's horizontal padding inside the field: one row keeps the text COMPOSER_TEXT_GAP from the controls (scaled), two rows COMPOSER_TEXT_INSET from the edge (fixed). */
 export function composerFieldPaddingX(wrapped: boolean, scale: number) {
-  return wrapped ? COMPOSER_TEXT_INSET * scale - COMPOSER_CAPSULE_INSET : COMPOSER_TEXT_GAP * scale - COMPOSER_ROW_GAP;
+  return wrapped ? COMPOSER_TEXT_INSET - COMPOSER_CAPSULE_INSET : COMPOSER_TEXT_GAP * scale - COMPOSER_ROW_GAP;
 }
 
 export function collapsedComposerHeight(bottomInset: number, ios: boolean) {
@@ -45,6 +50,8 @@ export function collapsedComposerHeight(bottomInset: number, ios: boolean) {
 export type ComposerLayoutInput = {
   text: string;
   contentHeight: number;
+  /** The placeholder's height when the field is empty, estimated at the current text size. */
+  placeholderHeight: number;
   lineHeight: number;
   availableHeight: number;
   expanded: boolean;
@@ -56,6 +63,9 @@ export type ComposerLayoutInput = {
 
 export type ComposerLayout = {
   expanded: boolean;
+  /** Two rows: the field on its own row, controls on a second row. */
+  twoRows: boolean;
+  /** The expand control is shown, which needs text: an empty field that wraps its placeholder has none. */
   showExpandButton: boolean;
   height: number;
   scrollEnabled: boolean;
@@ -67,13 +77,13 @@ export type ComposerLayout = {
  * estimate is derived from the text itself and only raises the measurement; a later real
  * native measurement always wins.
  */
-export function estimateComposerContentHeight(text: string, lineHeight: number, textPadding: number) {
+export function estimateComposerContentHeight(text: string, lineHeight: number, textPadding: number, columnsPerLine = COLUMNS_PER_LINE) {
   if (!text) return 0;
   let lines = 0;
   for (const line of text.split("\n")) {
     let columns = 0;
     for (const ch of line) columns += columnWidth(ch);
-    lines += Math.max(1, Math.ceil(columns / COLUMNS_PER_LINE));
+    lines += Math.max(1, Math.ceil(columns / columnsPerLine));
   }
   return lines * lineHeight + textPadding;
 }
@@ -108,18 +118,26 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   const expanded = hasText && input.expanded;
   const minHeight = input.lineHeight + input.textPadding;
   const expandedHeight = Math.max(minHeight, Math.min(320, Math.floor(input.availableHeight * 0.45)));
-  const maxHeight = expanded ? expandedHeight : Math.max(minHeight, Math.min(120, expandedHeight));
-  const contentHeight = hasText ? input.contentHeight : 0;
+  // Collapsed: three lines plus padding, or 120 pt, within the expanded cap. The field shows whole
+  // lines only, so a line that does not fit is clipped between lines, not through its middle.
+  const collapsedCap = Math.max(minHeight, Math.min(expandedHeight, Math.max(120, 3 * input.lineHeight + input.textPadding)));
+  const wholeLinesHeight = Math.max(minHeight, Math.floor((collapsedCap - input.textPadding) / input.lineHeight) * input.lineHeight + input.textPadding);
+  const maxHeight = expanded ? expandedHeight : wholeLinesHeight;
+  const contentHeight = hasText ? input.contentHeight : input.placeholderHeight;
   const height = expanded ? maxHeight : Math.min(maxHeight, Math.max(minHeight, Math.ceil(contentHeight)));
   // Native measurements include soft wraps; the threshold tolerates platform rounding.
-  const multiline = hasText && (input.text.includes("\n") || input.wrapped || contentHeight > input.lineHeight * 1.5 + input.textPadding);
+  const wrapsLine = contentHeight > input.lineHeight * 1.5 + input.textPadding;
+  const wrapsText = hasText && (input.text.includes("\n") || input.wrapped || wrapsLine);
+  const wrapsPlaceholder = !hasText && wrapsLine;
 
   return {
     expanded,
-    showExpandButton: expanded || multiline,
+    twoRows: expanded || wrapsText || wrapsPlaceholder,
+    showExpandButton: expanded || wrapsText,
     height,
     // While expanded, the estimate may undershoot the real content and clipping beats a
-    // height fight, so keep the editor scrollable there regardless of the measurement.
-    scrollEnabled: expanded || contentHeight > height,
+    // height fight, so keep the editor scrollable there regardless of the measurement. Collapsed,
+    // scroll only when a whole line is hidden, so the native measurement's trailing space does not scroll.
+    scrollEnabled: expanded || contentHeight > height + input.lineHeight,
   };
 }
