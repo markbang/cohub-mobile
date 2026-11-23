@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState as NativeAppState, Platform, Pressable, Text, View } from "react-native";
+import Animated, { Easing, ReduceMotion, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveSheet } from "@/src/components/AdaptiveSheet";
 import { ReleaseNotes } from "@/src/components/ReleaseNotes";
 import { useTranslation } from "@/src/i18n";
+import { curves, motion } from "@/src/motion";
 import { AppIcon, Loader, PrimaryButton } from "@/src/ui";
 import { openWebLink } from "@/src/platform/browser";
 import {
@@ -16,6 +18,29 @@ import {
   snoozeAppUpdate,
   type AppRelease,
 } from "@/src/platform/app-updates";
+
+const BANNER_DROP = -8;
+const BANNER_IN = { duration: motion.settle.duration, easing: Easing.bezier(...curves.easeOut) };
+
+// The banner lands uninvited over content. Under Reduce Motion the fade stays and the drop goes.
+function bannerEntering() {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: BANNER_DROP }] },
+    animations: {
+      opacity: withTiming(1, { ...BANNER_IN, reduceMotion: ReduceMotion.Never }),
+      transform: [{ translateY: withTiming(0, { ...BANNER_IN, reduceMotion: ReduceMotion.System }) }],
+    },
+  };
+}
+
+function bannerExiting() {
+  "worklet";
+  return {
+    initialValues: { opacity: 1 },
+    animations: { opacity: withTiming(0, { duration: motion.fadeOut.duration, reduceMotion: ReduceMotion.Never }) },
+  };
+}
 
 export function AppUpdateBanner() {
   const { t } = useTranslation();
@@ -79,7 +104,7 @@ export function AppUpdateBanner() {
 
   return (
     <>
-      <View pointerEvents="box-none" className="absolute left-3 right-3 z-100 items-center" style={{ top: insets.top + 8 }}>
+      <Animated.View entering={bannerEntering} exiting={bannerExiting} pointerEvents="box-none" className="absolute left-3 right-3 z-100 items-center" style={{ top: insets.top + 8 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("update.banner.accessibility", { version: release.version })}
@@ -97,7 +122,7 @@ export function AppUpdateBanner() {
           </View>
           <AppIcon name="chevron-right" size={18} tone="faint" />
         </Pressable>
-      </View>
+      </Animated.View>
 
       <AppUpdateDetailsSheet
         key={`banner-${release.version}`}
