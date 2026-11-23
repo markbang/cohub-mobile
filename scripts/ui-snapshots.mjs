@@ -144,6 +144,8 @@ export const TABLET_SCREENS = [
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
   { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ chatsTab: true }, { tapOn: "New Chat" }] },
+  // A one-line draft in the right pane, the tablet's counterpart of chat-draft.
+  { name: "split-chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
   // The long draft in the right pane: about six wrapped lines at 820 pt.
   { name: "split-chat-draft-long", ready: "Fix the Android sheet height", link: `cohub://debug/chat?fixture=conversation&draft=${LONG_DRAFT_TABLET}` },
 ];
