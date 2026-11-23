@@ -158,14 +158,12 @@ static NSNumber *CHTNum(id value)
     _scroll.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     _scroll.alwaysBounceVertical = YES;
     _scroll.showsHorizontalScrollIndicator = NO;
-    _scroll.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    _scroll.keyboardDismissMode = UIScrollViewKeyboardDismissModeNone;
     [self addSubview:_scroll];
 
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     [center addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
     [center addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
-    // A drag that dismisses the keyboard reports its frame here, not in the will-change pair.
-    [center addObserver:self selector:@selector(keyboardDidChange:) name:UIKeyboardDidChangeFrameNotification object:nil];
   }
   return self;
 }
@@ -918,8 +916,6 @@ static NSNumber *CHTNum(id value)
   CGFloat offset = scrollView.contentOffset.y;
   CGFloat delta = offset - _lastOffset;
   _lastOffset = offset;
-  // A downward drag at the top pulls to refresh, so only the rest of the list dismisses the keyboard.
-  scrollView.keyboardDismissMode = offset > [self minOffset] + 1 ? UIScrollViewKeyboardDismissModeInteractive : UIScrollViewKeyboardDismissModeNone;
   if (_dragging || _decelerating) {
     CGFloat distance = [self maxOffset] - offset;
     BOOL atTail = !_detached && distance <= _leaveThreshold;
@@ -1005,16 +1001,6 @@ static NSNumber *CHTNum(id value)
 
 - (void)keyboardWillChange:(NSNotification *)note
 {
-  [self applyKeyboardFrame:note animated:YES];
-}
-
-- (void)keyboardDidChange:(NSNotification *)note
-{
-  [self applyKeyboardFrame:note animated:NO];
-}
-
-- (void)applyKeyboardFrame:(NSNotification *)note animated:(BOOL)animated
-{
   UIWindow *window = self.window;
   if (!window || !_keyboardEnabled)
     return;
@@ -1027,7 +1013,7 @@ static NSNumber *CHTNum(id value)
   BOOL docked = frame.origin.y > 0 && frame.size.height > 0 && CGRectGetMaxY(frame) >= CGRectGetMaxY(window.bounds) - 1;
   if (docked && ![note.name isEqualToString:UIKeyboardWillHideNotification])
     overlap = MAX(0, CGRectGetMaxY(window.bounds) - frame.origin.y);
-  NSTimeInterval duration = animated ? [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue] : 0;
+  NSTimeInterval duration = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
   UIViewAnimationCurve curve = (UIViewAnimationCurve)[info[UIKeyboardAnimationCurveUserInfoKey] integerValue];
   [self liftTo:MAX(0, overlap - _coveredInset) duration:duration curve:curve];
 }
