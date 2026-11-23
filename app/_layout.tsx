@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
+import { useE2eSession } from "@/src/auth/e2e-session";
 import { connectWebSession, getWebAccessToken, type WebViewer } from "@/src/auth/web-session";
 import { AppUpdateBanner } from "@/src/components/AppUpdateBanner";
 import { ToastProvider } from "@/src/components/Toast";
@@ -133,6 +134,7 @@ function AuthEnvironmentRoot() {
 function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEnvironment; onSelectEnvironment: (environment: CohubEnvironment) => void }) {
   useDebugDiagnosticsLifecycle();
   useFrameProbe();
+  useE2eSession();
   const { client, isInitialized, isAuthenticated, signIn, signOut } = useLogto();
   const theme = useAppTheme();
   const [authLoading, setAuthLoading] = useState(false);

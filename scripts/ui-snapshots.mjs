@@ -234,9 +234,24 @@ function requireCommand(command, args, hint) {
 const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds));
 const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
-async function startMetro({ frameProbe }) {
+/**
+ * Signs the E2E account in with its password, without the hosted page, and returns a refresh token
+ * for the app (src/auth/e2e-session.ts). The hosted page mails a sign-in code to the account the
+ * moment it takes the identifier, so there is no fallback to it.
+ */
+function signInWithoutEmail() {
+  const result = spawnSync("node", ["scripts/e2e/logto-token.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (result.error) throw new Error(`node could not start scripts/e2e/logto-token.mjs: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`Signing in through Logto's experience API failed:\n${result.stderr.trim()}`);
+  process.stderr.write(result.stderr);
+  const token = result.stdout.trim();
+  if (!token) throw new Error("scripts/e2e/logto-token.mjs printed no refresh token.");
+  return token;
+}
+
+async function startMetro({ frameProbe, refreshToken }) {
   const metro = spawn("bunx", ["expo", "start", "--port", String(METRO_PORT)], {
-    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}) },
+    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}), ...(refreshToken ? { EXPO_PUBLIC_E2E_REFRESH_TOKEN: refreshToken } : {}) },
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,
   });
@@ -273,9 +288,12 @@ const MAESTRO_ORIENTATION = { portrait: "PORTRAIT", landscape: "LANDSCAPE_LEFT" 
 /**
  * Launches fresh, waits out a cold Metro and system dialogs, and signs in if needed. An iPad turns
  * here, through Maestro; Android turns from the host before the run (`android.setOrientation`).
+ * With a `session` the app signs itself in, so the flow waits for Chats alone: AuthScreen shows for a
+ * moment before the token lands, and the login flow would mail the account a sign-in code.
  */
-function preamble(platform, orientation = null) {
+function preamble(platform, session, orientation = null) {
   const login = resolve(LOGIN_FLOWS[platform]);
+  const start = session ? "Chats" : "Continue with Cohub|Chats";
   return [
     `appId: ${PACKAGE_ID}`,
     "---",
@@ -285,7 +303,7 @@ function preamble(platform, orientation = null) {
     "      all: allow",
     // A debug binary fetches its first bundle from Metro, which can take minutes on a cold cache.
     "- extendedWaitUntil:",
-    `    visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING}|${OPEN_IN_APP})`)}`,
+    `    visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING}|${OPEN_IN_APP})`)}`,
     "    timeout: 600000",
     "- runFlow:",
     "    when:",
@@ -293,7 +311,7 @@ function preamble(platform, orientation = null) {
     "    commands:",
     "      - tapOn: \"^Open$\"",
     "      - extendedWaitUntil:",
-    `          visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
+    `          visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
     "          timeout: 300000",
     "- repeat:",
     "    while:",
@@ -302,7 +320,7 @@ function preamble(platform, orientation = null) {
     "    commands:",
     "      - tapOn: \"Wait\"",
     "      - extendedWaitUntil:",
-    `          visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
+    `          visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
     "          timeout: 300000",
     // A cold Metro can build the first bundle slower than the app waits for it. Metro keeps building,
     // so a later reload gets the finished bundle.
@@ -313,12 +331,14 @@ function preamble(platform, orientation = null) {
     "    commands:",
     "      - tapOn: \"(Reload|RELOAD).*\"",
     "      - extendedWaitUntil:",
-    `          visible: ${yamlString(`(Continue with Cohub|Chats|${DEV_SERVER_ERROR}.*)`)}`,
+    `          visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*)`)}`,
     "          timeout: 300000",
-    "- runFlow:",
-    "    when:",
-    "      visible: \"Continue with Cohub\"",
-    `    file: ${yamlString(login)}`,
+    ...(session ? [] : [
+      "- runFlow:",
+      "    when:",
+      "      visible: \"Continue with Cohub\"",
+      `    file: ${yamlString(login)}`,
+    ]),
     // A cached debug APK predates the latest release, so Android offers it; "Not now" snoozes it across launches.
     ...(platform === "android" ? [
       "- extendedWaitUntil:",
@@ -407,8 +427,8 @@ function checkSplit(lines, platform) {
 }
 
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
-function buildFlow({ platform, screens, target, orientation }) {
-  const lines = preamble(platform, target === "tablet" ? orientation : null);
+function buildFlow({ platform, session, screens, target, orientation }) {
+  const lines = preamble(platform, session, target === "tablet" ? orientation : null);
   if (target === "tablet") checkSplit(lines, platform);
   for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
@@ -421,23 +441,23 @@ function buildFlow({ platform, screens, target, orientation }) {
 }
 
 /** The split-layout interaction flow, after sign-in, with the rows it taps for this platform. */
-function buildTabletFlow({ platform, maestroOrientation }) {
-  const lines = preamble(platform, "portrait");
+function buildTabletFlow({ platform, session, maestroOrientation }) {
+  const lines = preamble(platform, session, "portrait");
   checkSplit(lines, platform);
   return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`, `      PORTRAIT: ${maestroOrientation("portrait")}`, `      LANDSCAPE: ${maestroOrientation("landscape")}`].join("\n")}\n`;
 }
 
 /** One pass of the perf sequence from a fresh launch. */
-function buildPerfFlow({ platform, target }) {
-  const lines = preamble(platform, target === "tablet" ? "portrait" : null);
+function buildPerfFlow({ platform, session, target }) {
+  const lines = preamble(platform, session, target === "tablet" ? "portrait" : null);
   openScreen(lines, platform, "cohub://settings", target !== "tablet", "Appearance");
   pushSteps(lines, platform, PERF_STEPS[target]);
   return `${lines.join("\n")}\n`;
 }
 
 /** Records each interaction from its settled start screen to its settled end. */
-function buildMotionFlow({ platform, motions }) {
-  const lines = preamble(platform);
+function buildMotionFlow({ platform, session, motions }) {
+  const lines = preamble(platform, session);
   for (const [index, motion] of motions.entries()) {
     openScreen(lines, platform, motion.link, index === 0, motion.ready);
     pushSteps(lines, platform, motion.setup);
@@ -659,8 +679,13 @@ async function capture(options) {
   const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
   const screens = options.screens ? catalog.filter((screen) => options.screens.includes(screen.name)) : catalog;
   mkdirSync(options.out, { recursive: true });
+  // Before the device work, so a refused sign-in fails in seconds. The token reaches the app through
+  // the Metro this run starts; an already running Metro (`--no-metro`) keeps the login flow.
+  const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].every((key) => process.env[key]?.trim());
+  const refreshToken = options.metro && credentials ? signInWithoutEmail() : null;
+  const session = Boolean(refreshToken);
   const device = (options.platform === "android" ? android : ios).prepare(options.app, options.out, options.target);
-  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0 }) : null;
+  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, refreshToken }) : null;
   const missing = [];
   // The phone keeps the original layout (`<theme>/`); other targets are grouped by device and orientation.
   const groupDirectory = (orientation) => options.target === "phone" ? options.out : join(options.out, `${options.target}-${orientation}`);
@@ -676,7 +701,7 @@ async function capture(options) {
         device.setTheme(theme);
         const name = options.target === "phone" ? theme : `${group}-${theme}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFileSync(flowPath, buildFlow({ platform: options.platform, screens, target: options.target, orientation }));
+        writeFileSync(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
@@ -697,7 +722,7 @@ async function capture(options) {
       device.setTheme("light");
       device.setOrientation("portrait");
       const flowPath = join(options.out, "tablet-flow.yaml");
-      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, maestroOrientation: device.maestroOrientation }));
+      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
       runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
@@ -710,7 +735,7 @@ async function capture(options) {
       device.setTheme("light");
       device.setAnimations(true);
       const flowPath = join(options.out, "motion.yaml");
-      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, motions: MOTIONS }));
+      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions: MOTIONS }));
       const testOutput = join(options.out, "maestro-output", "motion");
       rmSync(testOutput, { recursive: true, force: true });
       runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
@@ -722,7 +747,7 @@ async function capture(options) {
         else missing.push(`motion/${file}`);
       }
     }
-    if (options.perf > 0) await capturePerf(options, device);
+    if (options.perf > 0) await capturePerf(options, device, session);
   } finally {
     stopMetro(metro);
     device.restore();
@@ -744,7 +769,7 @@ function listFiles(root) {
  * keeps every frame-probe record inside each run's window. The probe only records UI frames over
  * 25 ms and JS stalls over 50 ms, so a quiet run has no rows at all.
  */
-async function capturePerf(options, device) {
+async function capturePerf(options, device, session) {
   const { DatabaseSync } = await import("node:sqlite");
   const directory = join(options.out, "perf");
   mkdirSync(directory, { recursive: true });
@@ -753,7 +778,7 @@ async function capturePerf(options, device) {
   device.setOrientation("portrait");
   device.setAnimations(true);
   const flowPath = join(options.out, "perf.yaml");
-  writeFileSync(flowPath, buildPerfFlow({ platform: options.platform, target: options.target }));
+  writeFileSync(flowPath, buildPerfFlow({ platform: options.platform, session, target: options.target }));
   const runs = [];
   try {
     for (let index = 1; index <= options.perf; index += 1) {
