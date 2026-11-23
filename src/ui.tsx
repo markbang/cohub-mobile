@@ -607,14 +607,15 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
   const textPadding = COMPOSER_TEXT_PADDING * fontScale;
   // The native content size includes the field's padding (the text container inset) on both platforms.
-  const columns = composerColumnsPerLine(fontScale);
   const placeholderText = placeholder ?? t("ui.composer.placeholder");
-  const typed = userEdited && value === lastUserText;
-  const measuredContentHeight = typed && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding, columns));
+  const estimate = (text: string, fullRow: boolean) => estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, fullRow));
+  // Typed text is measured natively; a draft set without typing takes the larger of the native value and the estimate.
+  const typed = userEdited && value === lastUserText && contentHeight > 0;
+  const textMeasure = typed ? { inline: contentHeight, wide: contentHeight } : { inline: Math.max(contentHeight, estimate(value, false)), wide: Math.max(contentHeight, estimate(value, true)) };
+  const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
-    contentHeight: measuredContentHeight,
-    placeholderHeight: estimateComposerContentHeight(placeholderText, lineHeight, textPadding, columns),
+    measure: value ? textMeasure : placeholderMeasure,
     lineHeight,
     textPadding,
     availableHeight: Math.min(windowHeight, keyboardTop ?? windowHeight) - insets.top - (keyboardVisible ? 0 : insets.bottom),
