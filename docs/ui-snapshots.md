@@ -21,7 +21,7 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 
 - The iOS reference runs on iOS 27, on GitHub's `xcode-27` image (a preview). Pass `-f ios=26` to `ui-snapshots-ios.yml` to capture on the default image's iOS 26 instead; the drawn Android UI follows iOS 27.
 - `.github/workflows/ui-snapshots-android.yml` and `.github/workflows/ui-snapshots-ios.yml` build debug binaries and cache them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
-- Both workflows need the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), because every route sits behind sign-in.
+- Both workflows need the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), because every route sits behind sign-in. Before Metro starts, `scripts/e2e/logto-token.mjs` signs the account in with its password through Logto's experience API, and Metro hands the debug app the refresh token (`src/auth/e2e-session.ts`). The run never opens the hosted sign-in page, which mails a sign-in code as soon as it takes the email, so no code email is sent. The UI login flows (`e2e/auth/`) remain only for the Android device E2E, which runs a release binary, and for a local capture with `--no-metro`.
 - Artifacts: `ui-snapshots-android` and `ui-snapshots-ios`, each holding `<theme>/<screen>.png` and `motion/<interaction>.mp4`. A tablet run uploads `ui-snapshots-android-tablet` and `ui-snapshots-ios-tablet` instead (see [Tablets](#tablets)).
 
 ## Run locally
