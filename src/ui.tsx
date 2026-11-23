@@ -600,7 +600,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // so the estimate stands in for it. Typed text is measured natively once a measurement exists: the
   // estimate assumes the one-row width and would add a blank line under a draft that fills the wrapped row.
   const lineHeight = typography.body.lineHeight * fontScale;
-  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight));
+  // iOS's content size leaves out the field's vertical padding, which the estimate and Android's measurement include.
+  const nativeContentHeight = contentHeight > 0 && Platform.OS === "ios" ? contentHeight + COMPOSER_TEXT_PADDING : contentHeight;
+  const measuredContentHeight = value === lastUserText && nativeContentHeight > 0 ? nativeContentHeight : Math.max(nativeContentHeight, estimateComposerContentHeight(value, lineHeight));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
