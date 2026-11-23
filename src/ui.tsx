@@ -563,6 +563,9 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // state because the render-phase expansion check needs the committed value; identical
   // updates bail out, so typing never pays an extra render.
   const [lastUserText, setLastUserText] = useState(value);
+  // A draft that arrived without typing (restored, or set by a debug link) is measured by the estimate too: at mount its
+  // native measurement can read short, which left the field too small for its text.
+  const [userEdited, setUserEdited] = useState(false);
   const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
   // Two rows (the wrapped layout) once a draft has wrapped; see getComposerLayout.
   const [wrapped, setWrapped] = useState(false);
@@ -606,7 +609,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // The native content size includes the field's padding (the text container inset) on both platforms.
   const columns = composerColumnsPerLine(fontScale);
   const placeholderText = placeholder ?? t("ui.composer.placeholder");
-  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding, columns));
+  const typed = userEdited && value === lastUserText;
+  const measuredContentHeight = typed && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding, columns));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
@@ -641,6 +645,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               accessibilityLabel={t("ui.composer.placeholder")}
               value={value}
               onChangeText={(next) => {
+                setUserEdited(true);
                 setLastUserText(next);
                 const now = Date.now();
                 if (now - inputTrace.current.at >= 300) {
