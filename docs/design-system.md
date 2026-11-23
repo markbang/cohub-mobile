@@ -113,9 +113,10 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   A `Segmented` control is a capsule in a capsule, concentric at any height.
 - **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
   control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
-  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. With text, the
-  model chip keeps its icon and availability light so the field keeps the room; its name stays in the
-  label. Web has no mic, so its send stays visible and disabled.
+  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. The model is a
+  36 pt icon control (availability dot and chevron) that opens the picker, which names it; its label
+  keeps the name, thinking level and status. At 402 pt the field keeps about 250 pt. Web has no mic,
+  so its send stays visible and disabled.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
