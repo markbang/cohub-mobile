@@ -610,8 +610,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const placeholderText = placeholder ?? t("ui.composer.placeholder");
   const estimate = (text: string, fullRow: boolean) => estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, fullRow));
   // Typed text is measured natively; a draft set without typing takes the larger of the native value and the estimate.
-  const typed = userEdited && value === lastUserText && contentHeight > 0;
-  const textMeasure = typed ? { inline: contentHeight, wide: contentHeight } : { inline: Math.max(contentHeight, estimate(value, false)), wide: Math.max(contentHeight, estimate(value, true)) };
+  // The native measurement includes the field's vertical padding when the field was drawn in one row; in two rows the padding sits outside the input.
+  const nativeHeight = contentHeight > 0 ? contentHeight + (wrapped ? textPadding : 0) : 0;
+  const typed = userEdited && value === lastUserText && nativeHeight > 0;
+  const textMeasure = typed ? { inline: nativeHeight, wide: nativeHeight } : { inline: Math.max(nativeHeight, estimate(value, false)), wide: Math.max(nativeHeight, estimate(value, true)) };
   const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
@@ -635,76 +637,79 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
   const singleLine = !layout.twoRows;
-  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height;
-  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: textPadding / 2 };
+  // Two rows: the input is the text area (whole lines); its padding sits in the wrapper around it, so a line that does not fit is clipped between lines.
+  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height - textPadding;
+  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: layout.twoRows ? 0 : textPadding / 2 };
   const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
-            <TextInput
-              ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
-              testID="chat-composer-input"
-              accessibilityLabel={t("ui.composer.placeholder")}
-              value={value}
-              onChangeText={(next) => {
-                setUserEdited(true);
-                setLastUserText(next);
-                const now = Date.now();
-                if (now - inputTrace.current.at >= 300) {
-                  recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
-                  inputTrace.current.at = now;
-                }
-                inputTrace.current.length = next.length;
-                onChangeText(next);
-              }}
-              onScroll={(event) => {
-                if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
-                // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
-                // only emits onContentSizeChange once the height prop itself has changed, which
-                // starves the growth logic. The scroll event still carries a fresh content size;
-                // only raising the measurement keeps Android's coarser scroll payload from
-                // shrinking the box. iOS includes it but the RN types omit it (Android leaves
-                // it unset), so it is read as an optional extra.
-                const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
-                if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
-                  setContentHeight((current) => Math.max(current, appendedSize.height));
-                }
-              }}
-              onContentSizeChange={(event) => {
-                setContentHeight(event.nativeEvent.contentSize.height);
-                // Native inputs keep their scroll position on JS-driven text updates, so
-                // a voice-appended tail lands below the fold. This event only fires after
-                // the native layout reflects the new text, which is when the scroll lands.
-                if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
-              }}
-              editable={!disabled}
-              multiline
-              scrollEnabled={layout.scrollEnabled}
-              maxLength={12000}
-              placeholder={placeholderText}
-              placeholderTextColor={theme.colors.textFaint}
-              className="min-w-0 flex-1 text-body text-fg"
-              style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
-              onSelectionChange={(event) => {
-                const now = Date.now();
-                if (now - inputTrace.current.selectionAt >= 300) {
-                  inputTrace.current.selectionAt = now;
-                  recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
-                }
-                onSelectionChange?.(event.nativeEvent.selection);
-              }}
-              onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
-              onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
-              submitBehavior="newline"
-              onKeyPress={Platform.OS === "web" ? (event) => {
-                // Web: Enter sends and Shift+Enter breaks the line; an Enter that commits an IME composition stays with the IME.
-                const key = event.nativeEvent as unknown as KeyboardEvent;
-                if (key.key !== "Enter" || key.shiftKey || key.isComposing || key.keyCode === 229) return;
-                event.preventDefault();
-                if (!canSend) return;
-                traceAction("composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked });
-                onSend();
-              } : undefined}
-            />
+            <View style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
+              <TextInput
+                ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
+                testID="chat-composer-input"
+                accessibilityLabel={t("ui.composer.placeholder")}
+                value={value}
+                onChangeText={(next) => {
+                  setUserEdited(true);
+                  setLastUserText(next);
+                  const now = Date.now();
+                  if (now - inputTrace.current.at >= 300) {
+                    recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
+                    inputTrace.current.at = now;
+                  }
+                  inputTrace.current.length = next.length;
+                  onChangeText(next);
+                }}
+                onScroll={(event) => {
+                  if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
+                  // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
+                  // only emits onContentSizeChange once the height prop itself has changed, which
+                  // starves the growth logic. The scroll event still carries a fresh content size;
+                  // only raising the measurement keeps Android's coarser scroll payload from
+                  // shrinking the box. iOS includes it but the RN types omit it (Android leaves
+                  // it unset), so it is read as an optional extra.
+                  const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
+                  if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
+                    setContentHeight((current) => Math.max(current, appendedSize.height));
+                  }
+                }}
+                onContentSizeChange={(event) => {
+                  setContentHeight(event.nativeEvent.contentSize.height);
+                  // Native inputs keep their scroll position on JS-driven text updates, so
+                  // a voice-appended tail lands below the fold. This event only fires after
+                  // the native layout reflects the new text, which is when the scroll lands.
+                  if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
+                }}
+                editable={!disabled}
+                multiline
+                scrollEnabled={layout.scrollEnabled}
+                maxLength={12000}
+                placeholder={placeholderText}
+                placeholderTextColor={theme.colors.textFaint}
+                className="min-w-0 flex-1 text-body text-fg"
+                style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
+                onSelectionChange={(event) => {
+                  const now = Date.now();
+                  if (now - inputTrace.current.selectionAt >= 300) {
+                    inputTrace.current.selectionAt = now;
+                    recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
+                  }
+                  onSelectionChange?.(event.nativeEvent.selection);
+                }}
+                onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
+                onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
+                submitBehavior="newline"
+                onKeyPress={Platform.OS === "web" ? (event) => {
+                  // Web: Enter sends and Shift+Enter breaks the line; an Enter that commits an IME composition stays with the IME.
+                  const key = event.nativeEvent as unknown as KeyboardEvent;
+                  if (key.key !== "Enter" || key.shiftKey || key.isComposing || key.keyCode === 229) return;
+                  event.preventDefault();
+                  if (!canSend) return;
+                  traceAction("composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked });
+                  onSend();
+                } : undefined}
+              />
+            </View>
           </PasteImagesInput>
   </>;
   const expandButton = layout.showExpandButton ? <Pressable

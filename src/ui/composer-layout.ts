@@ -126,7 +126,9 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   // Collapsed: three lines plus padding, or 120 pt, within the expanded cap. The field shows whole
   // lines only, so a line that does not fit is clipped between lines, not through its middle.
   const collapsedCap = Math.max(minHeight, Math.min(expandedHeight, Math.max(120, 3 * input.lineHeight + input.textPadding)));
-  const wholeLinesHeight = Math.max(minHeight, Math.floor((collapsedCap - input.textPadding) / input.lineHeight) * input.lineHeight + input.textPadding);
+  // The epsilon keeps an exact count of lines from rounding down on float error.
+  const wholeLines = Math.floor((collapsedCap - input.textPadding) / input.lineHeight + 1e-6);
+  const wholeLinesHeight = Math.max(minHeight, wholeLines * input.lineHeight + input.textPadding);
   const maxHeight = expanded ? expandedHeight : wholeLinesHeight;
   const height = expanded ? maxHeight : Math.min(maxHeight, Math.max(minHeight, Math.ceil(input.measure.wide)));
   // Native measurements include soft wraps; the threshold tolerates platform rounding.
