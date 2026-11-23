@@ -34,7 +34,8 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_TEXT_PADDING, composerCapsuleRadius, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, MAX_FONT_SCALE, useAppTheme, typography } from "@/src/theme";
@@ -600,13 +601,16 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // so the estimate stands in for it. Typed text is measured natively once a measurement exists: the
   // estimate assumes the one-row width and would add a blank line under a draft that fills the wrapped row.
   const lineHeight = typography.body.lineHeight * fontScale;
+  // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
+  const textPadding = COMPOSER_TEXT_PADDING * fontScale;
   // iOS's content size leaves out the field's vertical padding, which the estimate and Android's measurement include.
-  const nativeContentHeight = contentHeight > 0 && Platform.OS === "ios" ? contentHeight + COMPOSER_TEXT_PADDING : contentHeight;
-  const measuredContentHeight = value === lastUserText && nativeContentHeight > 0 ? nativeContentHeight : Math.max(nativeContentHeight, estimateComposerContentHeight(value, lineHeight));
+  const nativeContentHeight = contentHeight > 0 && Platform.OS === "ios" ? contentHeight + textPadding : contentHeight;
+  const measuredContentHeight = value === lastUserText && nativeContentHeight > 0 ? nativeContentHeight : Math.max(nativeContentHeight, estimateComposerContentHeight(value, lineHeight, textPadding));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
     lineHeight,
+    textPadding,
     availableHeight: Math.min(windowHeight, keyboardTop ?? windowHeight) - insets.top - (keyboardVisible ? 0 : insets.bottom),
     expanded,
     wrapped,
@@ -624,7 +628,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
   const singleLine = !layout.expanded && !layout.showExpandButton;
-  const fieldHeight = singleLine ? lineHeight + COMPOSER_TEXT_PADDING : layout.height;
+  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height;
+  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.showExpandButton, fontScale), paddingVertical: textPadding / 2 };
   const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
@@ -670,7 +675,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               placeholder={placeholder ?? t("ui.composer.placeholder")}
               placeholderTextColor={theme.colors.textFaint}
               className="min-w-0 text-body text-fg"
-              style={[styles.composerText, { height: fieldHeight }]}
+              style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
               onSelectionChange={(event) => {
                 const now = Date.now();
                 if (now - inputTrace.current.selectionAt >= 300) {
@@ -724,12 +729,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const harnessSlot = variant === "chat" ? harnessControl : null;
   const modelSlot = variant === "chat" ? modelControl : null;
   const radius = composerCapsuleRadius(capsuleHeight);
+  const bottomGap = floatingBarBottomOffset(insets.bottom, Platform.OS === "ios");
   // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`. Glyphs pop only when they change, not when the composer first appears.
   // The field keeps the first row's slot in both layouts, so crossing the wrap does not remount the text input.
   return (
-    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
+    <View style={[styles.composerWrap, { paddingBottom: bottomGap }]}>
       <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }]}>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`justify-center overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }]}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
         <GlassBackground radius={radius} surface="glassComposer" />
         <View className="flex-row items-center gap-1">
@@ -739,7 +745,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           {inputField}
           {layout.showExpandButton ? null : trailing}
         </View>
-        {layout.showExpandButton ? <View className="flex-row items-center gap-1">
+        {layout.showExpandButton ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
           {attachButton}
           {harnessSlot}
           {modelSlot}
@@ -845,11 +851,11 @@ function controlIconExiting() {
 }
 
 const styles = StyleSheet.create({
-  composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
-  // One 44 pt row holds 36 pt controls inset 4. Wrapped, the field takes a full row above the controls;
+  composerWrap: { paddingHorizontal: 12, paddingTop: COMPOSER_TOP_PADDING },
+  // One row holds 36 pt controls centred in a 48 pt capsule. Wrapped, the text row sits above a fixed control row;
   // the corner radius is set from the drawn height (composerCapsuleRadius).
-  composerCapsule: { minHeight: 44, paddingHorizontal: 4, paddingVertical: 4, borderCurve: "continuous" },
-  composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
+  composerCapsule: { minHeight: COMPOSER_ONE_ROW_HEIGHT, paddingHorizontal: 4, borderCurve: "continuous" },
+  composerText: { textAlignVertical: "top", includeFontPadding: false },
   composerPasteTarget: { flex: 1, minWidth: 0 },
 });
 // The 36 pt controls in the 44 pt capsule keep a 44 pt touch target.

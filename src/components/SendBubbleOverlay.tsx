@@ -9,7 +9,7 @@ import type { FollowupQueueItem } from "@/src/data/followup-queue";
 import { AttachmentChip } from "@/src/ui";
 import { motion } from "@/src/motion";
 import { typography, useAppTheme } from "@/src/theme";
-import { COMPOSER_TEXT_PADDING } from "@/src/ui/composer-layout";
+import { COMPOSER_TEXT_PADDING, composerFieldPaddingX } from "@/src/ui/composer-layout";
 import { getBubbleMaxWidth } from "@/src/ui/message-bubble-layout";
 import { interpolateSendBubbleRect, type SendBubbleRect, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
 
@@ -135,6 +135,7 @@ const styles = StyleSheet.create({
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 2, overflow: "hidden" },
   surface: { position: "absolute", borderCurve: "continuous" },
   source: { position: "absolute", left: 0, top: 0, overflow: "hidden" },
-  sourceText: { paddingHorizontal: 5, paddingVertical: COMPOSER_TEXT_PADDING / 2, includeFontPadding: false },
+  // The source is the one-row field, so the text starts where the composer's text does at the default size.
+  sourceText: { paddingHorizontal: composerFieldPaddingX(false, 1), paddingVertical: COMPOSER_TEXT_PADDING / 2, includeFontPadding: false },
   copy: { position: "absolute", left: 0, top: 0, overflow: "hidden" },
 });
