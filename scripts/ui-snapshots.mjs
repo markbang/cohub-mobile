@@ -8,6 +8,7 @@ import { basename, join, relative, resolve } from "node:path";
  *
  *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
  *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
+ *           [--text-size default|extra-large|accessibility-large]   (iOS only; restored to default afterwards)
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *
@@ -39,6 +40,8 @@ const SIZE_BANDS = {
 };
 const TABLET_FLOW = "e2e/tablet/split.yaml";
 const PAIR_HEIGHT = 1400;
+// iOS content size categories behind each --text-size choice; `default` is the simulator's own `large`.
+const TEXT_SIZES = { default: "large", "extra-large": "extra-large", "accessibility-large": "accessibility-large" };
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
 const OPEN_IN_APP = "Open in .*Cohub.*\\?";
@@ -52,6 +55,11 @@ const FIRST_ROW = { ios: "50%, 40%", android: "50%, 26%" };
 const OUTSIDE = { ios: "50%, 9%", android: "50%, 9%" };
 // The Web browsing row's value, whichever the test account has; the picker opens from it on both platforms.
 const BROWSER_VALUE = "(System|In-app) browser";
+
+// One sentence repeated: the phone's draft wraps to about four lines at 402 pt, the tablet's to about six at 820 pt.
+const LONG_DRAFT = "The draft keeps its place while the timeline scrolls, and the composer grows with it. ";
+const LONG_DRAFT_PHONE = encodeURIComponent(LONG_DRAFT.repeat(2).trim());
+const LONG_DRAFT_TABLET = encodeURIComponent(LONG_DRAFT.repeat(3).trim());
 
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
@@ -84,6 +92,8 @@ export const SCREENS = [
   // The composer tapped, so the keyboard is up; then a drag down on the timeline, which should take it away.
   // The composer with text: send replaces the mic, and the model chip gives way to its icon.
   { name: "chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
+  // A long draft: about four wrapped lines at 402 pt. The composer's wrap layout is judged on this screen.
+  { name: "chat-draft-long", ready: "Fix the Android sheet height", link: `cohub://debug/chat?fixture=conversation&draft=${LONG_DRAFT_PHONE}` },
   { name: "chat-keyboard", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }] },
   { name: "chat-keyboard-drag", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }, { swipe: "down" }, { settle: true }] },
   // Unread: the Chat opens at the first message of the turn the device has not read (the 14th message).
@@ -134,6 +144,8 @@ export const TABLET_SCREENS = [
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
   { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ chatsTab: true }, { tapOn: "New Chat" }] },
+  // The long draft in the right pane: about six wrapped lines at 820 pt.
+  { name: "split-chat-draft-long", ready: "Fix the Android sheet height", link: `cohub://debug/chat?fixture=conversation&draft=${LONG_DRAFT_TABLET}` },
 ];
 
 /** The same operations on every target, timed by the frame probe: a long fixture, a real Chat, and the tabs. */
@@ -176,7 +188,7 @@ export const MOTIONS = [
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, target: "phone", orientations: null, perf: 0 };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, target: "phone", orientations: null, perf: 0, textSize: "default" };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -197,6 +209,7 @@ function parseArgs(argv) {
     else if (flag === "--orientations") options.orientations = value().split(",").map((name) => name.trim()).filter(Boolean);
     else if (flag === "--perf") options.perf = Number(value());
     else if (flag === "--dir") options.dir = resolve(value());
+    else if (flag === "--text-size") options.textSize = value();
     else throw new Error(`Unknown argument "${flag}".`);
   }
   if (command === "capture") {
@@ -207,6 +220,8 @@ function parseArgs(argv) {
     options.orientations ??= options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"];
     for (const orientation of options.orientations) if (!SIZE_BANDS[`${options.target}-${orientation}`]) throw new Error(`The ${options.target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
     if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
+    if (!(options.textSize in TEXT_SIZES)) throw new Error(`Unknown --text-size "${options.textSize}". Use ${Object.keys(TEXT_SIZES).join(", ")}.`);
+    if (options.platform === "android" && options.textSize !== "default") throw new Error("--text-size is set on iOS only; Android captures at its default font scale.");
     if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
     const known = new Set((options.target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name));
     for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
@@ -658,8 +673,14 @@ const ios = {
     }
     run("xcrun", ["simctl", "install", device.udid, appPath]);
     run("xcrun", ["simctl", "status_bar", device.udid, "override", "--time", "9:41", "--batteryState", "charged", "--batteryLevel", "100", "--cellularBars", "4", "--wifiBars", "3"]);
+    const setContentSize = (category) => run("xcrun", ["simctl", "ui", device.udid, "content_size", category], { allowFailure: true });
     return {
       device: device.udid,
+      setTextSize: (size) => {
+        const category = TEXT_SIZES[size];
+        setContentSize(category);
+        process.stdout.write(`Text size ${size}: content size ${category}\n`);
+      },
       setTheme: (theme) => run("xcrun", ["simctl", "ui", device.udid, "appearance", theme]),
       setAnimations: () => undefined,
       // Maestro turns the simulator in each flow's preamble.
@@ -675,7 +696,10 @@ const ios = {
           else if (!suffix) throw new Error(`No cohub-mobile.db in ${source}.`);
         }
       },
-      restore: () => run("xcrun", ["simctl", "status_bar", device.udid, "clear"], { allowFailure: true }),
+      restore: () => {
+        run("xcrun", ["simctl", "status_bar", device.udid, "clear"], { allowFailure: true });
+        setContentSize(TEXT_SIZES.default);
+      },
     };
   },
 };
@@ -691,6 +715,7 @@ async function capture(options) {
   const refreshToken = options.metro && credentials ? signInWithoutEmail() : null;
   const session = Boolean(refreshToken);
   const device = (options.platform === "android" ? android : ios).prepare(options.app, options.out, options.target);
+  device.setTextSize?.(options.textSize);
   const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, refreshToken }) : null;
   const missing = [];
   // The phone keeps the original layout (`<theme>/`); other targets are grouped by device and orientation.
