@@ -597,9 +597,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const { blocked, hasDraft, canSend, canStop, queues, glyph } = getComposerActionState({ text: value, hasAttachment, disabled, sending, running, hasStopHandler: Boolean(onStop), sendFeedback });
   // A JS-driven append is invisible to the native measurement (Android's watcher reads a
   // stale layout and never re-fires; iOS defers the event until the height prop changes),
-  // so the width-aware estimate stands in for it; a later real measurement still wins.
+  // so the estimate stands in for it. Typed text is measured natively once a measurement exists: the
+  // estimate assumes the one-row width and would add a blank line under a draft that fills the wrapped row.
   const lineHeight = typography.body.lineHeight * fontScale;
-  const measuredContentHeight = Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight));
+  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
