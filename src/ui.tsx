@@ -603,9 +603,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const lineHeight = typography.body.lineHeight * fontScale;
   // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
   const textPadding = COMPOSER_TEXT_PADDING * fontScale;
-  // iOS's content size leaves out the field's vertical padding, which the estimate and Android's measurement include.
-  const nativeContentHeight = contentHeight > 0 && Platform.OS === "ios" ? contentHeight + textPadding : contentHeight;
-  const measuredContentHeight = value === lastUserText && nativeContentHeight > 0 ? nativeContentHeight : Math.max(nativeContentHeight, estimateComposerContentHeight(value, lineHeight, textPadding));
+  // The native content size includes the field's padding (the text container inset) on both platforms.
+  const measuredContentHeight = value === lastUserText && contentHeight > 0 ? contentHeight : Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight, textPadding));
   const layout = getComposerLayout({
     text: value,
     contentHeight: measuredContentHeight,
