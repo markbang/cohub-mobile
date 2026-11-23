@@ -7,7 +7,7 @@
       "dependencies": {
         "@expo/ui": "~58.0.23",
         "@legendapp/list": "^3.6.0",
-        "@lobehub/icons-rn": "^2.14.0",
+        "@lobehub/icons-rn": "^2.21.3",
         "@logto/rn": "^1.3.0",
         "@neta-art/cohub": "^13.26.0",
         "@react-native-async-storage/async-storage": "~2.2.0",
@@ -379,7 +379,7 @@
 
     "@legendapp/list": ["@legendapp/list@3.6.0", "", { "dependencies": { "use-sync-external-store": "^1.5.0" }, "peerDependencies": { "react": "*" } }, "sha512-ndGQjSYdA32LWErJYbXEm4+eta+4bo0NxQO7eA3Xcvh0rXSb1mTGPbUtUkpea5w4MYciLKaE+0hoPxlMcaMtrw=="],
 
-    "@lobehub/icons-rn": ["@lobehub/icons-rn@2.14.0", "", { "dependencies": { "es-toolkit": "^1.43.0" }, "peerDependencies": { "expo-linear-gradient": ">=14.1.5", "react": "^19.0.0", "react-native": ">=0.76.9", "react-native-svg": ">=15.8.0" } }, "sha512-kHibUTg1ImHVhbyZU/3ZqwNwDxYy20IexPOmhntcmDPp35IIpg57y+zOyw76xv+jWAFu9K5yLMPqbduYTqv4dg=="],
+    "@lobehub/icons-rn": ["@lobehub/icons-rn@2.21.3", "", { "dependencies": { "es-toolkit": "^1.43.0" }, "peerDependencies": { "expo-linear-gradient": ">=14.1.5", "react": "^19.0.0", "react-native": ">=0.76.9", "react-native-svg": ">=15.8.0" } }, "sha512-f7AQqIGqAMoZlIKOHinHoeVolCozdswhDdl6NzECmb25ZwyglnZ8KmAFtFXUHwnEtXlpC1hy/yyCVmAhpeDHIQ=="],
 
     "@logto/client": ["@logto/client@3.1.2", "", { "dependencies": { "@logto/js": "^5.1.1", "@silverhand/essentials": "^2.9.2", "camelcase-keys": "^9.1.3", "jose": "^5.2.2" } }, "sha512-HRu6qO4QYQn5ckO5wHi8On/C4Nsp/5qYDbf6zrFjymSVlJlXmDft+OW/AQ9jdPl1kAgZJIlQzjvpM9YFy/7c6Q=="],
 
