@@ -114,9 +114,9 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
 - **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
   control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
   Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. The model is a
-  36 pt icon control (availability dot and chevron) that opens the picker, which names it; its label
-  keeps the name, thinking level and status. At 402 pt the field keeps about 250 pt. Web has no mic,
-  so its send stays visible and disabled.
+  36 pt sparkles control, like the harness, that opens the picker; its availability is an 8 pt dot badge
+  on its top-right corner, shown only when the status is known. Its label keeps the name, thinking level
+  and status. At 402 pt the field keeps about 250 pt. Web has no mic, so its send stays visible and disabled.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
