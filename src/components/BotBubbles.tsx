@@ -76,17 +76,20 @@ export function BotExchangeRow({ exchange, bot, peer, spaceId, availableWidth, o
 /** The centered time above a message on a Bot's page. */
 export function BotTimeDivider({ at }: { at: string }) {
   const { t } = useTranslation();
-  return <Text className="self-center px-3 pb-2 pt-3 text-caption text-fg-faint tabular-nums">{formatThreadTime(at, t, getActiveLocale())}</Text>;
+  return <Text className="self-center px-3 pb-2 pt-3 text-micro text-fg-faint tabular-nums">{formatThreadTime(at, t, getActiveLocale())}</Text>;
 }
 
+const BOT_TYPING_AVATAR_SIZE = 20;
 const DOT_BREATH = { "0%": { opacity: 0.35 }, "30%": { opacity: 1 }, "60%": { opacity: 0.35 }, "100%": { opacity: 0.35 } };
 
-/** The Bot is working on what it was asked: three dots on its side until it says something. */
-export function BotTyping() {
+/** The Bot is working on what it was asked: three dots in a reply's bubble, beside the Bot's face, until it says something. */
+export function BotTyping({ bot }: { bot: BotPeer }) {
   const { t } = useTranslation();
+  const theme = useAppTheme();
   const reduced = useReducedMotion();
-  return <View className="w-full flex-row px-3 pb-1">
-    <View accessible accessibilityLabel={t("bots.typing")} className="flex-row items-center gap-1 px-1" style={{ height: 28 }}>
+  return <View className="w-full flex-row items-end gap-2 px-3 pb-1">
+    <Avatar name={bot.name} uri={bot.avatarUrl} size={BOT_TYPING_AVATAR_SIZE} />
+    <View accessible accessibilityLabel={t("bots.typing")} className="flex-row items-center gap-1 bg-assistant-bubble" style={{ borderRadius: theme.radius.md, borderCurve: "continuous", paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 10, paddingBottom: 10 }}>
       {[0, 1, 2].map((index) => <Animated.View key={index} className="size-2 rounded-full bg-fg-muted" style={reduced ? { opacity: 0.6 } : { animationName: DOT_BREATH, animationDuration: loops.typingDots.duration, animationDelay: index * loops.typingDots.stagger, animationIterationCount: "infinite", animationTimingFunction: "ease-in-out" }} />)}
     </View>
   </View>;

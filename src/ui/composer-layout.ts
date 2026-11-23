@@ -1,6 +1,6 @@
 export const COMPOSER_TEXT_PADDING = 8;
-/** Empty collapsed composer chrome in `src/ui.tsx` (`composerWrap` + `composer` + input + toolbar), excluding the home-indicator inset. */
-export const COMPOSER_CHROME_HEIGHT = 130;
+/** Empty collapsed composer chrome in `src/ui.tsx` (`composerWrap` padding around the 44 pt capsule), excluding the home-indicator inset. */
+export const COMPOSER_CHROME_HEIGHT = 60;
 
 /**
  * Layout columns per rendered line at `typography.body` width, measured in Latin glyphs. The

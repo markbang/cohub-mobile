@@ -75,6 +75,27 @@ export function EdgeScrim({ edge, solid = 0, style }: { edge: "top" | "bottom"; 
 }
 
 /**
+ * iOS's bar blur for a Chat: the whole bar blurs the content behind it, so no text reads beside its title. Each
+ * layer reaches further down than the one before, with less blur, so the edge fades out below the bar.
+ */
+const BAR_BLUR_LAYERS = [
+  { reach: 0, intensity: 100 },
+  { reach: 8, intensity: 60 },
+  { reach: 16, intensity: 30 },
+  { reach: 24, intensity: 12 },
+] as const;
+
+function BarBlur() {
+  const dark = useAppTheme().mode === "dark";
+  return <>{BAR_BLUR_LAYERS.map(({ reach, intensity }) => <BlurView
+    key={reach}
+    intensity={intensity}
+    tint={dark ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
+    style={[StyleSheet.absoluteFill, { bottom: edgeChrome.topFade - reach }]}
+  />)}</>;
+}
+
+/**
  * The content an `EdgeHeader` given `blurTarget`, and the screen's floating glass (`Screen`'s `blurTarget`), blur:
  * on Android 12+, a blur target of its own, opaque.
  */
@@ -146,12 +167,15 @@ function SoftEdge({ target }: { target: RefObject<View | null> }) {
  * nothing is veiled at rest; without it the edge is always on, for screens whose content starts beneath it.
  * With `blurTarget` (the content inside `EdgeBlurTarget`), Android draws iOS's soft blurred edge; elsewhere,
  * and under Reduce Transparency, content stays solid-veiled under the whole bar and a strip below it fades.
+ * With `blurBar` on iOS, the whole bar blurs instead (`BarBlur`), and Reduce Transparency keeps the veil.
  */
-export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange = DEFAULT_EDGE_RANGE, hidden }: {
+export function EdgeHeader({ children, onLayout, scrollY, blurTarget, blurBar = false, edgeRange = DEFAULT_EDGE_RANGE, hidden }: {
   children: ReactNode;
   onLayout: (event: LayoutChangeEvent) => void;
   scrollY?: SharedValue<number>;
   blurTarget?: RefObject<View | null>;
+  /** iOS: the whole bar blurs the content behind it, as Messages does. */
+  blurBar?: boolean;
   edgeRange?: readonly [number, number];
   /** Fades the header out by `progress` and stops its touches while `active`, as an active search takes the bar. */
   hidden?: { progress: SharedValue<number>; active: boolean };
@@ -159,6 +183,7 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
   const insets = useSafeAreaInsets();
   const reduce = useReduceTransparency();
   const soft = androidBlur && !reduce && blurTarget;
+  const barBlur = blurBar && Platform.OS === "ios" && !reduce;
   const hiding = hidden?.progress;
   const scrimStyle = useAnimatedStyle(() => ({ opacity: (scrollY ? interpolate(scrollY.get(), edgeRange, [0, 1], "clamp") : 1) * (1 - (hiding ? hiding.get() : 0)) }));
   const contentStyle = useAnimatedStyle(() => ({ opacity: 1 - (hiding ? hiding.get() : 0) }));
@@ -166,6 +191,7 @@ export function EdgeHeader({ children, onLayout, scrollY, blurTarget, edgeRange 
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { bottom: -(soft ? SOFT_EDGE_TAIL : edgeChrome.topFade) }, scrimStyle]}>
       {soft
         ? <SoftEdge target={blurTarget} />
+        : barBlur ? <BarBlur />
         // The browser has no status bar to hold opaque and no blur behind the bar, so rows passing under it must be hidden as on Android.
         : Platform.OS !== "ios"
           ? <><View className="flex-1 bg-background" /><View style={TOP_FADE_STRIP}><EdgeScrim edge="top" /></View></>

@@ -13,6 +13,7 @@ import { KeyboardAwareLegendList } from "@legendapp/list/keyboard";
 import { KeyboardController, KeyboardEvents } from "react-native-keyboard-controller";
 import { AnchoredActionMenu, type AnchoredMenuAction, type AnchoredMenuSection } from "@/src/components/AnchoredActionMenu";
 import { NativeMenuButton, nativeMenus } from "@/src/components/NativeMenu";
+import { JumpToLatest } from "@/src/components/JumpToLatest";
 import { NoticeSheet } from "@/src/components/SystemDialogs";
 import { ToastViewport, useToast } from "@/src/components/Toast";
 import { copyMessageText, formatTokenCount, MessageBubble, StreamCard } from "@/src/components/MessageContent";
@@ -21,7 +22,7 @@ import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
 import { createSendFlight, isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
 import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess";
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
-import { latestMessageId } from "@/src/data/chat-read-state";
+import { latestMessageId, unreadAssistantTurnCount } from "@/src/data/chat-read-state";
 import { forkPoint } from "@/src/data/session-fork";
 import type { RelatedSessionRef } from "@/src/data/related-sessions";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
@@ -469,6 +470,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const initialUnreadRetriesRef = useRef(0);
   const readStateLoadedRef = useRef(false);
   const readSequenceRef = useRef<number | null>(null);
+  // The device's read sequence as state, for the jump button's count; the ref stays the source the scroll path advances.
+  const [readMirror, setReadMirror] = useState<{ sessionId: string; sequence: number } | null>(null);
   const savedReadSequenceRef = useRef<number | null>(null);
   const followingTailRef = useRef(true);
   const [followingTail, setFollowingTailState] = useState(true);
@@ -615,6 +618,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       }, readSequenceRef.current ?? 0);
       if (visibleAssistantSequence > (readSequenceRef.current ?? 0)) {
         readSequenceRef.current = visibleAssistantSequence;
+        setReadMirror({ sessionId, sequence: visibleAssistantSequence });
         if (visibleAssistantSequence > (savedReadSequenceRef.current ?? 0)) {
           savedReadSequenceRef.current = visibleAssistantSequence;
           void saveSessionReadSequence(sessionId, visibleAssistantSequence).catch(() => undefined);
@@ -872,6 +876,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       if (!active) return;
       readSequenceRef.current = sequence;
       savedReadSequenceRef.current = sequence;
+      setReadMirror(sequence === null ? null : { sessionId, sequence });
       readStateLoadedRef.current = true;
     }).catch(() => {
       if (active) readStateLoadedRef.current = true;
@@ -1630,6 +1635,9 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
   // first measured assistant does not poison the estimate used for the next user row.
   const getMessageItemType = useCallback((item: MessageRecord) => item.role, []);
+  // Replies newer than the device has shown, counted only while the user is off the tail: at the tail they are on screen.
+  const readSequence = readMirror?.sessionId === sessionId ? readMirror.sequence : null;
+  const unreadArrivals = useMemo(() => followingTail ? 0 : unreadAssistantTurnCount(messages, readSequence), [followingTail, messages, readSequence]);
   const listContentStyle = useMemo(() => ({ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12, flexGrow: messages.length === 0 ? 1 : undefined }), [footerHeight, headerHeight, messages.length]);
   const listIndicatorInsets = useMemo(() => ({ top: headerHeight, bottom: footerHeight }), [footerHeight, headerHeight]);
   // Chronological list: anchoring on data changes keeps the reading position when older turns are
@@ -1710,7 +1718,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     <View className="flex-1" accessibilityElementsHidden={moreOpen || titleMenuOpen} importantForAccessibility={moreOpen || titleMenuOpen ? "no-hide-descendants" : "auto"}>
     <SpacePanels edgeToEdge key={spaceId || sessionId} chatPanel={!bot} spaceId={spaceId} spaceName={spaceName} spaceAvatarUrl={listedSpaceAvatarUrl ?? view.space?.publicProfile?.avatarUrl} sessions={spaceSessions} client={client} activePanel={activePanel} onActivePanelChange={setActivePanel} onOpenSession={(nextSessionId, target) => router.push({ pathname: "/chat/[sessionId]", params: { sessionId: nextSessionId, ...(target?.turn != null ? { turn: String(target.turn) } : {}), ...(target?.turnId ? { turnId: target.turnId } : {}) } })} onNewChat={() => { if (spaceId) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: "new", spaceId } }); }} onOpenFile={(path) => { if (spaceId) router.push({ pathname: "/space/[spaceId]/file", params: { spaceId, path } }); }} onOpenFilesPage={() => { if (spaceId) router.push({ pathname: "/space/[spaceId]/files", params: { spaceId } }); }}>
       <ScreenBlurTarget attach={attachScreenBlurTarget}><Animated.View ref={sendRootRef} collapsable={false} className="flex-1 min-h-0">
-        <EdgeHeader onLayout={onHeaderLayout} blurTarget={blurTarget}>
+        <EdgeHeader onLayout={onHeaderLayout} blurTarget={blurTarget} blurBar>
         {/* A Bot's page is the Bot alone: its face and name, which open its profile, and its work log. */}
         {bot ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<WorkLogButton labeled={split} disabled={!botWork} onPress={() => { if (botWork) router.push({ pathname: "/chat/[sessionId]", params: { sessionId: botWork.id, log: "1" } }); }} />}><BotTitle name={spaceName} avatarUrl={spaceAvatarUrl} onPress={() => router.push({ pathname: "/bot/[spaceId]", params: { spaceId } })} /></TopBar> : !sessionId ? <TopBar transparent title={spaceName} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="messages" label={t("chat.actions.openChats")} size={38} onPress={() => setActivePanel("chat")} /><IconButton name="folder-open" label={t("chat.actions.openFiles")} size={38} onPress={() => setActivePanel("files")} /></>} /> : <TopBar transparent title={session ? displaySessionTitle(session) : t("chat.title")} subtitle={spaceName} titleRef={titleRef} onTitleLongPress={session ? openTitleMenu : undefined} titleMenu={session ? { menu: "chat-title-actions-menu", actions: titleActions } : undefined} titleLongPressLabel={t("chat.titleActions.open")} onBack={() => { traceBackPress(); router.back(); }} actions={<><IconButton name="list-tree" label={t("chat.turns.open")} size={38} onPress={() => setOverlay("turns")} disabled={view.turnIndex.length === 0 && view.loading} />{nativeMenus ? <NativeMenuButton appearance="bar" icon="more" label={t("chat.more")} sections={chatSections} testID="chat-actions-menu" /> : <MenuAnchor ref={moreButtonRef} open={moreOpen}><IconButton name="more" label={t("chat.more")} size={38} onPress={() => { closeOverlay("titleMenu"); setOverlay("more"); }} /></MenuAnchor>}</>} />}
         <ConnectionBanner visible={connectionUnavailable} />
@@ -1794,6 +1802,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           keyExtractor={keyExtractor}
           renderItem={renderMessage}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : undefined}
           maintainVisibleContentPosition={maintainVisiblePosition}
           viewabilityConfig={messageViewabilityConfig}
           onViewableItemsChanged={onViewableItemsChanged}
@@ -1819,8 +1828,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         <EdgeFooter keyboard onLayout={onFooterLayout}><ChatColumn>
         {/* Outside the measured chrome: in the list footer it moved the followed tail twice per catch-up. */}
         {catchUpLoader && !view.hasMoreNewer && !liveStream ? <View pointerEvents="none" className="absolute left-0 right-0 bottom-full"><ListEdgeLoader label={t("chat.catchingUp")} /></View> : null}
-        {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><Pressable accessibilityRole="button" accessibilityLabel={t("chat.jumpLatest")} accessibilityState={{ busy: jumpingToLatest, disabled: jumpingToLatest }} disabled={jumpingToLatest} onPress={() => void jumpToLatest()} className="size-11 items-center justify-center rounded-full shadow-float active:opacity-70"><GlassBackground radius={22} />{jumpingToLatest ? <Loader /> : <AppIcon name="arrow-down" size={18} tone="accent" />}</Pressable></Animated.View> : null}
-        {bot && botWorking ? <BotTyping /> : null}
+        {!followingTail ? <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={jumpingToLatest} unread={unreadArrivals} onPress={() => void jumpToLatest()} /></Animated.View> : null}
+        {bot && botWorking ? <BotTyping bot={bot} /> : null}
         {queueItems.length > 0 ? <Animated.View entering={footerRowEntering} exiting={FadeOut.duration(motion.fadeOut.duration)} className="px-3 pt-2 pb-2 gap-2">
           <Text className="text-micro font-semibold text-fg-muted">{t("chat.followups", { count: queueItems.length })}</Text>
           <ScrollView ref={queueScrollRef} style={{ maxHeight: 180, flexGrow: 0 }} contentContainerStyle={{ gap: 8 }} keyboardShouldPersistTaps="handled" onContentSizeChange={() => { if (queueTransitionActive || queueItems.some((item) => item.turn === null)) queueScrollRef.current?.scrollToEnd({ animated: false }); }}>

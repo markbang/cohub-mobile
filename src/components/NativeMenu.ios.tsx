@@ -1,5 +1,5 @@
 import { Button, Host, Image, Menu, Section, Text } from "@expo/ui/swift-ui";
-import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as disabledModifier, font, foregroundStyle, lineLimit } from "@expo/ui/swift-ui/modifiers";
+import { accessibilityLabel, buttonBorderShape, buttonStyle, controlSize, disabled as disabledModifier, font, foregroundStyle, frame, lineLimit } from "@expo/ui/swift-ui/modifiers";
 import { traceAction } from "@/src/data/interaction-trace";
 import { SF_SYMBOLS } from "@/src/sf-symbols";
 import { useAppTheme } from "@/src/theme";
@@ -32,16 +32,18 @@ export function NativeMenuButton({ icon, label, title, actions = [], sections, a
   const theme = useAppTheme();
   const symbol = SF_SYMBOLS[icon];
   const menu = testID ?? label;
-  // Bar and composer buttons are glass like the rest of the chrome; a plain one is a bare glyph.
+  // Bar buttons are glass like the rest of the chrome; a plain or composer one is a bare glyph, the composer's in a 36 pt target.
   const shape = appearance === "plain"
     ? [buttonStyle("borderless")]
-    : appearance === "chip"
+    : appearance === "composer"
+      ? [buttonStyle("borderless"), frame({ minWidth: 36, minHeight: 36 })]
+      : appearance === "chip"
       ? [buttonStyle(liquidGlass ? "glass" : "bordered"), buttonBorderShape("capsule"), controlSize("large")]
       : [buttonStyle(liquidGlass ? "glass" : "bordered"), buttonBorderShape("circle"), controlSize("large")];
-  const color = active ? theme.colors.accent : appearance === "plain" ? theme.colors.textMuted : theme.colors.text;
+  const color = active ? theme.colors.accent : appearance === "plain" ? theme.colors.textMuted : appearance === "composer" ? theme.colors.textSecondary : theme.colors.text;
   const trigger = appearance === "chip"
     ? <Text modifiers={[font({ textStyle: "subheadline", weight: "semibold" }), foregroundStyle(color), lineLimit(1)]}>{title ?? label}</Text>
-    : <Image systemName={symbol} size={appearance === "control" ? 20 : 17} color={color} />;
+    : <Image systemName={symbol} size={appearance === "composer" ? 20 : 17} color={color} />;
   return <Host matchContents colorScheme={theme.mode}>
     <Menu label={trigger} testID={testID} modifiers={[...shape, accessibilityLabel(label), disabledModifier(disabled)]}>
       {sections

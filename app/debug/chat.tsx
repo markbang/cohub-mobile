@@ -3,11 +3,14 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { unreadAssistantTurnCount } from "@/src/data/chat-read-state";
 import { BotTitle } from "@/src/components/BotTitle";
+import { JumpToLatest } from "@/src/components/JumpToLatest";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
-import { useReducedMotion } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { BOT_BUBBLE_INSET, botExchange, botNoteSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
+import { motion } from "@/src/motion";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
 import { EdgeBlurTarget, EdgeFooter, EdgeHeader, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
@@ -16,6 +19,7 @@ import { usePaneWidth } from "@/src/ui/pane";
 /**
  * The Chat screen's own chrome and native timeline over fixed conversations, so its layout can be
  * captured on both platforms without an account's data. `?fixture=` picks the conversation; `bot` is a Bot's page.
+ * `?arrive=<n>` appends n replies two seconds after opening, as a reply that lands while the user reads up.
  */
 const FIXTURES = ["conversation", "tools", "long", "states", "media", "stream", "bot"] as const;
 type Fixture = (typeof FIXTURES)[number];
@@ -28,10 +32,22 @@ export default function DebugChatScreen() {
   const router = useRouter();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
-  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string }>();
   const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
-  const messages = useMemo(() => conversation(fixture), [fixture]);
+  const baseMessages = useMemo(() => conversation(fixture), [fixture]);
+  const arriveCount = Number(params.arrive) > 0 ? Math.floor(Number(params.arrive)) : 0;
+  const arrivalKey = `${fixture}:${arriveCount}`;
+  const [arrival, setArrival] = useState<{ key: string; messages: MessageRecord[] } | null>(null);
+  useEffect(() => {
+    if (arriveCount === 0) return;
+    const timer = setTimeout(() => setArrival({ key: arrivalKey, messages: arrivals(baseMessages, arriveCount) }), 2000);
+    return () => clearTimeout(timer);
+  }, [arrivalKey, arriveCount, baseMessages]);
+  const messages = useMemo(() => [...baseMessages, ...(arrival?.key === arrivalKey ? arrival.messages : [])], [arrival, arrivalKey, baseMessages]);
+  const [following, setFollowing] = useState(true);
+  // The fixture's replies count as read; `arrive` replies land after them.
+  const seenSequence = useMemo(() => baseMessages.reduce((latest, message) => message.role === "assistant" ? Math.max(latest, Number(message.meta?.turnSequence ?? 0)) : latest, 0), [baseMessages]);
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
   // As the Chat screen: a reply is the page's Bot, a note is whoever wrote it.
@@ -40,7 +56,9 @@ export default function DebugChatScreen() {
   const { headerHeight, footerHeight, onHeaderLayout, onFooterLayout, blurTarget, attachBlurTarget } = useEdgeChrome({ reserveComposer: true });
   const keyboardCoveredInset = useKeyboardCoveredInset();
   const reducedMotion = useReducedMotion();
-  const [draft, setDraft] = useState("");
+  // `?draft=` seeds the composer as a Chat's saved draft does; typing replaces it.
+  const [typed, setDraft] = useState<string | null>(null);
+  const draft = typed ?? params.draft ?? "";
   const width = usePaneWidth();
   // With `?probe=1`, printed under the bar so a snapshot shows whether rows were laid out (frame) even when none
   // is painted. Otherwise it stays an accessibility label only, which captures can wait on without the text
@@ -67,13 +85,14 @@ export default function DebugChatScreen() {
   }, [fixture, useNative]);
 
   return <Screen edgeToEdge blurTarget={blurTarget}>
-    <EdgeHeader onLayout={onHeaderLayout}>
+    <EdgeHeader onLayout={onHeaderLayout} blurBar>
       {bot ? <TopBar transparent title={bot.name} onBack={() => router.back()} actions={<IconButton name="list-tree" label="Work log" size={38} onPress={NOOP} />}>
         <BotTitle name={bot.name} avatarUrl={null} onPress={NOOP} />
       </TopBar> : <TopBar transparent title="Fix the Android sheet height" subtitle="Home" onBack={() => router.back()} actions={<>
         <IconButton name="list-tree" label="Turns" size={38} onPress={NOOP} />
         <IconButton name="more" label="More" size={38} onPress={NOOP} />
       </>} />}
+      {arriveCount > 0 ? <View testID="debug-chat-arrivals" accessible accessibilityLabel={`arrivals ${arrival?.key === arrivalKey ? arrival.messages.length : 0}`} pointerEvents="none" style={ARRIVALS_LABEL} /> : null}
       {params.probe === "1"
         ? <Text testID="debug-chat-probe" className="px-4 text-micro text-fg-muted">{probe}</Text>
         : <View testID="debug-chat-probe" accessible accessibilityLabel={probe} pointerEvents="none" style={PROBE_LABEL} />}
@@ -119,7 +138,7 @@ export default function DebugChatScreen() {
         onSpeak={NOOP}
         onLoadOlder={NOOP}
         onLoadNewer={NOOP}
-        onFollowingChange={NOOP}
+        onFollowingChange={setFollowing}
         onVisibleMessages={NOOP}
         onNearEdge={NOOP}
         onLoad={NOOP}
@@ -148,16 +167,19 @@ export default function DebugChatScreen() {
     </EdgeBlurTarget>
     </View>
     <EdgeFooter keyboard onLayout={onFooterLayout}>
-      {bot ? <BotTyping /> : null}
-      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" {...(bot ? { variant: "bot" as const, onVoice: NOOP, placeholder: `Message ${bot.name}` } : {})} />
+      {following ? null : <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={false} unread={unreadAssistantTurnCount(messages, seenSequence)} onPress={NOOP} /></Animated.View>}
+      {bot ? <BotTyping bot={bot} /> : null}
+      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" onVoice={NOOP} {...(bot ? { variant: "bot" as const, placeholder: `Message ${bot.name}` } : {})} />
     </EdgeFooter>
   </Screen>;
 }
 
 // Full width: Android's accessibility dump leaves out a view too small to see.
 const PROBE_LABEL = { position: "absolute", left: 0, right: 0, bottom: 0, height: 8 } as const;
+const ARRIVALS_LABEL = { position: "absolute", left: 0, right: 0, top: 0, height: 8 } as const;
+const ABOVE_FOOTER_BUTTON = { bottom: "100%", marginBottom: 12 } as const;
 
-type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** On a Bot's page: which Bot wrote the note (none for the user's), at minutes from today 08:00. */ bot?: "self" | "peer" | "stranger"; at?: number };
+type Line = { role: "user" | "assistant"; text?: string; content?: ContentBlock[]; error?: string; /** A user message the server did not accept: its meta carries `sendFailed`, as a failed send's does. */ failed?: boolean; /** On a Bot's page: which Bot wrote the note (none for the user's), at minutes from today 08:00. */ bot?: "self" | "peer" | "stranger"; at?: number };
 
 const BOT: BotPeer = { name: "Chief of staff", avatarUrl: null };
 // The origin the server records on a `say` note; it is read only when its ids are UUIDs.
@@ -228,7 +250,7 @@ const SCRIPTS: Record<Fixture, Line[]> = {
   states: [
     { role: "user", text: "A message that sent normally." },
     { role: "assistant", text: "A normal reply." },
-    { role: "user", text: "A message that failed to send.", error: "The message could not be sent. Check your connection." },
+    { role: "user", text: "A message that failed to send.", error: "The message could not be sent. Check your connection.", failed: true },
   ],
 };
 
@@ -246,9 +268,26 @@ function conversation(fixture: Fixture): MessageRecord[] {
       model: line.role === "assistant" ? "claude-sonnet" : null,
       stopReason: "stop", errorMessage: line.error ?? null,
       usage: line.role === "assistant" ? { input: 1200, output: 240, cacheRead: 300, cacheWrite: 0, totalTokens: 1740 } : null,
-      meta: line.at === undefined ? { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn } : { turnId: `debug-${fixture}-turn-${index + 1}`, turnSequence: index + 1, ...(line.bot ? { writer: BOT_WRITERS[line.bot] } : {}) }, authorUuid: null, authorProfile: null,
+      meta: { ...(line.at === undefined ? { turnId: `debug-${fixture}-turn-${turn}`, turnSequence: turn } : { turnId: `debug-${fixture}-turn-${index + 1}`, turnSequence: index + 1, ...(line.bot ? { writer: BOT_WRITERS[line.bot] } : {}) }), ...(line.failed ? { sendFailed: true } : {}) }, authorUuid: null, authorProfile: null,
       startedAt: null, completedAt: null, durationMs: 4200,
       createdAt: new Date(line.at === undefined ? start + index * 60_000 : today.getTime() + line.at * 60_000).toISOString(),
+    } as MessageRecord;
+  });
+}
+
+/** Replies that arrive after the Chat opened: the turns after the fixture's last one, all from the assistant. */
+function arrivals(base: readonly MessageRecord[], count: number): MessageRecord[] {
+  const lastSequence = base.reduce((latest, message) => Math.max(latest, message.sequence), 0);
+  const lastTurn = base.reduce((latest, message) => Math.max(latest, Number(message.meta?.turnSequence ?? 0)), 0);
+  const sessionId = base[0]?.sessionId ?? "debug";
+  return Array.from({ length: count }, (_, index) => {
+    const turn = lastTurn + index + 1;
+    const text = `New arrival ${index + 1}. Ready when you are.`;
+    return {
+      id: `debug-arrival-${turn}`, sessionId, role: "assistant", content: [{ type: "text", text }], text,
+      sequence: lastSequence + index + 1, provider: "cohub", model: "claude-sonnet", stopReason: "stop", errorMessage: null,
+      usage: null, meta: { turnId: `debug-arrival-turn-${turn}`, turnSequence: turn }, authorUuid: null, authorProfile: null,
+      startedAt: null, completedAt: null, durationMs: 4200, createdAt: new Date().toISOString(),
     } as MessageRecord;
   });
 }

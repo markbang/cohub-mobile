@@ -15,6 +15,17 @@ export function latestUnreadAssistantIndex(messages: MessageRecord[], readSequen
   return latestIndex;
 }
 
+/** Assistant turns newer than what the device has shown: what jumping to the latest reveals. */
+export function unreadAssistantTurnCount(messages: readonly MessageRecord[], readSequence: number | null) {
+  const turns = new Set<number>();
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const sequence = messageTurnSequence(message);
+    if (sequence !== null && (readSequence === null || sequence > readSequence)) turns.add(sequence);
+  }
+  return turns.size;
+}
+
 /** What this device last showed of a Chat. A `null` id at `seenAt` 0 is a manual "mark as unread". */
 export type SessionSeenEntry = { messageId: string | null; seenAt: number };
 export type SessionSeenState = { baseline: number | null; entries: Readonly<Record<string, SessionSeenEntry>> };

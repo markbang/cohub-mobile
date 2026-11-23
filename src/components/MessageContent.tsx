@@ -25,7 +25,7 @@ import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
 import { ContentImage } from "@/src/ui/ContentImage";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
-import { BubbleContentWidth, BubbleText, BubbleTraceMessage } from "@/src/components/BubbleText";
+import { BubbleContentWidth, BubbleTraceMessage } from "@/src/components/BubbleText";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
@@ -687,13 +687,13 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
   const textColor = theme.colors.userBubbleText;
   const maxWidth = getBubbleMaxWidth(rowWidth);
   const failed = isFailedSend(message);
-  const footer = clock || local || failed ? <BubbleMeta clock={clock} local={local} failed={failed} t={t} /> : undefined;
+  // A message with an error never shows the delivered check: its receipt is the alert, as for a failed send.
+  const footer = clock || local || failed || message.errorMessage ? <BubbleMeta clock={clock} local={local} failed={failed || Boolean(message.errorMessage)} t={t} /> : undefined;
   return <BubbleContext.Provider value={bubbleEnvironment}><View {...traceTouches} pointerEvents={hidden ? "none" : "auto"} accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? "no-hide-descendants" : "auto"} onLayout={onRowLayout} style={{ width: floating ? undefined : "100%", opacity: hidden ? 0 : 1, paddingHorizontal: 12, paddingVertical: rowInset, alignItems: "flex-end" }}>
     <BubbleTraceMessage.Provider value={message}><UserBubbleFrame maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
-      {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={message.errorMessage ? undefined : footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={message.errorMessage ? undefined : footer} /> : !message.errorMessage ? footer : null}
-      {/* design-system: BubbleText measures its lines from this style, so it must stay a JS style. */}
-      {message.errorMessage ? <BubbleText selectable footer={footer} measurementKey={`${message.errorMessage}:${typography.caption.fontSize}`} containerStyle={{ marginTop: 6 }} style={[typography.caption, { color: theme.colors.userBubbleText }]}>{message.errorMessage}</BubbleText> : null}
+      {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={footer} /> : footer}
     </UserBubbleFrame></BubbleTraceMessage.Provider>
+    {message.errorMessage ? <View className="flex-row items-start gap-1.5 px-2 pt-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable className="shrink text-caption text-danger">{message.errorMessage}</Text></View> : null}
     {failed && (onRetry || onDiscard) ? <View className="flex-row items-center" style={{ marginRight: -8 }}>
       {onDiscard ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.delete")} onPress={() => onDiscard(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="trash" size={14} tone="muted" /><Text className="text-caption font-semibold text-fg-muted">{t("chat.sendFailed.delete")}</Text></Pressable> : null}
       {onRetry ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.retry")} accessibilityState={{ disabled: retryDisabled }} disabled={retryDisabled} onPress={() => onRetry(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55 disabled:opacity-45"><AppIcon name="refresh" size={14} tone="accent" /><Text className="text-caption font-semibold text-accent">{t("common.retry")}</Text></Pressable> : null}

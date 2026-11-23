@@ -54,7 +54,7 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 `app/debug/ui.tsx` is the UI catalog, a page that shows every shared primitive. `?section=` limits it to one section so each fits in a single screenshot. When you add or restyle a shared component, add it to the catalog.
 
-`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states|media|stream|bot`, where `bot` is a Bot's page), so the Chat layout can be compared without an account's data. `&native=0` draws the JS list that binaries without the native timeline fall back to; only that list shows the `stream` fixture's reply in progress. `app/debug/bot-list.tsx` renders the Bots view's rows over fixed Bots.
+`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states|media|stream|bot`, where `bot` is a Bot's page), so the Chat layout can be compared without an account's data. `&native=0` draws the JS list that binaries without the native timeline fall back to; only that list shows the `stream` fixture's reply in progress. `&draft=<text>` seeds the composer, as a Chat's saved draft does (the `chat-draft` screen). `&arrive=<n>` appends n replies two seconds after the screen opens, as a reply landing while the user reads up; the `chat-arrival` screen waits for them (an accessible `arrivals <n>` label) before it scrolls. The `chat-scrolled`, `chat-arrival`, `chat-keyboard` and `chat-keyboard-drag` screens cover the jump to latest and the keyboard. `app/debug/bot-list.tsx` renders the Bots view's rows over fixed Bots.
 
 ## Recordings
 
