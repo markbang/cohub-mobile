@@ -65,8 +65,19 @@ const jsonInit = (method, body) => ({ method, headers: { "content-type": "applic
 
 function decodeJwtPayload(token) {
   const payload = token?.split(".")[1];
-  if (!payload) throw new Error("The token response has no id_token.");
+  if (!payload) throw new Error("The refresh grant returned no JWT access token.");
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+}
+
+async function tokenGrant(params, step) {
+  const response = await request("/oidc/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(params),
+  });
+  const body = await readJson(response, step);
+  if (!response.ok) throw new Error(`${step} failed (${response.status}): ${body?.error ?? "unknown error"}${body?.error_description ? ` (${body.error_description})` : ""}`);
+  return body ?? {};
 }
 
 async function main() {
@@ -121,19 +132,17 @@ async function main() {
   if (!code) throw new Error("The callback carries no authorization code.");
   log("authorization code received");
 
-  const tokenResponse = await request("/oidc/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "authorization_code", client_id: appId, code, redirect_uri: REDIRECT_URI, code_verifier: verifier }),
-  });
-  const tokens = await readJson(tokenResponse, "The token exchange");
-  if (!tokenResponse.ok) throw new Error(`The token exchange failed (${tokenResponse.status}): ${tokens?.error ?? "unknown error"}${tokens?.error_description ? ` (${tokens.error_description})` : ""}`);
-  if (!tokens?.refresh_token) throw new Error("The token exchange returned no refresh_token; is offline_access granted to the app?");
-  const claims = decodeJwtPayload(tokens.id_token);
-  // The app refuses a session whose tokens lack this claim (NativeRoot in app/_layout.tsx).
-  if (typeof claims.talesofai_uuid !== "string" || !claims.talesofai_uuid.trim()) throw new Error("The id token has no talesofai_uuid claim; the app would refuse this session.");
+  const tokens = await tokenGrant({ grant_type: "authorization_code", client_id: appId, code, redirect_uri: REDIRECT_URI, code_verifier: verifier }, "The code exchange");
+  if (!tokens.refresh_token) throw new Error("The code exchange returned no refresh_token; is offline_access granted to the app?");
+  // The same grant the app runs first (src/auth/e2e-session.ts): it must return the id token the SDK
+  // counts as signed in and an API token with the claim the app requires (NativeRoot in app/_layout.tsx).
+  const refreshed = await tokenGrant({ grant_type: "refresh_token", client_id: appId, refresh_token: tokens.refresh_token, resource }, "The refresh grant");
+  if (!refreshed.id_token) throw new Error("The refresh grant returned no id_token; the app would stay signed out.");
+  const claims = decodeJwtPayload(refreshed.access_token);
+  if (typeof claims.talesofai_uuid !== "string" || !claims.talesofai_uuid.trim()) throw new Error(`The access token for ${resource} has no talesofai_uuid claim; the app would refuse this session.`);
+  const refreshToken = refreshed.refresh_token ?? tokens.refresh_token;
   log("refresh token issued");
-  process.stdout.write(`${tokens.refresh_token}\n`);
+  process.stdout.write(`${refreshToken}\n`);
 }
 
 try {
