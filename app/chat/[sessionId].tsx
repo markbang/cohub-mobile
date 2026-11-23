@@ -22,7 +22,7 @@ import { QueuedFollowupRow } from "@/src/components/QueuedFollowupRow";
 import { createSendFlight, isSendBubbleMessage, measureSendBubbleSource, type SendBubbleTransition } from "@/src/ui/send-bubble-motion";
 import { StreamingTurnProcess, TurnProcess } from "@/src/components/TurnProcess";
 import { ForkedFromDivider, SentFromLink, SentToList } from "@/src/components/RelatedSessionLinks";
-import { latestMessageId, unreadAssistantTurnCount } from "@/src/data/chat-read-state";
+import { isDeliveredMessage, latestMessageId, readThrough, reachesUnread, unreadAssistantTurnCount, unreadStart, type UnreadStart } from "@/src/data/chat-read-state";
 import { forkPoint } from "@/src/data/session-fork";
 import type { RelatedSessionRef } from "@/src/data/related-sessions";
 import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
@@ -86,6 +86,7 @@ import { BrandRefreshArea, useBrandRefresh } from "@/src/ui/BrandRefresh";
 import { EdgeBlurTarget, EdgeFooter, EdgeFooterOverlay, EdgeHeader, KeyboardLiftPadding, ScreenBlurTarget, useBlurTarget, useEdgeChrome, useKeyboardCoveredInset } from "@/src/ui/EdgeChrome";
 import { NativeChatTimeline, type NativeChatTimelineHandle, type VisibleMessage } from "@/src/components/timeline/NativeChatTimeline";
 import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
+import { UnreadDivider } from "@/src/components/UnreadDivider";
 import { BotTitle } from "@/src/components/BotTitle";
 import { BOT_BUBBLE_INSET, botContextWindow, botExchange, botMessageSpace, botPlacements, botVoice, isBotSpace, latestBotNote, turnModelSelection, type BotPeer } from "@/src/data/bot-mode";
 import { useBotMode } from "@/src/data/bot-mode-preference";
@@ -442,6 +443,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const [loadingSequence, setLoadingSequence] = useState<number | null>(null);
   // Tail pins snap until opening has settled; animating them was the visible chase to the tail.
   const [openPhase, setOpenPhase] = useState<"placing" | "placed" | "settled">("placing");
+  // The native list has placed itself once; a later window remount opens at the tail as before.
+  const [openPlaced, setOpenPlaced] = useState(false);
   const listLoaded = openPhase !== "placing";
   const openSettled = openPhase === "settled";
   const [openingDelayElapsed, setOpeningDelayElapsed] = useState(false);
@@ -466,13 +469,36 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const timelineRef = useRef<NativeChatTimelineHandle>(null);
   const listContainerRef = useRef<View>(null);
   const initialScrollDone = useRef(false);
-  const initialUnreadIndexRef = useRef<number | null>(null);
-  const initialUnreadRetriesRef = useRef(0);
   const readStateLoadedRef = useRef(false);
   const readSequenceRef = useRef<number | null>(null);
   // The device's read sequence as state, for the jump button's count; the ref stays the source the scroll path advances.
   const [readMirror, setReadMirror] = useState<{ sessionId: string; sequence: number } | null>(null);
   const savedReadSequenceRef = useRef<number | null>(null);
+  // The Chat whose stored read sequence has loaded; until then the open cannot be decided.
+  const [readLoaded, setReadLoaded] = useState<string | null>(null);
+  // Sets the ref the scroll path advances and the read mirror the jump button and divider render from.
+  const setReadSequence = useCallback((sequence: number | null) => {
+    readSequenceRef.current = sequence;
+    setReadMirror(sequence === null ? null : { sessionId, sequence });
+  }, [sessionId]);
+  const readSequence = readMirror?.sessionId === sessionId ? readMirror.sequence : null;
+  const readKnown = readLoaded === sessionId ? readSequence : undefined;
+  // Where this open starts its unread run, decided once: undefined until decided, null when nothing is unread.
+  const [unreadOpen, setUnreadOpen] = useState<UnreadStart | null | undefined>(undefined);
+  // The unread Turn's older window is fetched once; "failed" opens at the tail rather than at a guess.
+  const [unreadJump, setUnreadJump] = useState<"none" | "done" | "failed">("none");
+  const unreadJumpStartedRef = useRef(false);
+  // While an unread run was on screen at open, the rows in view are that run, not reading: advance after the first drag.
+  const readAdvanceRef = useRef(false);
+  const messagesRef = useRef<MessageRecord[]>([]);
+  // A Chat that replaces this one in the screen starts its read state and open again, as a remount would.
+  const [readSession, setReadSession] = useState(sessionId);
+  if (readSession !== sessionId) {
+    setReadSession(sessionId);
+    setReadLoaded(null);
+    setUnreadOpen(undefined);
+    setUnreadJump("none");
+  }
   const followingTailRef = useRef(true);
   const [followingTail, setFollowingTailState] = useState(true);
   const followPinAnimatedRef = useRef(true);
@@ -600,28 +626,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const ordered = viewableItems
       .filter((item) => item.isViewable && item.item && typeof item.item === "object")
       .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER));
-    if (initialUnreadIndexRef.current !== null) {
-      const initialUnreadVisible = ordered.some((item) => item.index === initialUnreadIndexRef.current);
-      if (initialUnreadVisible) {
-        initialUnreadIndexRef.current = null;
-        initialUnreadRetriesRef.current = 0;
-      } else {
-        return;
-      }
-    }
-    if (readStateLoadedRef.current && initialScrollDone.current) {
-      const visibleAssistantSequence = ordered.reduce((latest, item) => {
-        const message = item.item as MessageRecord;
-        if (message.role !== "assistant") return latest;
-        const sequence = turnSequenceForMessage(message);
-        return sequence !== null ? Math.max(latest, sequence) : latest;
-      }, readSequenceRef.current ?? 0);
-      if (visibleAssistantSequence > (readSequenceRef.current ?? 0)) {
-        readSequenceRef.current = visibleAssistantSequence;
-        setReadMirror({ sessionId, sequence: visibleAssistantSequence });
-        if (visibleAssistantSequence > (savedReadSequenceRef.current ?? 0)) {
-          savedReadSequenceRef.current = visibleAssistantSequence;
-          void saveSessionReadSequence(sessionId, visibleAssistantSequence).catch(() => undefined);
+    if (readStateLoadedRef.current && initialScrollDone.current && readAdvanceRef.current) {
+      const next = readThrough(readSequenceRef.current, ordered.map((item) => item.item as MessageRecord));
+      if (next !== readSequenceRef.current) {
+        setReadSequence(next);
+        if (next !== null && next > (savedReadSequenceRef.current ?? 0)) {
+          savedReadSequenceRef.current = next;
+          void saveSessionReadSequence(sessionId, next).catch(() => undefined);
         }
       }
     }
@@ -642,7 +653,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     // Chronological list: the first viewable row is the one at the top of the viewport.
     const visualTop = ordered[0];
     if (visualTop?.item) setCurrentTurnSequence(turnSequenceForMessage(visualTop.item as { meta: Record<string, unknown> | null }));
-  }, [saveSessionReadSequence, sessionId, trace]);
+  }, [saveSessionReadSequence, sessionId, setReadSequence, trace]);
   const { onViewableItemsChanged, measureVisibleRows, trackRow } = useChatVisibleRows({ viewportRef: listContainerRef, topInset: headerHeight, bottomInset: footerHeight, onVisible: onVisibleRows });
   useSpaceRealtime(spaceId ? [spaceId] : []);
   const spaceName = draftSpace ? displaySpaceName(draftSpace) : view.space ? displaySpaceName(view.space) : sessionSummary?.space?.name || t("space.fallbackName");
@@ -669,6 +680,15 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   useFocusEffect(useCallback(() => {
     if (seenMessageId) void markSessionSeen(sessionId, seenMessageId).catch(() => undefined);
   }, [markSessionSeen, seenMessageId, sessionId]));
+  // Leaving the Chat reads it through, as the seen mark above already does for the list.
+  useFocusEffect(useCallback(() => () => {
+    if (!readStateLoadedRef.current) return;
+    const next = readThrough(readSequenceRef.current, messagesRef.current);
+    if (next === null || next <= (savedReadSequenceRef.current ?? 0)) return;
+    readSequenceRef.current = next;
+    savedReadSequenceRef.current = next;
+    void saveSessionReadSequence(sessionId, next).catch(() => undefined);
+  }, [saveSessionReadSequence, sessionId]));
   // A notification for the Chat a Bot works in lands on the Bot's page; its work log opens it as a Chat.
   const botPageId = !workLog && botChats?.session?.id === sessionId ? botChats.chat?.id ?? null : null;
   useEffect(() => { if (botPageId) router.replace({ pathname: "/chat/[sessionId]", params: { sessionId: botPageId } }); }, [botPageId, router]);
@@ -701,6 +721,9 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   }, [pendingNew, queuedFollowupIds, view.hasMoreNewer, view.messages, view.turns]);
   const { showLoader: catchUpLoader, arrivalBaseline } = useChatCatchUp(view.catchingUp, messages);
   // renderItem previously ran linear `find`/`filter` over every turn for every rendered row.
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const turnsById = useMemo(() => new Map(view.turns.map((entry) => [entry.id, entry])), [view.turns]);
   const turnsBySequence = useMemo(() => {
     const map = new Map<number, SessionTurnRecord[]>();
@@ -810,6 +833,8 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const pendingReply = (starting || submitting) && !bot;
   const retryDisabled = Boolean(sessionId) && !view.historyLoaded;
   const timelineReady = messages.length > 0 || view.historyLoaded || Boolean(liveStream) || submitting;
+  // The list mounts once it knows where it opens, so its first placement is already there.
+  const listMounts = timelineReady && unreadOpen !== undefined;
   // The list stays invisible until it has settled on the tail, so the opening state covers that too.
   const placeholder = !sessionId
     ? (pendingNew ? null : "draft")
@@ -818,7 +843,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       historyLoaded: view.historyLoaded,
       error: view.error,
       hasLiveActivity: Boolean(liveStream || submitting),
-    }) ?? (timelineReady && !listLoaded ? "opening" : null);
+    }) ?? ((timelineReady || unreadOpen === undefined) && !listLoaded ? "opening" : null);
   const threadPlaceholder = placeholder === "opening" && !openingDelayElapsed ? null : placeholder;
   const running = Boolean(sessionId) && (latestTurnStatus === "running" || submitting || (liveStream && isLiveStreamStatus(view.stream?.status ?? "")));
   const coldResendTurns = useMemo(() => [...view.turns, ...view.turnIndex], [view.turnIndex, view.turns]);
@@ -830,6 +855,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
 
   const handleListLoad = useCallback(() => {
     listPlacedRef.current = true;
+    setOpenPlaced(true);
     setOpenPhase((current) => current === "placing" ? "placed" : current);
   }, []);
 
@@ -871,20 +897,45 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     readStateLoadedRef.current = false;
     readSequenceRef.current = null;
     savedReadSequenceRef.current = null;
+    readAdvanceRef.current = false;
+    unreadJumpStartedRef.current = false;
     if (!sessionId) return;
     void loadSessionReadSequence(sessionId).then((sequence) => {
       if (!active) return;
-      readSequenceRef.current = sequence;
       savedReadSequenceRef.current = sequence;
-      setReadMirror(sequence === null ? null : { sessionId, sequence });
       readStateLoadedRef.current = true;
+      setReadSequence(sequence);
+      setReadLoaded(sessionId);
     }).catch(() => {
-      if (active) readStateLoadedRef.current = true;
+      if (!active) return;
+      readStateLoadedRef.current = true;
+      setReadSequence(null);
+      setReadLoaded(sessionId);
     });
     return () => { active = false; };
-  }, [loadSessionReadSequence, sessionId]);
+  }, [loadSessionReadSequence, sessionId, setReadSequence]);
 
   const hasInitialTurnTarget = initialTurnId !== null || initialTurnSequence !== null;
+  // Opening lands on the first unseen message once the read sequence and its window are known; the list mounts after this.
+  useEffect(() => {
+    if (unreadOpen !== undefined) return;
+    const decide = (start: UnreadStart | null) => {
+      readAdvanceRef.current = start === null;
+      setUnreadOpen(start);
+    };
+    if (!sessionId || hasInitialTurnTarget) return decide(null);
+    if (readKnown === undefined || !view.historyLoaded) return;
+    const needsOlder = readKnown !== null && view.hasMoreOlder && !reachesUnread(messages, readKnown);
+    if (needsOlder && unreadJump === "failed") return decide(null);
+    if (needsOlder && unreadJump === "none") {
+      if (!unreadJumpStartedRef.current) {
+        unreadJumpStartedRef.current = true;
+        void jumpToTurn(sessionId, readKnown + 1).then(() => setUnreadJump("done"), () => setUnreadJump("failed"));
+      }
+      return;
+    }
+    decide(readKnown === null ? null : unreadStart(messages, readKnown));
+  }, [hasInitialTurnTarget, jumpToTurn, messages, readKnown, sessionId, unreadJump, unreadOpen, view.hasMoreOlder, view.historyLoaded]);
   const targetMessageIndex = useCallback((sequence: number) => {
     const exactIndex = messageIndexForTurn(messages, sequence);
     if (exactIndex >= 0) return exactIndex;
@@ -898,13 +949,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const lastMessage = messages.at(-1);
     return target !== null && lastMessage !== undefined && turnSequenceForMessage(lastMessage) === target;
   }, [messages]);
-  const requestInitialScroll = useCallback(() => {
-    if (!listLoaded || !view.historyLoaded || initialScrollDone.current || messages.length === 0 || hasInitialTurnTarget) return;
-    initialScrollDone.current = true;
-    setFollowingTail(true);
-    setCurrentTurnSequence(view.turns.at(-1)?.sequence ?? null);
-  }, [hasInitialTurnTarget, listLoaded, messages.length, setFollowingTail, view.historyLoaded, view.turns]);
-
   // Legend resolves `scrollToIndex` for unrendered rows from its own estimates; when it rejects the
   // row is too far away, so park at an estimated offset and let the retry timer re-target it.
   const scrollToMessageIndex = useCallback((source: string, index: number, animated: boolean) => {
@@ -932,7 +976,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       scrollToMessageIndex("turn.retryTimer", index, false);
     }, retry === 0 ? 120 : 180);
   }, [scrollToMessageIndex, targetMessageIndex, trace]);
-  const scrollToTurn = useCallback((sequence: number, retry = 0) => {
+  const scrollToTurn = useCallback((sequence: number, retry = 0, animated = retry === 0) => {
     const index = targetMessageIndex(sequence);
     trace("turn.scrollRequest", { sequence, retry, index, messageCount: messages.length });
     turnScrollTargetRef.current = sequence;
@@ -952,7 +996,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
       pendingScrollSequence.current = null;
       initialScrollDone.current = true;
       // The native list lands on the row exactly, so there is nothing to retry.
-      void timeline.scrollToMessage(messageRowKey(message), retry === 0).then((found) => {
+      void timeline.scrollToMessage(messageRowKey(message), animated).then((found) => {
         if (!found) pendingScrollSequence.current = sequence;
       });
       setCurrentTurnSequence(sequence);
@@ -964,10 +1008,27 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     }
     pendingScrollSequence.current = null;
     initialScrollDone.current = true;
-    scrollToMessageIndex("turn.scrollToTurn", index, retry === 0);
+    scrollToMessageIndex("turn.scrollToTurn", index, animated);
     scheduleTurnScrollRetry(sequence, retry);
     setCurrentTurnSequence(sequence);
   }, [messages, scheduleTurnScrollRetry, scrollToMessageIndex, setFollowingTail, targetMessageIndex, trace]);
+
+  const requestInitialScroll = useCallback(() => {
+    if (!listLoaded || !view.historyLoaded || initialScrollDone.current || messages.length === 0 || hasInitialTurnTarget || unreadOpen === undefined) return;
+    initialScrollDone.current = true;
+    if (unreadOpen && !unreadOpen.atEnd) {
+      // The native list was placed on this row before its first load; the JS list scrolls to it now.
+      if (nativeChatTimeline) {
+        setFollowingTail(false);
+        setCurrentTurnSequence(unreadOpen.turnSequence);
+      } else {
+        scrollToTurn(unreadOpen.turnSequence, 0, false);
+      }
+      return;
+    }
+    setFollowingTail(true);
+    setCurrentTurnSequence(view.turns.at(-1)?.sequence ?? null);
+  }, [hasInitialTurnTarget, listLoaded, messages.length, scrollToTurn, setFollowingTail, unreadOpen, view.historyLoaded, view.turns]);
 
   // A turn requested before its rows existed lands once they arrive; the JS list does this on content size.
   useEffect(() => {
@@ -995,8 +1056,6 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
 
   useEffect(() => {
     initialScrollDone.current = false;
-    initialUnreadIndexRef.current = null;
-    initialUnreadRetriesRef.current = 0;
     pendingScrollSequence.current = null;
     scrollGestureRef.current = "idle";
     turnScrollTargetRef.current = null;
@@ -1627,16 +1686,31 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const replyAnchor = liveStream || pendingReply ? liveReplyAnchor(messages, liveStream ? streamTurnId : null, view.hasMoreNewer) : null;
   // LegendList memoizes each row on [item, extraData]; fork/send-transition state renders
   // inside a row but never changes `messages`, so it must flow through extraData to reach it.
+  // A Bot's note or a message from another Bot is not the user's own, so it never carries the Delivered line.
+  const messageWriter = useCallback((message: MessageRecord) => {
+    if (!bot) return null;
+    const sequence = turnSequenceForMessage(message);
+    const sequenceTurns = message.role === "user" && sequence !== null ? turnsBySequence.get(sequence) : undefined;
+    const messageTurn = typeof message.meta?.turnId === "string" ? turnsById.get(message.meta.turnId) ?? null : null;
+    return botMessageSpace(message, sequenceTurns?.[0] ?? messageTurn);
+  }, [bot, turnsById, turnsBySequence]);
+  // The divider stays until the read sequence passes its Turn; scrolling back never brings it back.
+  const unreadMessageId = unreadOpen && readKnown !== undefined && readKnown !== null && readKnown < unreadOpen.turnSequence ? unreadOpen.messageId : null;
+  // Delivered sits under the newest accepted prompt only while nothing renders after it: a reply, its steps, or a pending reply replace it.
+  const deliveredMessageId = useMemo(() => {
+    const last = messages.at(-1);
+    if (!last || !isDeliveredMessage(last) || !hasRenderableMessage(last) || messageWriter(last) || pendingReply || liveStream || replyAnchor === last.id) return null;
+    return last.id;
+  }, [liveStream, messageWriter, messages, pendingReply, replyAnchor]);
   const rowExtraData = useMemo(
-    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, botPeers, t, theme }),
-    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, botPeers, t, theme],
+    () => ({ forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, botPeers, t, theme, unreadMessageId, deliveredMessageId }),
+    [forkingTurnId, forkOrigin, sendTransition, queueTransitionActive, streamTurnId, replyAnchor, liveStream, pendingReply, arrivalBaseline, retryDisabled, bot, botLayout, botPeers, t, theme, unreadMessageId, deliveredMessageId],
   );
   const keyExtractor = useCallback((item: MessageRecord) => messageRowKey(item), []);
   // Assistant Markdown rows are much taller than user bubbles; separate averages so the
   // first measured assistant does not poison the estimate used for the next user row.
   const getMessageItemType = useCallback((item: MessageRecord) => item.role, []);
   // Replies newer than the device has shown, counted only while the user is off the tail: at the tail they are on screen.
-  const readSequence = readMirror?.sessionId === sessionId ? readMirror.sequence : null;
   const unreadArrivals = useMemo(() => followingTail ? 0 : unreadAssistantTurnCount(messages, readSequence), [followingTail, messages, readSequence]);
   const listContentStyle = useMemo(() => ({ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12, flexGrow: messages.length === 0 ? 1 : undefined }), [footerHeight, headerHeight, messages.length]);
   const listIndicatorInsets = useMemo(() => ({ top: headerHeight, bottom: footerHeight }), [footerHeight, headerHeight]);
@@ -1668,6 +1742,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   }, [loadNewerTurns, loadOlderTurns, sessionId, view.hasMoreNewer, view.hasMoreOlder, view.loadingNewer, view.loadingOlder]);
   const timelineDragBegin = useCallback(() => {
     traceAction("chat_list_drag_begin");
+    readAdvanceRef.current = true;
     cancelTurnScroll();
   }, [cancelTurnScroll]);
   const timelineScrollOffset = useCallback((offsetY: number) => trackPull({ nativeEvent: { contentOffset: { y: offsetY } } }), [trackPull]);
@@ -1679,7 +1754,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const timelineFlightEnd = useCallback(() => setSendTransition(null), []);
   const timelineLoadOlder = useCallback(() => { void loadOlderTurns(sessionId); }, [loadOlderTurns, sessionId]);
   const timelineLoadNewer = useCallback(() => { void loadNewerTurns(sessionId); }, [loadNewerTurns, sessionId]);
-  const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
+  const handleListDragBegin = useCallback((event: ChatScrollEvent) => { trackPullStart(event); readAdvanceRef.current = true; handleScrollBeginDrag(); }, [handleScrollBeginDrag, trackPullStart]);
   const handleListDragEnd = useCallback((event: ChatScrollEvent) => { trackPullEnd(); handleScrollEndDrag(event); }, [handleScrollEndDrag, trackPullEnd]);
   const renderMessage = useCallback(({ item, index }: { item: MessageRecord; index: number }) => {
     const chronologicalIndex = index;
@@ -1697,13 +1772,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const writer = bot ? botMessageSpace(item, sequenceTurns?.[0] ?? messageTurn) : null;
     const exchange = bot && writer ? botExchange(item, writer, spaceId) : null;
     const spacing = bot ? placement?.gap ? { paddingTop: placement.gap } : undefined : item.role === "user" ? TURN_START_STYLE : undefined;
-    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={WEB_COLUMN ? [spacing, WEB_COLUMN] : spacing} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{exchange && bot
+    return <View ref={(row) => trackRow(messageRowKey(item), row)} collapsable={false} style={WEB_COLUMN ? [spacing, WEB_COLUMN] : spacing} onLayout={(event) => { const { height } = event.nativeEvent.layout; if (chatScrollTrace.isRecording()) trace("row.layout", { message: chatScrollTrace.alias("message", item.id), index, sequence, ...event.nativeEvent.layout }); const measurement = rowHeightMeasurement(measuredMessages, chronologicalIndex, item.id, height); if (measurement) measurements.measure(measurement.message, measurement.height); }}><ArrivalRow arrival={isCatchUpArrival(arrivalBaseline, item) && !isTransitionMessage} reducedMotion={reducedMotion}>{item.id === unreadMessageId ? <UnreadDivider /> : null}{bot ? <>{placement?.time ? <BotTimeDivider at={placement.time} /> : null}{exchange && bot
       ? <BotExchangeRow exchange={exchange} bot={bot} peer={botPeers.get(exchange.peer) ?? null} spaceId={spaceId || null} availableWidth={rowWidth} onOpenBot={openPeerBot} />
       : writer
       ? <BotNoteBubble message={item} spaceId={spaceId || null} availableWidth={rowWidth} />
-      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} />}</>
-      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} onSpeak={speechVoice && isSpeakableTurn(messageTurn) ? speakTurn : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={rowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
-  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, speakTurn, speechVoice, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, rowWidth, lookupSession, measuredMessages, measurements, messages, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence]);
+      : <MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} spaceId={spaceId || null} rowInset={BOT_BUBBLE_INSET} delivered={item.id === deliveredMessageId} />}</>
+      : <>{sequenceTurns?.[0] ? <SentFromLink turn={sequenceTurns[0]} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}<MessageBubble message={item} local={item.meta?.optimistic === true} hidden={isTransitionMessage} bubbleRef={isTransitionMessage ? sendBubbleRef : undefined} availableWidth={rowWidth} onCopy={handleCopyMessage} onRetry={retryRow} retryDisabled={retryDisabled} onDiscard={discardSend} onFork={messageTurn && isTerminalTurnStatus(messageTurn.status) ? forkMessage : undefined} onSpeak={speechVoice && isSpeakableTurn(messageTurn) ? speakTurn : undefined} forkDisabled={forkingTurnId !== null} forking={forkingTurnId !== null && forkingTurnId === item.meta?.turnId} spaceId={spaceId || null} delivered={item.id === deliveredMessageId} />{sequenceTurns?.map((entry) => <View key={entry.id}>{isActiveTurnStatus(entry.status) || entry.id === streamTurnId ? <LiveTurnProcess sessionId={sessionId} turn={entry} client={client} spaceId={spaceId} /> : <TurnProcess turn={entry} client={client} spaceId={spaceId} />}<SentToList turn={entry} spaceId={spaceId} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /></View>)}{item.id === replyAnchor ? <LiveReply sessionId={sessionId} showStream={liveStream} pending={pendingReply} processInRow={Boolean(sequenceTurns?.some((entry) => entry.id === streamTurnId))} availableWidth={rowWidth} /> : null}{endsForkPrefix ? <ForkedFromDivider origin={forkOrigin.ref} client={client} lookupSession={lookupSession} onOpen={openRelatedSession} /> : null}</>}</ArrivalRow></View>;
+  }, [arrivalBaseline, bot, botLayout, botPeers, client, discardSend, openPeerBot, forkMessage, speakTurn, speechVoice, forkOrigin, forkingTurnId, handleCopyMessage, retryRow, retryDisabled, rowWidth, lookupSession, measuredMessages, measurements, messages, unreadMessageId, deliveredMessageId, liveStream, openRelatedSession, pendingReply, reducedMotion, replyAnchor, queueTransitionActive, sendBubbleRef, sendTransition, sessionId, spaceId, streamTurnId, trace, trackRow, turnsById, turnsBySequence]);
 
   if (draft && !draftSpace && !sessionId) {
     const failure = spaceLookup.error && !spaceLookup.isFetching ? spaceLookup.error : null;
@@ -1728,10 +1803,12 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         <EdgeBlurTarget attach={attachBlurTarget}>
         {/* Android selectable text must not reposition the timeline when it gains focus. Explicit turn/tail scrolling remains enabled. */}
         <RenderErrorBoundary name="chat-timeline" resetKeys={[listGeneration]} fallback={(failure) => <View className="flex-1" style={{ paddingTop: headerHeight, paddingBottom: footerHeight }}><RenderFailureView {...failure} title={t("ui.renderFailed.chatTitle")} /></View>}>
-        {timelineReady && nativeChatTimeline ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><NativeChatTimeline
+        {listMounts && nativeChatTimeline ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><NativeChatTimeline
           key={listGeneration}
           ref={timelineRef}
           sessionId={sessionId}
+          unreadMessageId={unreadMessageId}
+          initialMessageId={!openPlaced && unreadOpen && !unreadOpen.atEnd ? unreadOpen.messageId : null}
           bot={bot}
           botPeers={botPeers}
           onOpenBot={openPeerBot}
@@ -1778,7 +1855,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
           onWidth={setListWidth}
           refreshing={view.refreshing}
           onRefresh={handleListRefresh}
-        /></BrandRefreshArea> : timelineReady ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><KeyboardAwareLegendList
+        /></BrandRefreshArea> : listMounts ? <BrandRefreshArea refresh={pullRefresh} top={headerHeight}><KeyboardAwareLegendList
           key={listGeneration}
           {...traceTouches}
           ref={listRef}

@@ -1,7 +1,60 @@
 import type { MessageRecord } from "@neta-art/cohub";
+import { isFailedSend, isLocalSend, turnSequenceForMessage } from "./session-history";
+
 function messageTurnSequence(message: Pick<MessageRecord, "meta">) {
   const sequence = message.meta?.turnSequence;
   return typeof sequence === "number" && Number.isInteger(sequence) ? sequence : null;
+}
+
+/** The first message of the first Turn after `readSequence`, or -1 when this device has read it all. */
+export function firstUnseenIndex(messages: Pick<MessageRecord, "meta">[], readSequence: number | null) {
+  if (readSequence === null) return -1;
+  return messages.findIndex((message) => {
+    const sequence = turnSequenceForMessage(message);
+    return sequence !== null && sequence > readSequence;
+  });
+}
+
+export type UnreadStart = {
+  messageId: string;
+  /** The Turn whose first message opens the unread run; the run is read once the read sequence reaches it. */
+  turnSequence: number;
+  /** The run is only the last message, so opening at the tail already shows it. */
+  atEnd: boolean;
+};
+
+/** Where a Chat with unread opens: the first message of the first Turn after the read sequence. */
+export function unreadStart(messages: MessageRecord[], readSequence: number | null): UnreadStart | null {
+  const index = firstUnseenIndex(messages, readSequence);
+  const message = messages[index];
+  const turnSequence = message ? turnSequenceForMessage(message) : null;
+  if (!message || turnSequence === null) return null;
+  return { messageId: message.id, turnSequence, atEnd: index === messages.length - 1 };
+}
+
+/** Whether the loaded messages reach the Turn after the read sequence, so the unread run can start in them. */
+export function reachesUnread(messages: Pick<MessageRecord, "meta">[], readSequence: number | null) {
+  if (readSequence === null) return true;
+  return messages.some((message) => {
+    const sequence = turnSequenceForMessage(message);
+    return sequence !== null && sequence <= readSequence + 1;
+  });
+}
+
+/** The read sequence once these messages have shown: the newest assistant Turn among them, never lower than `current`. */
+export function readThrough(current: number | null, messages: Iterable<Pick<MessageRecord, "role" | "meta">>): number | null {
+  let latest = current;
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const sequence = turnSequenceForMessage(message);
+    if (sequence !== null && (latest === null || sequence > latest)) latest = sequence;
+  }
+  return latest;
+}
+
+/** A user message the server accepted: a send still in flight or one that failed has nothing delivered. */
+export function isDeliveredMessage(message: Pick<MessageRecord, "role" | "meta">) {
+  return message.role === "user" && !isLocalSend(message) && !isFailedSend(message);
 }
 
 export function latestUnreadAssistantIndex(messages: MessageRecord[], readSequence: number | null) {

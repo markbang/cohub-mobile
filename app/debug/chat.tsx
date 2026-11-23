@@ -3,13 +3,15 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
 import { BotExchangeRow, BotNoteBubble, BotTimeDivider, BotTyping } from "@/src/components/BotBubbles";
-import { unreadAssistantTurnCount } from "@/src/data/chat-read-state";
 import { BotTitle } from "@/src/components/BotTitle";
 import { JumpToLatest } from "@/src/components/JumpToLatest";
 import { MessageBubble, StreamCard } from "@/src/components/MessageContent";
 import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
+import { UnreadDivider } from "@/src/components/UnreadDivider";
 import { NativeChatTimeline, type NativeChatTimelineHandle } from "@/src/components/timeline/NativeChatTimeline";
 import { BOT_BUBBLE_INSET, botExchange, botNoteSpace, botPlacements, botVoice, type BotPeer } from "@/src/data/bot-mode";
+import { isDeliveredMessage, readThrough, unreadAssistantTurnCount, unreadStart } from "@/src/data/chat-read-state";
+import { turnSequenceForMessage } from "@/src/data/session-history";
 import { motion } from "@/src/motion";
 import { ChatTimelineView, nativeChatTimeline } from "@/src/platform/chat-timeline";
 import { ComposerInput, IconButton, Screen, TopBar } from "@/src/ui";
@@ -29,13 +31,23 @@ const NO_TURN_SEQUENCES: ReadonlyMap<number, SessionTurnRecord[]> = new Map();
 const NOOP = () => undefined;
 
 export default function DebugChatScreen() {
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string; unread?: string; tail?: string }>();
+  // A new link is a new snapshot: its state starts over, as a fresh launch would, rather than carrying the last link's scroll and read state.
+  return <DebugChatView key={[params.fixture, params.native, params.probe, params.arrive, params.draft, params.unread, params.tail].join("|")} />;
+}
+
+function DebugChatView() {
   const router = useRouter();
   // `?native=1` draws the native timeline where the Chat screen does not (iOS), to debug it;
   // `?native=0` draws the JS list that binaries without the native timeline fall back to.
-  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; native?: string; probe?: string; arrive?: string; draft?: string; unread?: string; tail?: string }>();
   const useNative = params.native !== "0" && (nativeChatTimeline || (ChatTimelineView !== null && params.native === "1"));
   const fixture: Fixture = FIXTURES.includes(params.fixture as Fixture) ? params.fixture as Fixture : "conversation";
-  const baseMessages = useMemo(() => conversation(fixture), [fixture]);
+  // `?tail=user`: the Chat ends on a prompt with no reply yet, as a message just sent looks.
+  const baseMessages = useMemo(() => {
+    const all = conversation(fixture);
+    return params.tail === "user" && all.at(-1)?.role === "assistant" ? all.slice(0, -1) : all;
+  }, [fixture, params.tail]);
   const arriveCount = Number(params.arrive) > 0 ? Math.floor(Number(params.arrive)) : 0;
   const arrivalKey = `${fixture}:${arriveCount}`;
   const [arrival, setArrival] = useState<{ key: string; messages: MessageRecord[] } | null>(null);
@@ -48,8 +60,20 @@ export default function DebugChatScreen() {
   const [following, setFollowing] = useState(true);
   // The fixture's replies count as read; `arrive` replies land after them.
   const seenSequence = useMemo(() => baseMessages.reduce((latest, message) => message.role === "assistant" ? Math.max(latest, Number(message.meta?.turnSequence ?? 0)) : latest, 0), [baseMessages]);
+  // `?unread=N`: the Nth message's Turn is the first the device has not read; the read sequence is seeded just
+  // before it, then advances as the screen's own rules do (after the first drag, by the rows in view).
+  const seededRead = useMemo(() => {
+    const message = baseMessages[Number.parseInt(params.unread ?? "", 10) - 1];
+    return message ? (turnSequenceForMessage(message) ?? 1) - 1 : null;
+  }, [baseMessages, params.unread]);
+  const [readSequence, setReadSequence] = useState<number | null>(seededRead);
+  const [dragged, setDragged] = useState(false);
+  const unread = useMemo(() => unreadStart(messages, seededRead), [messages, seededRead]);
+  const unreadMessageId = unread && readSequence !== null && readSequence < unread.turnSequence ? unread.messageId : null;
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
+  // As the Chat screen: the newest own message the server accepted, which a Bot's note never is.
+  const deliveredId = useMemo(() => { const last = messages.at(-1); return last && isDeliveredMessage(last) && botNoteSpace(botTurns.get(String(last.meta?.turnId))) === null ? last.id : undefined; }, [botTurns, messages]);
   // As the Chat screen: a reply is the page's Bot, a note is whoever wrote it.
   const exchangeOf = (message: MessageRecord) => { const writer = botNoteSpace(botTurns.get(String(message.meta?.turnId))); return writer ? botExchange(message, writer, BOT_SPACE_ID) : null; };
   const placements = botPlacements(messages, (message) => message.role !== "user" ? BOT_SPACE_ID : botVoice(exchangeOf(message), botNoteSpace(botTurns.get(String(message.meta?.turnId)))));
@@ -108,6 +132,13 @@ export default function DebugChatScreen() {
         bot={bot}
         botPeers={BOT_PEERS}
         messages={messages}
+        unreadMessageId={unreadMessageId}
+        initialMessageId={unread && !unread.atEnd ? unread.messageId : null}
+        onDragBegin={() => setDragged(true)}
+        onVisibleMessages={(visible) => {
+          if (unread && !dragged) return;
+          setReadSequence((current) => readThrough(current, visible.map((item) => item.message)));
+        }}
         turnsById={botTurns}
         turnsBySequence={NO_TURN_SEQUENCES}
         streamTurnId={null}
@@ -139,10 +170,8 @@ export default function DebugChatScreen() {
         onLoadOlder={NOOP}
         onLoadNewer={NOOP}
         onFollowingChange={setFollowing}
-        onVisibleMessages={NOOP}
         onNearEdge={NOOP}
         onLoad={NOOP}
-        onDragBegin={NOOP}
         onFlightEnd={NOOP}
         onScrollOffset={NOOP}
         onWidth={NOOP}
@@ -156,10 +185,11 @@ export default function DebugChatScreen() {
         renderItem={({ item, index }) => { const writer = botNoteSpace(botTurns.get(String(item.meta?.turnId))); const exchange = exchangeOf(item); return bot
           // The Chat screen's Bot rows: the time above, the gap where the side changes, then the bubble.
           ? <View style={placements[index]?.gap ? { paddingTop: placements[index].gap } : undefined}>
+            {item.id === unreadMessageId ? <UnreadDivider /> : null}
             {placements[index]?.time ? <BotTimeDivider at={placements[index].time} /> : null}
             {exchange ? <BotExchangeRow exchange={exchange} bot={bot} peer={BOT_PEERS.get(exchange.peer) ?? null} spaceId={null} availableWidth={width} onOpenBot={NOOP} /> : writer ? <BotNoteBubble message={item} spaceId={null} availableWidth={width} /> : <MessageBubble message={item} availableWidth={width} rowInset={BOT_BUBBLE_INSET} />}
           </View>
-          : <MessageBubble message={item} availableWidth={width} />; }}
+          : <>{item.id === unreadMessageId ? <UnreadDivider /> : null}<MessageBubble message={item} availableWidth={width} delivered={item.id === deliveredId} /></>; }}
         contentContainerStyle={{ paddingTop: headerHeight + 12, paddingBottom: footerHeight + 12 }}
         // A reply still being written; the native timeline reads live replies from a Chat's stream, which a fixture has none of.
         ListFooterComponent={fixture === "stream" ? <StreamCard content={STREAM_REPLY} status="streaming" availableWidth={width} /> : null}
