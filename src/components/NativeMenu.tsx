@@ -12,10 +12,10 @@ export type NativeMenuButtonProps = {
   /** Groups shown with headers and separators, in place of `actions`. */
   sections?: readonly NativeMenuSection[];
   /**
-   * `bar`: a top-bar button; `control`: a composer control; `plain`: a bare glyph in content;
-   * `chip`: a composer capsule that shows `title`, sized like the composer's other controls.
+   * `bar`: a top-bar button; `composer`: a bare glyph in a 36 pt target inside the composer capsule; `plain`: a bare glyph
+   * in content; `chip`: a composer capsule that shows `title`, sized like the composer's other controls.
    */
-  appearance: "bar" | "control" | "plain" | "chip";
+  appearance: "bar" | "composer" | "plain" | "chip";
   title?: string;
   /** Marks a filter that is on (an accent glyph). */
   active?: boolean;

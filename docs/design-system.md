@@ -113,7 +113,7 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   A `Segmented` control is a capsule in a capsule, concentric at any height.
 - **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
   control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
-  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. The model is a
+  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. On iOS the `+` is a bare 20 pt glyph in a 36 pt target (a borderless SwiftUI menu), not a bordered circle. The model is a
   36 pt sparkles control, like the harness, that opens the picker; its availability is an 8 pt dot badge
   on its top-right corner, shown only when the status is known. Its label keeps the name, thinking level
   and status. At 402 pt the field keeps about 250 pt. Web has no mic, so its send stays visible and disabled.
