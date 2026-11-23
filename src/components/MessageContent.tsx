@@ -19,7 +19,7 @@ import { useAppActions } from "@/src/data/context";
 import { useSandboxImageUrls } from "@/src/data/use-message-images";
 import type { StreamView } from "@/src/data/types";
 import { formatThinkingLevel, requestedThinkingLevel } from "@/src/model-catalog";
-import { colorWithOpacity, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
+import { colorWithOpacity, edgeChrome, scaleFontSize, scaleLineHeight, useAppTheme, typography, type AppTheme } from "@/src/theme";
 import { useTranslation, type Translate } from "@/src/i18n";
 import { AppIcon, Loader, MascotLoader, type IconName } from "@/src/ui";
 import { ContentImage } from "@/src/ui/ContentImage";
@@ -551,6 +551,14 @@ function BubbleMeta({ local = false, failed = false, t }: { local?: boolean; fai
 
 export const DETAIL_SEPARATOR = " · ";
 
+/**
+ * Extra space under a Delivered line. At the tail the list stops 12 pt above the composer and the row pads `inset`;
+ * the bottom scrim fades `edgeChrome.fade` pt above the composer, so the line needs this much more to clear it.
+ */
+export function deliveredLift(inset: number) {
+  return edgeChrome.fade + 4 - 12 - inset;
+}
+
 /** A reply's details by priority: the identity always shows, usage parts drop from the end. */
 export function replyDetailParts(message: MessageRecord, t: Translate) {
   const turn = turnSequenceForMessage(message);
@@ -692,7 +700,7 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
     <BubbleTraceMessage.Provider value={message}><UserBubbleFrame maxWidth={maxWidth} bubbleRef={bubbleRef} onBubbleLayout={onBubbleLayout} surfaceHidden={surfaceHidden}>
       {hasRenderableContent(message.content) ? <MessageContent content={message.content} color={textColor} linkColor={theme.colors.userBubbleLink} imageMaxWidth={maxWidth - BUBBLE_PADDING_X * 2} footer={footer} /> : message.text?.trim() ? <TextBlock value={message.text} color={textColor} linkColor={theme.colors.userBubbleLink} footer={footer} /> : footer}
     </UserBubbleFrame></BubbleTraceMessage.Provider>
-    {delivered ? <Text className="text-micro text-fg-faint" style={{ marginTop: 3 }}>{t("chat.delivered")}</Text> : null}
+    {delivered ? <Text className="text-micro text-fg-faint" style={{ marginTop: 3, marginBottom: deliveredLift(rowInset) }}>{t("chat.delivered")}</Text> : null}
     {message.errorMessage ? <View className="flex-row items-start gap-1.5 px-2 pt-1"><AppIcon name="alert" size={14} tone="danger" /><Text selectable className="shrink text-caption text-danger">{message.errorMessage}</Text></View> : null}
     {failed && (onRetry || onDiscard) ? <View className="flex-row items-center" style={{ marginRight: -8 }}>
       {onDiscard ? <Pressable accessibilityRole="button" accessibilityLabel={t("chat.sendFailed.delete")} onPress={() => onDiscard(message)} className="min-h-11 flex-row items-center gap-1 px-2 active:opacity-55"><AppIcon name="trash" size={14} tone="muted" /><Text className="text-caption font-semibold text-fg-muted">{t("chat.sendFailed.delete")}</Text></Pressable> : null}

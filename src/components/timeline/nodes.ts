@@ -2,7 +2,7 @@ import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/c
 import { PixelRatio, Platform, processColor } from "react-native";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/src/normalizeMarkdownStyle";
 import type { TimelineAnimation, TimelineNode, TimelineTextStyle } from "@/modules/cohub-chat-timeline";
-import { DETAIL_SEPARATOR, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon } from "@/src/components/MessageContent";
+import { DETAIL_SEPARATOR, deliveredLift, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon } from "@/src/components/MessageContent";
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
@@ -338,7 +338,7 @@ export function userMessageNode(ctx: NodeContext, message: MessageRecord, option
         style: { maxWidth, minWidth: 0, borderRadius: theme.radius.md, backgroundColor: color(theme.colors.userBubble), paddingHorizontal: BUBBLE_PADDING_X, paddingTop: 9, paddingBottom: 8, gap: 4 },
         children: [...body, ...(meta ? [meta] : [])],
       },
-      ...(options.delivered ? [text(t("chat.delivered"), textStyle("micro", theme.colors.textFaint), { style: { marginTop: 3 } })] : []),
+      ...(options.delivered ? [text(t("chat.delivered"), textStyle("micro", theme.colors.textFaint), { style: { marginTop: 3, marginBottom: deliveredLift(options.inset ?? 5) } })] : []),
       ...(error ? [error] : []),
       ...(failed ? [{
         type: "view" as const, style: { flexDirection: "row", alignItems: "center", marginRight: -8 },
