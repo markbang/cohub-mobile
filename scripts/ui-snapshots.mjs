@@ -8,7 +8,9 @@ import { basename, join, relative, resolve } from "node:path";
  *
  *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
  *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
- *           [--text-size default|extra-large|accessibility-large]   (iOS only; restored to default afterwards)
+ *           [--target phone,tablet] [--text-size default,accessibility-large] [--offline]
+ *           (--target and --text-size take comma lists; every cell runs in this one process, with one Metro)
+ *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *
@@ -17,7 +19,9 @@ import { basename, join, relative, resolve } from "node:path";
  * pairs those too, so motion can be tuned frame by frame.
  *
  * `--target tablet` runs on an iPad simulator or a tablet emulator at its own density, in each of
- * `--orientations`, and writes `<target>-<orientation>/<theme>/`; the phone keeps `<theme>/`. It
+ * `--orientations`, and writes `tablet-<orientation>/<theme>/`; the phone keeps `<theme>/`. A text size
+ * other than `default` suffixes the theme directory (`<theme>-<size>/`), so one run's sizes never overwrite
+ * each other. It
  * then runs the split-layout interaction flow (e2e/tablet/split.yaml). `--perf <runs>` repeats one
  * operation sequence with the frame probe on and writes its raw stall records to `perf/<group>.json`.
  */
@@ -92,6 +96,8 @@ export const SCREENS = [
   // The composer tapped, so the keyboard is up; then a drag down on the timeline, which should take it away.
   // The composer with text: send replaces the mic, and the model chip gives way to its icon.
   { name: "chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
+  // The empty composer: the same fixture with no draft, so the mic shows alone.
+  { name: "chat-draft-empty", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
   // A long draft: about four wrapped lines at 402 pt. The composer's wrap layout is judged on this screen.
   { name: "chat-draft-long", ready: "Fix the Android sheet height", link: `cohub://debug/chat?fixture=conversation&draft=${LONG_DRAFT_PHONE}` },
   { name: "chat-keyboard", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { settle: true }] },
@@ -144,6 +150,8 @@ export const TABLET_SCREENS = [
   { name: "split-space", link: "cohub://spaces", steps: [{ tapPoint: LEFT_FIRST_ROW }] },
   { name: "split-settings-page", ready: "Accent color", link: "cohub://appearance" },
   { name: "split-new-chat", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ chatsTab: true }, { tapOn: "New Chat" }] },
+  // The empty composer in the right pane, the tablet's counterpart of chat-draft-empty.
+  { name: "split-chat-draft-empty", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
   // A one-line draft in the right pane, the tablet's counterpart of chat-draft.
   { name: "split-chat-draft", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&draft=Looks%20good%2C%20send%20it" },
   // The long draft in the right pane: about six wrapped lines at 820 pt.
@@ -188,9 +196,13 @@ export const MOTIONS = [
   { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
 ];
 
+function list(value) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, target: "phone", orientations: null, perf: 0, textSize: "default" };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: ["default"], offline: false };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -207,25 +219,27 @@ function parseArgs(argv) {
     else if (flag === "--android") options.android = resolve(value());
     else if (flag === "--no-metro") options.metro = false;
     else if (flag === "--no-motion") options.motion = false;
-    else if (flag === "--target") options.target = value();
+    else if (flag === "--target") options.targets = list(value());
     else if (flag === "--orientations") options.orientations = value().split(",").map((name) => name.trim()).filter(Boolean);
     else if (flag === "--perf") options.perf = Number(value());
     else if (flag === "--dir") options.dir = resolve(value());
-    else if (flag === "--text-size") options.textSize = value();
+    else if (flag === "--text-size") options.textSizes = list(value());
+    else if (flag === "--offline") options.offline = true;
     else throw new Error(`Unknown argument "${flag}".`);
   }
   if (command === "capture") {
     if (options.platform !== "android" && options.platform !== "ios") throw new Error("--platform must be android or ios.");
     if (!options.app || !existsSync(options.app)) throw new Error("--app must point to a built debug APK (Android) or simulator .app/.zip (iOS).");
     for (const theme of options.themes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown theme "${theme}". Use light and/or dark.`);
-    if (options.target !== "phone" && options.target !== "tablet") throw new Error("--target must be phone or tablet.");
-    options.orientations ??= options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"];
-    for (const orientation of options.orientations) if (!SIZE_BANDS[`${options.target}-${orientation}`]) throw new Error(`The ${options.target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
+    if (options.targets.length === 0 || options.targets.some((target) => target !== "phone" && target !== "tablet")) throw new Error("--target must be phone, tablet, or a comma list of both.");
+    for (const target of options.targets) for (const orientation of options.orientations ?? []) if (!SIZE_BANDS[`${target}-${orientation}`]) throw new Error(`The ${target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
     if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
-    if (!(options.textSize in TEXT_SIZES)) throw new Error(`Unknown --text-size "${options.textSize}". Use ${Object.keys(TEXT_SIZES).join(", ")}.`);
-    if (options.platform === "android" && options.textSize !== "default") throw new Error("--text-size is set on iOS only; Android captures at its default font scale.");
+    if (options.textSizes.length === 0 || options.textSizes.some((size) => !(size in TEXT_SIZES))) throw new Error(`Unknown --text-size. Use a comma list of ${Object.keys(TEXT_SIZES).join(", ")}.`);
+    if (options.platform === "android" && options.textSizes.some((size) => size !== "default")) throw new Error("--text-size is set on iOS only; Android captures at its default font scale.");
+    if (options.perf > 0 && (options.targets.length > 1 || options.textSizes.length > 1)) throw new Error("--perf runs one target at one text size.");
     if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
-    const known = new Set((options.target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name));
+    if (options.offline && options.platform === "android") throw new Error("--offline is iOS only for now: the Android flows still sign in.");
+    const known = new Set(options.targets.flatMap((target) => (target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name)));
     for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
     options.out ??= resolve("dist/ui-snapshots", options.platform);
   } else if (command === "compare") {
@@ -272,9 +286,9 @@ function signInWithoutEmail() {
   return token;
 }
 
-async function startMetro({ frameProbe, refreshToken }) {
+async function startMetro({ frameProbe, refreshToken, offline }) {
   const metro = spawn("bunx", ["expo", "start", "--port", String(METRO_PORT)], {
-    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}), ...(refreshToken ? { EXPO_PUBLIC_E2E_REFRESH_TOKEN: refreshToken } : {}) },
+    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}), ...(refreshToken ? { EXPO_PUBLIC_E2E_REFRESH_TOKEN: refreshToken } : {}), ...(offline ? { EXPO_PUBLIC_E2E_SESSION: "offline" } : {}) },
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,
   });
@@ -506,8 +520,8 @@ function findFile(root, name) {
 
 const MAESTRO_ATTEMPT_MS = 30 * 60 * 1000;
 
-function runMaestro({ device, flowPath, out, testOutput }) {
-  const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
+function runMaestro({ device, flowPath, out, testOutput, offline = false }) {
+  const credentials = offline ? [] : ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
     const value = process.env[key]?.trim();
     if (!value) throw new Error(`${key} is required: every screen renders AuthScreen until a session exists (dev tenant account).`);
     return `${key}=${value}`;
@@ -708,36 +722,58 @@ const ios = {
 
 async function capture(options) {
   requireCommand("maestro", ["--version"], "Install Maestro: curl -Ls https://get.maestro.mobile.dev | bash");
+  mkdirSync(options.out, { recursive: true });
+  // One sign-in per process, before the device work, so a refused sign-in fails in seconds. An offline run
+  // signs in never. The token reaches the app through the Metro this run starts; an already running Metro
+  // (`--no-metro`) keeps the login flow.
+  const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].every((key) => process.env[key]?.trim());
+  const refreshToken = !options.offline && options.metro && credentials ? signInWithoutEmail() : null;
+  const session = options.offline || Boolean(refreshToken);
+  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, refreshToken, offline: options.offline }) : null;
+  const missing = [];
+  let cells = 0;
+  try {
+    for (const target of options.targets) {
+      for (const textSize of options.textSizes) {
+        cells += await captureCell({ ...options, target, textSize }, session, missing);
+      }
+    }
+  } finally {
+    stopMetro(metro);
+  }
+  if (missing.length) throw new Error(`Maestro finished but these captures are missing: ${missing.join(", ")}.`);
+  process.stdout.write(`Captured ${cells} cells (${options.targets.join(", ")} × ${options.textSizes.join(", ")}) in ${options.out}\n`);
+}
+
+/** One device at one text size: the screens in each orientation and theme, then the target's extras. */
+async function captureCell(options, session, missing) {
   const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
   const screens = options.screens ? catalog.filter((screen) => options.screens.includes(screen.name)) : catalog;
-  mkdirSync(options.out, { recursive: true });
-  // Before the device work, so a refused sign-in fails in seconds. The token reaches the app through
-  // the Metro this run starts; an already running Metro (`--no-metro`) keeps the login flow.
-  const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].every((key) => process.env[key]?.trim());
-  const refreshToken = options.metro && credentials ? signInWithoutEmail() : null;
-  const session = Boolean(refreshToken);
+  // A run that names only another target's screens has nothing for this one.
+  if (options.screens && screens.length === 0) return 0;
+  const orientations = options.orientations ?? (options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"]);
+  // Text sizes other than the default get their own theme directories, so every cell of a run survives.
+  const suffix = options.textSize === "default" ? "" : `-${options.textSize}`;
   const device = (options.platform === "android" ? android : ios).prepare(options.app, options.out, options.target);
   device.setTextSize?.(options.textSize);
-  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, refreshToken }) : null;
-  const missing = [];
   // The phone keeps the original layout (`<theme>/`); other targets are grouped by device and orientation.
   const groupDirectory = (orientation) => options.target === "phone" ? options.out : join(options.out, `${options.target}-${orientation}`);
   try {
-    for (const orientation of options.orientations) {
+    for (const orientation of orientations) {
       const group = `${options.target}-${orientation}`;
       device.setOrientation(orientation);
       assertBand(group, device.logicalSize(orientation), options.platform === "android" ? "the emulator" : "the simulator");
       for (const theme of options.themes) {
-        const directory = join(groupDirectory(orientation), theme);
+        const directory = join(groupDirectory(orientation), `${theme}${suffix}`);
         rmSync(directory, { recursive: true, force: true });
         mkdirSync(directory, { recursive: true });
         device.setTheme(theme);
-        const name = options.target === "phone" ? theme : `${group}-${theme}`;
+        const name = `${options.target === "phone" ? theme : `${group}-${theme}`}${suffix}`;
         const flowPath = join(options.out, `${name}.yaml`);
         writeFileSync(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
-        runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+        runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
         for (const screen of screens) {
           const file = `${screen.name}.png`;
           // Maestro may nest screenshots in a per-run folder under its test output directory.
@@ -758,10 +794,10 @@ async function capture(options) {
       writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
       for (const file of listFiles(testOutput).filter((path) => path.endsWith(".png"))) run("mv", [file, join(directory, basename(file))]);
     }
-    if (options.motion && options.target === "phone") {
+    if (options.motion && options.target === "phone" && options.textSize === "default") {
       const directory = join(options.out, "motion");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
@@ -771,7 +807,7 @@ async function capture(options) {
       writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions: MOTIONS }));
       const testOutput = join(options.out, "maestro-output", "motion");
       rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
       device.setAnimations(false);
       for (const motion of MOTIONS) {
         const file = `${motion.name}.mp4`;
@@ -782,11 +818,9 @@ async function capture(options) {
     }
     if (options.perf > 0) await capturePerf(options, device, session);
   } finally {
-    stopMetro(metro);
     device.restore();
   }
-  if (missing.length) throw new Error(`Maestro finished but these captures are missing: ${missing.join(", ")}.`);
-  process.stdout.write(`Captured ${screens.length} screens × ${options.themes.length} themes × ${options.orientations.length} orientations${options.motion && options.target === "phone" ? ` and ${MOTIONS.length} recordings` : ""} in ${options.out}\n`);
+  return screens.length > 0 ? 1 : 0;
 }
 
 function listFiles(root) {
