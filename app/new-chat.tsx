@@ -72,6 +72,7 @@ export default function NewChatScreen() {
       renderItem={({ item: space }) => {
         const selected = selectedSpaceId === space.id;
         return <Pressable
+          testID={`new-chat-space-${space.id}`}
           accessibilityRole="button"
           accessibilityLabel={displaySpaceName(space)}
           onPress={() => openSpaceDraft(space.id)}

@@ -36,9 +36,9 @@ on:
         default: default
         type: string
       offline:
-        description: Render the debug fixtures without an account (no sign-in). Required when the account's sign-in is challenged.
+        description: Render the debug fixtures without an account (no sign-in). On by default because the tenant's CAPTCHA blocks the login flow; set false to sign in.
         required: false
-        default: false
+        default: true
         type: boolean
       perf:
         description: Frame-probe runs of the perf sequence (0 skips it).

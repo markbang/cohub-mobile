@@ -42,7 +42,10 @@ const SIZE_BANDS = {
   "tablet-portrait": { width: [744, 1000], height: [1000, 1400] },
   "tablet-landscape": { width: [1000, 1400], height: [744, 1000] },
 };
-const TABLET_FLOW = "e2e/tablet/split.yaml";
+// The split-layout flow runs first; the variant after it sends a message (signed in) or picks a seeded Space (offline).
+const TABLET_LAYOUT_FLOW = "e2e/tablet/split-layout.yaml";
+const TABLET_SEND_FLOW = "e2e/tablet/split-send.yaml";
+const TABLET_OFFLINE_FLOW = "e2e/tablet/split-offline.yaml";
 const PAIR_HEIGHT = 1400;
 // iOS content size categories behind each --text-size choice; `default` is the simulator's own `large`.
 const TEXT_SIZES = { default: "large", "extra-large": "extra-large", "accessibility-large": "accessibility-large" };
@@ -120,7 +123,7 @@ export const SCREENS = [
   { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
   // Menus in the app, each left open; `fresh` relaunches first, so the previous one is gone. iOS shows the
   // system menu, picker and attachment menu here, Android the drawn ones; the model selector is drawn on both.
-  { name: "chats-filter", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOn: "Filter Chats by source.*" }, { waitFor: "Web app" }] },
+  { name: "chats-filter", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapOnSourceFilter: true }, { waitFor: "All", exact: true }] },
   { name: "settings-select", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }] },
   { name: "composer-attach", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }] },
   { name: "composer-model", ready: "blocked=", link: "cohub://debug/composer", fresh: true, steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }] },
@@ -174,7 +177,7 @@ export const MOTIONS = [
   { name: "motion-push", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
   { name: "motion-controls", ready: "Buttons", link: "cohub://debug/ui?section=controls", steps: [{ tapOn: "Switch on" }, { tapOn: "Mine" }, { tapOn: "Shared" }, { tapOn: "Pinned" }] },
   { name: "motion-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { tapOn: "Pin" }] },
-  { name: "motion-filter", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ tapOn: "Filter Chats by source.*" }, { waitFor: "Web app" }, { tapOn: "All" }] },
+  { name: "motion-filter", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }], steps: [{ tapOnSourceFilter: true }, { waitFor: "All", exact: true }, { tapOn: "All" }] },
   // Opens the Web browsing picker and closes it from outside, so the account's setting is left alone.
   { name: "motion-select", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }, { tapPoint: OUTSIDE }, { waitGone: "In-app browser" }] },
   { name: "motion-attach", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }, { tapPoint: OUTSIDE }] },
@@ -406,11 +409,15 @@ function openScreen(lines, platform, link, first, ready) {
 const SETTLE = "    waitToSettleTimeoutMs: 1000";
 // iOS 26 minimizes the tab bar to the current tab on scroll, and a tab root keeps its offset across deep links.
 const TAB_LABELS = new Set(["Chats", "Spaces", "Activity", "Me"]);
+// The Chats source filter. Android's drawn button has a testID; iOS's native bar item has only its label
+// ("Filter Chats by who started them, All"), so iOS matches the label's start.
+const SOURCE_FILTER_IOS = "Filter Chats by .*";
 
 function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
     // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
-    if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${step.waitFor}.*`)}`, "    timeout: 20000");
+    // `exact` matches the whole text, for a short word such as a menu item that other labels contain.
+    if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(step.exact ? step.waitFor : `.*${step.waitFor}.*`)}`, "    timeout: 20000");
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     // A pause with nothing to wait for, as a keyboard needs after a tap before it is drawn.
@@ -424,6 +431,7 @@ function pushSteps(lines, platform, steps = []) {
       continue;
     }
     else if (step.tapPoint) lines.push("- tapOn:", `    point: ${yamlString(step.tapPoint[platform])}`, SETTLE);
+    else if (step.tapOnSourceFilter) lines.push("- tapOn:", ...(platform === "android" ? ["    id: \"chats-source-menu-button\""] : [`    text: ${yamlString(SOURCE_FILTER_IOS)}`]), SETTLE);
     else if (step.longPressOn) lines.push("- longPressOn:", `    text: ${yamlString(step.longPressOn)}`, SETTLE);
     else if (step.back && platform === "android") lines.push("- back");
     else if (step.back) lines.push("- swipe:", "    start: 2%, 50%", "    end: 85%, 50%", "    duration: 400");
@@ -457,7 +465,7 @@ const ACCOUNT_SCREENS = new Set(["chats", "chats-snap", "chats-scrolled", "space
 const EMPTY_OR_ERROR_TEXT = "(.*are unavailable|.*Connection unavailable|.*Still connecting.*|.*No Chats yet|.*No Spaces yet|.*Could not .*|.*Unable to .*)";
 
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
-function buildFlow({ platform, session, screens, target, orientation }) {
+export function buildFlow({ platform, session, screens, target, orientation }) {
   const lines = preamble(platform, session, target === "tablet" ? orientation : null);
   if (target === "tablet") checkSplit(lines, platform);
   for (const [index, screen] of screens.entries()) {
@@ -471,11 +479,16 @@ function buildFlow({ platform, session, screens, target, orientation }) {
   return `${lines.join("\n")}\n`;
 }
 
-/** The split-layout interaction flow, after sign-in, with the rows it taps for this platform. */
-function buildTabletFlow({ platform, session, maestroOrientation }) {
+/**
+ * The split-layout interaction flow. Signed in it ends by sending a message; offline (`session`) it
+ * picks the seeded Space instead, so every layout assertion still runs and only the send is dropped.
+ */
+export function buildTabletFlow({ platform, session, maestroOrientation }) {
   const lines = preamble(platform, session, "portrait");
   checkSplit(lines, platform);
-  return `${[...lines, "- runFlow:", `    file: ${yamlString(resolve(TABLET_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`, `      PORTRAIT: ${maestroOrientation("portrait")}`, `      LANDSCAPE: ${maestroOrientation("landscape")}`].join("\n")}\n`;
+  lines.push("- runFlow:", `    file: ${yamlString(resolve(TABLET_LAYOUT_FLOW))}`, "    env:", `      FIRST_ROW: ${yamlString(LEFT_FIRST_ROW[platform])}`, `      SECOND_ROW: ${yamlString(LEFT_SECOND_ROW[platform])}`, `      PORTRAIT: ${maestroOrientation("portrait")}`, `      LANDSCAPE: ${maestroOrientation("landscape")}`);
+  lines.push("- runFlow:", `    file: ${yamlString(resolve(session ? TABLET_OFFLINE_FLOW : TABLET_SEND_FLOW))}`);
+  return `${lines.join("\n")}\n`;
 }
 
 /** One pass of the perf sequence from a fresh launch. */
@@ -487,7 +500,7 @@ function buildPerfFlow({ platform, session, target }) {
 }
 
 /** Records each interaction from its settled start screen to its settled end. */
-function buildMotionFlow({ platform, session, motions }) {
+export function buildMotionFlow({ platform, session, motions }) {
   const lines = preamble(platform, session);
   for (const [index, motion] of motions.entries()) {
     openScreen(lines, platform, motion.link, index === 0, motion.ready);
