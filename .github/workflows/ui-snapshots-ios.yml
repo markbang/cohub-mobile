@@ -57,10 +57,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ui-snapshots-ios-${{ inputs.target }}-${{ inputs.text_size }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   CI: "true"
   EXPO_NO_TELEMETRY: "1"
@@ -80,6 +76,10 @@ jobs:
     # The app is matched to iOS 27; GitHub ships its simulator only on the xcode-27 image.
     runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
     timeout-minutes: 120
+    # One build per ref at a time; a second dispatch waits for the first and then restores its app.
+    concurrency:
+      group: ui-snapshots-ios-app-${{ github.ref }}
+      cancel-in-progress: false
     outputs:
       targets: ${{ steps.targets.outputs.targets }}
       key: ${{ steps.app.outputs.cache-primary-key }}
