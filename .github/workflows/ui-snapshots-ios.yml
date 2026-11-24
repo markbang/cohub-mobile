@@ -170,10 +170,10 @@ jobs:
         target: ${{ fromJSON(needs.prepare.outputs.targets) }}
     runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
     timeout-minutes: 120
-    # Each target has its own group, so the matrix jobs of one run never cancel each other.
+    # Each target has its own group, so the matrix legs never share one. Nothing is cancelled: a re-dispatch waits for the running capture.
     concurrency:
       group: ui-snapshots-ios-${{ matrix.target }}-${{ inputs.text_size }}-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
