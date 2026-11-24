@@ -422,14 +422,15 @@ function openScreen(lines, platform, link, first, ready) {
   // Matched inside the element's text: iOS and Android often merge a card or row into one element.
   const screen = ready ? `.*${ready}.*` : "^__settle__$";
   // iOS asks once per simulator before handing a custom-scheme link to the app, and the question can arrive
-  // seconds after openLink returns. It covers the screen, so the first link waits for whichever comes first,
-  // the question or the screen, then answers the question if it is up. An absent question costs Maestro's
-  // ~7 s optional lookup, so only a flow's first link checks.
+  // seconds after openLink returns. On a cold Metro the first screen after it also loads its route's modules
+  // (tens of seconds), so a flow's first link waits up to 60 s for the question or the screen, answers the
+  // question if it is up, then waits up to 60 s for the screen. An absent question costs Maestro's ~7 s
+  // optional lookup, so only a flow's first link checks.
   if (platform === "ios" && first && ready) {
     lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`(${OPEN_IN_APP}|${screen})`)}`, "    timeout: 60000");
     lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
-  }
-  if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 20000");
+    lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 60000");
+  } else if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 20000");
   else lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 1500", "    optional: true");
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
