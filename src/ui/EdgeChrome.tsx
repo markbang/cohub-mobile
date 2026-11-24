@@ -16,7 +16,7 @@ import { androidBlur, blurReduction, GlassBackdropScope, useReduceTransparency }
 export function useEdgeChrome(options?: { reserveComposer?: boolean; trackScroll?: boolean }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(insets.top + edgeChrome.headerMinHeight);
-  const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom) : 0);
+  const [footerHeight, setFooterHeight] = useState(() => options?.reserveComposer ? collapsedComposerHeight(insets.bottom, Platform.OS === "ios") : 0);
   const scrollY = useSharedValue(0);
   const scrollRef = useAnimatedRef<ScrollView>();
   const { blurTarget, attachBlurTarget } = useBlurTarget();

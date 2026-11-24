@@ -19,10 +19,12 @@ gh run download <ios-run-id> -n ui-snapshots-ios -D dist/ui-snapshots/ios
 node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist/ui-snapshots/android
 ```
 
+- `target` and `text_size` take comma lists (`target=phone,tablet`, `text_size=default,accessibility-large`). One dispatch runs every cell serially in one capture process with one Metro, and each cell's screens are filtered to its target's catalog. `text_size` (iOS only) sets the simulator's Dynamic Type category for its cell: `default`, `extra-large` or `accessibility-large`. The capture logs the category it applied and returns the simulator to `large` (its default) afterwards. Android has no such input.
+- `offline=true` (iOS) renders the debug fixtures without an account: no sign-in and no Logto request. Use it for any run that only needs `chat-*`, `split-chat-*` or `chats` screens, and whenever the E2E account's sign-in is challenged. The app stays in debug bundles only (`src/auth/e2e-session.ts`).
 - The iOS reference runs on iOS 27, on GitHub's `xcode-27` image (a preview). Pass `-f ios=26` to `ui-snapshots-ios.yml` to capture on the default image's iOS 26 instead; the drawn Android UI follows iOS 27.
 - `.github/workflows/ui-snapshots-android.yml` and `.github/workflows/ui-snapshots-ios.yml` build debug binaries and cache them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
 - Both workflows need the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), because every route sits behind sign-in. Before Metro starts, `scripts/e2e/logto-token.mjs` signs the account in with its password through Logto's experience API, and Metro hands the debug app the refresh token (`src/auth/e2e-session.ts`). The run never opens the hosted sign-in page, which mails a sign-in code as soon as it takes the email, so no code email is sent. The UI login flows (`e2e/auth/`) remain only for the Android device E2E, which runs a release binary, and for a local capture with `--no-metro`.
-- Artifacts: `ui-snapshots-android` and `ui-snapshots-ios`, each holding `<theme>/<screen>.png` and `motion/<interaction>.mp4`. A tablet run uploads `ui-snapshots-android-tablet` and `ui-snapshots-ios-tablet` instead (see [Tablets](#tablets)).
+- Artifacts: `ui-snapshots-android` and `ui-snapshots-ios`, each holding `<theme>/<screen>.png` and `motion/<interaction>.mp4`. A non-default text size writes to a suffixed directory instead of overwriting the default: `<theme>-<size>/` on the phone and `tablet-<orientation>/<theme>-<size>/` on a tablet, so `light/` is the default size and `light-accessibility-large/` the large one. A tablet run uploads `ui-snapshots-android-tablet` and `ui-snapshots-ios-tablet` instead (see [Tablets](#tablets)).
 
 ## Run locally
 
@@ -34,7 +36,7 @@ node scripts/ui-snapshots.mjs capture --platform ios --app <Cohub.app|Cohub-ios-
 node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist/ui-snapshots/android
 ```
 
-Use `--no-metro` when Metro is already running on port 8081. Android phone capture sets the emulator's density so that both platforms lay out at 402 pt wide. It resets the density when it finishes.
+`--target phone,tablet` and `--text-size default,accessibility-large` take comma lists; every cell runs in the one process. `--offline` renders the debug fixtures without an account, as the workflow's `offline` input does. Use `--no-metro` when Metro is already running on port 8081. Android phone capture sets the emulator's density so that both platforms lay out at 402 pt wide. It resets the density when it finishes.
 
 ## Tablets
 
@@ -54,7 +56,7 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 `app/debug/ui.tsx` is the UI catalog, a page that shows every shared primitive. `?section=` limits it to one section so each fits in a single screenshot. When you add or restyle a shared component, add it to the catalog.
 
-`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states|media|stream|bot`, where `bot` is a Bot's page), so the Chat layout can be compared without an account's data. `&native=0` draws the JS list that binaries without the native timeline fall back to; only that list shows the `stream` fixture's reply in progress. `&draft=<text>` seeds the composer, as a Chat's saved draft does (the `chat-draft` screen). `&arrive=<n>` appends n replies two seconds after the screen opens, as a reply landing while the user reads up; the `chat-arrival` screen waits for them (an accessible `arrivals <n>` label) before it scrolls. The `chat-scrolled`, `chat-arrival`, `chat-keyboard` and `chat-keyboard-drag` screens cover the jump to latest and the keyboard. `app/debug/bot-list.tsx` renders the Bots view's rows over fixed Bots.
+`app/debug/chat.tsx` renders the Chat screen's header, native timeline, and composer over fixed conversations (`?fixture=conversation|tools|long|states|media|stream|bot`, where `bot` is a Bot's page), so the Chat layout can be compared without an account's data. `&native=0` draws the JS list that binaries without the native timeline fall back to; only that list shows the `stream` fixture's reply in progress. `&draft=<text>` seeds the composer, as a Chat's saved draft does (the `chat-draft` screen). `chat-draft-long` seeds a draft of about four wrapped lines at 402 pt, and `split-chat-draft-long` one of about six at 820 pt, for the composer's two-row layout. `&arrive=<n>` appends n replies two seconds after the screen opens, as a reply landing while the user reads up; the `chat-arrival` screen waits for them (an accessible `arrivals <n>` label) before it scrolls. The `chat-scrolled`, `chat-arrival`, `chat-keyboard` and `chat-keyboard-drag` screens cover the jump to latest and the keyboard. `app/debug/bot-list.tsx` renders the Bots view's rows over fixed Bots.
 
 ## Recordings
 

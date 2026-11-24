@@ -17,6 +17,7 @@ import { EdgeScrim } from "@/src/ui/EdgeChrome";
 import { GlassBackground, GlassGroup, useGlassMaterial } from "@/src/ui/Glass";
 import { useTabBarMinimized } from "@/src/ui/tab-bar-minimize";
 import { useDesktopSplit, usePaneWidth } from "@/src/ui/pane";
+import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 
 // Geometry and feel follow UIKit's iOS 26 tab bar: a lens rests under the selected tab, lifts and
 // grows under a press, follows a drag across the bar, and settles on the tab it is let go over.
@@ -51,7 +52,6 @@ const JELLY_STRETCH = 0.2;
 const JELLY_ASPECT = 1.4;
 const BAR_SWELL = 0.049;
 const PULL_LIMIT = BAR_HEIGHT * 7 / 32;
-const BAR_BOTTOM_MARGIN = 8;
 const EASE_IN_OUT = Easing.bezier(...curves.easeInOut);
 /** Room around the bar for its glass group, so a lifted lens is not clipped where it overhangs the bar. */
 const GLASS_OUTSET = 16;
@@ -109,16 +109,8 @@ export function TabScreenLayout({ routeKey, children }: { routeKey: string; chil
   return <BlurTargetView ref={ref} style={{ flex: 1 }}>{children}</BlurTargetView>;
 }
 
-const IOS_HOME_INDICATOR_OVERLAP = 14;
-
-// The iOS 26 tab bar ends 22 pt above the screen edge, clear of the home indicator.
-const SYSTEM_BAR_BOTTOM = 22;
-
 function barBottomOffset(bottomInset: number) {
-  // iOS's home-indicator inset is sized for edge-to-edge content; like the system tab bar, a floating bar can sit partly inside it.
-  if (Platform.OS === "ios") return Math.max(bottomInset - IOS_HOME_INDICATOR_OVERLAP, BAR_BOTTOM_MARGIN * 2);
-  // Gesture navigation's handle sits where the home indicator does; three-button navigation needs its own inset.
-  return bottomInset <= 34 ? SYSTEM_BAR_BOTTOM : bottomInset + BAR_BOTTOM_MARGIN;
+  return floatingBarBottomOffset(bottomInset, Platform.OS === "ios");
 }
 
 /** Distance between neighbouring items' centres, given the bar's width. */

@@ -199,7 +199,7 @@ function DebugChatView() {
     <EdgeFooter keyboard onLayout={onFooterLayout}>
       {following ? null : <Animated.View entering={FadeIn.duration(motion.fade.duration)} exiting={FadeOut.duration(motion.fadeOut.duration)} className="absolute right-4 z-4" style={ABOVE_FOOTER_BUTTON}><JumpToLatest busy={false} unread={unreadAssistantTurnCount(messages, seenSequence)} onPress={NOOP} /></Animated.View>}
       {bot ? <BotTyping bot={bot} /> : null}
-      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" onVoice={NOOP} {...(bot ? { variant: "bot" as const, placeholder: `Message ${bot.name}` } : {})} />
+      <ComposerInput value={draft} onChangeText={setDraft} onSend={() => setDraft("")} onAttach={NOOP} modelLabel="Claude Sonnet" modelDetail="High" modelStatus="available" onModelPress={NOOP} showHarnessPicker onHarnessPress={NOOP} onVoice={NOOP} {...(bot ? { variant: "bot" as const, placeholder: `Message ${bot.name}` } : {})} />
     </EdgeFooter>
   </Screen>;
 }

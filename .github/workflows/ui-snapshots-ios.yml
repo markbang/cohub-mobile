@@ -22,17 +22,24 @@ on:
         default: true
         type: boolean
       target:
-        description: The device class. tablet runs the split layout in both orientations, then the e2e/tablet flow.
+        description: The device classes, comma-separated (phone, tablet, or phone,tablet). tablet runs the split layout in both orientations, then the e2e/tablet flow. All cells run serially in one capture process.
         required: false
         default: phone
-        type: choice
-        options:
-          - phone
-          - tablet
+        type: string
       orientations:
         description: Orientations to capture, comma-separated. Defaults to portrait on a phone and portrait,landscape on a tablet.
         required: false
         type: string
+      text_size:
+        description: Dynamic Type content sizes, comma-separated (default, extra-large, accessibility-large). Each size is restored to default after its cell; a non-default size writes to a suffixed theme directory.
+        required: false
+        default: default
+        type: string
+      offline:
+        description: Render the debug fixtures without an account (no sign-in). Required when the account's sign-in is challenged.
+        required: false
+        default: false
+        type: boolean
       perf:
         description: Frame-probe runs of the perf sequence (0 skips it).
         required: false
@@ -51,7 +58,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ui-snapshots-ios-${{ inputs.target }}-${{ github.ref }}
+  group: ui-snapshots-ios-${{ inputs.target }}-${{ inputs.text_size }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -63,6 +70,7 @@ env:
   SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
   MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
   ORIENTATIONS_ARG: ${{ inputs.orientations && format('--orientations {0}', inputs.orientations) || '' }}
+  OFFLINE_ARG: ${{ inputs.offline && '--offline' || '' }}
   ARTIFACT: ui-snapshots-ios${{ inputs.target == 'tablet' && '-tablet' || '' }}
   # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
@@ -146,7 +154,7 @@ jobs:
             metro-${{ runner.os }}-
 
       - name: Capture
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ inputs.target }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ inputs.target }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG $OFFLINE_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.

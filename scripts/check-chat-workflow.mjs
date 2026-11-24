@@ -26,7 +26,7 @@ import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, s
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
-import { collapsedComposerHeight, COMPOSER_CHROME_HEIGHT, COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
+import { collapsedComposerHeight, composerClipSlack, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
@@ -403,6 +403,9 @@ const chromeScope = {
   Field: "Field", FIELD_INPUT_CLASS: "", Segmented: "Segmented", ListRow: "ListRow", Meta: "Meta", Tag: "Tag", AvatarStatus: "AvatarStatus", LIST_AVATAR_SIZE: 46, FilterChip: "FilterChip",
   StyleSheet: { create: (styles) => styles },
   COMPOSER_TEXT_PADDING,
+  COMPOSER_TOP_PADDING,
+  COMPOSER_ONE_ROW_HEIGHT,
+  composerFieldPaddingX,
   colorWithOpacity,
   edgeChrome: { headerMinHeight: 56, fade: 24 },
   recordDebugEvent: () => {},
@@ -3996,34 +3999,49 @@ assert.deepEqual(
 assert.equal(getComposerActionState({ text: "hi", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true }).queues, false, "an idle Chat sends instead of queueing");
 assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: false, hasStopHandler: true, sendFeedback: "success" }).glyph, "sent");
 assert.equal(getComposerActionState({ text: "", hasAttachment: false, disabled: false, sending: false, running: true, hasStopHandler: true, sendFeedback: "success" }).glyph, "stop", "a running turn shows stop over the sent check");
-const composerLayoutInput = { text: "hello", contentHeight: 30, lineHeight: 22, availableHeight: 800, expanded: false };
+const composerLayoutInput = { text: "hello", measure: { inline: 30, wide: 30 }, lineHeight: 22, textPadding: COMPOSER_TEXT_PADDING, availableHeight: 800, expanded: false, wrapped: false };
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "" }), {
-  expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,
+  expanded: false, twoRows: false, showExpandButton: false, height: 42, scrollEnabled: false,
 });
 assert.deepEqual(getComposerLayout(composerLayoutInput), {
-  expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,
+  expanded: false, twoRows: false, showExpandButton: false, height: 42, scrollEnabled: false,
 });
 assert.equal(getComposerLayout({ ...composerLayoutInput, text: "hello\n" }).showExpandButton, true, "explicit newline is expandable before native measurement");
-assert.deepEqual(getComposerLayout({ ...composerLayoutInput, contentHeight: 52 }), {
-  expanded: false, showExpandButton: true, height: 52, scrollEnabled: false,
+assert.deepEqual(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 } }), {
+  expanded: false, twoRows: true, showExpandButton: true, height: 66, scrollEnabled: false,
 }, "soft-wrapped text grows and exposes expansion");
-assert.deepEqual(getComposerLayout({ ...composerLayoutInput, contentHeight: 600 }), {
-  expanded: false, showExpandButton: true, height: 120, scrollEnabled: true,
+// The default cap is 120 pt: 4 whole lines (4 × 22 + 20 = 108) plus the padding. The 12 pt
+// the native measurement adds below the text is not a line, so it neither shows nor scrolls.
+assert.deepEqual(getComposerLayout({ ...composerLayoutInput, measure: { inline: 600, wide: 600 } }), {
+  expanded: false, twoRows: true, showExpandButton: true, height: 108, scrollEnabled: true,
 });
-assert.deepEqual(getComposerLayout({ ...composerLayoutInput, contentHeight: 600, expanded: true }), {
-  expanded: true, showExpandButton: true, height: 320, scrollEnabled: true,
+assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 120, wide: 120 } }).scrollEnabled, false, "trailing measurement space under four lines does not scroll");
+assert.deepEqual(getComposerLayout({ ...composerLayoutInput, measure: { inline: 600, wide: 600 }, expanded: true }), {
+  expanded: true, twoRows: true, showExpandButton: true, height: 306, scrollEnabled: true,
 });
-assert.equal(getComposerLayout({ ...composerLayoutInput, contentHeight: 52, expanded: true }).height, 320, "an expanded editor keeps its height even when the content fits");
-assert.equal(getComposerLayout({ ...composerLayoutInput, contentHeight: 52, expanded: true }).scrollEnabled, true, "an expanded editor stays scrollable because the estimate may undershoot real wraps");
+assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 }, expanded: true }).height, 306, "an expanded editor keeps its height even when the content fits, in whole lines (13 at 22 pt: 13 × 22 + 20)");
+assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 }, expanded: true }).scrollEnabled, true, "an expanded editor stays scrollable because the estimate may undershoot real wraps");
 assert.equal(getComposerLayout({ ...composerLayoutInput, expanded: true }).showExpandButton, true, "collapse remains available after deleting back to one line");
-assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "", contentHeight: 600, expanded: true }), {
-  expanded: false, showExpandButton: false, height: 44, scrollEnabled: false,
-}, "clearing or sending resets the layout even before the native measurement catches up");
-assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 400, expanded: true }).height, 180, "expanded input leaves room above the keyboard");
-assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 180, contentHeight: 600 }).height, 81, "short viewports also constrain the default input");
-assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, contentHeight: 52 }).showExpandButton, false, "a large-font single line is not mistaken for multiline");
-assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, contentHeight: 96 }).showExpandButton, true);
-assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, contentHeight: 52 }).height, 52);
+// A wrapped draft keeps its two rows: the full-width row measures shorter, which would flip a one-row draft back and forth.
+assert.equal(getComposerLayout({ ...composerLayoutInput, wrapped: true }).showExpandButton, true, "a wrapped draft stays in two rows while its text is kept");
+assert.equal(getComposerLayout({ ...composerLayoutInput, wrapped: true, text: "" }).showExpandButton, false, "clearing the draft returns to one row");
+assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "", measure: { inline: 30, wide: 30 }, expanded: true }), {
+  expanded: false, twoRows: false, showExpandButton: false, height: 42, scrollEnabled: false,
+}, "clearing or sending lays the empty field out from the placeholder, not the stale text measurement");
+assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 400, expanded: true }).height, 174, "expanded input leaves room above the keyboard, in whole lines (7 × 22 + 20)");
+// The 45% cap (a tablet pane, or a short window) is rounded too: a line that does not fit is never cut through.
+for (const availableHeight of [500, 777, 1100]) {
+  const expandedHeight = getComposerLayout({ ...composerLayoutInput, availableHeight, measure: { inline: 900, wide: 900 }, expanded: true }).height;
+  assert.equal((expandedHeight - COMPOSER_TEXT_PADDING) % 22, 0, `the expanded cap at ${availableHeight} pt is whole lines`);
+  const collapsedHeight = getComposerLayout({ ...composerLayoutInput, availableHeight, measure: { inline: 900, wide: 900 } }).height;
+  assert.equal((collapsedHeight - COMPOSER_TEXT_PADDING) % 22, 0, `the collapsed cap at ${availableHeight} pt is whole lines`);
+}
+assert.equal(composerClipSlack(22), 22 * 0.08, "the clip slack is a fraction of the line height, so it scales with Dynamic Type");
+assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 180, measure: { inline: 600, wide: 600 } }).height, 64, "short viewports constrain the default input to whole lines");
+assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 52, wide: 52 } }).showExpandButton, false, "a large-font single line is not mistaken for multiline");
+assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 120, wide: 120 } }).showExpandButton, true);
+assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 84, wide: 84 } }).height, 84);
+assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 0, wide: 0 } }).height, 84, "a large-font field is never shorter than one line and its padding");
 // A dictation final can land after the mic already stopped, so auto-expansion keys off the
 // JS-driven append (no onChangeText round-trip), not off active recording.
 const autoExpandInput = { value: "hello", expanded: false, scrollEnabled: true, lastUserText: "hello", autoExpandedFor: null };
@@ -4036,17 +4054,60 @@ assert.equal(shouldAutoExpandComposer({ ...autoExpandInput, value: "a very long 
 // Android's stale-watcher deadlock: a JS-driven final leaves the native measurement stale, so
 // the text-derived estimate must expose the overflow and raise the collapsed height on its own.
 const lineHeight = 22;
-assert.equal(estimateComposerContentHeight("", lineHeight), 0, "empty text measures nothing");
-assert.equal(estimateComposerContentHeight("word ".repeat(45), lineHeight), 8 * lineHeight + COMPOSER_TEXT_PADDING, "the estimate wraps long prose into multiple lines");
-assert.equal(estimateComposerContentHeight("这是一段比较长的中文语音转写内容，".repeat(6), lineHeight), 7 * lineHeight + COMPOSER_TEXT_PADDING, "CJK glyphs count double so Chinese lines are not under-counted");
-assert.equal(estimateComposerContentHeight("a\nb\nc", lineHeight), 3 * lineHeight + COMPOSER_TEXT_PADDING, "explicit newlines each take a line");
-assert.equal(estimateComposerContentHeight("a short dictation transcript", lineHeight), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
-assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).scrollEnabled, true, "the estimate alone unsticks the overflow signal when the native measurement is stale");
-assert.equal(getComposerLayout({ text: "word ".repeat(45), contentHeight: Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight)), lineHeight, availableHeight: 800, expanded: false }).height, 120, "the estimated overflow still respects the collapsed height cap");
-assert.equal(COMPOSER_CHROME_HEIGHT, 60);
-assert.equal(collapsedComposerHeight(34), 94);
-assert.equal(collapsedComposerHeight(0), 60);
-assert.equal(collapsedComposerHeight(-1), 60);
+assert.equal(estimateComposerContentHeight("", lineHeight, COMPOSER_TEXT_PADDING), 0, "empty text measures nothing");
+assert.equal(estimateComposerContentHeight("word ".repeat(45), lineHeight, COMPOSER_TEXT_PADDING), 8 * lineHeight + COMPOSER_TEXT_PADDING, "the estimate wraps long prose into multiple lines");
+assert.equal(estimateComposerContentHeight("这是一段比较长的中文语音转写内容，".repeat(6), lineHeight, COMPOSER_TEXT_PADDING), 7 * lineHeight + COMPOSER_TEXT_PADDING, "CJK glyphs count double so Chinese lines are not under-counted");
+assert.equal(estimateComposerContentHeight("a\nb\nc", lineHeight, COMPOSER_TEXT_PADDING), 3 * lineHeight + COMPOSER_TEXT_PADDING, "explicit newlines each take a line");
+assert.equal(estimateComposerContentHeight("a short dictation transcript", lineHeight, COMPOSER_TEXT_PADDING), lineHeight + COMPOSER_TEXT_PADDING, "a short append still estimates one line");
+assert.equal(estimateComposerContentHeight("word ".repeat(45), lineHeight, 2 * COMPOSER_TEXT_PADDING), 8 * lineHeight + 2 * COMPOSER_TEXT_PADDING, "the estimate takes the scaled padding, so large text keeps its margin");
+const overflowInput = { text: "word ".repeat(45), lineHeight, textPadding: COMPOSER_TEXT_PADDING, availableHeight: 800, expanded: false, wrapped: false };
+const overflowHeight = Math.max(30, estimateComposerContentHeight("word ".repeat(45), lineHeight, COMPOSER_TEXT_PADDING));
+assert.equal(getComposerLayout({ ...overflowInput, measure: { inline: overflowHeight, wide: overflowHeight } }).scrollEnabled, true, "the estimate alone unsticks the overflow signal when the native measurement is stale");
+assert.equal(getComposerLayout({ ...overflowInput, measure: { inline: overflowHeight, wide: overflowHeight } }).height, 108, "the estimated overflow still respects the collapsed height cap, in whole lines");
+// The capsule: one row is 48 pt, and a corner is half the shorter of the capsule and the 24 pt corner.
+assert.equal(COMPOSER_ONE_ROW_HEIGHT, 48);
+assert.equal(COMPOSER_CONTROL_ROW_HEIGHT, 44);
+assert.equal(composerCapsuleRadius(48), 24, "the one-row capsule is fully round");
+assert.equal(composerCapsuleRadius(30), 15, "a shorter capsule keeps its ends fully round");
+assert.equal(composerCapsuleRadius(120), 24, "a two-row capsule keeps the 24 pt corner");
+assert.equal(composerFieldPaddingX(false, 1), 8, "one row: the text sits 12 pt from the controls, 4 pt of which is the row gap");
+assert.equal(composerFieldPaddingX(true, 1), 10, "two rows: the text sits 14 pt from the edge, 4 pt of which is the capsule's inset");
+assert.equal(composerFieldPaddingX(false, 2), 20, "the one-row gap scales with Dynamic Type");
+assert.equal(composerFieldPaddingX(true, 2), 10, "two rows keep the 14 pt text inset at any Dynamic Type size, so the wrapped text keeps full width");
+// Two widths: the inline row decides the wrap (its controls keep their width, so it holds fewer columns as the glyphs
+// grow), and the full two-row line sizes the field (about twice the columns). At the default size the wrap is unchanged.
+const fitMeasure = (text, fontScale) => {
+  const lineHeight = 22 * fontScale;
+  const textPadding = COMPOSER_TEXT_PADDING * fontScale;
+  return {
+    inline: estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale)),
+    wide: estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, true)),
+  };
+};
+assert.equal(composerColumnsPerLine(1), 30, "the default inline row holds the calibrated 30 columns");
+assert.equal(composerColumnsPerLine(2), 15, "a text size twice as large holds half the inline columns");
+assert.equal(composerColumnsPerLine(2, true), 30, "the full two-row line holds twice the inline columns, at any size");
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: "Looks good, send it", measure: fitMeasure("Looks good, send it", 1) }).twoRows, false, "the default draft stays on one row");
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: "", measure: fitMeasure("Message the Agent", 1) }).twoRows, false, "the default placeholder stays on one row");
+const longDraft = "word ".repeat(51);
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: longDraft, measure: fitMeasure(longDraft, 1) }).height, 108, "the default long draft shows four whole lines");
+const largeMetrics = { lineHeight: 44, textPadding: 40 };
+const largeDraft = (text) => ({ ...composerLayoutInput, ...largeMetrics, text, measure: fitMeasure(text, 2) });
+assert.deepEqual(getComposerLayout(largeDraft("Looks good, send it")), {
+  expanded: false, twoRows: true, showExpandButton: true, height: 84, scrollEnabled: false,
+}, "a large-text draft that does not fit the inline row wraps, and its full-width line is one line");
+assert.equal(getComposerLayout(largeDraft("Looks good,")).twoRows, false, "a large-text draft that fits the inline row stays on one row");
+assert.deepEqual(getComposerLayout({ ...composerLayoutInput, ...largeMetrics, text: "", measure: fitMeasure("Message the Agent", 2) }), {
+  expanded: false, twoRows: true, showExpandButton: false, height: 84, scrollEnabled: false,
+}, "a large-text placeholder that does not fit the inline row wraps, with no expand control on an empty field");
+assert.equal(getComposerLayout(largeDraft(longDraft)).height, 172, "a large-text draft shows three whole lines");
+assert.equal(getComposerLayout(largeDraft(longDraft)).scrollEnabled, true, "a large-text draft scrolls past its whole lines");
+// The chrome: 8 pt above the capsule, and a bottom gap that matches the floating tab bar.
+assert.equal(COMPOSER_CHROME_HEIGHT, 56);
+assert.equal(collapsedComposerHeight(34, true), 76, "iOS: the bar's 20 pt bottom gap under a 34 pt home-indicator inset");
+assert.equal(collapsedComposerHeight(0, true), 72, "iOS: the bar's 16 pt minimum gap without an inset");
+assert.equal(collapsedComposerHeight(34, false), 78, "Android: the bar's 22 pt gap with gesture navigation");
+assert.equal(collapsedComposerHeight(-1, true), 72, "a negative inset does not shrink the gap");
 assert.equal(keyboardOverlap({ screenY: 620, height: 336 }, 956), 336, "a docked keyboard covers its own height");
 assert.equal(keyboardOverlap({ screenY: 0, height: 0 }, 956), 0, "the iOS resume frame must not cover the whole screen");
 assert.equal(keyboardOverlap({ screenY: 0, height: 956 }, 956), 0, "a zero-origin frame is never a docked keyboard");

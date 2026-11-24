@@ -34,7 +34,8 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_TEXT_PADDING, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerClipSlack, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
 import { edgeChrome, MAX_FONT_SCALE, useAppTheme, typography } from "@/src/theme";
@@ -562,7 +563,13 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // state because the render-phase expansion check needs the committed value; identical
   // updates bail out, so typing never pays an extra render.
   const [lastUserText, setLastUserText] = useState(value);
+  // A draft that arrived without typing (restored, or set by a debug link) is measured by the estimate too: at mount its
+  // native measurement can read short, which left the field too small for its text.
+  const [userEdited, setUserEdited] = useState(false);
   const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
+  // Two rows (the wrapped layout) once a draft has wrapped; see getComposerLayout.
+  const [wrapped, setWrapped] = useState(false);
+  const [capsuleHeight, setCapsuleHeight] = useState(44);
   const inputRef = useRef<TextInput | null>(null);
   const attachButtonRef = useRef<View>(null);
   const harnessButtonRef = useRef<View>(null);
@@ -594,16 +601,31 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const { blocked, hasDraft, canSend, canStop, queues, glyph } = getComposerActionState({ text: value, hasAttachment, disabled, sending, running, hasStopHandler: Boolean(onStop), sendFeedback });
   // A JS-driven append is invisible to the native measurement (Android's watcher reads a
   // stale layout and never re-fires; iOS defers the event until the height prop changes),
-  // so the width-aware estimate stands in for it; a later real measurement still wins.
+  // so the estimate stands in for it. Typed text is measured natively once a measurement exists: the
+  // estimate assumes the one-row width and would add a blank line under a draft that fills the wrapped row.
   const lineHeight = typography.body.lineHeight * fontScale;
-  const measuredContentHeight = Math.max(contentHeight, estimateComposerContentHeight(value, lineHeight));
+  // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
+  const textPadding = COMPOSER_TEXT_PADDING * fontScale;
+  // The native content size includes the field's padding (the text container inset) on both platforms.
+  const placeholderText = placeholder ?? t("ui.composer.placeholder");
+  const estimate = (text: string, fullRow: boolean) => estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, fullRow));
+  // Typed text is measured natively; a draft set without typing takes the larger of the native value and the estimate.
+  // The native measurement includes the field's vertical padding when the field was drawn in one row; in two rows the padding sits outside the input.
+  const nativeHeight = contentHeight > 0 ? contentHeight + (wrapped ? textPadding : 0) : 0;
+  const typed = userEdited && value === lastUserText && nativeHeight > 0;
+  // A draft set without typing is sized by the estimate at the full width: its native value was measured in the inline row, where it may wrap.
+  const textMeasure = typed ? { inline: nativeHeight, wide: nativeHeight } : { inline: Math.max(nativeHeight, estimate(value, false)), wide: estimate(value, true) };
+  const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
-    contentHeight: measuredContentHeight,
+    measure: value ? textMeasure : placeholderMeasure,
     lineHeight,
+    textPadding,
     availableHeight: Math.min(windowHeight, keyboardTop ?? windowHeight) - insets.top - (keyboardVisible ? 0 : insets.bottom),
     expanded,
+    wrapped,
   });
+  if (layout.showExpandButton !== wrapped) setWrapped(layout.showExpandButton);
   // Dictation appends a whole transcript at once, and the overflowing final can land after
   // the mic already stopped, so auto-expand keys off the missing onChangeText round-trip
   // instead of active recording. It fires once per append so a manual collapse sticks while
@@ -615,75 +637,81 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const resolvedModelLabel = modelLabel ?? t("ui.composer.modelAutomatic");
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
-  const singleLine = !layout.expanded && !layout.showExpandButton;
-  const fieldHeight = singleLine ? lineHeight + COMPOSER_TEXT_PADDING : layout.height;
+  const singleLine = !layout.twoRows;
+  // Two rows: the input is the text area, whole lines plus a clip slack; the padding sits in the wrapper around it, and the wrapper's bottom padding gives the slack back.
+  const clipSlack = composerClipSlack(lineHeight);
+  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height - textPadding + clipSlack;
+  const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: layout.twoRows ? 0 : textPadding / 2 };
   const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
-            <TextInput
-              ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
-              testID="chat-composer-input"
-              accessibilityLabel={t("ui.composer.placeholder")}
-              value={value}
-              onChangeText={(next) => {
-                setLastUserText(next);
-                const now = Date.now();
-                if (now - inputTrace.current.at >= 300) {
-                  recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
-                  inputTrace.current.at = now;
-                }
-                inputTrace.current.length = next.length;
-                onChangeText(next);
-              }}
-              onScroll={(event) => {
-                if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
-                // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
-                // only emits onContentSizeChange once the height prop itself has changed, which
-                // starves the growth logic. The scroll event still carries a fresh content size;
-                // only raising the measurement keeps Android's coarser scroll payload from
-                // shrinking the box. iOS includes it but the RN types omit it (Android leaves
-                // it unset), so it is read as an optional extra.
-                const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
-                if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
-                  setContentHeight((current) => Math.max(current, appendedSize.height));
-                }
-              }}
-              onContentSizeChange={(event) => {
-                setContentHeight(event.nativeEvent.contentSize.height);
-                // Native inputs keep their scroll position on JS-driven text updates, so
-                // a voice-appended tail lands below the fold. This event only fires after
-                // the native layout reflects the new text, which is when the scroll lands.
-                if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
-              }}
-              editable={!disabled}
-              multiline
-              scrollEnabled={layout.scrollEnabled}
-              maxLength={12000}
-              placeholder={placeholder ?? t("ui.composer.placeholder")}
-              placeholderTextColor={theme.colors.textFaint}
-              className="min-w-0 text-body text-fg"
-              style={[styles.composerText, { height: fieldHeight }]}
-              onSelectionChange={(event) => {
-                const now = Date.now();
-                if (now - inputTrace.current.selectionAt >= 300) {
-                  inputTrace.current.selectionAt = now;
-                  recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
-                }
-                onSelectionChange?.(event.nativeEvent.selection);
-              }}
-              onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
-              onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
-              submitBehavior="newline"
-              onKeyPress={Platform.OS === "web" ? (event) => {
-                // Web: Enter sends and Shift+Enter breaks the line; an Enter that commits an IME composition stays with the IME.
-                const key = event.nativeEvent as unknown as KeyboardEvent;
-                if (key.key !== "Enter" || key.shiftKey || key.isComposing || key.keyCode === 229) return;
-                event.preventDefault();
-                if (!canSend) return;
-                traceAction("composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked });
-                onSend();
-              } : undefined}
-            />
+            <View style={layout.twoRows ? { paddingTop: textPadding / 2, paddingBottom: textPadding / 2 - clipSlack } : undefined}>
+              <TextInput
+                ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
+                testID="chat-composer-input"
+                accessibilityLabel={t("ui.composer.placeholder")}
+                value={value}
+                onChangeText={(next) => {
+                  setUserEdited(true);
+                  setLastUserText(next);
+                  const now = Date.now();
+                  if (now - inputTrace.current.at >= 300) {
+                    recordDebugEvent("ui.input", { field: "composer", action: next.length < inputTrace.current.length ? "delete" : "insert", length: next.length, delta: next.length - inputTrace.current.length, lines: next.split("\n").length });
+                    inputTrace.current.at = now;
+                  }
+                  inputTrace.current.length = next.length;
+                  onChangeText(next);
+                }}
+                onScroll={(event) => {
+                  if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
+                  // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
+                  // only emits onContentSizeChange once the height prop itself has changed, which
+                  // starves the growth logic. The scroll event still carries a fresh content size;
+                  // only raising the measurement keeps Android's coarser scroll payload from
+                  // shrinking the box. iOS includes it but the RN types omit it (Android leaves
+                  // it unset), so it is read as an optional extra.
+                  const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
+                  if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
+                    setContentHeight((current) => Math.max(current, appendedSize.height));
+                  }
+                }}
+                onContentSizeChange={(event) => {
+                  setContentHeight(event.nativeEvent.contentSize.height);
+                  // Native inputs keep their scroll position on JS-driven text updates, so
+                  // a voice-appended tail lands below the fold. This event only fires after
+                  // the native layout reflects the new text, which is when the scroll lands.
+                  if (value !== lastUserText) inputRef.current?.setSelection(value.length, value.length);
+                }}
+                editable={!disabled}
+                multiline
+                scrollEnabled={layout.scrollEnabled}
+                maxLength={12000}
+                placeholder={placeholderText}
+                placeholderTextColor={theme.colors.textFaint}
+                className="min-w-0 flex-1 text-body text-fg"
+                style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
+                onSelectionChange={(event) => {
+                  const now = Date.now();
+                  if (now - inputTrace.current.selectionAt >= 300) {
+                    inputTrace.current.selectionAt = now;
+                    recordDebugEvent("ui.input", { field: "composer", action: "selection", start: event.nativeEvent.selection.start, end: event.nativeEvent.selection.end, length: value.length });
+                  }
+                  onSelectionChange?.(event.nativeEvent.selection);
+                }}
+                onFocus={() => { recordDebugEvent("ui.focus", { field: "composer" }); onFocusChange?.(true); }}
+                onBlur={() => { recordDebugEvent("ui.blur", { field: "composer" }); onFocusChange?.(false); }}
+                submitBehavior="newline"
+                onKeyPress={Platform.OS === "web" ? (event) => {
+                  // Web: Enter sends and Shift+Enter breaks the line; an Enter that commits an IME composition stays with the IME.
+                  const key = event.nativeEvent as unknown as KeyboardEvent;
+                  if (key.key !== "Enter" || key.shiftKey || key.isComposing || key.keyCode === 229) return;
+                  event.preventDefault();
+                  if (!canSend) return;
+                  traceAction("composer_send", { length: value.length, attachment: hasAttachment, disabled: blocked });
+                  onSend();
+                } : undefined}
+              />
+            </View>
           </PasteImagesInput>
   </>;
   const expandButton = layout.showExpandButton ? <Pressable
@@ -712,19 +740,34 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
             <AppIcon name="sparkles" size={18} tone="secondary" />
             {modelStatus === "unknown" ? null : <View className={`absolute right-0.5 top-0.5 size-2 rounded-full ${modelStatus === "available" ? "bg-success" : modelStatus === "degraded" ? "bg-warning" : "bg-danger"}`} />}
           </Pressable></MenuAnchor> : null;
+  const trailing = showVoice ? voiceButton : sendButton;
+  const harnessSlot = variant === "chat" ? harnessControl : null;
+  const modelSlot = variant === "chat" ? modelControl : null;
+  const radius = composerCapsuleRadius(capsuleHeight);
+  const bottomGap = floatingBarBottomOffset(insets.bottom, Platform.OS === "ios");
   // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`. Glyphs pop only when they change, not when the composer first appears.
+  // The field keeps the first row's slot in both layouts, so crossing the wrap does not remount the text input.
   return (
-    <View style={[styles.composerWrap, { paddingBottom: insets.bottom + 8 }]}>
+    <View style={[styles.composerWrap, { paddingBottom: bottomGap }]}>
       <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" className={`flex-row gap-1 overflow-hidden ${layout.showExpandButton ? "items-end" : "items-center"} ${material === "liquid" ? "" : "shadow-glass"}`} style={styles.composerCapsule}>
+      <View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`justify-center overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }]}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
-        <GlassBackground radius={styles.composerCapsule.borderRadius} surface="glassComposer" />
-        {attachButton}
-        {variant === "chat" ? harnessControl : null}
-        {variant === "chat" ? modelControl : null}
-        {inputField}
-        {expandButton}
-        {showVoice ? voiceButton : sendButton}
+        <GlassBackground radius={radius} surface="glassComposer" />
+        <View className="flex-row items-center gap-1">
+          {layout.twoRows ? null : attachButton}
+          {layout.twoRows ? null : harnessSlot}
+          {layout.twoRows ? null : modelSlot}
+          {inputField}
+          {layout.twoRows ? null : trailing}
+        </View>
+        {layout.twoRows ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
+          {attachButton}
+          {harnessSlot}
+          {modelSlot}
+          <View className="flex-1" />
+          {expandButton}
+          {trailing}
+        </View> : null}
       </View>
       </LayoutAnimationConfig>
     </View>
@@ -823,11 +866,11 @@ function controlIconExiting() {
 }
 
 const styles = StyleSheet.create({
-  composerWrap: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
-  // Concentric with the 44 pt corner controls inset by the 8 pt padding: 8 + 44 / 2.
-  // One 44 pt row: 36 pt controls inset 4, so the capsule's ends stay round at any text height.
-  composerCapsule: { minHeight: 44, paddingHorizontal: 4, paddingVertical: 4, borderRadius: 22, borderCurve: "continuous" },
-  composerText: { paddingHorizontal: 4, paddingVertical: COMPOSER_TEXT_PADDING / 2, textAlignVertical: "top", includeFontPadding: false },
+  composerWrap: { paddingHorizontal: 12, paddingTop: COMPOSER_TOP_PADDING },
+  // One row holds 36 pt controls centred in a 48 pt capsule. Wrapped, the text row sits above a fixed control row;
+  // the corner radius is set from the drawn height (composerCapsuleRadius).
+  composerCapsule: { minHeight: COMPOSER_ONE_ROW_HEIGHT, paddingHorizontal: 4, borderCurve: "continuous" },
+  composerText: { textAlignVertical: "top", includeFontPadding: false },
   composerPasteTarget: { flex: 1, minWidth: 0 },
 });
 // The 36 pt controls in the 44 pt capsule keep a 44 pt touch target.

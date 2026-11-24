@@ -14,7 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import "react-native-reanimated";
 import { AuthScreen } from "@/src/auth/AuthScreen";
-import { useE2eSession } from "@/src/auth/e2e-session";
+import { offlineAccessToken, offlineSnapshot, OFFLINE_SNAPSHOT_USER_UUID, useE2eSession } from "@/src/auth/e2e-session";
 import { connectWebSession, getWebAccessToken, type WebViewer } from "@/src/auth/web-session";
 import { AppUpdateBanner } from "@/src/components/AppUpdateBanner";
 import { ToastProvider } from "@/src/components/Toast";
@@ -179,6 +179,7 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
 
   useEffect(() => {
     let active = true;
+    if (offlineSnapshot) return;
     if (!isAuthenticated) {
       void Promise.resolve().then(() => {
         if (active) setIdentity({ authenticated: false, uuid: null });
@@ -252,6 +253,7 @@ function NativeRoot({ environment, onSelectEnvironment }: { environment: CohubEn
   }, [isAuthenticated, isInitialized]);
 
   if (!isInitialized) return <LoadingScreen />;
+  if (offlineSnapshot) return <AppProvider key="offline-snapshot" userUuid={OFFLINE_SNAPSHOT_USER_UUID} getAccessToken={offlineAccessToken} getAuthSessionVersion={getAuthSessionVersion} onUnauthorized={onUnauthorized}><Navigation theme={theme} /></AppProvider>;
   if (!isAuthenticated || (authError && !identity.uuid)) return <AuthScreen environment={environment} onSelectEnvironment={onSelectEnvironment} onSignIn={handleSignIn} loading={authLoading} error={authError} />;
   if (identity.authenticated !== isAuthenticated || !identity.uuid) return <LoadingScreen />;
   return <AppProvider key={identity.uuid} userUuid={identity.uuid} getAccessToken={getAccessToken} getAuthSessionVersion={getAuthSessionVersion} onUnauthorized={onUnauthorized}><Navigation theme={theme} /></AppProvider>;

@@ -111,12 +111,19 @@ The zh copy uses 对话 for every Chat concept (the source of truth is the web a
   `borderCurve: "continuous"` where the platform supports it (iOS).
 - **Concentric corners.** A shape nested in another at an inset takes `outer = inner + inset`.
   A `Segmented` control is a capsule in a capsule, concentric at any height.
-- **Composer** is one 44 pt capsule (radius 22): `+` inside at the left, the field, then the trailing
-  control. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
-  Its 36 pt controls sit inset 4 pt, so their corners are concentric with the capsule. On iOS the `+` is a bare 20 pt glyph in a 36 pt target (a borderless SwiftUI menu), not a bordered circle. The model is a
+- **Composer** has two layouts, and `getComposerLayout` in `src/ui/composer-layout.ts` is the only place that decides which.
+  - **One row** (empty, or text that fits one line): a 48 pt capsule with its 36 pt controls centred: `+` at the left, the field, then the trailing control. The text sits 12 pt from the controls. Empty and idle it shows the mic; with text, send replaces the mic; while a turn runs, stop.
+  - **Fit:** a draft (or, when empty, the placeholder) that does not fit one line at the current text size goes to two rows. The inline row holds 30 columns at the default size and `30 ÷ scale` at a larger one, because the controls keep their width and the glyphs grow. A two-row line holds twice that. The wrap is decided at the inline width; the field's height is sized at the full two-row width. Typed text uses the native measurement. A draft set without typing is estimated, so the wrap and the height do not depend on a native value measured in the other row.
+  - **Two rows** (text that wraps or has a newline, or an expanded field): row 1 is the field alone, full width, its text 14 pt from the capsule's edges and 10 pt above and below (scaled). Row 2 is a fixed 44 pt control row with the 36 pt controls centred: `+`, harness and model on the left, a flexible spacer, then expand and the trailing control on the right. A wrapped composer stays in two rows until its draft is cleared, so the wider row cannot flip it back to one line.
+  - **Height:** collapsed, the field is at most three lines plus padding, or 120 pt at the default size, within 45% of the available height, and it shows whole lines only, collapsed and expanded alike: the text area is rounded down to a whole number of lines, with the padding outside it. The text box runs 0.08 line past those lines, so a line that does not fit is clipped in the gap between two lines (measured on the iOS stills). The rest scrolls.
+  - **Dynamic Type:** the one-row gap and the vertical text padding scale with the text size. The two-row side inset stays 14 pt, so wrapped text keeps full width at every size. The controls, the 44 pt row and the 48 pt one-row height do not scale; the capsule grows with its text.
+  - **Corner radius** follows the drawn height: `min(height / 2, 24)`, with `borderCurve: "continuous"`. One row is fully round. Two rows keep the 24 pt corner, and their bottom controls sit 4 pt in, about 2 pt inside a concentric arc. Liquid, frosted and solid glass take the same radius.
+  - **Bottom gap:** the composer sits the same distance above the bottom edge as the floating tab bar (`floatingBarBottomOffset` in `src/ui/floating-bar.ts`, 20 pt with an iPhone home-indicator inset). The chat footer reserves that gap plus the 56 pt chrome above it (`collapsedComposerHeight`).
+  - The `bot` variant has no harness or model, so its row 2 is `+` left and expand/send right.
+  - On iOS the `+` is a bare 20 pt glyph in a 36 pt target (a borderless SwiftUI menu), not a bordered circle. The model is a
   36 pt sparkles control, like the harness, that opens the picker; its availability is an 8 pt dot badge
   on its top-right corner, shown only when the status is known. Its label keeps the name, thinking level
-  and status. At 402 pt the field keeps about 250 pt. Web has no mic, so its send stays visible and disabled.
+  and status. Web has no mic, so its send stays visible and disabled.
 - **Type ramp** (size/line height; `caption` defaults to 500 and `micro` to 600 so small text stays legible, and a `font-*` class overrides either):
 
 | Token | Size | Use |
