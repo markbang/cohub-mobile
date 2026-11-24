@@ -1,4 +1,4 @@
-import type { BillingCreditStatus, BillingSubscriptionHistoryList, ModelStatusResponse, PaletteOverviewResponse, SpaceRecord, UserActivityResponse, UserSessionListItem } from "@neta-art/cohub";
+import type { BillingCreditStatus, BillingSubscriptionHistoryList, ModelCatalogEntry, ModelStatusResponse, PaletteOverviewResponse, SpaceRecord, UserActivityResponse, UserSessionListItem } from "@neta-art/cohub";
 import { uiSnapshots } from "@/src/config";
 import type { SessionSeenState } from "@/src/data/chat-read-state";
 import type { SpaceSessionCount } from "@/src/data/space-session-counts";
@@ -6,7 +6,7 @@ import type { SessionView } from "@/src/data/types";
 import { FIXTURE_ACCOUNT } from "./account";
 import { FIXTURE_CREDITS, FIXTURE_SUBSCRIPTIONS, fixtureActivity } from "./activity";
 import { fixtureChats } from "./chats";
-import { FIXTURE_MODEL_STATUS, fixtureChatView, previewChatView, REAL_CHAT_ID } from "./session";
+import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, previewChatView, REAL_CHAT_ID } from "./session";
 import { FIXTURE_SPACE_SPECS, fixtureOverview, fixtureSpaces, fixtureSpaceSessionCounts } from "./spaces";
 
 /**
@@ -23,6 +23,7 @@ export type FixtureSeed = {
   sessions: UserSessionListItem[];
   sessionSeen: SessionSeenState;
   sessionViews: Record<string, SessionView>;
+  models: ModelCatalogEntry[];
   modelStatus: ModelStatusResponse;
   overview: PaletteOverviewResponse;
   spaceSessionCounts: Record<string, SpaceSessionCount>;
@@ -56,6 +57,7 @@ function buildSeed(now: number): FixtureSeed {
     sessions,
     sessionSeen: seen,
     sessionViews,
+    models: FIXTURE_MODELS,
     modelStatus: FIXTURE_MODEL_STATUS,
     overview: fixtureOverview(spaces, now),
     spaceSessionCounts: fixtureSpaceSessionCounts(sessions.map((session) => session.spaceId)),

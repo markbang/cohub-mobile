@@ -1,4 +1,4 @@
-import type { ContentBlock, ModelStatusResponse, SessionRecord, SessionTurnRecord, SpaceRecord } from "@neta-art/cohub";
+import type { ContentBlock, ModelCatalogEntry, ModelStatusResponse, SessionRecord, SessionTurnRecord, SpaceRecord } from "@neta-art/cohub";
 import { messagesFromTurns } from "@/src/data/session-history";
 import type { SessionView } from "@/src/data/types";
 
@@ -30,18 +30,24 @@ type TurnSpec = {
   toolCallCount: number;
 };
 
-/** The Chat screen's model status for the Chats' model, which is operational. */
+/** The models the Chats run and the composer offers; `claude-sonnet` is the Model the seeded Turns record. */
+export const FIXTURE_MODELS: ModelCatalogEntry[] = [
+  { provider: "cohub", id: "claude-sonnet", model: { name: "Claude Sonnet", contextWindow: 200_000, reasoning: true, cost: { input: 3, output: 15 } } },
+  { provider: "cohub", id: "claude-haiku", model: { name: "Claude Haiku", contextWindow: 200_000, reasoning: false, cost: { input: 1, output: 5 } } },
+];
+
+/** The Chat screen's model status: every seeded model is operational, and `modelAvailabilityLevel` reads its 5-minute success rate in percent. */
 export const FIXTURE_MODEL_STATUS: ModelStatusResponse = {
   generatedAt: new Date(0).toISOString(),
   overallStatus: "operational",
   models: {
     "claude-sonnet": {
       status: "operational",
-      successRate5m: 1,
-      successRateRecent: 1,
+      successRate5m: 100,
+      successRateRecent: 100,
       successRateRecentWindowMinutes: 5,
-      successRate2h: 1,
-      successRate24h: 1,
+      successRate2h: 100,
+      successRate24h: 100,
       latencyAvgMs: 1200,
       latencyP90Ms: 2400,
       checkedAt: null,

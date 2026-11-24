@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { fixtureChats } from "../src/data/fixtures/chats.ts";
 import { FIXTURE_ACCOUNT } from "../src/data/fixtures/account.ts";
 import { fixtureActivity, FIXTURE_SUBSCRIPTIONS } from "../src/data/fixtures/activity.ts";
-import { fixtureChatView, REAL_CHAT_ID } from "../src/data/fixtures/session.ts";
+import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, REAL_CHAT_ID } from "../src/data/fixtures/session.ts";
 import { fixtureSpaces } from "../src/data/fixtures/spaces.ts";
 import { isSessionUnread } from "../src/data/chat-read-state.ts";
+import { modelAvailabilityLevel } from "../src/model-catalog.ts";
 
 const DAY_MS = 86_400_000;
 const now = Date.parse("2026-11-24T04:00:00Z");
@@ -34,3 +35,6 @@ const totals = new Set(activity.hourly.map((bucket) => bucket.totalTokens));
 assert.ok(totals.size > 3, "the heatmap's usage varies");
 assert.equal(FIXTURE_SUBSCRIPTIONS.items.length, 0, "the Activity page has no active subscription");
 assert.ok(FIXTURE_ACCOUNT.name && FIXTURE_ACCOUNT.email && FIXTURE_ACCOUNT.avatar.startsWith("data:image/png;base64,"), "the Settings card has a name, an email and an avatar");
+assert.ok(FIXTURE_MODELS.length >= 2, "the composer offers more than one model");
+assert.equal(modelAvailabilityLevel(FIXTURE_MODEL_STATUS.models["claude-sonnet"]), "available", "the Chats' model reads as available, not as an outage");
+assert.ok(FIXTURE_MODELS.some((entry) => entry.id === "claude-sonnet"), "the Chats' recorded model is in the catalog");

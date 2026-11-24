@@ -3009,7 +3009,7 @@ export function usePersonalSpaceActivity(userUuid: string) {
 
 /** Reads the catalog `loadModels`/`loadModelStatus` fill; it never fetches on its own. */
 export function useModelCatalog() {
-  const models = useQuery<ChatModelCatalogItem[]>({ queryKey: MODELS_KEY, enabled: false });
+  const models = useQuery<ChatModelCatalogItem[]>({ queryKey: MODELS_KEY, enabled: false, initialData: usesFixtures() ? fixtureSeed().models : undefined });
   const status = useQuery<ModelStatusResponse | null>({ queryKey: MODEL_STATUS_KEY, enabled: false, initialData: usesFixtures() ? fixtureSeed().modelStatus : undefined });
   return {
     models: models.data ?? [],
