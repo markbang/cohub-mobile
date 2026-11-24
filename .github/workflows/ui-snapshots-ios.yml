@@ -1,9 +1,11 @@
 name: UI Snapshots (iOS)
 
 # Captures the screens on an iOS simulator, the reference for ui-snapshots-android.yml. A prepare job
-# builds the simulator app once per native fingerprint and caches it; each target then captures in its
-# own job, so phone and tablet run side by side. The simulator app is cached by native fingerprint and
-# loads the branch's JS from Metro, so a JS-only change skips the native build.
+# builds the simulator app once per native fingerprint, caches it and plans the capture jobs
+# (`scripts/ui-snapshots.mjs plan`). Each job captures one slice of one target on its own simulator, so
+# the jobs run side by side. A merge job combines them into the `ui-snapshots-ios` (phone) and
+# `ui-snapshots-ios-tablet` artifacts. The simulator app is cached by native fingerprint and loads the
+# branch's JS from Metro, so a JS-only change skips the native build.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +24,7 @@ on:
         default: true
         type: boolean
       target:
-        description: The device classes, comma-separated (phone, tablet, or phone,tablet). Each target captures in its own job, and the jobs run in parallel. tablet runs the split layout in both orientations, then the e2e/tablet flow.
+        description: The device classes, comma-separated (phone, tablet, or phone,tablet). The screens are sliced into jobs that run in parallel (see the plan step). tablet runs the split layout in both orientations, then the e2e/tablet flow.
         required: false
         default: phone
         type: string
@@ -63,9 +65,6 @@ env:
   EXPO_PUBLIC_COHUB_ENV: dev
   E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
-  SCREENS_ARG: ${{ inputs.screens && format('--screens {0}', inputs.screens) || '' }}
-  MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
-  ORIENTATIONS_ARG: ${{ inputs.orientations && format('--orientations {0}', inputs.orientations) || '' }}
   OFFLINE_ARG: ${{ inputs.offline && '--offline' || '' }}
   # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
@@ -81,13 +80,12 @@ jobs:
       group: ui-snapshots-ios-app-${{ github.ref }}
       cancel-in-progress: false
     outputs:
-      targets: ${{ steps.targets.outputs.targets }}
+      shards: ${{ steps.plan.outputs.shards }}
       key: ${{ steps.app.outputs.cache-primary-key }}
       built: ${{ steps.app.outputs.cache-hit != 'true' }}
     steps:
       # Fails the run before any build when the target input is not phone, tablet, or both.
       - name: Targets
-        id: targets
         env:
           TARGET: ${{ inputs.target }}
         run: |
@@ -96,7 +94,6 @@ jobs:
             echo "::error::target must be phone, tablet, or phone,tablet; got \"$TARGET\"."
             exit 1
           fi
-          echo "targets=$targets" >> "$GITHUB_OUTPUT"
           echo "Capture targets: $targets"
 
       - name: Checkout
@@ -104,6 +101,25 @@ jobs:
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
+
+      - name: Plan capture jobs
+        id: plan
+        env:
+          TARGET: ${{ inputs.target }}
+          SCREENS: ${{ inputs.screens }}
+          ORIENTATIONS: ${{ inputs.orientations }}
+          THEMES: ${{ inputs.themes }}
+          TEXT_SIZE: ${{ inputs.text_size }}
+          MOTION: ${{ inputs.motion }}
+          PERF: ${{ inputs.perf }}
+        run: |
+          args=(--target "$TARGET" --themes "$THEMES" --text-size "$TEXT_SIZE" --perf "$PERF")
+          if [ -n "$SCREENS" ]; then args+=(--screens "$SCREENS"); fi
+          if [ -n "$ORIENTATIONS" ]; then args+=(--orientations "$ORIENTATIONS"); fi
+          if [ "$MOTION" != "true" ]; then args+=(--no-motion); fi
+          shards=$(node scripts/ui-snapshots.mjs plan "${args[@]}")
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+          echo "$shards" | jq -r '.[] | "\(.artifact): \(.target) \(.orientation) \(.part), \(.screens | length) screens"'
 
       - name: Native fingerprint
         id: fingerprint
@@ -162,17 +178,17 @@ jobs:
           retention-days: 1
 
   capture:
-    name: iOS simulator (${{ matrix.target }})
+    name: iOS ${{ matrix.target }} ${{ matrix.orientation }} ${{ matrix.part }} (${{ matrix.shard }})
     needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(needs.prepare.outputs.targets) }}
+        include: ${{ fromJSON(needs.prepare.outputs.shards) }}
     runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
     timeout-minutes: 120
-    # Each target has its own group, so the matrix legs never share one. Nothing is cancelled: a re-dispatch waits for the running capture.
+    # Each job has its own group, so the jobs never share one. Nothing is cancelled: a re-dispatch waits for the running capture.
     concurrency:
-      group: ui-snapshots-ios-${{ matrix.target }}-${{ inputs.text_size }}-${{ github.ref }}
+      group: ui-snapshots-ios-${{ matrix.artifact }}-${{ inputs.text_size }}-${{ github.ref }}
       cancel-in-progress: false
     steps:
       - name: Checkout
@@ -219,12 +235,14 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ github.run_id }}
+          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
             metro-${{ runner.os }}-${{ matrix.target }}-
 
       - name: Capture
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ matrix.target }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG $OFFLINE_ARG
+        env:
+          SCREENS_ARG: ${{ join(matrix.screens, ',') && format('--screens {0}', join(matrix.screens, ',')) || '' }}
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ matrix.target }}" --orientations "${{ matrix.orientation }}" --part "${{ matrix.part }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $OFFLINE_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -236,7 +254,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.target == 'tablet' && 'ui-snapshots-ios-tablet' || 'ui-snapshots-ios' }}
+          name: ${{ matrix.artifact }}
           path: |
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
@@ -251,4 +269,54 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ github.run_id }}
+          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}
+
+  # Runs when a capture job failed, so the jobs that passed stay downloadable. Missing captures are listed in
+  # MISSING.txt in their artifact, and the merge fails the run.
+  merge:
+    name: iOS snapshots (merged)
+    needs: [prepare, capture]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # A run whose jobs all failed uploads nothing; the merge then lists every capture as missing.
+      - name: Download captures
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ui-snapshots-ios{,-tablet}-[0-9]*
+          path: dist/ui-snapshots/shards
+
+      - name: Merge captures
+        env:
+          PLAN: ${{ needs.prepare.outputs.shards }}
+          THEMES: ${{ inputs.themes }}
+          TEXT_SIZE: ${{ inputs.text_size }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PLAN" > plan.json
+          node scripts/ui-snapshots.mjs merge --plan plan.json --shards dist/ui-snapshots/shards --out dist/ui-snapshots/merged --themes "$THEMES" --text-size "$TEXT_SIZE"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-ios
+          path: dist/ui-snapshots/merged/ui-snapshots-ios
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Upload tablet screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-ios-tablet
+          path: dist/ui-snapshots/merged/ui-snapshots-ios-tablet
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 7

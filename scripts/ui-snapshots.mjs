@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, join, relative, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 /**
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
@@ -8,9 +9,15 @@ import { basename, join, relative, resolve } from "node:path";
  *
  *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
  *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
- *           [--target phone,tablet] [--text-size default,accessibility-large] [--offline]
+ *           [--target phone,tablet] [--text-size default,accessibility-large] [--offline] [--part screens|flow|motion|perf]
  *           (--target and --text-size take comma lists; every cell runs in this one process, with one Metro)
  *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
+ *           (--part runs one slice of the target's work: its screens, the split flows, the motion recordings
+ *            (--screens then names the interactions) or the perf runs. Without --part every slice runs.)
+ *   plan --target phone,tablet [--orientations ...] [--screens ...] [--themes ...] [--text-size ...] [--no-motion] [--perf runs]
+ *           prints the capture jobs as JSON, each one a --part slice that fits one job's budget
+ *   merge --plan <plan.json> --shards <dir> [--out dir] [--themes ...] [--text-size ...]
+ *           combines the jobs' directories into one per artifact; names what a missing job did not capture
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *   boot --platform ios --target phone|tablet   (starts the simulator's boot and returns; capture waits for it)
@@ -203,13 +210,77 @@ export const MOTIONS = [
   { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
 ];
 
+const ARTIFACTS = { phone: "ui-snapshots-ios", tablet: "ui-snapshots-ios-tablet" };
+const PARTS = ["screens", "flow", "motion", "perf"];
+const DEFAULT_ORIENTATIONS = { phone: ["portrait"], tablet: ["portrait", "landscape"] };
+// Seconds of capture per job, measured on run 45462974741 (one light theme, offline): a phone screen takes
+// about 13 s, a tablet screen 19 s in portrait and 22 s in landscape. A job holds at most SHARD_CAPTURE_SECONDS
+// of it, so the default list is six jobs (phone 2, tablet portrait 1, tablet landscape 2, split flows 1).
+// Every job also pays a fixed cost before its first capture (dependencies, app, driver, first bundle).
+const SHARD_CAPTURE_SECONDS = 360;
+const SECONDS_PER_SCREEN = { "phone-portrait": 13, "tablet-portrait": 19, "tablet-landscape": 22 };
+// An estimate: no run has timed the motion recordings yet.
+const SECONDS_PER_MOTION = 25;
+
 function list(value) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+/** Splits `items` into contiguous slices of near-equal size, as many as `seconds` of work needs at SHARD_CAPTURE_SECONDS each. */
+function splitByBudget(items, seconds) {
+  if (items.length === 0) return [];
+  const count = Math.min(items.length, Math.max(1, Math.ceil(seconds / SHARD_CAPTURE_SECONDS)));
+  let start = 0;
+  return Array.from({ length: count }, (_, index) => {
+    const size = Math.floor(items.length / count) + (index < items.length % count ? 1 : 0);
+    const slice = items.slice(start, start + size);
+    start += size;
+    return slice;
+  });
+}
+
+/**
+ * The capture jobs for one run, in matrix order. Each is one `--part` slice: its target, orientation, the part, and the
+ * names that part captures (screens, or motion interactions). `artifact` is the name its directory uploads under.
+ */
+export function planShards({ targets, orientations = null, screens = null, themes, textSizes, motion, perf }) {
+  const units = [];
+  for (const target of ["phone", "tablet"].filter((name) => targets.includes(name))) {
+    const catalog = target === "tablet" ? TABLET_SCREENS : SCREENS;
+    const names = (screens ? catalog.filter((screen) => screens.includes(screen.name)) : catalog).map((screen) => screen.name);
+    // A run that names only another target's screens has nothing for this one.
+    if (names.length === 0) continue;
+    for (const orientation of orientations ?? DEFAULT_ORIENTATIONS[target]) {
+      const seconds = SECONDS_PER_SCREEN[`${target}-${orientation}`] * themes.length * textSizes.length;
+      for (const slice of splitByBudget(names, names.length * seconds)) units.push({ target, orientation, part: "screens", screens: slice });
+    }
+    if (target === "tablet" && !screens && textSizes.includes("default")) units.push({ target, orientation: "portrait", part: "flow", screens: [] });
+    if (target === "phone" && motion && textSizes.includes("default")) {
+      const interactions = MOTIONS.map((interaction) => interaction.name);
+      for (const slice of splitByBudget(interactions, interactions.length * SECONDS_PER_MOTION)) units.push({ target, orientation: "portrait", part: "motion", screens: slice });
+    }
+    if (perf > 0) units.push({ target, orientation: "portrait", part: "perf", screens: [] });
+  }
+  return units.map((unit, shard) => ({ shard, artifact: `${ARTIFACTS[unit.target]}-${shard}`, ...unit }));
+}
+
+/**
+ * The files one job leaves in the run's layout, relative to the run's root. A path ending in "/" is a directory: the
+ * split flows name their screenshots in the flow file, so only their directory is known here.
+ */
+export function expectedOutputs(entry, { themes, textSizes }) {
+  if (entry.part === "screens") {
+    const prefix = entry.target === "phone" ? "" : `${entry.target}-${entry.orientation}/`;
+    return textSizes.flatMap((size) => themes.flatMap((theme) => entry.screens.map((name) => `${prefix}${theme}${size === "default" ? "" : `-${size}`}/${name}.png`)));
+  }
+  if (entry.part === "motion") return entry.screens.map((name) => `motion/${name}.mp4`);
+  if (entry.part === "perf") return [`perf/${entry.target}-${entry.orientation}.json`];
+  return ["tablet-flow/"];
+}
+
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: ["default"], offline: false };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: ["default"], offline: false, part: null, plan: null, shards: null };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -232,23 +303,24 @@ function parseArgs(argv) {
     else if (flag === "--dir") options.dir = resolve(value());
     else if (flag === "--text-size") options.textSizes = list(value());
     else if (flag === "--offline") options.offline = true;
+    else if (flag === "--part") options.part = value();
+    else if (flag === "--plan") options.plan = resolve(value());
+    else if (flag === "--shards") options.shards = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
   }
+  if (options.part !== null && !PARTS.includes(options.part)) throw new Error(`--part must be one of ${PARTS.join(", ")}.`);
+  if (command === "capture" || command === "plan") checkSelection(options);
   if (command === "capture") {
     if (options.platform !== "android" && options.platform !== "ios") throw new Error("--platform must be android or ios.");
     if (!options.app || !existsSync(options.app)) throw new Error("--app must point to a built debug APK (Android) or simulator .app/.zip (iOS).");
-    for (const theme of options.themes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown theme "${theme}". Use light and/or dark.`);
-    if (options.targets.length === 0 || options.targets.some((target) => target !== "phone" && target !== "tablet")) throw new Error("--target must be phone, tablet, or a comma list of both.");
-    for (const target of options.targets) for (const orientation of options.orientations ?? []) if (!SIZE_BANDS[`${target}-${orientation}`]) throw new Error(`The ${target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
-    if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
-    if (options.textSizes.length === 0 || options.textSizes.some((size) => !(size in TEXT_SIZES))) throw new Error(`Unknown --text-size. Use a comma list of ${Object.keys(TEXT_SIZES).join(", ")}.`);
     if (options.platform === "android" && options.textSizes.some((size) => size !== "default")) throw new Error("--text-size is set on iOS only; Android captures at its default font scale.");
-    if (options.perf > 0 && (options.targets.length > 1 || options.textSizes.length > 1)) throw new Error("--perf runs one target at one text size.");
     if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
     if (options.offline && options.platform === "android") throw new Error("--offline is iOS only for now: the Android flows still sign in.");
-    const known = new Set([...SCREENS, ...TABLET_SCREENS].map((screen) => screen.name));
-    for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
     options.out ??= resolve("dist/ui-snapshots", options.platform);
+  } else if (command === "plan") {
+  } else if (command === "merge") {
+    if (!options.plan || !options.shards) throw new Error("merge needs --plan <plan.json> and --shards <dir>.");
+    options.out ??= resolve("dist/ui-snapshots/merged");
   } else if (command === "compare") {
     if (!options.ios || !options.android) throw new Error("compare needs --ios <dir> and --android <dir>.");
     options.out ??= resolve("dist/ui-snapshots/pairs");
@@ -258,9 +330,25 @@ function parseArgs(argv) {
     if (options.platform !== "ios") throw new Error("boot is for --platform ios.");
     if (options.targets.length !== 1) throw new Error("boot takes one --target: phone or tablet.");
   } else {
-    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|compare|redact|boot [options]. See the header of this file.");
+    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|plan|merge|compare|redact|boot [options]. See the header of this file.");
   }
   return options;
+}
+
+/** The selection shared by capture and plan: targets, orientations, themes, text sizes, perf and the named screens or interactions. */
+function checkSelection(options) {
+  if (options.targets.length === 0 || options.targets.some((target) => target !== "phone" && target !== "tablet")) throw new Error("--target must be phone, tablet, or a comma list of both.");
+  for (const target of options.targets) for (const orientation of options.orientations ?? []) if (!SIZE_BANDS[`${target}-${orientation}`]) throw new Error(`The ${target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
+  for (const theme of options.themes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown theme "${theme}". Use light and/or dark.`);
+  if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
+  if (options.textSizes.length === 0 || options.textSizes.some((size) => !(size in TEXT_SIZES))) throw new Error(`Unknown --text-size. Use a comma list of ${Object.keys(TEXT_SIZES).join(", ")}.`);
+  if (options.perf > 0 && (options.targets.length > 1 || options.textSizes.length > 1)) throw new Error("--perf runs one target at one text size.");
+  if (options.part === "perf" && options.perf < 1) throw new Error("--part perf needs --perf <runs>.");
+  if (options.part === "flow" && options.targets.some((target) => target !== "tablet")) throw new Error("--part flow is for --target tablet.");
+  if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
+  const interactions = options.part === "motion";
+  const known = new Set((interactions ? MOTIONS : [...SCREENS, ...TABLET_SCREENS]).map((item) => item.name));
+  for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown ${interactions ? "interaction" : "screen"} "${name}". Known: ${[...known].join(", ")}.`);
 }
 
 function run(command, args, options = {}) {
@@ -556,36 +644,134 @@ function findFile(root, name) {
 }
 
 const MAESTRO_ATTEMPT_MS = 30 * 60 * 1000;
+const DRIVER_NOT_READY = "iOS driver not ready in time";
+const RUNNING_ON = "Running on ";
+const DRIVER_ATTEMPTS = 3;
+const FLOW_ATTEMPTS = 3;
+const RETRY_PAUSE_MS = 15_000;
+const DRIVER_LINE = /xctest|xcodebuild|xcuitest|driver|simctl|simulator|exception|error/i;
 
-function runMaestro({ device, flowPath, out, testOutput, offline = false }) {
+/**
+ * Runs one `maestro test` and reports how it went. Its output is copied to this process as it arrives. `started` is
+ * true once Maestro names the device it runs on, which it does only after the driver answers; a start that never gets
+ * there is killed after the driver's own timeout plus two minutes.
+ */
+export function launchMaestro(args, cwd, device) {
+  const watchdogMs = (Number(process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT) || 240_000) + 120_000;
+  return new Promise((resolveAttempt, reject) => {
+    const started = Date.now();
+    let output = "";
+    let upAt = null;
+    let timedOut = false;
+    let driverHung = false;
+    const child = spawn("maestro", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const copy = (sink) => (text) => {
+      output += text;
+      sink.write(text);
+      if (upAt === null && output.includes(RUNNING_ON)) {
+        upAt = Date.now();
+        process.stdout.write(`Driver up on ${device} after ${((upAt - started) / 1000).toFixed(0)} s.\n`);
+      }
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", copy(process.stdout));
+    child.stderr.on("data", copy(process.stderr));
+    // A failed iOS `viewHierarchy` request can leave Maestro hung instead of exiting, so each attempt is capped.
+    const timers = [
+      setTimeout(() => {
+        timedOut = true;
+        child.kill("SIGKILL");
+      }, MAESTRO_ATTEMPT_MS),
+      setTimeout(() => {
+        if (upAt !== null) return;
+        driverHung = true;
+        child.kill("SIGKILL");
+      }, watchdogMs),
+    ];
+    child.on("error", (error) => {
+      timers.forEach(clearTimeout);
+      reject(error);
+    });
+    child.on("close", (status) => {
+      timers.forEach(clearTimeout);
+      resolveAttempt({ status, timedOut, driverHung, started: upAt !== null, output, seconds: (Date.now() - started) / 1000 });
+    });
+  });
+}
+
+/** A start that never reached the device: Maestro's startup timeout, or the watchdog. No step of the flow has run. */
+function driverNeverStarted(attempt) {
+  return !attempt.started && (attempt.driverHung || attempt.output.includes(DRIVER_NOT_READY));
+}
+
+/**
+ * Runs a flow until it passes or a budget runs out. A driver that never starts has run no step, so only its start is
+ * retried, on its own budget; a flow that fails after its driver came up is retried as a whole, as before.
+ */
+export async function runFlowWithRetries(launch, { describe, driverAttempts = DRIVER_ATTEMPTS, flowAttempts = FLOW_ATTEMPTS, pauseMs = RETRY_PAUSE_MS, pause = sleep, log = (text) => process.stdout.write(text) }) {
+  let drivers = 0;
+  let flows = 0;
+  for (;;) {
+    const attempt = await launch();
+    if (attempt.status === 0 && !attempt.timedOut) return { ok: true, attempt };
+    if (driverNeverStarted(attempt)) {
+      drivers += 1;
+      log(`Driver start ${drivers} of ${driverAttempts} failed on ${describe} after ${attempt.seconds.toFixed(0)} s; no step ran.${drivers < driverAttempts ? " Starting the driver again." : ""}\n`);
+      if (drivers === driverAttempts) return { ok: false, reason: "driver", attempt };
+    } else {
+      flows += 1;
+      log(`Maestro ${attempt.timedOut ? "timed out" : "failed"} on ${describe}.${flows < flowAttempts ? ` Retrying (attempt ${flows + 1} of ${flowAttempts}).` : ""}\n`);
+      if (flows === flowAttempts) return { ok: false, reason: "flow", attempt };
+    }
+    await pause(pauseMs);
+  }
+}
+
+/** The driver's own lines from a failed start: Maestro's output, the log files its debug output wrote, and the device's state. */
+function driverLogExcerpt({ output }, { udid, debugOutput, since, secrets }) {
+  const fromOutput = output.split("\n").filter((line) => !/^\s+at\s/.test(line) && DRIVER_LINE.test(line));
+  const logs = [...listFiles(debugOutput), ...listFiles(join(homedir(), ".maestro"))].filter((path) => path.endsWith(".log") && statSync(path).mtimeMs >= since);
+  const fromLogs = logs.flatMap((path) => readFileSync(path, "utf8").split("\n").filter((line) => DRIVER_LINE.test(line)).slice(-40).map((line) => `${basename(path)}: ${line}`));
+  const device = run("xcrun", ["simctl", "list", "devices"], { allowFailure: true }).split("\n").find((line) => line.includes(udid)) ?? `${udid} is not listed`;
+  return scrubSecrets([`device: ${device.trim()}`, ...fromOutput.slice(-25), ...fromLogs.slice(-40)].join("\n"), secrets);
+}
+
+async function runMaestro({ device, flowPath, out, testOutput, offline = false }) {
   const credentials = offline ? [] : ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
     const value = process.env[key]?.trim();
     if (!value) throw new Error(`${key} is required: every screen renders AuthScreen until a session exists (dev tenant account).`);
     return `${key}=${value}`;
   });
+  // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
+  const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
   const args = ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
-  // A failed iOS `viewHierarchy` request can leave Maestro hung instead of exiting, so each attempt is capped.
-  const run = () => spawnSync("maestro", args, { cwd: out, stdio: "inherit", timeout: MAESTRO_ATTEMPT_MS, killSignal: "SIGKILL" });
-  const timedOut = (value) => value.error?.code === "ETIMEDOUT";
-  let result = run();
-  // Maestro's on-device driver dies mid-run often enough on CI emulators that two retries are worth it,
-  // after a pause for the device to settle (as in scripts/e2e/android.mjs).
-  for (let attempt = 2; attempt <= 3 && (timedOut(result) || (!result.error && result.status !== 0)); attempt += 1) {
-    process.stdout.write(`Maestro ${timedOut(result) ? "timed out" : "failed"} on ${basename(flowPath)}; retrying (attempt ${attempt} of 3).\n`);
-    sleepSync(15_000);
-    result = run();
+  const describe = basename(flowPath);
+  const since = Date.now();
+  let outcome;
+  try {
+    outcome = await runFlowWithRetries(() => launchMaestro(args, out, device), { describe });
+  } finally {
+    redact(debugOutput, secrets);
+    redact(testOutput, secrets);
   }
-  // Maestro records `-e` values verbatim in commands.json and its logs, and this directory is uploaded.
-  const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
-  redact(debugOutput, secrets);
-  redact(testOutput, secrets);
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`Maestro failed on ${basename(flowPath)}. Its screenshots and view hierarchy are in ${debugOutput}.`);
+  if (outcome.ok) return;
+  if (outcome.reason === "driver") {
+    const excerpt = driverLogExcerpt(outcome.attempt, { udid: device, debugOutput, since, secrets });
+    throw new Error(`Maestro's driver did not start on ${device} in ${DRIVER_ATTEMPTS} attempts (${describe}). Driver log:\n${excerpt}`);
+  }
+  throw new Error(`Maestro failed on ${describe}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
 
 const MAX_REDACTED_BYTES = 32 * 1024 * 1024;
+
+/** XCTest types the first character on its own and logs the remaining text, so each secret is scrubbed in both forms. */
+function scrubSecrets(text, secrets) {
+  const variants = secrets.flatMap((secret) => [secret, secret.slice(1)]).filter((value) => value.length >= 4).sort((a, b) => b.length - a.length);
+  return variants.reduce((clean, secret) => clean.split(secret).join("***"), text);
+}
 
 function redact(root, secrets) {
   if (!existsSync(root)) return;
@@ -605,9 +791,7 @@ function redact(root, secrets) {
         continue;
       }
       const source = readFileSync(path, "utf8");
-      // XCTest types the first character on its own and logs the remaining text.
-      const variants = secrets.flatMap((secret) => [secret, secret.slice(1)]).filter((value) => value.length >= 4).sort((a, b) => b.length - a.length);
-      const clean = variants.reduce((text, secret) => text.split(secret).join("***"), source);
+      const clean = scrubSecrets(source, secrets);
       if (clean !== source) writeFileSync(path, clean);
     }
   }
@@ -792,12 +976,25 @@ async function capture(options) {
   process.stdout.write(`Captured ${cells} cells (${options.targets.join(", ")} × ${options.textSizes.join(", ")}) in ${options.out}\n`);
 }
 
-/** One device at one text size: the screens in each orientation and theme, then the target's extras. */
+/** The slices one capture runs: a `--part`, or without one every slice the target has in this run. */
+function partsFor(options, screens) {
+  if (options.part) return [options.part];
+  if (options.screens && screens.length === 0) return [];
+  return ["screens", ...(options.target === "tablet" && !options.screens ? ["flow"] : []), ...(options.motion ? ["motion"] : []), ...(options.perf > 0 ? ["perf"] : [])];
+}
+
+/** One device at one text size: the screens in each orientation and theme, then the slices the target has beyond them. */
 async function captureCell(options, session, missing) {
   const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
   const screens = options.screens ? catalog.filter((screen) => options.screens.includes(screen.name)) : catalog;
-  // A run that names only another target's screens has nothing for this one.
-  if (options.screens && screens.length === 0) return 0;
+  const motions = options.part === "motion" && options.screens ? MOTIONS.filter((motion) => options.screens.includes(motion.name)) : MOTIONS;
+  const parts = partsFor(options, screens);
+  // The split flows and the motion recordings run once, at the default text size.
+  const doScreens = parts.includes("screens") && screens.length > 0;
+  const doFlow = parts.includes("flow") && options.target === "tablet" && options.textSize === "default";
+  const doMotion = parts.includes("motion") && options.target === "phone" && options.textSize === "default";
+  const doPerf = parts.includes("perf") && options.perf > 0;
+  if (!doScreens && !doFlow && !doMotion && !doPerf) return 0;
   const orientations = options.orientations ?? (options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"]);
   // Text sizes other than the default get their own theme directories, so every cell of a run survives.
   const suffix = options.textSize === "default" ? "" : `-${options.textSize}`;
@@ -806,7 +1003,7 @@ async function captureCell(options, session, missing) {
   // The phone keeps the original layout (`<theme>/`); other targets are grouped by device and orientation.
   const groupDirectory = (orientation) => options.target === "phone" ? options.out : join(options.out, `${options.target}-${orientation}`);
   try {
-    for (const orientation of orientations) {
+    for (const orientation of doScreens ? orientations : []) {
       const group = `${options.target}-${orientation}`;
       device.setOrientation(orientation);
       assertBand(group, device.logicalSize(orientation), options.platform === "android" ? "the emulator" : "the simulator");
@@ -820,7 +1017,7 @@ async function captureCell(options, session, missing) {
         writeFileSync(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
-        runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+        await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
         for (const screen of screens) {
           const file = `${screen.name}.png`;
           // Maestro may nest screenshots in a per-run folder under its test output directory.
@@ -830,8 +1027,7 @@ async function captureCell(options, session, missing) {
         }
       }
     }
-    // A `--screens` subset is a screenshot pass; the interaction flow runs with the full set.
-    if (options.target === "tablet" && !options.screens) {
+    if (doFlow) {
       const directory = join(options.out, "tablet-flow");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
@@ -841,33 +1037,33 @@ async function captureCell(options, session, missing) {
       writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
       for (const file of listFiles(testOutput).filter((path) => path.endsWith(".png"))) run("mv", [file, join(directory, basename(file))]);
     }
-    if (options.motion && options.target === "phone" && options.textSize === "default") {
+    if (doMotion) {
       const directory = join(options.out, "motion");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
       device.setTheme("light");
       device.setAnimations(true);
       const flowPath = join(options.out, "motion.yaml");
-      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions: MOTIONS }));
+      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
       const testOutput = join(options.out, "maestro-output", "motion");
       rmSync(testOutput, { recursive: true, force: true });
-      runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
       device.setAnimations(false);
-      for (const motion of MOTIONS) {
+      for (const motion of motions) {
         const file = `${motion.name}.mp4`;
         const found = findFile(testOutput, file);
         if (found) run("mv", [found, join(directory, file)]);
         else missing.push(`motion/${file}`);
       }
     }
-    if (options.perf > 0) await capturePerf(options, device, session);
+    if (doPerf) await capturePerf(options, device, session);
   } finally {
     device.restore();
   }
-  return screens.length > 0 ? 1 : 0;
+  return 1;
 }
 
 function listFiles(root) {
@@ -899,7 +1095,7 @@ async function capturePerf(options, device, session) {
       const testOutput = join(options.out, "maestro-output", `perf-${index}`);
       rmSync(testOutput, { recursive: true, force: true });
       const startedAt = new Date().toISOString();
-      runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
       runs.push({ run: index, startedAt, endedAt: new Date().toISOString() });
     }
   } finally {
@@ -994,10 +1190,76 @@ function pairMotion(options, unmatched) {
   return count;
 }
 
+function describeEntry(entry) {
+  const where = entry.target === "tablet" ? `tablet ${entry.orientation}` : "phone";
+  if (entry.part === "flow") return `${where} split flows`;
+  if (entry.part === "perf") return `${where} perf runs`;
+  return `${where} ${entry.part}: ${entry.screens.join(", ")}`;
+}
+
+/** Diagnostics stay out of the layout that compare reads: Maestro's output, its debug logs and the flow files. */
+function isDiagnostic(name) {
+  return name === "maestro-output" || name === "maestro-debug" || name.endsWith(".yaml");
+}
+
+/** Copies a file or directory tree; a file two jobs both wrote is an error, not an overwrite. */
+function copyTree(source, destination) {
+  if (statSync(source).isDirectory()) {
+    mkdirSync(destination, { recursive: true });
+    for (const name of readdirSync(source)) copyTree(join(source, name), join(destination, name));
+    return;
+  }
+  if (existsSync(destination)) throw new Error(`Two jobs wrote ${destination}.`);
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(source, destination);
+}
+
+/**
+ * Combines the jobs' directories into one per artifact, in the layout compare reads. A job that did not upload, or
+ * uploaded without one of its files, is listed in MISSING.txt in its artifact and fails the command after the copy.
+ */
+function merge(options) {
+  const plan = JSON.parse(readFileSync(options.plan, "utf8"));
+  rmSync(options.out, { recursive: true, force: true });
+  const roots = Object.fromEntries([...new Set(plan.map((entry) => entry.target))].map((target) => [target, join(options.out, ARTIFACTS[target])]));
+  for (const root of Object.values(roots)) mkdirSync(root, { recursive: true });
+  const missing = Object.fromEntries(Object.keys(roots).map((target) => [target, []]));
+  for (const entry of plan) {
+    const root = roots[entry.target];
+    const source = join(options.shards, entry.artifact);
+    if (!existsSync(source)) {
+      missing[entry.target].push(`${entry.artifact} did not upload; it owned ${describeEntry(entry)}`);
+      continue;
+    }
+    for (const name of readdirSync(source)) copyTree(join(source, name), isDiagnostic(name) ? join(root, "diagnostics", entry.artifact, name) : join(root, name));
+    for (const path of expectedOutputs(entry, options)) {
+      const found = path.endsWith("/") ? existsSync(join(root, path)) && statSync(join(root, path)).isDirectory() : existsSync(join(root, path));
+      if (!found) missing[entry.target].push(`${path} is missing from ${entry.artifact} (${describeEntry(entry)})`);
+    }
+  }
+  let count = 0;
+  for (const [target, root] of Object.entries(roots)) {
+    const lines = missing[target];
+    count += lines.length;
+    if (lines.length) writeFileSync(join(root, "MISSING.txt"), `${lines.join("\n")}\n`);
+    for (const line of lines) process.stdout.write(`Missing: ${line}\n`);
+  }
+  if (count) throw new Error(`${count} capture(s) are missing from the merged run; each is listed in MISSING.txt in its artifact.`);
+  process.stdout.write(`Merged ${plan.length} jobs into ${Object.values(roots).map((root) => relative(process.cwd(), root)).join(", ")}\n`);
+}
+
+function planCommand(options) {
+  const plan = planShards(options);
+  if (plan.length === 0) throw new Error(`Nothing to capture for --target ${options.targets.join(",")}${options.screens ? ` with --screens ${options.screens.join(",")}` : ""}.`);
+  process.stdout.write(`${JSON.stringify(plan)}\n`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.command === "capture") await capture(options);
+    else if (options.command === "plan") planCommand(options);
+    else if (options.command === "merge") merge(options);
     else if (options.command === "boot") bootSimulator(options.targets[0]);
     else if (options.command === "redact") redact(options.dir, ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => process.env[key]?.trim()).filter(Boolean));
     else compare(options);
