@@ -2,18 +2,18 @@ import type { ContentBlock, MessageRecord, SessionTurnRecord } from "@neta-art/c
 import { PixelRatio, Platform, processColor } from "react-native";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/src/normalizeMarkdownStyle";
 import type { TimelineAnimation, TimelineNode, TimelineTextStyle } from "@/modules/cohub-chat-timeline";
-import { DETAIL_SEPARATOR, deliveredLift, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon } from "@/src/components/MessageContent";
+import { DETAIL_SEPARATOR, deliveredLift, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon, toolVerb } from "@/src/components/MessageContent";
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
-import { answerBlocks, thinkingBlocks, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
-import { formatMessageClock, formatThreadTime } from "@/src/data/chat-format";
+import { answerBlocks, streamingSteps, thinkingBlocks, turnProcessSummary, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
+import { formatElapsed, formatMessageClock, formatThreadTime } from "@/src/data/chat-format";
 import { compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { imageThumbnailUrl } from "@/src/data/media";
 import { messageMarkdownImages } from "@/src/data/message-links";
 import type { RelatedSessionView } from "@/src/data/related-sessions";
 import { isFailedSend } from "@/src/data/session-history";
-import { toolCallPreview } from "@/src/data/tool-call";
+import { changedFiles, diffRuns, summarizeToolCall, toolInputDetails, type DiffLine, type LineDelta } from "@/src/data/tool-call";
 import { speechIcon, speechLabelKey, type TurnSpeechPhase } from "@/src/data/turn-speech";
 import type { StreamView } from "@/src/data/types";
 import { BRAND, MASCOT_PATHS } from "@/src/design/brand";
@@ -146,39 +146,74 @@ function pressable(node: Omit<Extract<TimelineNode, { type: "view" }>, "type">, 
   return { type: "view", pressedOpacity, accessibilityRole: "button", ...node };
 }
 
+const MONO_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
+
+/** The faint wash inline code sits on, for a tool's target and a changed file. */
+function chipWash(theme: AppTheme) {
+  return colorWithOpacity(theme.colors.text, theme.mode === "dark" ? 0.1 : 0.07);
+}
+
+function monoStyle(tint: string): TimelineTextStyle {
+  return { fontSize: scaleFontSize(12), lineHeight: scaleLineHeight(16), color: color(tint), fontFamily: MONO_FAMILY };
+}
+
+/** "+12 −3" in the diff colors; null when nothing changed. */
+function deltaRuns(ctx: NodeContext, delta: LineDelta | null, lead = "") {
+  if (!delta || (delta.added === 0 && delta.removed === 0)) return null;
+  return [
+    ...(delta.added ? [{ text: `${lead}+${delta.added}`, color: color(ctx.theme.colors.success) }] : []),
+    ...(delta.removed ? [{ text: `${delta.added || lead ? " " : ""}−${delta.removed}`, color: color(ctx.theme.colors.danger) }] : []),
+  ];
+}
+
+function diffNodes(ctx: NodeContext, diff: readonly DiffLine[]): TimelineNode[] {
+  const { colors } = ctx.theme;
+  return diffRuns(diff).map((run) => run.sign === "-"
+    ? codeText(ctx, run.text, colors.danger, colors.dangerSoft)
+    : run.sign === "+" ? codeText(ctx, run.text, colors.success, colors.successSoft) : codeText(ctx, run.text, colors.textMuted));
+}
+
 function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, { type: "tool_use" }>, result: Extract<ContentBlock, { type: "tool_result" }> | undefined, active: boolean, width: number): TimelineNode {
   const { theme, t } = ctx;
   const id = `tool:${scope}:${block.id}`;
   const expanded = ctx.expanded.has(id);
   const status = result ? result.is_error ? t("message.tool.status.error") : t("message.tool.status.done") : active ? t("message.tool.status.running") : t("message.tool.status.noResult");
   const iconColor = result?.is_error ? theme.colors.danger : active && !result ? theme.colors.accent : theme.colors.textMuted;
-  const preview = toolCallPreview(block.name, block.input);
-  const caption = preview ? `${block.name}: "${preview}"` : block.name;
-  const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
+  const summary = summarizeToolCall(block.name, block.input);
+  const verb = toolVerb(t, summary.kind, block.name);
+  const delta = deltaRuns(ctx, summary.delta);
   const label = (value: string, tint: string) => text(value, textStyle("micro", tint, { fontWeight: "600" }));
-  const lineStyle: TimelineTextStyle = { fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18), color: color(theme.colors.textMuted), ...(TEXT_FAMILY ? { fontFamily: TEXT_FAMILY } : null) };
+  const spoken = [`${verb} ${summary.path ?? summary.target}`.trim(), summary.delta && delta ? t("message.tool.lineDelta", { added: summary.delta.added, removed: summary.delta.removed }) : null, status].filter(Boolean).join(", ");
   const children: TimelineNode[] = [
     pressable({
-      id: `${id}:row`, action: "toggle", payload: { id }, accessibilityLabel: `${caption}: ${status}`, accessibilityState: { expanded }, pressedOpacity: 1,
+      id: `${id}:row`, action: "toggle", payload: { id }, accessibilityLabel: spoken, accessibilityState: { expanded }, pressedOpacity: 1,
       style: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 8 },
       children: [
         icon(toolIcon(block.name) as TimelineIconName, 14, iconColor),
-        { type: "text", text: lineStyle, numberOfLines: 1, style: { flex: 1 }, runs: [{ text: block.name, color: color(theme.colors.text), fontWeight: "500" }, ...(preview ? [{ text: `: "${preview}"` }] : [])] },
+        text(verb, textStyle("caption", theme.colors.text, { fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18), fontWeight: "500" }), { numberOfLines: 1, style: { flexShrink: 0, maxWidth: "45%" } }),
+        ...(summary.target ? [{
+          type: "view" as const, style: { flexShrink: 1, minWidth: 0, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: color(chipWash(theme)) },
+          children: [text(summary.target, monoStyle(theme.colors.textSecondary), { numberOfLines: 1 })],
+        }] : []),
+        { type: "view", style: { flex: 1, minWidth: 0 } },
+        ...(delta ? [{ type: "text" as const, text: { ...monoStyle(theme.colors.textMuted), fontVariant: ["tabular-nums"] }, runs: delta, numberOfLines: 1, style: { flexShrink: 0 } }] : []),
       ],
     }),
   ];
   if (expanded) {
     const inner = Math.max(0, width - 21);
+    const details = toolInputDetails(block.name, block.input);
+    const input = [
+      ...(details.primary ? [codeText(ctx, details.primary, theme.colors.text)] : []),
+      ...details.diffs.flatMap((diff) => diffNodes(ctx, diff)),
+      ...(details.body !== null ? [codeText(ctx, details.body, theme.colors.text)] : []),
+      ...(details.rest ? [codeText(ctx, details.rest, theme.colors.textSecondary)] : []),
+    ];
     children.push({
       type: "scroll", id: `${id}:details`, style: { maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 },
       contentStyle: { gap: 8, borderLeftWidth: STEP_RULE, borderLeftColor: color(theme.colors.border), paddingLeft: 12, paddingRight: 8 },
       children: [
-        label(t("message.tool.input"), theme.colors.textMuted),
-        codeText(ctx, JSON.stringify(block.input, null, 2), theme.colors.text),
-        ...edits.flatMap((edit) => [
-          codeText(ctx, edit.oldText.split("\n").map((line) => `- ${line}`).join("\n"), theme.colors.danger, theme.colors.dangerSoft),
-          codeText(ctx, edit.newText.split("\n").map((line) => `+ ${line}`).join("\n"), theme.colors.success, theme.colors.successSoft),
-        ]),
+        ...(input.length ? [label(t("message.tool.input"), theme.colors.textMuted), ...input] : []),
         ...(result ? [{
           type: "view" as const, style: { gap: 8 },
           children: [
@@ -191,6 +226,21 @@ function toolCall(ctx: NodeContext, scope: string, block: Extract<ContentBlock, 
   }
   // Android scroll views clip only inside a clipping parent.
   return { type: "view", id, style: { width, overflow: "hidden" }, children };
+}
+
+/** The files a Turn's steps changed, as wrapping chips: the name and its line delta. */
+function changedFilesNode(ctx: NodeContext, blocks: readonly ContentBlock[]): TimelineNode | null {
+  const files = changedFiles(blocks);
+  if (files.length === 0) return null;
+  const { theme, t } = ctx;
+  return {
+    type: "view", style: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+    children: files.map((file) => ({
+      type: "view", accessibilityLabel: `${file.path}: ${t("message.tool.lineDelta", { added: file.delta.added, removed: file.delta.removed })}`,
+      style: { maxWidth: "100%", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: color(chipWash(theme)) },
+      children: [{ type: "text", text: { ...monoStyle(theme.colors.textSecondary), fontVariant: ["tabular-nums"] }, numberOfLines: 1, runs: [{ text: file.name }, ...(deltaRuns(ctx, file.delta, " ") ?? [])] }],
+    })),
+  };
 }
 
 /** A gallery thumbnail's corner; the image viewer starts from it. */
@@ -454,17 +504,28 @@ export function compactionNode(ctx: NodeContext, key: string, info: CompactionIn
   };
 }
 
-/** `ProcessDisclosure`: a capsule that opens the turn's steps under a rule. */
-function disclosure(ctx: NodeContext, id: string, label: string, children: TimelineNode[]): TimelineNode {
+/** One `Meta` item of a Turn's process summary: a glyph and its value. */
+type ProcessItem = { icon: TimelineIconName; value: string };
+
+/** `ProcessDisclosure`: the Turn's summary as `Meta` items, opening its steps under a rule. */
+function disclosure(ctx: NodeContext, id: string, items: readonly ProcessItem[], label: string, children: TimelineNode[]): TimelineNode {
   const { theme } = ctx;
   const expanded = ctx.expanded.has(id);
+  const tint = theme.colors.textMuted;
   return {
     type: "view", style: { paddingHorizontal: 16, paddingVertical: 6 },
     children: [
       {
         type: "view", action: "toggle", payload: { id }, accessibilityRole: "button", accessibilityState: { expanded }, accessibilityLabel: label, pressedBackgroundColor: color(theme.colors.surfacePressed),
-        style: { height: 32, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", borderRadius: 16, backgroundColor: color(theme.colors.surfaceRaised), paddingLeft: 8, paddingRight: 12, marginVertical: 2 },
-        children: [icon(expanded ? "chevron-down" : "chevron-right", 14, theme.colors.textMuted), text(label, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flexShrink: 1 } })],
+        // The text column starts at the row's inset; the press highlight reaches past it.
+        style: { height: 32, maxWidth: "100%", flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "flex-start", borderRadius: 16, paddingHorizontal: 8, marginLeft: -8, marginVertical: 2 },
+        children: [
+          ...items.map((item): TimelineNode => ({
+            type: "view", style: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, minWidth: 0 },
+            children: [icon(item.icon, 13, tint), text(item.value, textStyle("caption", tint, { fontVariant: ["tabular-nums"] }), { numberOfLines: 1, style: { flexShrink: 1 } })],
+          })),
+          icon(expanded ? "chevron-down" : "chevron-right", 13, theme.colors.textFaint),
+        ],
       },
       ...(expanded ? [{ type: "view" as const, style: { marginTop: 8, gap: 8, borderLeftWidth: STEP_RULE, borderLeftColor: color(theme.colors.border), paddingLeft: 12 }, children }] : []),
     ],
@@ -482,7 +543,7 @@ export function turnProcessNode(ctx: NodeContext, turn: SessionTurnRecord, steps
   const hasSteps = Boolean(objectKey || summary?.messageCount || summary?.toolCallCount);
   if (!hasSteps && thinking.length === 0) return null;
   const id = `steps:${turn.id}`;
-  const label = `${hasSteps ? summary ? t("turn.steps", { steps: summary.messageCount, tools: summary.toolCallCount }) : t("turn.executionDetails") : t("turn.thinking")}${turn.durationMs != null ? ` · ${Math.round(turn.durationMs / 1000)}s` : ""}`;
+  const process = turnProcessSummary(t, { hasSteps, steps: summary?.messageCount ?? null, tools: summary?.toolCallCount ?? null, durationMs: turn.durationMs ?? null });
   const width = getReplyContentWidth(ctx.width) - 13;
   const muted = (value: string) => text(value, textStyle("caption", theme.colors.textMuted));
   const children: TimelineNode[] = [];
@@ -491,28 +552,25 @@ export function turnProcessNode(ctx: NodeContext, turn: SessionTurnRecord, steps
     else if (steps.status === "error") children.push(pressable({ action: "stepsRetry", payload: { turnId: turn.id }, children: [text(`${steps.error || t("turn.loadError")} ${t("common.retry")}`, textStyle("caption", theme.colors.danger))] }));
     else if (!objectKey) children.push(muted(t("turn.notArchived")));
     else if (steps.content === null) children.push(loader(ctx));
-    else if (steps.content.length) children.push(...contentNodes(ctx, turn.id, steps.content, { width }));
+    else if (steps.content.length) children.push(...[changedFilesNode(ctx, steps.content)].filter((node) => node !== null), ...contentNodes(ctx, turn.id, steps.content, { width }));
     else if (!thinking.length) children.push(muted(t("turn.none")));
   }
   if (thinking.length) children.push(...contentNodes(ctx, `${turn.id}:thinking`, thinking, { width }));
-  return disclosure(ctx, id, label, children);
+  return disclosure(ctx, id, process.items, process.label, children);
 }
 
 /** `StreamingTurnProcess`: the live step list, keyed like the archived one so its open state carries over. */
 export function streamingProcessNode(ctx: NodeContext, turnId: string, messages: StreamView["intermediateMessages"], thinking: ContentBlock[]): TimelineNode | null {
   if (messages.length === 0 && thinking.length === 0) return null;
-  let tools = 0;
-  const content: ContentBlock[] = [];
-  for (const message of messages) {
-    for (const block of message.content) if (block.type === "tool_use") tools += 1;
-    if (message.content.length) content.push(...message.content);
-    else if (message.text) content.push({ type: "text", text: message.text });
-  }
+  const { content, tools } = streamingSteps(messages);
   const width = getReplyContentWidth(ctx.width) - 13;
   const children: TimelineNode[] = [];
+  const files = changedFilesNode(ctx, content);
+  if (files) children.push(files);
   if (messages.length) children.push(...(content.length ? contentNodes(ctx, turnId, content, { width }) : thinking.length ? [] : [text(ctx.t("turn.none"), textStyle("caption", ctx.theme.colors.textMuted))]));
   if (thinking.length) children.push(...contentNodes(ctx, `${turnId}:thinking`, thinking, { width, active: true }));
-  return disclosure(ctx, `steps:${turnId}`, messages.length ? ctx.t("turn.steps", { steps: messages.length, tools }) : ctx.t("turn.thinking"), children);
+  const process = turnProcessSummary(ctx.t, { hasSteps: messages.length > 0, steps: messages.length, tools, durationMs: null });
+  return disclosure(ctx, `steps:${turnId}`, process.items, process.label, children);
 }
 
 /** `Avatar`'s shape, for the other Bot's face on a message between Bots. */
@@ -595,7 +653,7 @@ function liveDot(ctx: NodeContext): TimelineNode {
 }
 
 /** `StreamCard`: the reply being written, ending in a status line the finished reply's meta replaces in place. */
-export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[]; status: string; runtimePhase: StreamView["runtimePhase"]; runtimeModel: string | null; startedAt: string; streamingText: string | null }): TimelineNode {
+export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[]; status: string; runtimePhase: StreamView["runtimePhase"]; runtimeModel: string | null; elapsedSeconds: number | null; streamingText: string | null }): TimelineNode {
   const { theme, t } = ctx;
   const answer = answerBlocks(input.content);
   const live = input.status === "pending" || input.status === "streaming";
@@ -622,7 +680,7 @@ export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[
       ...(hasContent ? [{ type: "view" as const, style: { gap: 4, minWidth: 0 }, children: contentNodes(ctx, "live", answer, { width: getReplyContentWidth(ctx.width), active: live, streamingText: input.streamingText, sandboxImages: NO_SANDBOX_IMAGES }) }] : []),
       {
         type: "view", style: { flexDirection: "row", alignItems: "center", gap: 8, height: REPLY_META_HEIGHT },
-        children: [...statusRow, ...(live ? [text(formatMessageClock(input.startedAt) ?? "", textStyle("micro", theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { flexShrink: 0 } })] : [])],
+        children: [...statusRow, ...(live && input.elapsedSeconds !== null ? [text(formatElapsed(input.elapsedSeconds * 1000), textStyle("micro", theme.colors.textFaint, { fontVariant: ["tabular-nums"] }), { style: { flexShrink: 0 } })] : [])],
       },
     ],
   };

@@ -72,6 +72,7 @@ function DebugChatView() {
   const unreadMessageId = unread && readSequence !== null && readSequence < unread.turnSequence ? unread.messageId : null;
   const bot = fixture === "bot" ? BOT : null;
   const botTurns = useMemo(() => bot ? botSayTurns(messages) : NO_TURNS, [bot, messages]);
+  const turnsBySequence = useMemo(() => fixture === "tools" ? toolTurns(baseMessages) : NO_TURN_SEQUENCES, [baseMessages, fixture]);
   // As the Chat screen: the newest own message the server accepted, which a Bot's note never is.
   const deliveredId = useMemo(() => { const last = messages.at(-1); return last && isDeliveredMessage(last) && botNoteSpace(botTurns.get(String(last.meta?.turnId))) === null ? last.id : undefined; }, [botTurns, messages]);
   // As the Chat screen: a reply is the page's Bot, a note is whoever wrote it.
@@ -140,7 +141,7 @@ function DebugChatView() {
           setReadSequence((current) => readThrough(current, visible.map((item) => item.message)));
         }}
         turnsById={botTurns}
-        turnsBySequence={NO_TURN_SEQUENCES}
+        turnsBySequence={turnsBySequence}
         streamTurnId={null}
         replyAnchor={null}
         liveStream={false}
@@ -220,6 +221,18 @@ const BOT_WRITERS = { self: BOT_SPACE_ID, peer: "5b0c2d4e-6f70-4a81-9b92-a3b4c5d
 const BOT_PEERS: ReadonlyMap<string, BotPeer> = new Map([[BOT_WRITERS.peer, { name: "Cohub", avatarUrl: null }]]);
 
 /** The `say` Turn behind each of the Bot's lines, so both timelines put them on its side. */
+/** The tools fixture's Turn summaries: one that only thought, and one with archived-style step counts. */
+function toolTurns(messages: readonly MessageRecord[]): ReadonlyMap<number, SessionTurnRecord[]> {
+  const turn = (sequence: number, fields: Partial<SessionTurnRecord>): [number, SessionTurnRecord[]] => [sequence, [{
+    id: `debug-tools-turn-${sequence}`, sessionId: messages[0]?.sessionId ?? "debug-tools", sequence, status: "completed",
+    intermediateIndex: null, intermediateSummary: null, assistantContent: [], durationMs: null, ...fields,
+  } as unknown as SessionTurnRecord]];
+  return new Map([
+    turn(1, { assistantContent: [{ type: "thinking", thinking: "The file is short; read it whole." }], durationMs: 4_000 }),
+    turn(3, { intermediateSummary: { messageCount: 4, toolCallCount: 3 } as SessionTurnRecord["intermediateSummary"], durationMs: 72_400 }),
+  ]);
+}
+
 function botSayTurns(messages: readonly MessageRecord[]): ReadonlyMap<string, SessionTurnRecord> {
   return new Map(messages.filter((message) => typeof message.meta?.writer === "string").map((message) => {
     const id = String(message.meta?.turnId);
@@ -251,6 +264,14 @@ const SCRIPTS: Record<Fixture, Line[]> = {
       { type: "tool_use", id: "debug-bash", name: "bash", input: { command: "npm test" } },
       { type: "tool_result", tool_use_id: "debug-bash", content: [{ type: "text", text: "1 failing\n  example › run returns false" }], is_error: true },
       { type: "text", text: "One test fails: it expects `run()` to return `false`." },
+    ] },
+    { role: "user", text: "Make it pass." },
+    { role: "assistant", content: [
+      { type: "tool_use", id: "debug-edit", name: "edit", input: { path: "/workspace/src/example.ts", edits: [{ oldText: "export function run() {\n  return example;\n}", newText: "export function run() {\n  return !example;\n}" }] } },
+      { type: "tool_result", tool_use_id: "debug-edit", content: "Applied 1 edit.", is_error: false },
+      { type: "tool_use", id: "debug-write", name: "write", input: { path: "/workspace/src/example.test.ts", content: "import { run } from \"./example\";\n\ntest(\"run\", () => {\n  expect(run()).toBe(false);\n});" } },
+      { type: "tool_result", tool_use_id: "debug-write", content: "Wrote 5 lines.", is_error: false },
+      { type: "text", text: "`run()` now returns `false`, and the test passes." },
     ] },
   ],
   long: Array.from({ length: 24 }, (_, index): Line => index % 2 === 0

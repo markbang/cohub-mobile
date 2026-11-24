@@ -10,6 +10,7 @@ import { __iconData as chevronDown } from "lucide-react-native/icons/chevron-dow
 import { __iconData as chevronRight } from "lucide-react-native/icons/chevron-right";
 import { __iconData as chevronsDown } from "lucide-react-native/icons/chevrons-down";
 import { __iconData as chevronsUp } from "lucide-react-native/icons/chevrons-up";
+import { __iconData as clock } from "lucide-react-native/icons/clock";
 import { __iconData as code } from "lucide-react-native/icons/code";
 import { __iconData as copy } from "lucide-react-native/icons/copy";
 import { __iconData as fileText } from "lucide-react-native/icons/file-text";
@@ -18,6 +19,7 @@ import { __iconData as gitFork } from "lucide-react-native/icons/git-fork";
 import { __iconData as globe } from "lucide-react-native/icons/globe";
 import { __iconData as images } from "lucide-react-native/icons/images";
 import { __iconData as layers } from "lucide-react-native/icons/layers";
+import { __iconData as listTree } from "lucide-react-native/icons/list-tree";
 import { __iconData as pause } from "lucide-react-native/icons/pause";
 import { __iconData as play } from "lucide-react-native/icons/play";
 import { __iconData as refresh } from "lucide-react-native/icons/refresh-cw";
@@ -27,13 +29,14 @@ import { __iconData as squarePen } from "lucide-react-native/icons/square-pen";
 import { __iconData as terminal } from "lucide-react-native/icons/square-terminal";
 import { __iconData as trash } from "lucide-react-native/icons/trash";
 import { __iconData as volume } from "lucide-react-native/icons/volume-2";
+import { __iconData as wrench } from "lucide-react-native/icons/wrench";
 import type { IconName } from "@/src/icons";
 
 /** The glyphs the native timeline draws, by the app's icon names. */
 const ICONS = {
   alert, archive, "book-open": bookOpen, box, brain, check, "check-check": checkCheck, "chevron-down": chevronDown,
-  "chevron-right": chevronRight, "chevrons-down": chevronsDown, "chevrons-up": chevronsUp, code, copy,
-  "file-text": fileText, folder, "git-fork": gitFork, globe, images, layers, pause, play, refresh, search, "square-pen": squarePen, terminal, trash, volume,
+  "chevron-right": chevronRight, "chevrons-down": chevronsDown, "chevrons-up": chevronsUp, clock, code, copy,
+  "file-text": fileText, folder, "git-fork": gitFork, globe, images, layers, "list-tree": listTree, pause, play, refresh, search, "square-pen": squarePen, terminal, trash, volume, wrench,
 } satisfies Partial<Record<IconName, LucideIconData>>;
 
 export type TimelineIconName = keyof typeof ICONS;

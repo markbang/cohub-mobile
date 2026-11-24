@@ -10,10 +10,10 @@ import { sessionActivity } from "../src/data/session-activity.ts";
 import { ChatScrollTrace, setDebugTraceSink } from "../src/data/chat-scroll-trace.ts";
 import { isSpeakableTurn, mergeTurnSpeech, speechIcon, speechLabelKey, turnSpeechStep } from "../src/data/turn-speech.ts";
 import { composerInsertion, isLargeComposerPaste, pastedTextFileName } from "../src/data/composer-paste.ts";
-import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, thinkingBlocks, viewportReferences } from "../src/data/chat-rendering.ts";
+import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, rowHeightMeasurement, streamingSteps, thinkingBlocks, turnProcessSummary, viewportReferences } from "../src/data/chat-rendering.ts";
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, chatTimelineSettledOffset, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
-import { formatMessageClock, formatThreadTime } from "../src/data/chat-format.ts";
+import { formatElapsed, formatMessageClock, formatThreadTime } from "../src/data/chat-format.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
@@ -65,7 +65,7 @@ import { connectionDisplayState, createRealtimeRecovery, createSessionResyncCoor
 import { PANEL_SWIPE_ACTIVATION_PX, PANEL_SWIPE_VERTICAL_SLOP_PX, panelForScrollOffset, panelSwipeTarget } from "../src/data/space-panel-pager.ts";
 import { createLimiter } from "../src/data/space-session-counts.ts";
 import { cacheRetentionCutoff, DEFAULT_CACHE_RETENTION } from "../src/data/cache-retention.ts";
-import { formatToolCallCaption, toolCallPreview } from "../src/data/tool-call.ts";
+import { changedFiles, diffRuns, editDiffLines, formatToolCallCaption, summarizeToolCall, toolCallPreview, toolInputDetails } from "../src/data/tool-call.ts";
 import { forkPoint, forkSessionTurn } from "../src/data/session-fork.ts";
 import { buildSessionForkTree, mergeSessionForks, realtimeSessionFork } from "../src/data/session-fork-tree.ts";
 import { SETUP_STATUS, sandboxSetupInfo, sandboxSetupLogPaths, sandboxSetupStatus } from "../src/data/sandbox-setup.ts";
@@ -2263,8 +2263,8 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(reveal.props.accessibilityLabel, "#2 · deepseek-flash · ↑245K · ↓2.1K · 245K cached", "screen readers always get every part");
   assert.equal(chromeNodes(reveal).find((node) => node.type === "Text").props.children.join(""), "#2 · deepseek-flash · ↑245K · ↓2.1K");
   const StreamCard = loadChromeComponent("../src/components/MessageContent.tsx", "StreamCard", {
-    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth, getReplyRowWidth, formatMessageClock: (value) => value,
-    useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
+    ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth, getReplyRowWidth, formatElapsed,
+    useElapsedSeconds: (startedAt, running) => running ? startedAt ? 72 : 3 : null,
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
     BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
   });
@@ -2275,7 +2275,9 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   const statusText = (status) => chromeNodes(StreamCard({ content: [], status })).find((node) => node.type === "Text" && classes(node).has("text-caption"));
   assert.deepEqual([classes(statusText("interrupted")).has("text-fg-muted"), classes(statusText("failed")).has("text-danger")], [true, true], "a reply the user stopped is quiet; only a failure is red");
   const liveClock = (props) => chromeNodes(StreamCard({ content: [], status: "streaming", ...props })).find((node) => node.type === "Text" && classes(node).has("tabular-nums"))?.props.children.join("");
-  assert.equal(liveClock({ startedAt: "2026-10-31T09:00:00.000Z" }), "2026-10-31T09:00:00.000Z", "the live clock shows when the Turn started, not the time of each render");
+  assert.equal(liveClock({ startedAt: "2026-10-31T09:00:00.000Z" }), "1m 12s", "the live line counts how long the Turn has run");
+  assert.equal(liveClock({}), "3s", "a Turn not yet known counts from when the reply appeared");
+  assert.equal(chromeNodes(StreamCard({ content: [], status: "failed", startedAt: "2026-10-31T09:00:00.000Z" })).some((node) => node.type === "Text" && classes(node).has("tabular-nums")), false, "a finished reply stops counting");
   // Only the answer is the reply; the thinking belongs to the Turn's steps, live and finished alike.
   const thought = { type: "thinking", thinking: "Weighing options" };
   const answer = { type: "text", text: "Done." };
@@ -2298,11 +2300,11 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(chromeNodes(MessageBubble({ message: { id: "reply", role: "assistant", text: "$ ls", content: [{ type: "shell_command", command: "ls" }], meta: {} } })).find((node) => node.type === "TextBlock")?.props.value, "$ ls", "a reply that did not think keeps its text fallback");
   const TurnProcess = loadChromeComponent("../src/components/TurnProcess.tsx", "TurnProcess", {
     ...chromeScope, useTranslation: () => ({ t: replyT }), useState: (value) => [value, () => {}], useQuery: () => ({ data: undefined, error: null, isFetching: false }), useMemo: (factory) => factory(),
-    turnStepsQuery: () => ({}), thinkingBlocks, ProcessDisclosure: "ProcessDisclosure", MessageContent: "MessageContent", Loader: "Loader",
+    turnStepsQuery: () => ({}), thinkingBlocks, turnProcessSummary, ProcessDisclosure: "ProcessDisclosure", ChangedFiles: "ChangedFiles", MessageContent: "MessageContent", Loader: "Loader",
   });
   const thoughtTurn = { id: "turn", sessionId: "session", intermediateIndex: null, intermediateSummary: null, durationMs: 12_000, assistantContent: [thought, answer] };
   const capsule = TurnProcess({ turn: thoughtTurn, client: null, spaceId: "space" });
-  assert.deepEqual([capsule?.type, capsule?.props.label, chromeNodes(capsule).find((node) => node.type === "MessageContent").props.content], ["ProcessDisclosure", "turn.thinking · 12s", [thought]], "a Turn that only thought still folds its thinking into a capsule");
+  assert.deepEqual([capsule?.type, capsule?.props.process.items.map((item) => item.icon), chromeNodes(capsule).find((node) => node.type === "MessageContent").props.content], ["ProcessDisclosure", ["brain"], [thought]], "a Turn that only thought still folds its thinking into its summary");
   assert.equal(TurnProcess({ turn: { ...thoughtTurn, assistantContent: [answer] }, client: null, spaceId: "space" }), null, "no steps and no thinking, no capsule");
 }
 
@@ -4728,6 +4730,40 @@ assert.equal(toolCallPreview("read", { path: "src/app.ts" }), "src/app.ts");
 assert.equal(toolCallPreview("unknown", {}), "");
 assert.equal(formatToolCallCaption("skill_view", { skill: "github-pr-workflow" }), "skill_view: \"github-pr-workflow\"");
 assert.equal(formatToolCallCaption("terminal", {}), "terminal");
+// A tool row names its verb and one target; a file edit carries the lines it changed, not the context it repeats.
+assert.deepEqual(summarizeToolCall("bash", { command: "npm run typecheck" }), { kind: "run", target: "npm run typecheck", path: null, delta: null });
+assert.deepEqual(summarizeToolCall("read", { path: "/workspace/src/data/tool-call.ts", offset: 1 }), { kind: "read", target: "tool-call.ts", path: "src/data/tool-call.ts", delta: null }, "a file reads by its name; the path drops the sandbox root");
+assert.deepEqual(summarizeToolCall("ls", { path: "/workspace/src/" }).target, "src/", "a listed folder keeps its path");
+assert.equal(summarizeToolCall("grep", { pattern: "useElapsed", path: "src" }).target, "useElapsed", "a search names its pattern");
+assert.deepEqual(summarizeToolCall("write", { path: "/workspace/a.md", content: "one\ntwo" }).delta, { added: 2, removed: 0 });
+const contextEdit = { path: "/workspace/a.ts", edits: [{ oldText: "a\nb\nc\nd\ne", newText: "a\nb\nC\nd\ne" }, { oldText: "x", newText: "x\ny" }] };
+assert.deepEqual(summarizeToolCall("edit", contextEdit).delta, { added: 2, removed: 1 }, "an edit counts only its changed lines");
+assert.deepEqual(summarizeToolCall("mcp__github__create_issue", { title: "Bug" }), { kind: "other", target: "Bug", path: null, delta: null }, "an unknown tool keeps its name and the usual preview");
+const longContext = Array.from({ length: 8 }, (_, index) => `line ${index}`);
+assert.deepEqual(editDiffLines(longContext.join("\n"), [...longContext.slice(0, 4), "changed", ...longContext.slice(5)].join("\n")).map((line) => `${line.sign}${line.text}`),
+  [" line 1", " line 2", " line 3", "-line 4", "+changed", " line 5", " line 6", " line 7"], "the diff keeps three lines of context either side");
+assert.deepEqual(diffRuns(editDiffLines("a\nb", "a\nB\nC")), [{ sign: " ", text: "  a" }, { sign: "-", text: "- b" }, { sign: "+", text: "+ B\n+ C" }], "lines of one sign draw as one run");
+const editDetails = toolInputDetails("edit", { ...contextEdit, dryRun: true });
+assert.equal(editDetails.primary, "a.ts");
+assert.equal(editDetails.diffs.length, 2);
+assert.equal(editDetails.rest, JSON.stringify({ dryRun: true }, null, 2), "the details repeat no input the diff already shows");
+assert.deepEqual(toolInputDetails("bash", { command: "ls" }), { primary: "$ ls", diffs: [], body: null, rest: null });
+assert.deepEqual(changedFiles([
+  { type: "tool_use", id: "e1", name: "edit", input: contextEdit },
+  { type: "tool_use", id: "w1", name: "write", input: { path: "/workspace/b.md", content: "x" } },
+  { type: "tool_use", id: "e2", name: "edit", input: { path: "/workspace/a.ts", edits: [{ oldText: "q", newText: "" }] } },
+  { type: "tool_use", id: "e3", name: "edit", input: { path: "/workspace/c.ts", edits: [{ oldText: "q", newText: "r" }] } },
+  { type: "tool_result", tool_use_id: "e3", content: "No match", is_error: true },
+  { type: "tool_use", id: "r1", name: "read", input: { path: "/workspace/d.ts" } },
+]), [{ path: "a.ts", name: "a.ts", delta: { added: 2, removed: 2 } }, { path: "b.md", name: "b.md", delta: { added: 1, removed: 0 } }], "changed files sum per path in first-touched order; failed edits and reads change nothing");
+
+// A Turn's process summary reads as Meta items; the spoken label keeps the words.
+const say = (key, values) => `${key}${values ? JSON.stringify(values) : ""}`;
+assert.deepEqual(turnProcessSummary(say, { hasSteps: true, steps: 3, tools: 5, durationMs: 72_400 }), { items: [{ icon: "list-tree", value: "3" }, { icon: "wrench", value: "5" }, { icon: "clock", value: "1m 12s" }], label: 'turn.steps{"steps":3,"tools":5} · 1m 12s' });
+assert.deepEqual(turnProcessSummary(say, { hasSteps: true, steps: 2, tools: 0, durationMs: null }).items, [{ icon: "list-tree", value: "2" }], "no tools and no duration leave only the steps");
+assert.deepEqual(turnProcessSummary(say, { hasSteps: false, steps: null, tools: null, durationMs: 4_000 }), { items: [{ icon: "brain", value: 'turn.thoughtFor{"duration":"4s"}' }], label: 'turn.thoughtFor{"duration":"4s"}' });
+assert.deepEqual(streamingSteps([{ content: [{ type: "tool_use", id: "a", name: "read", input: {} }] }, { content: [], text: "Done" }, { content: [], text: "" }]), { content: [{ type: "tool_use", id: "a", name: "read", input: {} }, { type: "text", text: "Done" }], tools: 1 });
+assert.deepEqual([0, 999, 8_000, 59_999, 60_000, 65_000, 3_599_000, 3_720_000, -5].map(formatElapsed), ["0s", "0s", "8s", "59s", "1m 00s", "1m 05s", "59m 59s", "1h 02m", "0s"]);
 const evening = new Date(2026, 0, 1, 19, 3).toISOString();
 assert.equal(formatMessageClock(evening, "en"), "7:03 PM", "English keeps the 12-hour clock");
 assert.equal(formatMessageClock(evening, "zh"), "19:03", "a 24-hour locale pads the hour");

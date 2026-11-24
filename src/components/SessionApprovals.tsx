@@ -1,7 +1,7 @@
 import { harnessLabel, type ApprovalDecision, type CohubClient, type HarnessKind, type SessionApproval } from "@neta-art/cohub";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeOut } from "react-native-reanimated";
 import { useScreenQuery } from "@/src/data/query";
 import { useTranslation, type TranslationKey } from "@/src/i18n";
@@ -34,6 +34,7 @@ export function SessionApprovals({ client, spaceId, sessionId, running, harnessO
     intervalMs: running ? 10_000 : undefined,
   });
   const [deciding, setDeciding] = useState<string | null>(null);
+  const [shownId, setShownId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const approvals = (query.data?.approvals ?? []).filter((approval) => Date.parse(approval.expiresAt) > now);
@@ -44,6 +45,11 @@ export function SessionApprovals({ client, spaceId, sessionId, running, harnessO
     return () => clearTimeout(timer);
   }, [nextExpiry]);
   if (approvals.length === 0) return null;
+  // One request at a time keeps the thread visible; the one shown stays put as others arrive or resolve.
+  const index = Math.max(0, approvals.findIndex((approval) => approval.id === shownId));
+  const show = (next: number) => setShownId(approvals[(next + approvals.length) % approvals.length]!.id);
+  const approval = approvals[index]!;
+  const title = t(approval.kind === "command" ? "runtime.approval.command" : "runtime.approval.fileChange", { harness: harnessLabel(harnessOf(approval.turnId)) });
 
   const decide = async (approval: SessionApproval, decision: ApprovalDecision) => {
     if (!client || deciding) return;
@@ -61,21 +67,23 @@ export function SessionApprovals({ client, spaceId, sessionId, running, harnessO
   };
 
   return <Animated.View exiting={FadeOut.duration(motion.fadeOut.duration)} className="gap-2 bg-background px-3 pt-2">
-    {approvals.map((approval) => {
-      const title = t(approval.kind === "command" ? "runtime.approval.command" : "runtime.approval.fileChange", { harness: harnessLabel(harnessOf(approval.turnId)) });
-      return <View key={approval.id} accessibilityLabel={title} className="gap-2 rounded-md bg-surface-raised p-3" style={{ borderCurve: "continuous" }}>
-        <View className="flex-row items-center gap-2">
-          <AppIcon name={approval.kind === "command" ? "terminal" : "file-text"} size={16} tone="muted" />
-          <Text className="min-w-0 flex-1 text-subhead font-semibold text-fg">{title}</Text>
-        </View>
-        {approval.command ? <ScrollView style={{ maxHeight: 96 }} className="rounded-sm bg-surface px-2.5 py-1.5"><Text selectable className="text-code text-fg-secondary" style={MONO}>{approval.command}</Text></ScrollView> : null}
-        {approval.paths?.length ? <ScrollView style={{ maxHeight: 72 }}>{approval.paths.map((path) => <Text key={path} selectable numberOfLines={1} ellipsizeMode="middle" className="text-code text-fg-secondary" style={MONO}>{path}</Text>)}</ScrollView> : null}
-        {approval.reason || approval.cwd ? <Text selectable className="text-caption text-fg-muted">{[approval.reason, approval.cwd].filter(Boolean).join(" · ")}</Text> : null}
-        {query.data?.canDecide
-          ? <View className="flex-row flex-wrap gap-2">{approval.decisions.map((decision) => <PrimaryButton key={decision} label={t(DECISIONS[decision].label)} variant={DECISIONS[decision].variant} loading={deciding === approval.id && decision === "accept"} disabled={deciding !== null} onPress={() => void decide(approval, decision)} className="min-h-11 px-3" />)}</View>
-          : <Text accessibilityRole="text" className="text-caption text-fg-muted">{t("runtime.approval.waiting")}</Text>}
-      </View>;
-    })}
+    <View key={approval.id} accessibilityLabel={title} className="gap-2 rounded-md bg-surface-raised p-3" style={{ borderCurve: "continuous" }}>
+      <View className="min-h-6 flex-row items-center gap-2">
+        <AppIcon name={approval.kind === "command" ? "terminal" : "file-text"} size={16} tone="muted" />
+        <Text className="min-w-0 flex-1 text-subhead font-semibold text-fg">{title}</Text>
+        {approvals.length > 1 ? <View className="-my-2.5 -mr-2.5 flex-row items-center">
+          <Pressable accessibilityRole="button" accessibilityLabel={t("runtime.approval.previous")} onPress={() => show(index - 1)} className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"><AppIcon name="chevron-left" size={16} tone="muted" /></Pressable>
+          <Text accessibilityLabel={t("runtime.approval.position", { index: index + 1, count: approvals.length })} className="text-caption text-fg-muted tabular-nums">{`${index + 1}/${approvals.length}`}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("runtime.approval.next")} onPress={() => show(index + 1)} className="size-11 items-center justify-center rounded-full active:bg-surface-pressed"><AppIcon name="chevron-right" size={16} tone="muted" /></Pressable>
+        </View> : null}
+      </View>
+      {approval.command ? <ScrollView style={{ maxHeight: 96 }} className="rounded-sm bg-surface px-2.5 py-1.5"><Text selectable className="text-code text-fg-secondary" style={MONO}>{approval.command}</Text></ScrollView> : null}
+      {approval.paths?.length ? <ScrollView style={{ maxHeight: 72 }}>{approval.paths.map((path) => <Text key={path} selectable numberOfLines={1} ellipsizeMode="middle" className="text-code text-fg-secondary" style={MONO}>{path}</Text>)}</ScrollView> : null}
+      {approval.reason || approval.cwd ? <Text selectable className="text-caption text-fg-muted">{[approval.reason, approval.cwd].filter(Boolean).join(" · ")}</Text> : null}
+      {query.data?.canDecide
+        ? <View className="flex-row flex-wrap gap-2">{approval.decisions.map((decision) => <PrimaryButton key={decision} label={t(DECISIONS[decision].label)} variant={DECISIONS[decision].variant} loading={deciding === approval.id && decision === "accept"} disabled={deciding !== null} onPress={() => void decide(approval, decision)} className="min-h-11 px-3" />)}</View>
+        : <Text accessibilityRole="text" className="text-caption text-fg-muted">{t("runtime.approval.waiting")}</Text>}
+    </View>
     {error ? <Text accessibilityRole="alert" selectable className="px-1 text-caption text-danger">{error}</Text> : null}
   </Animated.View>;
 }

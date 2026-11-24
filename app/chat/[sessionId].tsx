@@ -2000,7 +2000,7 @@ function LiveReply({ sessionId, showStream, pending, processInRow, availableWidt
   });
   if (showStream && stream) return <View testID="chat-live-reply">
     {!processInRow ? <StreamingTurnProcess messages={stream.intermediateMessages} thinking={thinkingBlocks(stream.contentBlocks)} /> : null}
-    <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={stream.outputAt ?? streamStartedAt} availableWidth={availableWidth} />
+    <StreamCard content={stream.contentBlocks} status={stream.status} runtimePhase={stream.runtimePhase} runtimeModel={stream.runtimeModel} startedAt={streamStartedAt} availableWidth={availableWidth} />
   </View>;
   return pending ? <StreamCard content={[]} status="pending" availableWidth={availableWidth} /> : null;
 }

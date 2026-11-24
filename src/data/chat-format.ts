@@ -29,3 +29,12 @@ export function formatThreadTime(value: string, t: (key: "bots.time.today" | "bo
   const day = date.toLocaleDateString(locale, { month: "short", day: "numeric", ...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }) });
   return `${day} ${time}`;
 }
+
+/** A running or finished Turn's length: "8s", "1m 05s", "1h 02m". */
+export function formatElapsed(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}

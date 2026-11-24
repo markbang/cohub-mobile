@@ -1,4 +1,6 @@
 import type { ContentBlock, MessageRecord } from "@neta-art/cohub";
+import type { Translate } from "../i18n/core";
+import { formatElapsed } from "./chat-format";
 
 export type MeasuredMessage = { id: string; revision: string };
 
@@ -9,6 +11,36 @@ export function answerBlocks(content: readonly ContentBlock[] | null | undefined
 
 export function thinkingBlocks(content: readonly ContentBlock[] | null | undefined): ContentBlock[] {
   return (content ?? []).filter((block) => block.type === "thinking" && block.thinking.trim().length > 0);
+}
+
+/** A Turn's process summary as `Meta` items (steps, tools, duration), with the sentence a screen reader speaks. */
+export function turnProcessSummary(t: Translate, input: { hasSteps: boolean; steps: number | null; tools: number | null; durationMs: number | null }) {
+  const duration = input.durationMs != null ? formatElapsed(input.durationMs) : null;
+  const items: { icon: "list-tree" | "wrench" | "clock" | "brain"; value: string }[] = [];
+  if (!input.hasSteps) {
+    const value = duration ? t("turn.thoughtFor", { duration }) : t("turn.thinking");
+    return { items: [{ icon: "brain" as const, value }], label: value };
+  }
+  if (input.steps === null) items.push({ icon: "list-tree", value: t("turn.executionDetails") });
+  else {
+    items.push({ icon: "list-tree", value: String(input.steps) });
+    if (input.tools) items.push({ icon: "wrench", value: String(input.tools) });
+  }
+  if (duration) items.push({ icon: "clock", value: duration });
+  const label = input.steps === null ? t("turn.executionDetails") : t("turn.steps", { steps: input.steps, tools: input.tools ?? 0 });
+  return { items, label: duration ? `${label} · ${duration}` : label };
+}
+
+/** A live Turn's intermediate messages as one step list, and how many tools they called. */
+export function streamingSteps(messages: readonly { content: readonly ContentBlock[]; text?: string | null }[]) {
+  let tools = 0;
+  const content: ContentBlock[] = [];
+  for (const message of messages) {
+    for (const block of message.content) if (block.type === "tool_use") tools += 1;
+    if (message.content.length) content.push(...message.content);
+    else if (message.text) content.push({ type: "text", text: message.text });
+  }
+  return { content, tools };
 }
 
 /** Keep a growing reply in its user's normal-flow row, not a separately positioned footer.

@@ -7,6 +7,7 @@ import type { ChatTimelineViewRef, TimelineFlight, TimelineNode, TimelineRowSpec
 import { useOpenMessageLink } from "@/src/components/MessageContent";
 import { turnStepsQuery } from "@/src/components/TurnProcess";
 import { isCatchUpArrival } from "@/src/components/use-chat-catch-up";
+import { useElapsedSeconds } from "@/src/components/use-elapsed";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { arrivalAnimations, assistantMessageNode, GALLERY_THUMB_RADIUS, botExchangeNode, botNoteNode, botPlacedNode, compactionNode, EMPTY_NODE, forkDividerNode, loadMoreNode, replyImagePaths, SEND_FLIGHT_EASING, sentByNode, sentFromNode, sentToNode, streamCardNode, streamingProcessNode, systemMessageNode, turnProcessNode, UNREAD_DIVIDER_PAD, unreadDividerNode, userMessageNode, type NodeContext, type StepsState } from "@/src/components/timeline/nodes";
 import { answerBlocks, thinkingBlocks } from "@/src/data/chat-rendering";
@@ -170,11 +171,12 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return turn ? turn.startedAt ?? turn.createdAt : null;
   });
   const { pendingReply } = props;
-  const [firstSeenAt] = useState(() => new Date().toISOString());
   const liveAnswer = useMemo(() => answerBlocks(stream?.contentBlocks), [stream?.contentBlocks]);
   const liveTextBlock = liveAnswer.findLast((block) => block.type === "text");
   const liveStatus = stream?.status ?? "";
   const pacedText = useRevealedStreamText(liveTextBlock?.type === "text" ? liveTextBlock.text : "", liveStatus === "pending" || liveStatus === "streaming");
+  const streaming = Boolean(props.liveStream && stream && (liveStatus === "pending" || liveStatus === "streaming"));
+  const elapsed = useElapsedSeconds(streaming ? streamStartedAt : null, streaming || (!(props.liveStream && stream) && pendingReply));
 
   const rows = useMemo(() => timelineRows({
     messages,
@@ -363,14 +365,14 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
           }
           case "live": {
             const show = props.liveStream && stream;
-            build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, streamStartedAt, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
+            build([show ? stream : null, show ? pacedText : null, pendingReply, row.processInRow, elapsed, expandedIn(expanded, ["live", stream?.turnId ?? "-"])], () => {
               if (show) {
                 const live = stream.status === "pending" || stream.status === "streaming";
-                const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, startedAt: stream.outputAt ?? streamStartedAt ?? firstSeenAt, streamingText: live ? pacedText : null });
+                const card = streamCardNode(ctx, { content: stream.contentBlocks, status: stream.status, runtimePhase: stream.runtimePhase, runtimeModel: stream.runtimeModel, elapsedSeconds: elapsed, streamingText: live ? pacedText : null });
                 const process = row.processInRow ? null : streamingProcessNode(ctx, stream.turnId ?? "live", stream.intermediateMessages, thinkingBlocks(stream.contentBlocks));
                 return { type: "live", node: { type: "view", children: process ? [process, card] : [card] } };
               }
-              return { type: "live", node: pendingReply ? streamCardNode(ctx, { content: [], status: "pending", runtimePhase: null, runtimeModel: null, startedAt: firstSeenAt, streamingText: null }) : null };
+              return { type: "live", node: pendingReply ? streamCardNode(ctx, { content: [], status: "pending", runtimePhase: null, runtimeModel: null, elapsedSeconds: elapsed, streamingText: null }) : null };
             });
             break;
           }
@@ -387,7 +389,7 @@ export const NativeChatTimeline = forwardRef<NativeChatTimelineHandle, Props>(fu
     return { keys: built.keys, rows: built.rows };
     // `stepsByTurn` is summarized by `stepsSignature`; `ctx` by its parts in `base`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, unreadMessageId, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, streamStartedAt, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages, speechEnabled, speechState]);
+  }, [rows, unreadMessageId, ctx, bot, botPeers, noteWriter, expanded, copiedKey, flight, forkingTurnId, retryDisabled, arrivalBaseline, relatedView, stream, pacedText, pendingReply, elapsed, stepsSignature, props.loadingOlder, props.loadingNewer, props.liveStream, client, spaceId, forkOrigin, turnsById, sandboxImages, speechEnabled, speechState]);
 
   // Only descriptions whose identity changed cross the bridge.
   const sentRef = useRef(new Map<string, TimelineRowSpec>());

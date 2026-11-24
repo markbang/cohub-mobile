@@ -8,10 +8,10 @@ import { FlatList, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, 
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 import Reanimated from "react-native-reanimated";
-import { formatMessageClock } from "@/src/data/chat-format";
+import { formatElapsed, formatMessageClock } from "@/src/data/chat-format";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { imageThumbnailUrl } from "@/src/data/media";
-import { toolCallPreview } from "@/src/data/tool-call";
+import { diffRuns, summarizeToolCall, toolInputDetails, type LineDelta, type ToolKind } from "@/src/data/tool-call";
 import { compactionFromMessage, compactionStats, type CompactionInfo } from "@/src/data/compaction";
 import { isWebLink, openWebLink } from "@/src/platform/browser";
 import { messageMarkdownImages, resolveMessageLink } from "@/src/data/message-links";
@@ -26,6 +26,7 @@ import { ContentImage } from "@/src/ui/ContentImage";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 import { BubbleContentWidth, BubbleTraceMessage } from "@/src/components/BubbleText";
+import { useElapsedSeconds } from "@/src/components/use-elapsed";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
 import { answerBlocks, thinkingBlocks, viewportReferenceIcon, viewportReferences, type ViewportReference } from "@/src/data/chat-rendering";
@@ -406,6 +407,11 @@ export function toolIcon(name: string): IconName {
   return "code";
 }
 
+/** The row's verb for a tool; a tool the app does not know keeps its own name. */
+export function toolVerb(t: Translate, kind: ToolKind, name: string) {
+  return kind === "other" ? name : t(`message.tool.kind.${kind}`);
+}
+
 // Long tool bodies are height-capped and scroll internally. The cap is applied via
 // ScrollView only once the content actually overflows it: inside the inverted chat
 // list (scale(-1) cells on Android) a nested scroller measures at its full
@@ -429,33 +435,72 @@ function ToolOutput({ block }: { block: Extract<ContentBlock, { type: "tool_resu
   return <View className="gap-2"><Text className={`text-micro font-semibold ${block.is_error ? "text-danger" : "text-fg-muted"}`}>{block.is_error ? t("message.tool.outputError") : t("message.tool.output")}</Text>{typeof block.content === "string" ? <CappedCodeText value={block.content} color={theme.colors.text} /> : <MessageContent content={block.content} />}</View>;
 }
 
+const MONO_FAMILY = Platform.OS === "ios" ? "Menlo" : "monospace";
+
+/** "+12 −3" in the diff colors, in the mono face of the chip it sits beside. */
+export function LineDeltaText({ delta, lead = false }: { delta: LineDelta | null; lead?: boolean }) {
+  if (!delta || (delta.added === 0 && delta.removed === 0)) return null;
+  return <>
+    {delta.added ? <Text className="text-success">{`${lead ? " " : ""}+${delta.added}`}</Text> : null}
+    {delta.removed ? <Text className="text-danger">{`${delta.added || lead ? " " : ""}−${delta.removed}`}</Text> : null}
+  </>;
+}
+
+/** A tool's target and a changed file sit on inline code's faint wash. */
+export function useChipStyle() {
+  const theme = useAppTheme();
+  return useMemo(() => ({
+    // design-system: the wash follows inline code's, a fraction of the text color per mode.
+    chip: { backgroundColor: colorWithOpacity(theme.colors.text, theme.mode === "dark" ? 0.1 : 0.07) },
+    mono: { fontFamily: MONO_FAMILY, fontSize: scaleFontSize(12), lineHeight: scaleLineHeight(16), fontVariant: ["tabular-nums" as const] },
+  }), [theme]);
+}
+
 function ToolCall({ block, result, active = false }: { block: Extract<ContentBlock, { type: "tool_use" }>; result?: Extract<ContentBlock, { type: "tool_result" }>; active?: boolean }) {
   const theme = useAppTheme();
   const contentWidth = useContext(BubbleContentWidth);
   const { t } = useTranslation();
+  const { chip, mono } = useChipStyle();
   const [expanded, setExpanded] = useState(false);
   const status = result ? result.is_error ? t("message.tool.status.error") : t("message.tool.status.done") : active ? t("message.tool.status.running") : t("message.tool.status.noResult");
   const iconColor = result?.is_error ? theme.colors.danger : active && !result ? theme.colors.accent : theme.colors.textMuted;
-  const preview = toolCallPreview(block.name, block.input);
-  const caption = preview ? `${block.name}: "${preview}"` : block.name;
-  const edits = Array.isArray(block.input.edits) ? block.input.edits.filter((edit): edit is { oldText: string; newText: string } => typeof edit === "object" && edit !== null && typeof edit.oldText === "string" && typeof edit.newText === "string") : [];
+  const summary = toolCallSummary(block);
+  const verb = toolVerb(t, summary.kind, block.name);
+  const changed = summary.delta && (summary.delta.added || summary.delta.removed) ? summary.delta : null;
+  const spoken = [`${verb} ${summary.path ?? summary.target}`.trim(), changed ? t("message.tool.lineDelta", { added: changed.added, removed: changed.removed }) : null, status].filter(Boolean).join(", ");
+  const details = expanded ? toolInputDetails(block.name, block.input) : null;
+  const hasInput = Boolean(details && (details.primary || details.diffs.length || details.body !== null || details.rest));
   return <View style={{ width: contentWidth }}>
-    <Pressable accessibilityRole="button" accessibilityLabel={`${caption}: ${status}`} accessibilityState={{ expanded }} hitSlop={TOOL_ROW_HIT_SLOP} onPress={() => setExpanded(!expanded)} className="min-h-9 flex-row items-center gap-2">
+    <Pressable accessibilityRole="button" accessibilityLabel={spoken} accessibilityState={{ expanded }} hitSlop={TOOL_ROW_HIT_SLOP} onPress={() => setExpanded(!expanded)} className="min-h-9 flex-row items-center gap-2">
       <AppIcon name={toolIcon(block.name)} size={14} color={iconColor} />
-      <Text numberOfLines={1} style={{ flex: 1, fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>
-        <Text className="text-fg font-medium">{block.name}</Text>
-        {preview ? <Text className="text-fg-muted">{`: "${preview}"`}</Text> : null}
-      </Text>
+      <Text numberOfLines={1} className="shrink-0 font-medium text-fg" style={{ maxWidth: "45%", fontSize: scaleFontSize(13), lineHeight: scaleLineHeight(18) }}>{verb}</Text>
+      {summary.target ? <View className="min-w-0 shrink rounded-[5px] px-[5px] py-px" style={chip}><Text numberOfLines={1} className="text-fg-secondary" style={mono}>{summary.target}</Text></View> : null}
+      <View className="min-w-0 flex-1" />
+      {changed ? <Text numberOfLines={1} className="shrink-0" style={mono}><LineDeltaText delta={changed} /></Text> : null}
     </Pressable>
-    {expanded ? <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 }} contentContainerClassName="gap-2 border-l border-border pl-3 pr-2">
+    {expanded && details ? <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: TOOL_DETAILS_MAX_HEIGHT, marginTop: 4 }} contentContainerClassName="gap-2 border-l border-border pl-3 pr-2">
       <BubbleContentWidth.Provider value={contentWidth === undefined ? undefined : Math.max(0, contentWidth - 21)}>
-      <Text className="text-micro font-semibold text-fg-muted">{t("message.tool.input")}</Text>
-      <CappedCodeText value={JSON.stringify(block.input, null, 2)} color={theme.colors.text} />
-      {edits.map((edit, index) => <View key={index}><Text className="bg-danger-soft text-code text-danger" style={{ fontFamily: "SpaceMono" }}>{edit.oldText.split("\n").map((line) => `- ${line}`).join("\n")}</Text><Text className="bg-success-soft text-code text-success" style={{ fontFamily: "SpaceMono" }}>{edit.newText.split("\n").map((line) => `+ ${line}`).join("\n")}</Text></View>)}
+      {hasInput ? <Text className="text-micro font-semibold text-fg-muted">{t("message.tool.input")}</Text> : null}
+      {details.primary ? <CappedCodeText value={details.primary} color={theme.colors.text} /> : null}
+      {details.diffs.map((diff, index) => <View key={index}>{diffRuns(diff).map((run, part) => <Text key={part} selectable className={`text-code ${run.sign === "-" ? "bg-danger-soft text-danger" : run.sign === "+" ? "bg-success-soft text-success" : "text-fg-muted"}`} style={{ fontFamily: "SpaceMono" }}>{run.text}</Text>)}</View>)}
+      {details.body !== null ? <CappedCodeText value={details.body} color={theme.colors.text} /> : null}
+      {details.rest ? <CappedCodeText value={details.rest} color={theme.colors.textSecondary} /> : null}
       {result ? <ToolOutput block={result} /> : null}
       </BubbleContentWidth.Provider>
     </ScrollView> : null}
   </View>;
+}
+
+/** Summaries are pure in the block, which a long running Turn re-renders on every commit. */
+const toolSummaries = new WeakMap<object, ReturnType<typeof summarizeToolCall>>();
+
+function toolCallSummary(block: Extract<ContentBlock, { type: "tool_use" }>) {
+  let summary = toolSummaries.get(block);
+  if (!summary) {
+    summary = summarizeToolCall(block.name, block.input);
+    toolSummaries.set(block, summary);
+  }
+  return summary;
 }
 
 /** `sandboxImages`: draw the sandbox images a reply's text references, as the web client does. */
@@ -712,8 +757,6 @@ export const MessageBubble = memo(function MessageBubble({ message, local = fals
 /** Its status line matches the finished reply's meta line, so the swap at the end of a Turn moves nothing. */
 export function StreamCard({ content, status, runtimePhase = null, runtimeModel = null, startedAt = null, availableWidth }: { content: ContentBlock[]; status: string; runtimePhase?: StreamView["runtimePhase"]; runtimeModel?: string | null; startedAt?: string | null; availableWidth?: number }) {
   const width = usePaneWidth();
-  // A clock read during render changed on every batch; the reply's start does not.
-  const [firstSeenAt] = useState(() => new Date().toISOString());
   const contentWidth = getReplyContentWidth(availableWidth ?? width);
   const { t } = useTranslation();
   // Like the finished reply, the body is the answer; the thinking streams into the Turn's steps.
@@ -735,6 +778,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
     : null;
   const statusLabel = status === "failed" ? t("message.stream.failed") : status === "interrupted" ? t("message.stream.stopped") : null;
   const live = status === "pending" || status === "streaming";
+  const elapsed = useElapsedSeconds(startedAt, live);
   const hasContent = hasLivePreview || hasRenderableLive;
   return <View style={{ width: "100%", maxWidth: getReplyRowWidth(availableWidth ?? width), paddingHorizontal: REPLY_INSET_X, paddingTop: 6 }}>
     {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} sandboxImages /></BubbleContentWidth.Provider> : null}
@@ -743,7 +787,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
         : runtimeLabel ? <><LiveDot /><Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{runtimeLabel}</Text></>
         : hasContent ? <><LiveDot /><View className="flex-1" /></>
         : <View className="flex-1"><TypingIndicator /></View>}
-      {live ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatMessageClock(startedAt ?? firstSeenAt)}</Text> : null}
+      {elapsed !== null ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatElapsed(elapsed * 1000)}</Text> : null}
     </View>
   </View>;
 }
