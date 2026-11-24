@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
-import { useContext, useEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import {
   AccessibilityInfo,
   Dimensions,
@@ -34,7 +34,7 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -642,11 +642,33 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const fieldHeight = singleLine ? lineHeight + textPadding : layout.height - textPadding;
   const textClip = singleLine ? undefined : { height: fieldHeight, overflow: "hidden" as const };
   const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: layout.twoRows ? 0 : textPadding / 2 };
-  const inputField = <>
+  // The capsule's laid-out height: one row is the 48 pt capsule; two rows add the 44 pt control row under the field.
+  const capsuleTargetHeight = layout.twoRows ? layout.height + COMPOSER_CONTROL_ROW_HEIGHT : COMPOSER_ONE_ROW_HEIGHT;
+  // Crossing between one and two rows makes the footer's frame jump upward before the capsule grows. The drawn
+  // capsule starts this much lower and rises to its laid-out place, keeping its bottom edge still and revealing
+  // the control row as the top edge travels; the parent still holds the target frame, so nothing re-lays out.
+  const lift = useSharedValue(0);
+  const liftedFrom = useRef(capsuleTargetHeight);
+  const layoutMode = `${layout.twoRows ? "two" : "one"}:${layout.expanded ? "expanded" : "collapsed"}`;
+  const liftedMode = useRef(layoutMode);
+  useLayoutEffect(() => {
+    const previousHeight = liftedFrom.current;
+    const previousMode = liftedMode.current;
+    liftedFrom.current = capsuleTargetHeight;
+    liftedMode.current = layoutMode;
+    // Shrinking has no room below the capsule to travel into, and per-line growth stays immediate.
+    if (previousMode === layoutMode || capsuleTargetHeight <= previousHeight) return;
+    lift.set(capsuleTargetHeight - previousHeight);
+    lift.set(withTiming(0, { duration: motion.settle.duration, easing: Easing.bezier(...curves.easeInOut) }));
+  }, [capsuleTargetHeight, layoutMode, lift]);
+  const liftStyle = useAnimatedStyle(() => ({ transform: [{ translateY: lift.get() }] }));
+  const inputField = <Fragment key="composer-field">
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
-          <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
-            <View style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
-              <View style={textClip}>
+          <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={layout.twoRows ? styles.composerPasteTargetTwoRows : styles.composerPasteTarget}>
+            {/* Both wrappers keep a native view in either layout. Fabric flattens a layout-only wrapper, and the
+                two-row padding and clip would then re-create the tree around the focused field, dropping the keyboard. */}
+            <View collapsable={false} style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
+              <View collapsable={false} style={textClip}>
                 <TextInput
                   ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
                   testID="chat-composer-input"
@@ -689,7 +711,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
                   maxLength={12000}
                   placeholder={placeholderText}
                   placeholderTextColor={theme.colors.textFaint}
-                  className="min-w-0 flex-1 text-body text-fg"
+                  className={layout.twoRows ? "min-w-0 text-body text-fg" : "min-w-0 flex-1 text-body text-fg"}
                   style={[styles.composerText, fieldPadding, { height: fieldHeight }]}
                   onSelectionChange={(event) => {
                     const now = Date.now();
@@ -715,7 +737,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
               </View>
             </View>
           </PasteImagesInput>
-  </>;
+  </Fragment>;
   const expandButton = layout.showExpandButton ? <Pressable
               testID="chat-composer-expand"
               accessibilityRole="button"
@@ -745,32 +767,32 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const trailing = showVoice ? voiceButton : sendButton;
   const harnessSlot = variant === "chat" ? harnessControl : null;
   const modelSlot = variant === "chat" ? modelControl : null;
+  // The controls before the field keep their own node in both layouts. Moving the field between rows would
+  // re-insert its native view, which drops the keyboard; the two-row layout instead pins these controls to the
+  // capsule's bottom edge, leaving the field as the column's only in-flow child.
+  const leadingControls = <View collapsable={false} className="flex-row items-center gap-1" style={layout.twoRows ? styles.composerControlsLeading : undefined}>
+    {attachButton}
+    {harnessSlot}
+    {modelSlot}
+  </View>;
   const radius = composerCapsuleRadius(capsuleHeight);
   const bottomGap = floatingBarBottomOffset(insets.bottom, Platform.OS === "ios");
   // Constant height: hosts lift it by the keyboard minus `useKeyboardCoveredInset`. Glyphs pop only when they change, not when the composer first appears.
-  // The field keeps the first row's slot in both layouts, so crossing the wrap does not remount the text input.
+  // The field keeps its slot in the content column in both layouts, so crossing the wrap does not remount the text input.
   return (
     <View style={[styles.composerWrap, { paddingBottom: bottomGap }]}>
       <LayoutAnimationConfig skipEntering skipExiting>
-      <View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`justify-center overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }]}>
+      <Animated.View ref={anchorRef} collapsable={false} testID="chat-composer" onLayout={(event) => setCapsuleHeight(event.nativeEvent.layout.height)} className={`justify-center overflow-hidden ${material === "liquid" ? "" : "shadow-glass"}`} style={[styles.composerCapsule, { borderRadius: radius }, liftStyle]}>
         {/* iOS's glass reads 4 levels off the page with almost no shadow; the drawn one matches, not a white card. */}
         <GlassBackground radius={radius} surface="glassComposer" />
-        <View className="flex-row items-center gap-1">
-          {layout.twoRows ? null : attachButton}
-          {layout.twoRows ? null : harnessSlot}
-          {layout.twoRows ? null : modelSlot}
+        <View collapsable={false} className={layout.twoRows ? undefined : "flex-row items-center gap-1"} style={layout.twoRows ? styles.composerContentTwoRows : undefined}>
+          {leadingControls}
           {inputField}
           {layout.twoRows ? null : trailing}
+          {layout.twoRows ? <View style={styles.composerTrailingCorner}>{trailing}</View> : null}
+          {layout.twoRows ? <View style={styles.composerExpandCorner}>{expandButton}</View> : null}
         </View>
-        {layout.twoRows ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
-          {attachButton}
-          {harnessSlot}
-          {modelSlot}
-          <View className="flex-1" />
-          {expandButton}
-          {trailing}
-        </View> : null}
-      </View>
+      </Animated.View>
       </LayoutAnimationConfig>
     </View>
   );
@@ -874,6 +896,12 @@ const styles = StyleSheet.create({
   composerCapsule: { minHeight: COMPOSER_ONE_ROW_HEIGHT, paddingHorizontal: 4, borderCurve: "continuous" },
   composerText: { textAlignVertical: "top", includeFontPadding: false },
   composerPasteTarget: { flex: 1, minWidth: 0 },
+  composerPasteTargetTwoRows: { minWidth: 0, width: "100%" },
+  // Two rows: the field takes the top, and the control row is pinned to the capsule's bottom edge.
+  composerContentTwoRows: { paddingBottom: COMPOSER_CONTROL_ROW_HEIGHT },
+  composerControlsLeading: { position: "absolute", left: 0, bottom: COMPOSER_ROW_GAP, flexDirection: "row", alignItems: "center", gap: COMPOSER_ROW_GAP },
+  composerTrailingCorner: { position: "absolute", right: 0, bottom: COMPOSER_ROW_GAP },
+  composerExpandCorner: { position: "absolute", right: COMPOSER_CONTROL_SIZE + COMPOSER_ROW_GAP, bottom: COMPOSER_ROW_GAP },
 });
 // The 36 pt controls in the 44 pt capsule keep a 44 pt touch target.
 const COMPOSER_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 } as const;

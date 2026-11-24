@@ -9,6 +9,8 @@ export const COMPOSER_TOP_PADDING = 8;
 export const COMPOSER_ONE_ROW_HEIGHT = 48;
 /** Two rows: the text row, then a fixed 44 pt control row. */
 export const COMPOSER_CONTROL_ROW_HEIGHT = 44;
+/** The 36 pt controls inside the capsule. */
+export const COMPOSER_CONTROL_SIZE = 36;
 /** Gap between the text and the controls in one row (the 4 pt row gap plus the field's own padding). */
 export const COMPOSER_TEXT_GAP = 12;
 /** Text inset from the capsule's edge in two rows. It stays 14 pt at every text size so the wrapped text keeps full width. */

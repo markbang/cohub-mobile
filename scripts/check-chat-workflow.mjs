@@ -27,7 +27,7 @@ import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, s
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
-import { collapsedComposerHeight, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
+import { collapsedComposerHeight, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
@@ -406,6 +406,9 @@ const chromeScope = {
   COMPOSER_TEXT_PADDING,
   COMPOSER_TOP_PADDING,
   COMPOSER_ONE_ROW_HEIGHT,
+  COMPOSER_CONTROL_ROW_HEIGHT,
+  COMPOSER_CONTROL_SIZE,
+  COMPOSER_ROW_GAP,
   composerFieldPaddingX,
   colorWithOpacity,
   edgeChrome: { headerMinHeight: 56, fade: 24 },
@@ -4077,6 +4080,7 @@ assert.equal(getComposerLayout({ ...overflowInput, measure: { inline: overflowHe
 // The capsule: one row is 48 pt, and a corner is half the shorter of the capsule and the 24 pt corner.
 assert.equal(COMPOSER_ONE_ROW_HEIGHT, 48);
 assert.equal(COMPOSER_CONTROL_ROW_HEIGHT, 44);
+assert.equal(COMPOSER_CONTROL_SIZE, 36);
 assert.equal(composerCapsuleRadius(48), 24, "the one-row capsule is fully round");
 assert.equal(composerCapsuleRadius(30), 15, "a shorter capsule keeps its ends fully round");
 assert.equal(composerCapsuleRadius(120), 24, "a two-row capsule keeps the 24 pt corner");
