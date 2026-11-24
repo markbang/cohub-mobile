@@ -762,7 +762,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
           {inputField}
           {layout.twoRows ? null : trailing}
         </View>
-        {layout.twoRows ? <View className="flex-row items-center gap-1 bg-glass-composer" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
+        {layout.twoRows ? <View className="flex-row items-center gap-1" style={{ height: COMPOSER_CONTROL_ROW_HEIGHT }}>
           {attachButton}
           {harnessSlot}
           {modelSlot}
