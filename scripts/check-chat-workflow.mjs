@@ -27,7 +27,7 @@ import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, s
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
-import { collapsedComposerHeight, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
+import { collapsedComposerHeight, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, composerTextMeasure, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
@@ -4105,6 +4105,15 @@ assert.equal(getComposerLayout({ ...composerLayoutInput, text: "Looks good, send
 assert.equal(getComposerLayout({ ...composerLayoutInput, text: "", measure: fitMeasure("Message the Agent", 1) }).twoRows, false, "the default placeholder stays on one row");
 const longDraft = "word ".repeat(51);
 assert.equal(getComposerLayout({ ...composerLayoutInput, text: longDraft, measure: fitMeasure(longDraft, 1) }).height, 108, "the default long draft shows four whole lines");
+// A value set from JS (a restored draft, a dictation final) never reports a native content size, so its text layout is the measure.
+const jsDraft = "word ".repeat(20).trim();
+const jsDraftEstimate = fitMeasure(jsDraft, 1);
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: jsDraftEstimate }).height, 64, "the estimate counts two wide lines for the JS-set draft");
+const jsDraftLaidOut = composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: 3 * 22 + 20, estimate: jsDraftEstimate });
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: jsDraftLaidOut }).height, 86, "a JS-set draft shows the three lines its text layout measured, not the two the estimate counts");
+assert.deepEqual(composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: null, estimate: jsDraftEstimate }), jsDraftEstimate, "before its first layout report a JS-set draft is the estimate");
+assert.deepEqual(composerTextMeasure({ typed: true, nativeHeight: 40, layoutHeight: 86, estimate: jsDraftEstimate }), { inline: 40, wide: 40 }, "typed text keeps its native measurement");
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: 5 * 22 + 20, estimate: jsDraftEstimate }) }).scrollEnabled, true, "a laid-out draft one line past the collapsed cap scrolls to its end");
 const largeMetrics = { lineHeight: 44, textPadding: 40 };
 const largeDraft = (text) => ({ ...composerLayoutInput, ...largeMetrics, text, measure: fitMeasure(text, 2) });
 assert.deepEqual(getComposerLayout(largeDraft("Looks good, send it")), {

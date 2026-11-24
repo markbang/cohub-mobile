@@ -25,8 +25,8 @@ export const COMPOSER_CHROME_HEIGHT = COMPOSER_TOP_PADDING + COMPOSER_ONE_ROW_HE
 /**
  * Columns that fit on one line of the inline row at the default text size, measured in Latin glyphs.
  * The controls keep their width at every text size, so the row holds fewer columns as the glyphs grow:
- * `composerColumnsPerLine`. The estimate only needs to be close: typed text carries a real native
- * measurement, and a JS-set draft (a dictation final, a restored draft, the placeholder) is estimated.
+ * `composerColumnsPerLine`. The estimate is only a fallback: `composerTextMeasure` measures the text
+ * itself, and the placeholder is the only text that is estimated.
  */
 const COLUMNS_PER_LINE = 30;
 
@@ -78,12 +78,7 @@ export type ComposerLayout = {
   scrollEnabled: boolean;
 };
 
-/**
- * Android's content-size watcher reads a stale layout when JS replaces the text (a dictation
- * final) and never fires again, so native measurement alone cannot detect the growth. The
- * estimate is derived from the text itself and only raises the measurement; a later real
- * native measurement always wins.
- */
+/** The height of `text` estimated from its characters, before any layout has reported its height. */
 export function estimateComposerContentHeight(text: string, lineHeight: number, textPadding: number, columnsPerLine = COLUMNS_PER_LINE) {
   if (!text) return 0;
   let lines = 0;
@@ -93,6 +88,18 @@ export function estimateComposerContentHeight(text: string, lineHeight: number, 
     lines += Math.max(1, Math.ceil(columns / columnsPerLine));
   }
   return lines * lineHeight + textPadding;
+}
+
+/**
+ * The text's heights for the layout. Typed text uses the native content size. Any other value uses the height its
+ * text layout reported at the rows it is drawn in: iOS reports a content size only when the input's frame changes,
+ * and Android's watcher reads a stale layout, so a JS-set value never reaches the native measurement. The estimate
+ * stands in only until that first report.
+ */
+export function composerTextMeasure(input: { typed: boolean; nativeHeight: number; layoutHeight: number | null; estimate: ComposerMeasure }): ComposerMeasure {
+  if (input.typed) return { inline: input.nativeHeight, wide: input.nativeHeight };
+  if (input.layoutHeight !== null) return { inline: input.layoutHeight, wide: input.layoutHeight };
+  return input.estimate;
 }
 
 export function shouldAutoExpandComposer(input: {

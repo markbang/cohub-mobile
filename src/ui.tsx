@@ -34,7 +34,7 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_CONTROL_SIZE, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_ROW_GAP, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, composerTextMeasure, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -563,9 +563,10 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // state because the render-phase expansion check needs the committed value; identical
   // updates bail out, so typing never pays an extra render.
   const [lastUserText, setLastUserText] = useState(value);
-  // A draft that arrived without typing (restored, or set by a debug link) is measured by the estimate too: at mount its
-  // native measurement can read short, which left the field too small for its text.
+  // Set by typing. A value set from JS (a restored draft, a dictation final) is measured by its text layout instead.
   const [userEdited, setUserEdited] = useState(false);
+  // The height the hidden text layout reported for `text`, at the row layout and line height it was drawn with.
+  const [laidOutText, setLaidOutText] = useState<{ text: string; twoRows: boolean; lineHeight: number; height: number } | null>(null);
   const [autoExpandedFor, setAutoExpandedFor] = useState<string | null>(null);
   // Two rows (the wrapped layout) once a draft has wrapped; see getComposerLayout.
   const [wrapped, setWrapped] = useState(false);
@@ -599,22 +600,20 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
     if (expanded) setExpanded(false);
   }
   const { blocked, hasDraft, canSend, canStop, queues, glyph } = getComposerActionState({ text: value, hasAttachment, disabled, sending, running, hasStopHandler: Boolean(onStop), sendFeedback });
-  // A JS-driven append is invisible to the native measurement (Android's watcher reads a
-  // stale layout and never re-fires; iOS defers the event until the height prop changes),
-  // so the estimate stands in for it. Typed text is measured natively once a measurement exists: the
-  // estimate assumes the one-row width and would add a blank line under a draft that fills the wrapped row.
   const lineHeight = typography.body.lineHeight * fontScale;
   // The text's paddings and gaps scale with Dynamic Type; the controls and their rows keep their size.
   const textPadding = COMPOSER_TEXT_PADDING * fontScale;
   // The native content size includes the field's padding (the text container inset) on both platforms.
   const placeholderText = placeholder ?? t("ui.composer.placeholder");
+  // A trailing newline opens a line in the input; the zero-width space gives the text layout that line too.
+  const laidOutValue = value.endsWith("\n") ? `${value}\u200b` : value;
   const estimate = (text: string, fullRow: boolean) => estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, fullRow));
-  // Typed text is measured natively; a draft set without typing takes the larger of the native value and the estimate.
   // The native measurement includes the field's vertical padding when the field was drawn in one row; in two rows the padding sits outside the input.
   const nativeHeight = contentHeight > 0 ? contentHeight + (wrapped ? textPadding : 0) : 0;
   const typed = userEdited && value === lastUserText && nativeHeight > 0;
-  // A draft set without typing is sized by the estimate at the full width: its native value was measured in the inline row, where it may wrap.
-  const textMeasure = typed ? { inline: nativeHeight, wide: nativeHeight } : { inline: Math.max(nativeHeight, estimate(value, false)), wide: estimate(value, true) };
+  // The layout's height holds only for the text and the rows it was laid out in.
+  const laidOutHeight = laidOutText && laidOutText.text === value && laidOutText.twoRows === wrapped && laidOutText.lineHeight === lineHeight ? laidOutText.height : null;
+  const textMeasure = composerTextMeasure({ typed, nativeHeight, layoutHeight: laidOutHeight, estimate: { inline: estimate(value, false), wide: estimate(value, true) } });
   const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
@@ -669,6 +668,19 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
                 two-row padding and clip would then re-create the tree around the focused field, dropping the keyboard. */}
             <View collapsable={false} style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
               <View collapsable={false} style={textClip}>
+                {/* Hidden, at the input's width and font: it reports the height a value set from JS reaches, which the input does not report.
+                    Always mounted, so the input's sibling index does not change when the first character arrives. */}
+                <Text
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  onLayout={(event) => {
+                    const height = event.nativeEvent.layout.height + textPadding;
+                    setLaidOutText((current) => current && current.text === value && current.twoRows === layout.twoRows && current.lineHeight === lineHeight && current.height === height ? current : { text: value, twoRows: layout.twoRows, lineHeight, height });
+                  }}
+                  className="text-body"
+                  style={[styles.composerText, { position: "absolute", top: 0, left: 0, right: 0, opacity: 0, paddingHorizontal: fieldPadding.paddingHorizontal }]}
+                >{laidOutValue}</Text>
                 <TextInput
                   ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
                   testID="chat-composer-input"
@@ -687,16 +699,6 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
                   }}
                   onScroll={(event) => {
                     if (measurementRef) measurementRef.current.scrollY = event.nativeEvent.contentOffset.y;
-                    // A JS-driven append scrolls the caret natively without an onChangeText, and iOS
-                    // only emits onContentSizeChange once the height prop itself has changed, which
-                    // starves the growth logic. The scroll event still carries a fresh content size;
-                    // only raising the measurement keeps Android's coarser scroll payload from
-                    // shrinking the box. iOS includes it but the RN types omit it (Android leaves
-                    // it unset), so it is read as an optional extra.
-                    const appendedSize = (event.nativeEvent as { contentSize?: { height: number } }).contentSize;
-                    if (value !== lastUserText && typeof appendedSize?.height === "number" && Number.isFinite(appendedSize.height)) {
-                      setContentHeight((current) => Math.max(current, appendedSize.height));
-                    }
                   }}
                   onContentSizeChange={(event) => {
                     setContentHeight(event.nativeEvent.contentSize.height);
