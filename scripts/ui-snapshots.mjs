@@ -213,12 +213,12 @@ export const MOTIONS = [
 const ARTIFACTS = { phone: "ui-snapshots-ios", tablet: "ui-snapshots-ios-tablet" };
 const PARTS = ["screens", "flow", "motion", "perf"];
 const DEFAULT_ORIENTATIONS = { phone: ["portrait"], tablet: ["portrait", "landscape"] };
-// Seconds of capture per job, measured on run 45462974741 (one light theme, offline): a phone screen takes
-// about 13 s, a tablet screen 19 s in portrait and 22 s in landscape. A job holds at most SHARD_CAPTURE_SECONDS
-// of it, so the default list is six jobs (phone 2, tablet portrait 1, tablet landscape 2, split flows 1).
-// Every job also pays a fixed cost before its first capture (dependencies, app, driver, first bundle).
-const SHARD_CAPTURE_SECONDS = 360;
-const SECONDS_PER_SCREEN = { "phone-portrait": 13, "tablet-portrait": 19, "tablet-landscape": 22 };
+// Seconds of Maestro time per screen, measured on run 45497720090 (warm Metro, offline, light): 25 s on a phone,
+// 26 s on a tablet. A job holds at most SHARD_CAPTURE_SECONDS of it. Every job also pays a fixed cost before its
+// first screen (about 12 minutes measured on that run: dependencies, the driver, the first bundle), and GitHub runs
+// five macOS jobs at once, so the default list is five jobs: phone 2, tablet portrait 1, tablet landscape 1, split flows 1.
+const SHARD_CAPTURE_SECONDS = 570;
+const SECONDS_PER_SCREEN = { "phone-portrait": 25, "tablet-portrait": 26, "tablet-landscape": 26 };
 // An estimate: no run has timed the motion recordings yet.
 const SECONDS_PER_MOTION = 25;
 
@@ -383,7 +383,8 @@ async function startMetro({ frameProbe, offline }) {
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,
   });
-  const deadline = Date.now() + 120_000;
+  // Expo's CLI and its bundler take about 90 s to answer on a cold runner; a run that timed out at 120 s was a false failure.
+  const deadline = Date.now() + 300_000;
   while (Date.now() < deadline) {
     if (metro.exitCode !== null) throw new Error(`Metro exited with code ${metro.exitCode} before it was ready.`);
     try {
@@ -395,7 +396,7 @@ async function startMetro({ frameProbe, offline }) {
     await sleep(1000);
   }
   stopMetro(metro);
-  throw new Error(`Metro did not answer on port ${METRO_PORT} within two minutes.`);
+  throw new Error(`Metro did not answer on port ${METRO_PORT} within five minutes.`);
 }
 
 /**

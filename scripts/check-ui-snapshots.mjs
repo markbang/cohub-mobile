@@ -22,7 +22,7 @@ assert.ok(!flow("android", [first]).includes(`"(Open in`), "Android does not wai
 
 const all = { targets: ["phone", "tablet"], orientations: null, screens: null, themes: ["light"], textSizes: ["default"], motion: false, perf: 0 };
 const defaults = planShards(all);
-assert.equal(defaults.length, 6, "the default list (light, phone and tablet, no motion) is six jobs: phone 2, tablet portrait 1, tablet landscape 2, split flows 1");
+assert.equal(defaults.length, 5, "the default list (light, phone and tablet, no motion) is five jobs, the most GitHub runs at once: phone 2, tablet portrait 1, tablet landscape 1, split flows 1");
 assert.equal(new Set(defaults.map((entry) => entry.artifact)).size, defaults.length, "every job uploads under its own artifact name");
 assert.ok(defaults.every((entry) => entry.part === "flow" || entry.screens.length > 0), "no job is empty");
 
@@ -42,8 +42,9 @@ assert.deepEqual(landscape.map((entry) => [entry.orientation, entry.part, entry.
 assert.deepEqual(planShards({ ...all, targets: ["phone"], screens: ["split-space"] }), [], "a run naming only tablet screens has no phone job");
 
 const doubled = planShards({ ...all, targets: ["phone"], themes: ["light", "dark"] });
-assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs");
+assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs of eleven screens");
 assert.deepEqual(doubled.flatMap((entry) => entry.screens), SCREENS.map((screen) => screen.name), "both themes still cover each phone screen once");
+assert.ok(doubled.every((entry) => entry.screens.length === 11), "each doubled phone job holds eleven screens");
 
 const motionPlan = planShards({ ...all, targets: ["phone"], motion: true });
 const motions = motionPlan.filter((entry) => entry.part === "motion");
