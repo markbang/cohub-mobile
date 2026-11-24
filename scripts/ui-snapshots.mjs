@@ -115,7 +115,8 @@ export const SCREENS = [
   // The native timeline on the same fixtures, on iOS too, where the Chat screen draws the JS list.
   { name: "chat-native", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation&native=1", steps: [{ waitFor: "setRows" }] },
   // The first row, by position: the test account's newest Chat changes from run to run.
-  { name: "chat-real", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }] },
+  // Fresh: the Settings and Chats tab roots keep the offset the scrolled screens above left them at, so Appearance would be off-screen.
+  { name: "chat-real", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { tapPoint: FIRST_ROW }, { waitGone: "Opening Chat" }] },
   { name: "catalog-menu", ready: "Menu", link: "cohub://debug/ui?section=menu", steps: [{ tapOnId: "ui-catalog-menu-button" }, { waitFor: "Pin" }] },
   // Menus in the app, each left open; `fresh` relaunches first, so the previous one is gone. iOS shows the
   // system menu, picker and attachment menu here, Android the drawn ones; the model selector is drawn on both.
