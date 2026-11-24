@@ -273,24 +273,9 @@ function requireCommand(command, args, hint) {
 const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds));
 const sleepSync = (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 
-/**
- * Signs the E2E account in with its password, without the hosted page, and returns a refresh token
- * for the app (src/auth/e2e-session.ts). The hosted page mails a sign-in code to the account the
- * moment it takes the identifier, so there is no fallback to it.
- */
-function signInWithoutEmail() {
-  const result = spawnSync("node", ["scripts/e2e/logto-token.mjs"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  if (result.error) throw new Error(`node could not start scripts/e2e/logto-token.mjs: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`Signing in through Logto's experience API failed:\n${result.stderr.trim()}`);
-  process.stderr.write(result.stderr);
-  const token = result.stdout.trim();
-  if (!token) throw new Error("scripts/e2e/logto-token.mjs printed no refresh token.");
-  return token;
-}
-
-async function startMetro({ frameProbe, refreshToken, offline }) {
+async function startMetro({ frameProbe, offline }) {
   const metro = spawn("bunx", ["expo", "start", "--port", String(METRO_PORT)], {
-    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}), ...(refreshToken ? { EXPO_PUBLIC_E2E_REFRESH_TOKEN: refreshToken } : {}), ...(offline ? { EXPO_PUBLIC_E2E_SESSION: "offline" } : {}) },
+    env: { ...process.env, CI: "1", EXPO_PUBLIC_UI_SNAPSHOTS: "1", EXPO_PUBLIC_COHUB_ENV: process.env.EXPO_PUBLIC_COHUB_ENV || "dev", ...(frameProbe ? { EXPO_PUBLIC_FRAME_PROBE: "1" } : {}), ...(offline ? { EXPO_PUBLIC_E2E_SESSION: "offline" } : {}) },
     stdio: ["ignore", "inherit", "inherit"],
     detached: true,
   });
@@ -327,8 +312,8 @@ const MAESTRO_ORIENTATION = { portrait: "PORTRAIT", landscape: "LANDSCAPE_LEFT" 
 /**
  * Launches fresh, waits out a cold Metro and system dialogs, and signs in if needed. An iPad turns
  * here, through Maestro; Android turns from the host before the run (`android.setOrientation`).
- * With a `session` the app signs itself in, so the flow waits for Chats alone: AuthScreen shows for a
- * moment before the token lands, and the login flow would mail the account a sign-in code.
+ * With a `session` (an offline run) the app draws its fixtures without sign-in, so the flow waits for
+ * Chats alone.
  */
 function preamble(platform, session, orientation = null) {
   const login = resolve(LOGIN_FLOWS[platform]);
@@ -725,13 +710,8 @@ const ios = {
 async function capture(options) {
   requireCommand("maestro", ["--version"], "Install Maestro: curl -Ls https://get.maestro.mobile.dev | bash");
   mkdirSync(options.out, { recursive: true });
-  // One sign-in per process, before the device work, so a refused sign-in fails in seconds. An offline run
-  // signs in never. The token reaches the app through the Metro this run starts; an already running Metro
-  // (`--no-metro`) keeps the login flow.
-  const credentials = ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].every((key) => process.env[key]?.trim());
-  const refreshToken = !options.offline && options.metro && credentials ? signInWithoutEmail() : null;
-  const session = options.offline || Boolean(refreshToken);
-  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, refreshToken, offline: options.offline }) : null;
+  const session = options.offline;
+  const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, offline: options.offline }) : null;
   const missing = [];
   let cells = 0;
   try {

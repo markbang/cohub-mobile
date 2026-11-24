@@ -4,6 +4,8 @@ name: E2E Android
 # JS, so it only makes sense once Publish OTA has published that commit. It therefore
 # chains off Publish OTA instead of running on every pull request, where the JS under
 # test would not be on any channel yet.
+# It depends on the page login (e2e/auth/login.yaml). With the dev tenant's CAPTCHA on, that cannot
+# run unattended, so keep this workflow disabled until the E2E account can sign in without it.
 on:
   workflow_dispatch:
     inputs:
