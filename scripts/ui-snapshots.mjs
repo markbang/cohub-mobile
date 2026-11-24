@@ -14,6 +14,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
  *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
  *           (--part runs one slice of the target's work: its screens, the split flows, the motion recordings
  *            (--screens then names the interactions) or the perf runs. Without --part every slice runs.)
+ *   warm --platform ios [--offline]   (starts Metro, requests the iOS bundle once, stops Metro; prepare saves the cache)
  *   plan --target phone,tablet [--orientations ...] [--screens ...] [--themes ...] [--text-size ...] [--no-motion] [--perf runs]
  *           prints the capture jobs as JSON, each one a --part slice that fits one job's budget
  *   merge --plan <plan.json> --shards <dir> [--out dir] [--themes ...] [--text-size ...]
@@ -57,6 +58,7 @@ const TABLET_OFFLINE_FLOW = "e2e/tablet/split-offline.yaml";
 const PAIR_HEIGHT = 1400;
 // iOS content size categories behind each --text-size choice; `default` is the simulator's own `large`.
 const TEXT_SIZES = { default: "large", "extra-large": "extra-large", "accessibility-large": "accessibility-large" };
+const WARM_TIMEOUT_MS = 30 * 60 * 1000;
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
 const OPEN_IN_APP = "Open in .*Cohub.*\\?";
@@ -318,6 +320,8 @@ function parseArgs(argv) {
     if (options.offline && options.platform === "android") throw new Error("--offline is iOS only for now: the Android flows still sign in.");
     options.out ??= resolve("dist/ui-snapshots", options.platform);
   } else if (command === "plan") {
+  } else if (command === "warm") {
+    if (options.platform !== "ios") throw new Error("warm is for --platform ios.");
   } else if (command === "merge") {
     if (!options.plan || !options.shards) throw new Error("merge needs --plan <plan.json> and --shards <dir>.");
     options.out ??= resolve("dist/ui-snapshots/merged");
@@ -330,7 +334,7 @@ function parseArgs(argv) {
     if (options.platform !== "ios") throw new Error("boot is for --platform ios.");
     if (options.targets.length !== 1) throw new Error("boot takes one --target: phone or tablet.");
   } else {
-    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|plan|merge|compare|redact|boot [options]. See the header of this file.");
+    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|plan|warm|merge|compare|redact|boot [options]. See the header of this file.");
   }
   return options;
 }
@@ -405,9 +409,29 @@ async function startMetro({ frameProbe, offline }) {
  * filling the transform options), so Metro's transforms are done when the app launches. Detached: the capture
  * does not wait for it.
  */
+function iosBundleUrl() {
+  return `http://localhost:${METRO_PORT}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&app=${PACKAGE_ID}`;
+}
+
 function warmIosBundle() {
-  const url = `http://localhost:${METRO_PORT}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&app=${PACKAGE_ID}`;
-  spawn("curl", ["--silent", "--output", "/dev/null", url], { stdio: "ignore", detached: true }).unref();
+  spawn("curl", ["--silent", "--output", "/dev/null", iosBundleUrl()], { stdio: "ignore", detached: true }).unref();
+}
+
+/**
+ * Starts Metro and requests the app's first bundle, then stops it. Metro's transform cache lives on disk, so the
+ * capture jobs that restore it start with the bundle already transformed. Expo's own "iOS Bundled" line shows the cost.
+ */
+async function warm({ offline }) {
+  const metro = await startMetro({ frameProbe: false, offline });
+  const started = Date.now();
+  try {
+    const response = await fetch(iosBundleUrl(), { signal: AbortSignal.timeout(WARM_TIMEOUT_MS) });
+    const size = (await response.arrayBuffer()).byteLength;
+    if (!response.ok) throw new Error(`Metro answered ${response.status} for the iOS bundle.`);
+    process.stdout.write(`Warmed the iOS bundle: ${size} bytes in ${((Date.now() - started) / 1000).toFixed(1)} s.\n`);
+  } finally {
+    stopMetro(metro);
+  }
 }
 
 function stopMetro(metro) {
@@ -437,6 +461,8 @@ function preamble(platform, session, orientation = null) {
   return [
     `appId: ${PACKAGE_ID}`,
     "---",
+    // Before the launch, so the app draws in the orientation the flow asks for and not in the one an earlier flow left.
+    ...(platform === "ios" && orientation ? [`- setOrientation: ${MAESTRO_ORIENTATION[orientation]}`, "- waitForAnimationToEnd:", "    timeout: 5000"] : []),
     "- launchApp:",
     "    stopApp: true",
     "    permissions:",
@@ -498,7 +524,6 @@ function preamble(platform, session, orientation = null) {
       "      - waitForAnimationToEnd:",
       "          timeout: 5000",
     ] : []),
-    ...(platform === "ios" && orientation ? [`- setOrientation: ${MAESTRO_ORIENTATION[orientation]}`, "- waitForAnimationToEnd:", "    timeout: 5000"] : []),
   ];
 }
 
@@ -1260,6 +1285,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const options = parseArgs(process.argv.slice(2));
     if (options.command === "capture") await capture(options);
     else if (options.command === "plan") planCommand(options);
+    else if (options.command === "warm") await warm(options);
     else if (options.command === "merge") merge(options);
     else if (options.command === "boot") bootSimulator(options.targets[0]);
     else if (options.command === "redact") redact(options.dir, ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => process.env[key]?.trim()).filter(Boolean));

@@ -102,6 +102,30 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
 
+      # Metro's transform cache is shared through this run: prepare warms it with the app's first bundle and saves
+      # it, and every capture job restores that save. The key is per run, so a new run starts from the newest save
+      # for the same lockfile and transforms only what changed. A cold first bundle takes minutes on a macOS runner.
+      - name: Locate Metro cache
+        id: metro
+        run: echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Metro cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.run_id }}
+          restore-keys: |
+            metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+
+      - name: Warm Metro
+        run: node scripts/ui-snapshots.mjs warm --platform ios $OFFLINE_ARG
+
+      - name: Save Metro cache
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.metro.outputs.path }}
+          key: metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.run_id }}
+
       - name: Plan capture jobs
         id: plan
         env:
@@ -226,7 +250,7 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      # Metro's transform cache makes the app's first bundle fast; a cold one can outlast the app's wait.
+      # Metro's transform cache, saved by prepare in this run: the app's first bundle starts from transforms already done.
       - name: Locate Metro cache
         id: metro
         run: echo "path=$(node -p "require('os').tmpdir()")/metro-cache" >> "$GITHUB_OUTPUT"
@@ -235,9 +259,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}
+          key: metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.run_id }}
           restore-keys: |
-            metro-${{ runner.os }}-${{ matrix.target }}-
+            metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
 
       - name: Capture
         env:
@@ -263,13 +287,6 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
-
-      - name: Save Metro cache
-        if: always()
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}
 
   # Runs when a capture job failed, so the jobs that passed stay downloadable. Missing captures are listed in
   # MISSING.txt in their artifact, and the merge fails the run.

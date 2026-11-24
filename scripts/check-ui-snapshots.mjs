@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -19,6 +19,15 @@ assert.ok(ask > 0 && answer > ask && screenAfter > answer, "the first link waits
 assert.equal((firstBlock.match(/timeout: 60000/g) ?? []).length, 2, "the first link's waits allow a cold Metro (60 s)");
 assert.ok(!ios.slice(secondLink).includes("Open in .*Cohub"), "later links do not check for the question");
 assert.ok(!flow("android", [first]).includes(`"(Open in`), "Android does not wait for the question with the screen");
+
+// A landscape flow asks for its orientation before the app launches, so it never relies on the state an earlier flow left.
+const landscapeFlow = buildFlow({ platform: "ios", session: true, screens: TABLET_SCREENS.slice(0, 1), target: "tablet", orientation: "landscape" });
+assert.ok(landscapeFlow.indexOf("- setOrientation: LANDSCAPE_LEFT") > 0 && landscapeFlow.indexOf("- setOrientation: LANDSCAPE_LEFT") < landscapeFlow.indexOf("- launchApp:"), "the landscape flow turns the device before it launches the app");
+const portraitFlow = buildFlow({ platform: "ios", session: true, screens: TABLET_SCREENS.slice(0, 1), target: "tablet", orientation: "portrait" });
+assert.ok(portraitFlow.indexOf("- setOrientation: PORTRAIT") > 0 && portraitFlow.indexOf("- setOrientation: PORTRAIT") < portraitFlow.indexOf("- launchApp:"), "the portrait flow turns the device before it launches the app");
+assert.equal(buildFlow({ platform: "ios", session: true, screens: SCREENS.slice(0, 1), target: "phone", orientation: "portrait" }).includes("setOrientation"), false, "a phone flow does not turn the device");
+const tabletFlowLandscape = buildTabletFlow({ platform: "ios", session: true, maestroOrientation: (orientation) => (orientation === "landscape" ? "LANDSCAPE_LEFT" : "PORTRAIT") });
+assert.ok(tabletFlowLandscape.indexOf("- setOrientation: PORTRAIT") < tabletFlowLandscape.indexOf("- launchApp:"), "the split-flow run turns the device before it launches the app");
 
 const all = { targets: ["phone", "tablet"], orientations: null, screens: null, themes: ["light"], textSizes: ["default"], motion: false, perf: 0 };
 const defaults = planShards(all);
