@@ -26,7 +26,7 @@ import { chatOpenAction, dropRepeatedTopPush, focusedRouteKeys, leftPaneWidth, s
 import { RADIUS, TEXT_RAMP, darkPalette, lightPalette, pureBlackOverrides } from "../src/design/tokens.ts";
 import { imageViewerFlightStart, imageViewerOriginUsable, imageViewerPageIndex } from "../src/data/image-viewer.ts";
 import { arrivedKeys, listContinuityChange, withLeavingRows } from "../src/data/list-continuity.ts";
-import { collapsedComposerHeight, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
+import { collapsedComposerHeight, composerClipSlack, composerColumnsPerLine, COMPOSER_CHROME_HEIGHT, COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "../src/ui/composer-layout.ts";
 import { BUBBLE_META_GAP, bubbleTextLines, getBubbleMaxWidth, getBubbleMetaLayout, getReplyContentWidth, getReplyRowWidth } from "../src/ui/message-bubble-layout.ts";
 import { getComposerMenuLayout } from "../src/ui/composer-menu-layout.ts";
 import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame.ts";
@@ -4017,9 +4017,9 @@ assert.deepEqual(getComposerLayout({ ...composerLayoutInput, measure: { inline: 
 });
 assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 120, wide: 120 } }).scrollEnabled, false, "trailing measurement space under four lines does not scroll");
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, measure: { inline: 600, wide: 600 }, expanded: true }), {
-  expanded: true, twoRows: true, showExpandButton: true, height: 320, scrollEnabled: true,
+  expanded: true, twoRows: true, showExpandButton: true, height: 306, scrollEnabled: true,
 });
-assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 }, expanded: true }).height, 320, "an expanded editor keeps its height even when the content fits");
+assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 }, expanded: true }).height, 306, "an expanded editor keeps its height even when the content fits, in whole lines (13 at 22 pt: 13 × 22 + 20)");
 assert.equal(getComposerLayout({ ...composerLayoutInput, measure: { inline: 66, wide: 66 }, expanded: true }).scrollEnabled, true, "an expanded editor stays scrollable because the estimate may undershoot real wraps");
 assert.equal(getComposerLayout({ ...composerLayoutInput, expanded: true }).showExpandButton, true, "collapse remains available after deleting back to one line");
 // A wrapped draft keeps its two rows: the full-width row measures shorter, which would flip a one-row draft back and forth.
@@ -4028,7 +4028,15 @@ assert.equal(getComposerLayout({ ...composerLayoutInput, wrapped: true, text: ""
 assert.deepEqual(getComposerLayout({ ...composerLayoutInput, text: "", measure: { inline: 30, wide: 30 }, expanded: true }), {
   expanded: false, twoRows: false, showExpandButton: false, height: 42, scrollEnabled: false,
 }, "clearing or sending lays the empty field out from the placeholder, not the stale text measurement");
-assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 400, expanded: true }).height, 180, "expanded input leaves room above the keyboard");
+assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 400, expanded: true }).height, 174, "expanded input leaves room above the keyboard, in whole lines (7 × 22 + 20)");
+// The 45% cap (a tablet pane, or a short window) is rounded too: a line that does not fit is never cut through.
+for (const availableHeight of [500, 777, 1100]) {
+  const expandedHeight = getComposerLayout({ ...composerLayoutInput, availableHeight, measure: { inline: 900, wide: 900 }, expanded: true }).height;
+  assert.equal((expandedHeight - COMPOSER_TEXT_PADDING) % 22, 0, `the expanded cap at ${availableHeight} pt is whole lines`);
+  const collapsedHeight = getComposerLayout({ ...composerLayoutInput, availableHeight, measure: { inline: 900, wide: 900 } }).height;
+  assert.equal((collapsedHeight - COMPOSER_TEXT_PADDING) % 22, 0, `the collapsed cap at ${availableHeight} pt is whole lines`);
+}
+assert.equal(composerClipSlack(22), 22 * 0.08, "the clip slack is a fraction of the line height, so it scales with Dynamic Type");
 assert.equal(getComposerLayout({ ...composerLayoutInput, availableHeight: 180, measure: { inline: 600, wide: 600 } }).height, 64, "short viewports constrain the default input to whole lines");
 assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 52, wide: 52 } }).showExpandButton, false, "a large-font single line is not mistaken for multiline");
 assert.equal(getComposerLayout({ ...composerLayoutInput, lineHeight: 44, textPadding: 40, measure: { inline: 120, wide: 120 } }).showExpandButton, true);

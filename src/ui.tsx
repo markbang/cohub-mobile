@@ -34,7 +34,7 @@ import { getComposerActionState } from "@/src/data/composer-state";
 import { useDelayedStatus } from "@/src/data/use-delayed-status";
 import type { AttachmentUploadState } from "@/src/data/attachment-uploads";
 import { PasteImagesInput } from "@/src/platform/paste-input";
-import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
+import { COMPOSER_CONTROL_ROW_HEIGHT, COMPOSER_ONE_ROW_HEIGHT, COMPOSER_TEXT_PADDING, COMPOSER_TOP_PADDING, composerCapsuleRadius, composerClipSlack, composerColumnsPerLine, composerFieldPaddingX, estimateComposerContentHeight, getComposerLayout, shouldAutoExpandComposer } from "@/src/ui/composer-layout";
 import { floatingBarBottomOffset } from "@/src/ui/floating-bar";
 import { isUsableKeyboardFrame } from "@/src/ui/keyboard-frame";
 import { useTranslation } from "@/src/i18n";
@@ -638,13 +638,14 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
   const singleLine = !layout.twoRows;
-  // Two rows: the input is the text area (whole lines); its padding sits in the wrapper around it, so a line that does not fit is clipped between lines.
-  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height - textPadding;
+  // Two rows: the input is the text area, whole lines plus a clip slack; the padding sits in the wrapper around it, and the wrapper's bottom padding gives the slack back.
+  const clipSlack = composerClipSlack(lineHeight);
+  const fieldHeight = singleLine ? lineHeight + textPadding : layout.height - textPadding + clipSlack;
   const fieldPadding = { paddingHorizontal: composerFieldPaddingX(layout.twoRows, fontScale), paddingVertical: layout.twoRows ? 0 : textPadding / 2 };
   const inputField = <>
           {/* Images, GIFs, and stickers pasted into the input attach to the message; text pastes stay text. */}
           <PasteImagesInput onPasteImages={(pasted) => onPasteImages?.(pasted)} style={styles.composerPasteTarget}>
-            <View style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
+            <View style={layout.twoRows ? { paddingTop: textPadding / 2, paddingBottom: textPadding / 2 - clipSlack } : undefined}>
               <TextInput
                 ref={(input) => { inputRef.current = input; if (measurementRef) measurementRef.current.input = input; }}
                 testID="chat-composer-input"

@@ -114,6 +114,17 @@ export function shouldAutoExpandComposer(input: {
  */
 export const COMPOSER_CAPSULE_RADIUS = 24;
 
+/**
+ * How far the two-row text box runs past a whole number of lines. Measured on the iOS stills (22 pt and 47 pt
+ * lines): the first line's ink sits about a quarter line below the box top, and the glyphs end about two thirds
+ * of the way down their line. A box this far past the lines clips in the middle of the gap between lines.
+ */
+export const COMPOSER_CLIP_SLACK_LINES = 0.08;
+
+export function composerClipSlack(lineHeight: number) {
+  return lineHeight * COMPOSER_CLIP_SLACK_LINES;
+}
+
 export function composerCapsuleRadius(height: number) {
   return Math.min(height / 2, COMPOSER_CAPSULE_RADIUS);
 }
@@ -122,14 +133,13 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   const hasText = input.text.length > 0;
   const expanded = hasText && input.expanded;
   const minHeight = input.lineHeight + input.textPadding;
-  const expandedHeight = Math.max(minHeight, Math.min(320, Math.floor(input.availableHeight * 0.45)));
-  // Collapsed: three lines plus padding, or 120 pt, within the expanded cap. The field shows whole
-  // lines only, so a line that does not fit is clipped between lines, not through its middle.
-  const collapsedCap = Math.max(minHeight, Math.min(expandedHeight, Math.max(120, 3 * input.lineHeight + input.textPadding)));
-  // The epsilon keeps an exact count of lines from rounding down on float error.
-  const wholeLines = Math.floor((collapsedCap - input.textPadding) / input.lineHeight + 1e-6);
-  const wholeLinesHeight = Math.max(minHeight, wholeLines * input.lineHeight + input.textPadding);
-  const maxHeight = expanded ? expandedHeight : wholeLinesHeight;
+  // The largest whole-line height within a limit: the field shows exact lines, so a line that does not fit is clipped between lines.
+  const wholeLinesWithin = (limit: number) => Math.max(minHeight, Math.floor((limit - input.textPadding) / input.lineHeight + 1e-6) * input.lineHeight + input.textPadding);
+  const limit = Math.min(320, input.availableHeight * 0.45);
+  const expandedHeight = wholeLinesWithin(limit);
+  // Collapsed: three lines plus padding, or 120 pt, within the cap.
+  const collapsedCap = wholeLinesWithin(Math.min(limit, Math.max(120, 3 * input.lineHeight + input.textPadding)));
+  const maxHeight = expanded ? expandedHeight : collapsedCap;
   const height = expanded ? maxHeight : Math.min(maxHeight, Math.max(minHeight, Math.ceil(input.measure.wide)));
   // Native measurements include soft wraps; the threshold tolerates platform rounding.
   const wrapsLine = input.measure.inline > input.lineHeight * 1.5 + input.textPadding;
