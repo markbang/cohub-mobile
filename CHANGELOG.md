@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.3.18](https://github.com/markbang/cohub-mobile/compare/v2.3.17...v2.3.18) (2026-11-24)
+
+
+### Features
+
+* **chat:** name tool calls, summarize Turns, and count live time ([8ed8186](https://github.com/markbang/cohub-mobile/commit/8ed81866ecea484f10ef8f80dde572e8b2a80e44))
+* **chat:** shimmer the live reply's status label ([7c12d98](https://github.com/markbang/cohub-mobile/commit/7c12d9890541b6b115e6f00a213a02afb82e8f0a))
+* **ui-snapshots:** render the account screens from seeded fixtures ([#290](https://github.com/markbang/cohub-mobile/issues/290)) ([b141f24](https://github.com/markbang/cohub-mobile/commit/b141f244a8550cf02e4a2203bd8a61f44ce2e7aa))
+* **update:** animate the Android update banner in and out ([25e328e](https://github.com/markbang/cohub-mobile/commit/25e328ed63a6caca58e0714da70f01a788838f46))
+
+
+### Fixes
+
+* **chat:** clip the wrapped composer's text at whole lines ([#289](https://github.com/markbang/cohub-mobile/issues/289)) ([54f1b6d](https://github.com/markbang/cohub-mobile/commit/54f1b6d1850bf1a57b5218f746574a31902798d7))
+* **chat:** give the composer's text the full width once it wraps ([#287](https://github.com/markbang/cohub-mobile/issues/287)) ([5ce6548](https://github.com/markbang/cohub-mobile/commit/5ce654872ae6a1954f96a67e97f4a497efee29e1))
+* **refresh:** continue an Android pull from where the spring back is ([f9b4800](https://github.com/markbang/cohub-mobile/commit/f9b48006a1430d083381fe712df74319a9c06660))
+
 ## [2.3.17](https://github.com/markbang/cohub-mobile/compare/v2.3.16...v2.3.17) (2026-11-23)
 
 

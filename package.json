@@ -1,7 +1,7 @@
 {
   "name": "cohub-mobile",
   "main": "expo-router/entry",
-  "version": "2.3.17",
+  "version": "2.3.18",
   "workspaces": [
     "modules/react-native-enriched-markdown",
     "modules/react-native-screens"
