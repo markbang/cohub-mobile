@@ -1,6 +1,7 @@
 import type { BillingCreditStatus, UserActivityResponse } from "@neta-art/cohub";
 import { useCallback } from "react";
 import { useAppActions } from "./context";
+import { fixtureSeed, usesFixtures } from "./fixtures";
 import { activityRange } from "./activity";
 import { useScreenQuery } from "./query";
 
@@ -10,16 +11,19 @@ const failure = (error: Error | null) => error ? error.message || "Unable to loa
 
 export function useActivity() {
   const { client } = useAppActions();
+  const seed = usesFixtures() ? fixtureSeed() : null;
   const credits = useScreenQuery({
     queryKey: ["activity", "credits"],
-    queryFn: (): Promise<BillingCreditStatus> => client!.billing.getCredits(),
-    enabled: Boolean(client),
+    queryFn: async (): Promise<BillingCreditStatus> => seed ? seed.credits : client!.billing.getCredits(),
+    enabled: Boolean(client) || seed !== null,
+    initialData: seed?.credits,
     intervalMs: ACTIVITY_POLL_INTERVAL_MS,
   });
   const activity = useScreenQuery({
     queryKey: ["activity", "usage"],
-    queryFn: (): Promise<UserActivityResponse> => client!.user.getActivity(activityRange(new Date())),
-    enabled: Boolean(client),
+    queryFn: async (): Promise<UserActivityResponse> => seed ? seed.activity : client!.user.getActivity(activityRange(new Date())),
+    enabled: Boolean(client) || seed !== null,
+    initialData: seed?.activity,
     intervalMs: ACTIVITY_POLL_INTERVAL_MS,
   });
   const refetchCredits = credits.refetch;

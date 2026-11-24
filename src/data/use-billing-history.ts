@@ -2,6 +2,7 @@ import type { BillingBalanceActivityList, BillingSubscriptionHistoryList, Billin
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useAppActions } from "@/src/data/context";
+import { fixtureSeed, usesFixtures } from "@/src/data/fixtures";
 import { useTranslation } from "@/src/i18n";
 import { useScreenQuery } from "./query";
 
@@ -17,17 +18,20 @@ export function useBillingHistory(kind: HistoryData["kind"]) {
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const cursor = cursors[page - 1] ?? null;
   const queryKey = ["billing", kind, page, cursor];
+  // The UI snapshots' account has no subscriptions; the balance history is not seeded.
+  const seeded = usesFixtures() && kind === "subscriptions" ? fixtureSeed().subscriptions : null;
   const query = useScreenQuery({
     queryKey,
     queryFn: async (): Promise<HistoryData> => kind === "history"
       ? { kind, page, list: (await client!.billing.getBalanceActivities({ cursor, limit: 20 })).activities }
-      : { kind, page, list: (await client!.billing.getSubscriptions({ page, limit: 20 })).subscriptions },
-    enabled: Boolean(client),
+      : { kind, page, list: seeded ?? (await client!.billing.getSubscriptions({ page, limit: 20 })).subscriptions },
+    enabled: Boolean(client) || seeded !== null,
+    initialData: seeded ? { kind: "subscriptions", page, list: seeded } : undefined,
     placeholderData: keepPreviousData,
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const loadError = !client ? t("settings.billing.connect") : query.error ? query.error.message || t("settings.billing.error") : null;
+  const loadError = !client && !seeded ? t("settings.billing.connect") : query.error ? query.error.message || t("settings.billing.error") : null;
 
   const cancel = async ({ subscription, kind: action }: SubscriptionCancellation): Promise<boolean> => {
     if (!client || saving) return false;

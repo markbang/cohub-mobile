@@ -2,6 +2,7 @@ import type { CohubClient, PaletteOverviewResponse } from "@neta-art/cohub";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
+import { fixtureSeed, usesFixtures } from "./fixtures";
 import { loadSpaceListCache, loadSpaceVisits, saveSpaceListCache, saveSpaceVisit } from "./local-db";
 import { useScreenQuery } from "./query";
 import { recentSpaceVisits, type SpaceVisit } from "./space-list";
@@ -29,6 +30,7 @@ export function useSpaceListOwner(client: CohubClient | null, userKey: string, s
   }, [queryClient, store, userKey]);
 
   const loadOverview = useCallback(async (): Promise<PaletteOverviewResponse> => {
+    if (usesFixtures()) return fixtureSeed().overview;
     if (!client) throw new Error("Still connecting. Try again in a moment.");
     await hydration.current;
     try {
@@ -58,7 +60,7 @@ export function useSpaceListOwner(client: CohubClient | null, userKey: string, s
 /** Consumer side: recent visits plus the server overview, refreshed while the caller is mounted. */
 export function useSpaceList(loadOverview: () => Promise<PaletteOverviewResponse>, visits: SpaceVisit[], visitsError: string | null, enabled: boolean, intervalMs?: number) {
   const queryClient = useQueryClient();
-  const query = useScreenQuery({ queryKey: SPACE_OVERVIEW_KEY, queryFn: loadOverview, enabled, intervalMs });
+  const query = useScreenQuery({ queryKey: SPACE_OVERVIEW_KEY, queryFn: loadOverview, enabled, intervalMs, initialData: usesFixtures() ? fixtureSeed().overview : undefined });
   // Errors surface through the query state, so callers can await a refresh without handling them.
   const refresh = useCallback(() => queryClient.fetchQuery({ queryKey: SPACE_OVERVIEW_KEY, queryFn: loadOverview, staleTime: 0 }).then(() => undefined, () => undefined), [loadOverview, queryClient]);
   const overview = query.data ?? null;

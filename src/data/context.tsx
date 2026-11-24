@@ -35,6 +35,8 @@ import { createSpaceRealtime, type SpaceRealtime } from "@/src/data/space-realti
 import { spaceRealtimeChange, userSessionRealtimeChange, type SpaceRealtimeEvent } from "@/src/data/space-realtime-events";
 import { sessionInitiatorFilterKeys, sessionInitiatorOf, type SessionInitiatorFilter } from "@/src/data/session-initiator";
 import { hydrateBotCache } from "@/src/data/bot-cache";
+import { fixtureSeed, usesFixtures, type FixtureSeed } from "@/src/data/fixtures";
+import { publishSpaceSessionCount } from "@/src/data/space-session-counts";
 import { cacheRetentionCutoff, loadCacheRetention } from "@/src/data/cache-retention";
 import { EMPTY_SESSION_SEEN, type SessionSeenState } from "@/src/data/chat-read-state";
 import { useSessionSeenOwner } from "@/src/data/use-session-seen";
@@ -1073,13 +1075,14 @@ export type AppActions = {
 
 type AppStore = StoreApi<AppSnapshot>;
 
-const createAppStore = (): AppStore => createStore<AppSnapshot>()(() => ({
-  state: initialState,
+/** `seed` is the UI snapshots' account data; a live account starts empty and fills from the API. */
+const createAppStore = (seed: FixtureSeed | null): AppStore => createStore<AppSnapshot>()(() => ({
+  state: seed ? { ...initialState, booting: false, spaces: seed.spaces, sessions: seed.sessions, sessionViews: seed.sessionViews } : initialState,
   connectionState: "idle",
   connectionUnavailable: false,
   spaceVisits: [],
   spaceVisitsError: null,
-  sessionSeen: EMPTY_SESSION_SEEN,
+  sessionSeen: seed?.sessionSeen ?? EMPTY_SESSION_SEEN,
 }));
 
 /** A Bot's page shows only its notes, so it reads what arrived since the cached tail instead of the last page again. */
@@ -1105,9 +1108,13 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [installationId, setInstallationId] = useState<string | null>(null);
-  const [store] = useState(createAppStore);
+  const [store] = useState(() => createAppStore(usesFixtures() ? fixtureSeed() : null));
   // The provider is keyed by user, so this cache never outlives the account it was filled for.
-  const [queryClient] = useState(createAppQueryClient);
+  const [queryClient] = useState(() => {
+    const created = createAppQueryClient();
+    if (usesFixtures()) for (const [spaceId, count] of Object.entries(fixtureSeed().spaceSessionCounts)) publishSpaceSessionCount(created, spaceId, count.count, count.hasMore);
+    return created;
+  });
   const [scopeInvalidator] = useState(() => createScopeInvalidator(queryClient));
   useEffect(() => () => { scopeInvalidator.dispose(); queryClient.clear(); }, [queryClient, scopeInvalidator]);
   const booting = useStore(store, (snapshot) => snapshot.state.booting);
@@ -1270,6 +1277,7 @@ export function AppProvider({
   }, [dispatch, stateRef]);
 
   const refreshHome = useCallback((options: { silent?: boolean } = {}) => {
+    if (usesFixtures()) return Promise.resolve();
     if (homeRefreshRequestRef.current) return homeRefreshRequestRef.current;
     const requestStartedAt = Date.now();
     const request = (async () => {
@@ -1505,6 +1513,8 @@ export function AppProvider({
   }, [userKey]);
 
   useEffect(() => {
+    // Fixture data is complete; no home read, cache hydration or background sync runs over it.
+    if (usesFixtures()) return;
     let active = true;
     const activeSubscriptions = subscriptions.current;
     const activeSessionSpaces = sessionSpaces.current;
@@ -2999,8 +3009,8 @@ export function usePersonalSpaceActivity(userUuid: string) {
 
 /** Reads the catalog `loadModels`/`loadModelStatus` fill; it never fetches on its own. */
 export function useModelCatalog() {
-  const models = useQuery<ChatModelCatalogItem[]>({ queryKey: MODELS_KEY, enabled: false });
-  const status = useQuery<ModelStatusResponse | null>({ queryKey: MODEL_STATUS_KEY, enabled: false });
+  const models = useQuery<ChatModelCatalogItem[]>({ queryKey: MODELS_KEY, enabled: false, initialData: usesFixtures() ? fixtureSeed().models : undefined });
+  const status = useQuery<ModelStatusResponse | null>({ queryKey: MODEL_STATUS_KEY, enabled: false, initialData: usesFixtures() ? fixtureSeed().modelStatus : undefined });
   return {
     models: models.data ?? [],
     modelsLoading: models.isFetching,

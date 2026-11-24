@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useProfileSession } from "@/src/auth/profile-session";
 import type { ProfileClaims } from "@/src/auth/profile-session.types";
 import { translate } from "@/src/i18n/core";
+import { fixtureSeed, usesFixtures } from "@/src/data/fixtures";
 
 export type CurrentUser = {
   name: string;
@@ -29,9 +30,11 @@ function userFromClaims(claims: ProfileClaims): CurrentUser {
 /** Reads the signed-in identity from the ID token claims; falls back to a neutral placeholder. */
 export function useCurrentUser(): CurrentUser {
   const { getClaims } = useProfileSession();
-  const [user, setUser] = useState<CurrentUser>(fallbackUser);
+  const [user, setUser] = useState<CurrentUser>(() => usesFixtures() ? fixtureSeed().account : fallbackUser());
 
   useEffect(() => {
+    // The fixture account has no ID token to read claims from.
+    if (usesFixtures()) return;
     let active = true;
     void getClaims()
       .then((claims) => {
