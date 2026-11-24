@@ -114,17 +114,6 @@ export function shouldAutoExpandComposer(input: {
  */
 export const COMPOSER_CAPSULE_RADIUS = 24;
 
-/**
- * How far the two-row text box runs past a whole number of lines. Measured on the iOS stills (22 pt and 47 pt
- * lines): the first line's ink sits about a quarter line below the box top, and the glyphs end about two thirds
- * of the way down their line. A box this far past the lines clips in the middle of the gap between lines.
- */
-export const COMPOSER_CLIP_SLACK_LINES = 0.08;
-
-export function composerClipSlack(lineHeight: number) {
-  return lineHeight * COMPOSER_CLIP_SLACK_LINES;
-}
-
 export function composerCapsuleRadius(height: number) {
   return Math.min(height / 2, COMPOSER_CAPSULE_RADIUS);
 }
@@ -140,7 +129,8 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
   // Collapsed: three lines plus padding, or 120 pt, within the cap.
   const collapsedCap = wholeLinesWithin(Math.min(limit, Math.max(120, 3 * input.lineHeight + input.textPadding)));
   const maxHeight = expanded ? expandedHeight : collapsedCap;
-  const height = expanded ? maxHeight : Math.min(maxHeight, Math.max(minHeight, Math.ceil(input.measure.wide)));
+  // Collapsed, the field is the whole lines the measurement holds, within the cap: a line that does not fit is not drawn at all.
+  const height = expanded ? maxHeight : Math.min(maxHeight, wholeLinesWithin(Math.ceil(input.measure.wide)));
   // Native measurements include soft wraps; the threshold tolerates platform rounding.
   const wrapsLine = input.measure.inline > input.lineHeight * 1.5 + input.textPadding;
   const wrapsText = hasText && (input.text.includes("\n") || input.wrapped || wrapsLine);
@@ -152,8 +142,8 @@ export function getComposerLayout(input: ComposerLayoutInput): ComposerLayout {
     showExpandButton: expanded || wrapsText,
     height,
     // While expanded, the estimate may undershoot the real content and clipping beats a
-    // height fight, so keep the editor scrollable there regardless of the measurement. Collapsed,
-    // scroll only when a whole line is hidden, so the native measurement's trailing space does not scroll.
-    scrollEnabled: expanded || input.measure.wide > height + input.lineHeight,
+    // height fight, so keep the editor scrollable there regardless of the measurement. Collapsed, the
+    // field scrolls as soon as its text runs past the whole lines it shows; a point of rounding is not overflow.
+    scrollEnabled: expanded || input.measure.wide > height + 1,
   };
 }
