@@ -84,7 +84,7 @@ export const SCREENS = [
   { name: "chats-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { swipe: "up" }] },
   { name: "spaces-scrolled", link: "cohub://spaces", steps: [{ swipe: "up" }] },
   { name: "activity-scrolled", ready: "Usage details", link: "cohub://activity", steps: [{ waitGone: "Loading" }, { swipe: "up" }] },
-  { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", steps: [{ swipe: "up" }] },
+  { name: "settings-scrolled", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ swipe: "up" }] },
   // The Chat screen's chrome and native timeline over fixed conversations, then a real Chat.
   { name: "chat-conversation", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation" },
   { name: "chat-tools", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=tools" },
@@ -450,6 +450,11 @@ function checkSplit(lines, platform) {
   lines.push("- assertVisible:", "    id: \"split-right-pane\"");
 }
 
+// The account screens are seeded (src/data/fixtures), so none of these states may show: a failed read or an
+// empty list would mean the seed is missing something the screen needs.
+const ACCOUNT_SCREENS = new Set(["chats", "chats-snap", "chats-scrolled", "spaces", "spaces-scrolled", "activity", "activity-scrolled", "settings", "settings-scrolled", "chat-real", "chat-real-model", "split-chat-real", "split-chat-panel"]);
+const EMPTY_OR_ERROR_TEXT = "(.*are unavailable|.*Connection unavailable|.*Still connecting.*|.*No Chats yet|.*No Spaces yet|.*Could not .*|.*Unable to .*)";
+
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
 function buildFlow({ platform, session, screens, target, orientation }) {
   const lines = preamble(platform, session, target === "tablet" ? orientation : null);
@@ -458,6 +463,7 @@ function buildFlow({ platform, session, screens, target, orientation }) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
     openScreen(lines, platform, screen.link, index === 0 && target !== "tablet", screen.ready);
     pushSteps(lines, platform, screen.steps);
+    if (ACCOUNT_SCREENS.has(screen.name)) lines.push("- assertNotVisible:", `    text: ${yamlString(EMPTY_OR_ERROR_TEXT)}`);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
     lines.push("- takeScreenshot:", `    path: ${yamlString(screen.name)}`);
   }
