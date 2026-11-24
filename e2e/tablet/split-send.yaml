@@ -1,0 +1,24 @@
+appId: io.github.markbang.cohubmobile
+name: Tablet split send
+---
+# Run after split-layout.yaml with a signed-in account, which sends one real message. The Space is
+# picked by its position in the New Chat sheet, since the account's Spaces are not fixed.
+- tapOn:
+    point: "50%, 30%"
+- extendedWaitUntil:
+    visible:
+      id: "chat-composer-input"
+    timeout: 30000
+- tapOn:
+    id: "chat-composer-input"
+- inputText: "Tablet split check. Reply with OK."
+- tapOn: "Send message"
+- extendedWaitUntil:
+    visible:
+      text: "Open .*"
+      selected: true
+    timeout: 30000
+- assertVisible:
+    id: "split-right-pane"
+- assertVisible: ".*Tablet split check.*"
+- takeScreenshot: "flow-07-sent-streaming"

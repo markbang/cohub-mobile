@@ -1,0 +1,18 @@
+appId: io.github.markbang.cohubmobile
+name: Tablet split new Chat, offline
+---
+# Run after split-layout.yaml without an account. The seeded Finance Ops row is picked by its testID, which
+# the New Chat sheet gives every Space; the seed's id is in src/data/fixtures/spaces.ts. Nothing is sent.
+- tapOn:
+    id: "new-chat-space-5a7e0000-0000-4000-8000-000000000001"
+- extendedWaitUntil:
+    visible:
+      id: "chat-composer-input"
+    timeout: 30000
+- tapOn:
+    id: "chat-composer-input"
+- inputText: "Tablet split check. Reply with OK."
+- assertVisible:
+    id: "split-right-pane"
+- assertVisible: ".*Tablet split check.*"
+- takeScreenshot: "flow-07-new-chat-draft"

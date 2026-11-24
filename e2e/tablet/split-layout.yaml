@@ -1,10 +1,9 @@
 appId: io.github.markbang.cohubmobile
 name: Tablet split layout
 ---
-# Run by `scripts/ui-snapshots.mjs capture --target tablet` after sign-in, in portrait, on the
-# Chats tab of a split window. FIRST_ROW and SECOND_ROW are left-pane row positions; PORTRAIT and
-# LANDSCAPE are Maestro orientations for this device.
-# It sends one real message from the test account (the New Chat step).
+# Run by `scripts/ui-snapshots.mjs capture --target tablet`, in portrait, on the Chats tab of a split window,
+# with FIRST_ROW and SECOND_ROW as left-pane row positions and PORTRAIT and LANDSCAPE as Maestro orientations.
+# It needs no network: both panes, opening a Chat, a draft across a rotation, and the New Chat sheet.
 # The root link selects the Chats tab and empties the right pane.
 - openLink: "cohub:///"
 - extendedWaitUntil:
@@ -123,7 +122,7 @@ name: Tablet split layout
           id: "split-right-pane"
       - takeScreenshot: "flow-05-back-empty"
 
-# New Chat opens over both panes, then the draft it creates takes over the right pane once sent.
+# New Chat opens over both panes; the variant flow picks a Space from it.
 - openLink: "cohub:///"
 - extendedWaitUntil:
     visible: ".*Chats.*"
@@ -140,22 +139,3 @@ name: Tablet split layout
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: "flow-06-new-chat-sheet"
-- tapOn:
-    point: "50%, 30%"
-- extendedWaitUntil:
-    visible:
-      id: "chat-composer-input"
-    timeout: 30000
-- tapOn:
-    id: "chat-composer-input"
-- inputText: "Tablet split check. Reply with OK."
-- tapOn: "Send message"
-- extendedWaitUntil:
-    visible:
-      text: "Open .*"
-      selected: true
-    timeout: 30000
-- assertVisible:
-    id: "split-right-pane"
-- assertVisible: ".*Tablet split check.*"
-- takeScreenshot: "flow-07-sent-streaming"
