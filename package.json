@@ -85,7 +85,7 @@
     "ios": "expo run:ios",
     "lint": "oxlint --deny-warnings --report-unused-disable-directives",
     "typecheck": "bun check --noUnusedLocals --noUnusedParameters",
-    "test:workflow": "bun scripts/check-chat-workflow.mjs && bun scripts/check-ota-publish.mjs",
+    "test:workflow": "bun scripts/check-chat-workflow.mjs && bun scripts/check-ota-publish.mjs && bun scripts/check-ui-fixtures.mjs",
     "check:design-tokens": "bun scripts/design-tokens.mjs --check",
     "check:design-system": "bun scripts/check-design-system.mjs",
     "check:module-graph": "bun scripts/check-module-graph.mjs",

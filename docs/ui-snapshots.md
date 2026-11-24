@@ -20,7 +20,7 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 ```
 
 - `target` and `text_size` take comma lists (`target=phone,tablet`, `text_size=default,accessibility-large`). One dispatch runs every cell serially in one capture process with one Metro, and each cell's screens are filtered to its target's catalog. `text_size` (iOS only) sets the simulator's Dynamic Type category for its cell: `default`, `extra-large` or `accessibility-large`. The capture logs the category it applied and returns the simulator to `large` (its default) afterwards. Android has no such input.
-- `offline` (iOS, default `true`) renders the debug fixtures without an account: no sign-in and no Logto request. Only the `chat-*`, `split-chat-*` and `chats` screens have fixtures; the others need `offline=false`. The app stays in debug bundles only (`src/auth/e2e-session.ts`).
+- `offline` (iOS, default `true`) skips sign-in and the Logto request, so the run needs no account. The account screens render from seeded data either way (see [Fixtures](#fixtures)). The app stays in debug bundles only (`src/auth/e2e-session.ts`).
 - The iOS reference runs on iOS 27, on GitHub's `xcode-27` image (a preview). Pass `-f ios=26` to `ui-snapshots-ios.yml` to capture on the default image's iOS 26 instead; the drawn Android UI follows iOS 27.
 - `.github/workflows/ui-snapshots-android.yml` and `.github/workflows/ui-snapshots-ios.yml` build debug binaries and cache them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
 - Snapshots run without an account on seeded fixtures by default (`offline=true`). `offline=false` signs in through the login flow (`e2e/auth/`) with the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), and the tenant's CAPTCHA blocks that step.
@@ -50,6 +50,18 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 - Interaction flow: `e2e/tablet/split.yaml` runs once in the light theme, unless `screens` limits the run. It covers the unread mark clearing when a Chat opens, the missing back button on the right pane's first screen, a draft surviving a rotation, a second Chat replacing the first, Android back emptying the pane, and New Chat taking over the right pane. Its screenshots are in `tablet-flow/`. The New Chat step sends a real message from the test account.
 
 `perf=<runs>` (`--perf <runs>`) runs `PERF_STEPS` that many times from fresh launches in portrait with the frame probe forced on (`EXPO_PUBLIC_FRAME_PROBE=1`). It then reads the probe's records from the app's `cohub-mobile.db` and writes them to `perf/<target>-portrait.json`, one entry per run with its time window. The probe records only UI frames over 25 ms and JS stalls over 50 ms, so a quiet run has no events. Compare a phone run with a tablet run on the same runner type.
+
+## Fixtures
+
+The account screens are never captured from a real account. `src/data/fixtures/` seeds them, and the provider in `src/data/context.tsx` starts from that seed instead of calling the API, so these screens show no loading, network or error state:
+
+- `chats`, `chats-scrolled`, `split-chat-real`: 22 Chats over four Spaces, one of them a pinned Bot, unread on three rows, ages from 13 hours to ten days.
+- `chat-real` and `split-chat-real`: one Chat with a tool-using Turn, a long reply and a short Bot reply.
+- `spaces`, `spaces-scrolled`: four Spaces; the three without a description show their Chat counts.
+- `activity`, `activity-scrolled`: a balance, no active subscription and a 13-week heatmap.
+- `settings`, `settings-scrolled`: the profile card's name, email and avatar.
+
+The seed is gated by `usesFixtures()` in `src/data/fixtures/index.ts`, which is `__DEV__ && uiSnapshots`. A release build has `__DEV__` false, so no fixture is ever read. A screen that needs data the seed does not hold gets it added to the seed, not a manual capture.
 
 ## Screens
 

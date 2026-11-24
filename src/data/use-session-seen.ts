@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { EMPTY_SESSION_SEEN, type SessionSeenEntry, type SessionSeenState } from "./chat-read-state";
+import { usesFixtures } from "./fixtures";
 import { loadSessionSeen, markAllSessionsSeen, saveSessionSeen } from "./local-db";
 
 type SeenStore = StoreApi<{ sessionSeen: SessionSeenState }>;
@@ -20,6 +21,8 @@ export function useSessionSeenOwner(userKey: string, store: SeenStore) {
   }, [store, userKey]);
 
   useLayoutEffect(() => {
+    // Fixture read marks are seeded with the store; hydrating would replace them with this device's empty store.
+    if (usesFixtures()) return;
     // Without a baseline nothing shows as unread, which is the safe failure for a list marker.
     void hydrate().catch(() => undefined);
     return () => { generation.current += 1; };
