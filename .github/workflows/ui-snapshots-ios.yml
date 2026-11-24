@@ -178,6 +178,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The simulator boots for minutes, and `simctl boot` returns once the boot is requested: it runs under the
+      # dependency install, Maestro's install and Metro's start. The capture step waits for it (bootstatus).
+      - name: Boot simulator
+        run: node scripts/ui-snapshots.mjs boot --platform ios --target "${{ matrix.target }}"
+
       # prepare has saved node_modules by now; a capture that misses it installs without saving.
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies

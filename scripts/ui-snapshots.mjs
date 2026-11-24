@@ -13,6 +13,7 @@ import { basename, join, relative, resolve } from "node:path";
  *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
+ *   boot --platform ios --target phone|tablet   (starts the simulator's boot and returns; capture waits for it)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
  * After the screenshots it records each of MOTIONS as a video (light theme, animations on); compare
@@ -253,8 +254,11 @@ function parseArgs(argv) {
     options.out ??= resolve("dist/ui-snapshots/pairs");
   } else if (command === "redact") {
     if (!options.dir) throw new Error("redact needs --dir <dir>.");
+  } else if (command === "boot") {
+    if (options.platform !== "ios") throw new Error("boot is for --platform ios.");
+    if (options.targets.length !== 1) throw new Error("boot takes one --target: phone or tablet.");
   } else {
-    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|compare|redact [options]. See the header of this file.");
+    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|compare|redact|boot [options]. See the header of this file.");
   }
   return options;
 }
@@ -272,6 +276,14 @@ function run(command, args, options = {}) {
 function requireCommand(command, args, hint) {
   const probe = spawnSync(command, args, { stdio: "ignore" });
   if (probe.error) throw new Error(`${command} is required. ${hint}`);
+}
+
+/** Runs one step and prints its duration, so a CI log shows where the time goes. */
+function timed(label, step) {
+  const started = Date.now();
+  const result = step();
+  process.stdout.write(`${label}: ${((Date.now() - started) / 1000).toFixed(1)} s\n`);
+  return result;
 }
 
 const sleep = (milliseconds) => new Promise((done) => setTimeout(done, milliseconds));
@@ -296,6 +308,17 @@ async function startMetro({ frameProbe, offline }) {
   }
   stopMetro(metro);
   throw new Error(`Metro did not answer on port ${METRO_PORT} within two minutes.`);
+}
+
+/**
+ * The app's first bundle takes minutes on a cold Metro, and the simulator boots for minutes before the app asks
+ * for it. This requests the same bundle the app's React Native host asks for (its URL, with Expo's rewrite
+ * filling the transform options), so Metro's transforms are done when the app launches. Detached: the capture
+ * does not wait for it.
+ */
+function warmIosBundle() {
+  const url = `http://localhost:${METRO_PORT}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&app=${PACKAGE_ID}`;
+  spawn("curl", ["--silent", "--output", "/dev/null", url], { stdio: "ignore", detached: true }).unref();
 }
 
 function stopMetro(metro) {
@@ -396,11 +419,18 @@ function preamble(platform, session, orientation = null) {
  */
 function openScreen(lines, platform, link, first, ready) {
   lines.push(`- openLink: ${yamlString(link)}`);
-  // iOS asks once per simulator before handing a custom-scheme link to the app. An absent match
-  // costs Maestro's ~7 s optional lookup, so only a flow's first link checks.
-  if (platform === "ios" && first) lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
   // Matched inside the element's text: iOS and Android often merge a card or row into one element.
-  if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`.*${ready}.*`)}`, "    timeout: 20000");
+  const screen = ready ? `.*${ready}.*` : "^__settle__$";
+  // iOS asks once per simulator before handing a custom-scheme link to the app, and the question can arrive
+  // seconds after openLink returns. On a cold Metro the first screen after it also loads its route's modules
+  // (tens of seconds), so a flow's first link waits up to 60 s for the question or the screen, answers the
+  // question if it is up, then waits up to 60 s for the screen. An absent question costs Maestro's ~7 s
+  // optional lookup, so only a flow's first link checks.
+  if (platform === "ios" && first && ready) {
+    lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`(${OPEN_IN_APP}|${screen})`)}`, "    timeout: 60000");
+    lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
+    lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 60000");
+  } else if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 20000");
   else lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 1500", "    optional: true");
   lines.push("- waitForAnimationToEnd:", "    timeout: 5000");
 }
@@ -675,26 +705,40 @@ const android = {
   },
 };
 
+/** The target's simulator: the first of its devices installed on this machine, with its logical portrait size. */
+function iosDevice(target) {
+  requireCommand("xcrun", ["--version"], "iOS capture needs macOS with Xcode.");
+  const devices = Object.values(JSON.parse(run("xcrun", ["simctl", "list", "devices", "available", "-j"])).devices).flat();
+  const sizes = IOS_DEVICES[target];
+  const device = Object.keys(sizes).map((name) => devices.find((candidate) => candidate.name === name)).find(Boolean);
+  if (!device) throw new Error(`No ${target} simulator among ${Object.keys(sizes).join(", ")}. Install one in Xcode > Settings > Components, or add its logical size to IOS_DEVICES.`);
+  return { ...device, size: sizes[device.name] };
+}
+
+/** `simctl boot` returns once the boot is requested, so a CI step can start it early and the capture waits with bootstatus. */
+function bootSimulator(target) {
+  const device = iosDevice(target);
+  if (device.state === "Shutdown") timed("boot", () => run("xcrun", ["simctl", "boot", device.udid]));
+  process.stdout.write(`${device.name} (${device.state}) ${device.udid}\n`);
+}
+
 const ios = {
   prepare(app, out, target) {
-    requireCommand("xcrun", ["--version"], "iOS capture needs macOS with Xcode.");
-    const devices = Object.values(JSON.parse(run("xcrun", ["simctl", "list", "devices", "available", "-j"])).devices).flat();
-    const sizes = IOS_DEVICES[target];
-    const device = Object.keys(sizes).map((name) => devices.find((candidate) => candidate.name === name)).find(Boolean);
-    if (!device) throw new Error(`No ${target} simulator among ${Object.keys(sizes).join(", ")}. Install one in Xcode > Settings > Components, or add its logical size to IOS_DEVICES.`);
-    const [portraitWidth, portraitHeight] = sizes[device.name];
-    if (device.state !== "Booted") run("xcrun", ["simctl", "boot", device.udid]);
-    run("xcrun", ["simctl", "bootstatus", device.udid, "-b"]);
+    const device = iosDevice(target);
+    const [portraitWidth, portraitHeight] = device.size;
+    // A simulator the boot step already started is Booting here; booting it again fails.
+    if (device.state === "Shutdown") timed("boot", () => run("xcrun", ["simctl", "boot", device.udid]));
     let appPath = app;
     if (app.endsWith(".zip")) {
       const unpacked = join(out, "app");
       rmSync(unpacked, { recursive: true, force: true });
-      run("ditto", ["-x", "-k", app, unpacked]);
+      timed("unzip", () => run("ditto", ["-x", "-k", app, unpacked]));
       const bundle = readdirSync(unpacked).find((entry) => entry.endsWith(".app"));
       if (!bundle) throw new Error(`${app} does not contain a .app bundle.`);
       appPath = join(unpacked, bundle);
     }
-    run("xcrun", ["simctl", "install", device.udid, appPath]);
+    timed("bootstatus", () => run("xcrun", ["simctl", "bootstatus", device.udid, "-b"]));
+    timed("install", () => run("xcrun", ["simctl", "install", device.udid, appPath]));
     run("xcrun", ["simctl", "status_bar", device.udid, "override", "--time", "9:41", "--batteryState", "charged", "--batteryLevel", "100", "--cellularBars", "4", "--wifiBars", "3"]);
     const setContentSize = (category) => run("xcrun", ["simctl", "ui", device.udid, "content_size", category], { allowFailure: true });
     return {
@@ -732,6 +776,7 @@ async function capture(options) {
   mkdirSync(options.out, { recursive: true });
   const session = options.offline;
   const metro = options.metro ? await startMetro({ frameProbe: options.perf > 0, offline: options.offline }) : null;
+  if (metro && options.platform === "ios") warmIosBundle();
   const missing = [];
   let cells = 0;
   try {
@@ -953,6 +998,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     const options = parseArgs(process.argv.slice(2));
     if (options.command === "capture") await capture(options);
+    else if (options.command === "boot") bootSimulator(options.targets[0]);
     else if (options.command === "redact") redact(options.dir, ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => process.env[key]?.trim()).filter(Boolean));
     else compare(options);
   } catch (error) {
