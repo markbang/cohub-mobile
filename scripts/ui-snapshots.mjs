@@ -242,7 +242,7 @@ function parseArgs(argv) {
     if (options.perf > 0 && (options.targets.length > 1 || options.textSizes.length > 1)) throw new Error("--perf runs one target at one text size.");
     if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
     if (options.offline && options.platform === "android") throw new Error("--offline is iOS only for now: the Android flows still sign in.");
-    const known = new Set(options.targets.flatMap((target) => (target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name)));
+    const known = new Set([...SCREENS, ...TABLET_SCREENS].map((screen) => screen.name));
     for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen "${name}". Known: ${[...known].join(", ")}.`);
     options.out ??= resolve("dist/ui-snapshots", options.platform);
   } else if (command === "compare") {

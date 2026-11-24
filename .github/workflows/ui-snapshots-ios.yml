@@ -1,9 +1,9 @@
 name: UI Snapshots (iOS)
 
-# Captures the screens on an iOS simulator, the reference for ui-snapshots-android.yml. Each
-# platform runs on its own so a failure can be retried without waiting for the other. The
-# simulator app is cached by native fingerprint and loads the branch's JS from Metro, so a
-# JS-only change skips the native build.
+# Captures the screens on an iOS simulator, the reference for ui-snapshots-android.yml. A prepare job
+# builds the simulator app once per native fingerprint and caches it; each target then captures in its
+# own job, so phone and tablet run side by side. The simulator app is cached by native fingerprint and
+# loads the branch's JS from Metro, so a JS-only change skips the native build.
 on:
   workflow_dispatch:
     inputs:
@@ -22,7 +22,7 @@ on:
         default: true
         type: boolean
       target:
-        description: The device classes, comma-separated (phone, tablet, or phone,tablet). tablet runs the split layout in both orientations, then the e2e/tablet flow. All cells run serially in one capture process.
+        description: The device classes, comma-separated (phone, tablet, or phone,tablet). Each target captures in its own job, and the jobs run in parallel. tablet runs the split layout in both orientations, then the e2e/tablet flow.
         required: false
         default: phone
         type: string
@@ -36,9 +36,9 @@ on:
         default: default
         type: string
       offline:
-        description: Render the debug fixtures without an account (no sign-in). On by default because the tenant's CAPTCHA blocks the login flow; set false to sign in.
+        description: Render the debug fixtures without an account (no sign-in). Required when the account's sign-in is challenged.
         required: false
-        default: true
+        default: false
         type: boolean
       perf:
         description: Frame-probe runs of the perf sequence (0 skips it).
@@ -57,10 +57,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ui-snapshots-ios-${{ inputs.target }}-${{ inputs.text_size }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   CI: "true"
   EXPO_NO_TELEMETRY: "1"
@@ -71,17 +67,38 @@ env:
   MOTION_ARG: ${{ !inputs.motion && '--no-motion' || '' }}
   ORIENTATIONS_ARG: ${{ inputs.orientations && format('--orientations {0}', inputs.orientations) || '' }}
   OFFLINE_ARG: ${{ inputs.offline && '--offline' || '' }}
-  ARTIFACT: ui-snapshots-ios${{ inputs.target == 'tablet' && '-tablet' || '' }}
   # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
   MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
 
 jobs:
-  ios:
-    name: iOS simulator
+  prepare:
+    name: iOS simulator app
     # The app is matched to iOS 27; GitHub ships its simulator only on the xcode-27 image.
     runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
     timeout-minutes: 120
+    # One build per ref at a time; a second dispatch waits for the first and then restores its app.
+    concurrency:
+      group: ui-snapshots-ios-app-${{ github.ref }}
+      cancel-in-progress: false
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+      key: ${{ steps.app.outputs.cache-primary-key }}
+      built: ${{ steps.app.outputs.cache-hit != 'true' }}
     steps:
+      # Fails the run before any build when the target input is not phone, tablet, or both.
+      - name: Targets
+        id: targets
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          targets=$(printf '%s' "$TARGET" | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)) | unique')
+          if ! echo "$targets" | jq -e 'length > 0 and all(. == "phone" or . == "tablet")' > /dev/null; then
+            echo "::error::target must be phone, tablet, or phone,tablet; got \"$TARGET\"."
+            exit 1
+          fi
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "Capture targets: $targets"
+
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -134,6 +151,54 @@ jobs:
           path: build/ui-snapshots/Cohub-ios-simulator.zip
           key: ${{ steps.app.outputs.cache-primary-key }}
 
+      # The capture jobs take the app from here when it was built, so they do not wait on a cache save.
+      - name: Upload simulator app
+        if: steps.app.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-snapshots-ios-app
+          path: build/ui-snapshots/Cohub-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  capture:
+    name: iOS simulator (${{ matrix.target }})
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.prepare.outputs.targets) }}
+    runs-on: ${{ inputs.ios == '26' && 'macos-latest' || 'xcode-27' }}
+    timeout-minutes: 120
+    # Each target has its own group, so the matrix legs never share one. Nothing is cancelled: a re-dispatch waits for the running capture.
+    concurrency:
+      group: ui-snapshots-ios-${{ matrix.target }}-${{ inputs.text_size }}-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # prepare has saved node_modules by now; a capture that misses it installs without saving.
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+        with:
+          save-cache: "false"
+
+      - name: Download simulator app
+        if: needs.prepare.outputs.built == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: ui-snapshots-ios-app
+          path: build/ui-snapshots
+
+      - name: Restore simulator app
+        if: needs.prepare.outputs.built != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: build/ui-snapshots/Cohub-ios-simulator.zip
+          key: ${{ needs.prepare.outputs.key }}
+          fail-on-cache-miss: true
+
       - name: Install Maestro
         run: |
           set -euo pipefail
@@ -149,12 +214,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ github.run_id }}
+          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ github.run_id }}
           restore-keys: |
-            metro-${{ runner.os }}-
+            metro-${{ runner.os }}-${{ matrix.target }}-
 
       - name: Capture
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ inputs.target }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG $OFFLINE_ARG
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ matrix.target }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $MOTION_ARG $ORIENTATIONS_ARG $OFFLINE_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -166,7 +231,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.ARTIFACT }}
+          name: ${{ matrix.target == 'tablet' && 'ui-snapshots-ios-tablet' || 'ui-snapshots-ios' }}
           path: |
             dist/ui-snapshots/ios
             !dist/ui-snapshots/ios/app
@@ -181,4 +246,4 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ${{ steps.metro.outputs.path }}
-          key: metro-${{ runner.os }}-${{ github.run_id }}
+          key: metro-${{ runner.os }}-${{ matrix.target }}-${{ github.run_id }}
