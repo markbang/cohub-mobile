@@ -613,7 +613,8 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   // The native measurement includes the field's vertical padding when the field was drawn in one row; in two rows the padding sits outside the input.
   const nativeHeight = contentHeight > 0 ? contentHeight + (wrapped ? textPadding : 0) : 0;
   const typed = userEdited && value === lastUserText && nativeHeight > 0;
-  const textMeasure = typed ? { inline: nativeHeight, wide: nativeHeight } : { inline: Math.max(nativeHeight, estimate(value, false)), wide: Math.max(nativeHeight, estimate(value, true)) };
+  // A draft set without typing is sized by the estimate at the full width: its native value was measured in the inline row, where it may wrap.
+  const textMeasure = typed ? { inline: nativeHeight, wide: nativeHeight } : { inline: Math.max(nativeHeight, estimate(value, false)), wide: estimate(value, true) };
   const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
