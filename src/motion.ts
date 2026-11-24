@@ -164,4 +164,9 @@ export const loops = {
   runningRing: { duration: 2400 },
   /** One pass of a Bot's typing dots; each dot starts `stagger` after the last. */
   typingDots: { duration: 1200, stagger: 160 },
+  /**
+   * A live status label's brightness wave: each glyph lights over `rise` and dims back, `stagger` after the one
+   * before it, so the light crosses a long label in at most `sweep`; then the label rests until the pass ends.
+   */
+  shimmer: { duration: 1800, stagger: 80, sweep: 1000, rise: 200, dim: 0.45 },
 } as const;

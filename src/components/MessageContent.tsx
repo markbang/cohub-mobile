@@ -7,7 +7,7 @@ import { useTraceTouches } from "@/src/components/use-chat-scroll-trace";
 import { FlatList, Linking, PixelRatio, Platform, Pressable, ScrollView, Share, Text, View, useWindowDimensions, type LayoutChangeEvent, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
-import Reanimated from "react-native-reanimated";
+import Reanimated, { useReducedMotion } from "react-native-reanimated";
 import { formatElapsed, formatMessageClock } from "@/src/data/chat-format";
 import { setImageViewerPayload } from "@/src/data/image-viewer";
 import { imageThumbnailUrl } from "@/src/data/media";
@@ -26,6 +26,7 @@ import { ContentImage } from "@/src/ui/ContentImage";
 import { BUBBLE_PADDING_X, REPLY_INSET_X, REPLY_META_HEIGHT, getBubbleMaxWidth, getReplyContentWidth, getReplyRowWidth } from "@/src/ui/message-bubble-layout";
 import { usePaneWidth } from "@/src/ui/pane";
 import { BubbleContentWidth, BubbleTraceMessage } from "@/src/components/BubbleText";
+import { shimmerGlyphs, shimmerWave } from "@/src/components/shimmer";
 import { useElapsedSeconds } from "@/src/components/use-elapsed";
 import { useRevealedStreamText } from "@/src/components/useRevealedStreamText";
 import { isFailedSend, turnSequenceForMessage } from "@/src/data/session-history";
@@ -695,6 +696,21 @@ function LiveDot() {
   return <View className="rounded-full bg-accent" style={{ width: 5, height: 5 }} />;
 }
 
+/** A live status label a brightness wave crosses glyph by glyph; it holds still under Reduce Motion. */
+function ShimmerText({ label }: { label: string }) {
+  const reduced = useReducedMotion();
+  const glyphs = useMemo(() => shimmerGlyphs(label), [label]);
+  const wave = useMemo(() => {
+    const { keyframes, duration, stagger } = shimmerWave(glyphs.length);
+    return { duration, stagger, name: Object.fromEntries(keyframes.map((frame) => [`${frame.at * 100}%`, { opacity: frame.value }])) };
+  }, [glyphs.length]);
+  if (reduced) return <Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-secondary">{label}</Text>;
+  // A long label is cut at the row's end: separate glyphs cannot end in an ellipsis.
+  return <View accessible accessibilityLabel={label} className="min-w-0 flex-1 flex-row items-center overflow-hidden">
+    {glyphs.map((glyph, index) => <Reanimated.Text key={index} numberOfLines={1} className="shrink-0 text-caption text-fg-secondary" style={{ animationName: wave.name, animationDuration: wave.duration, animationDelay: Math.round(index * wave.stagger), animationIterationCount: "infinite", animationTimingFunction: "linear" }}>{glyph}</Reanimated.Text>)}
+  </View>;
+}
+
 export const MessageBubble = memo(function MessageBubble({ message, local = false, onCopy, onFork, onSpeak, onRetry, retryDisabled = false, onDiscard, forkDisabled = false, forking = false, spaceId = null, availableWidth, bubbleRef, onBubbleLayout, hidden = false, surfaceHidden = false, floating = false, rowInset = 5, delivered = false }: { message: MessageRecord; local?: boolean; /** The newest own message the server accepted: it carries the Delivered line. */ delivered?: boolean; onCopy?: (text: string) => void | Promise<void>; onFork?: (message: MessageRecord) => void; /** Set for a reply the viewer can hear read aloud. */ onSpeak?: (turnId: string) => void; onRetry?: (message: MessageRecord) => void; retryDisabled?: boolean; onDiscard?: (message: MessageRecord) => void; forkDisabled?: boolean; forking?: boolean; spaceId?: string | null; availableWidth?: number; bubbleRef?: RefObject<View | null>; onBubbleLayout?: () => void; hidden?: boolean; surfaceHidden?: boolean; floating?: boolean; /** A user bubble's own top and bottom padding; a Bot's page packs its bubbles closer. */ rowInset?: number }) {
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -784,7 +800,7 @@ export function StreamCard({ content, status, runtimePhase = null, runtimeModel 
     {hasContent ? <BubbleContentWidth.Provider value={contentWidth}><MessageContent active={live} content={answer} sandboxImages /></BubbleContentWidth.Provider> : null}
     <View className="flex-row items-center gap-2" style={{ height: REPLY_META_HEIGHT }}>
       {statusLabel ? <Text className={`min-w-0 flex-1 text-caption ${status === "failed" ? "text-danger" : "text-fg-muted"}`}>{statusLabel}</Text>
-        : runtimeLabel ? <><LiveDot /><Text numberOfLines={1} className="min-w-0 flex-1 text-caption text-fg-muted">{runtimeLabel}</Text></>
+        : runtimeLabel ? <><LiveDot /><ShimmerText label={runtimeLabel} /></>
         : hasContent ? <><LiveDot /><View className="flex-1" /></>
         : <View className="flex-1"><TypingIndicator /></View>}
       {elapsed !== null ? <Text className="shrink-0 text-micro text-fg-faint tabular-nums">{formatElapsed(elapsed * 1000)}</Text> : null}

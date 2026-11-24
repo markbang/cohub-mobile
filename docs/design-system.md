@@ -252,7 +252,9 @@ toast, `success` for the debug unlock. Nothing buzzes on scroll, row taps, or na
 Rows use background highlight on press (`active:bg-surface-pressed`),
 not scale and not a haptic (a touch that starts a scroll begins on a row); buttons and cards keep `PressableScale`. Tab screens never slide.
 The chat thread's rows, bubbles, and streaming text add no motion of their own: list layout
-animations would fight scroll anchoring and turn ordering.
+animations would fight scroll anchoring and turn ordering. The one exception is the live reply's
+status label (thinking, waiting for the model, starting): a brightness wave crosses it glyph by
+glyph (`loops.shimmer`), opacity only, so nothing lays out again; it holds still under Reduce Motion.
 
 ## 3. Components
 

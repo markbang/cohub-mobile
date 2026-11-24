@@ -3,6 +3,7 @@ import { PixelRatio, Platform, processColor } from "react-native";
 import { normalizeMarkdownStyle } from "react-native-enriched-markdown/src/normalizeMarkdownStyle";
 import type { TimelineAnimation, TimelineNode, TimelineTextStyle } from "@/modules/cohub-chat-timeline";
 import { DETAIL_SEPARATOR, deliveredLift, enrichedMarkdownStyle, estimateTextWidth, fitReplyDetails, formatTokenCount, imageUri, replyDetailParts, toolIcon, toolVerb } from "@/src/components/MessageContent";
+import { shimmerGlyphs, shimmerWave } from "@/src/components/shimmer";
 import { iconPaths, type TimelineIconName } from "@/src/components/timeline/icons";
 import { TEXT_FAMILY } from "@/src/ui/platform-fonts";
 import { GLYPH_PATHS } from "@/src/ui/glyph-paths";
@@ -652,6 +653,24 @@ function liveDot(ctx: NodeContext): TimelineNode {
   return { type: "view", style: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: color(ctx.theme.colors.accent) } };
 }
 
+/** `ShimmerText`: a live status label a brightness wave crosses glyph by glyph; it holds still under Reduce Motion. */
+function shimmerText(ctx: NodeContext, label: string): TimelineNode {
+  const style = textStyle("caption", ctx.theme.colors.textSecondary);
+  const box = { flex: 1, minWidth: 0 };
+  if (ctx.reducedMotion) return text(label, style, { numberOfLines: 1, style: box });
+  const glyphs = shimmerGlyphs(label);
+  const wave = shimmerWave(glyphs.length);
+  return {
+    // A long label is cut at the row's end: separate glyphs cannot end in an ellipsis.
+    type: "view", accessibilityLabel: label, style: { ...box, flexDirection: "row", alignItems: "center", overflow: "hidden" },
+    children: glyphs.map((glyph, index): TimelineNode => ({
+      ...text(glyph, style, { numberOfLines: 1, style: { flexShrink: 0 } }),
+      accessibilityHidden: true,
+      animations: [{ property: "opacity", keyframes: wave.keyframes, duration: wave.duration, delay: Math.round(index * wave.stagger), iterations: 0 }],
+    })),
+  };
+}
+
 /** `StreamCard`: the reply being written, ending in a status line the finished reply's meta replaces in place. */
 export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[]; status: string; runtimePhase: StreamView["runtimePhase"]; runtimeModel: string | null; elapsedSeconds: number | null; streamingText: string | null }): TimelineNode {
   const { theme, t } = ctx;
@@ -670,7 +689,7 @@ export function streamCardNode(ctx: NodeContext, input: { content: ContentBlock[
   const statusRow: TimelineNode[] = statusLabel
     ? [text(statusLabel, textStyle("caption", input.status === "failed" ? theme.colors.danger : theme.colors.textMuted), { style: { flex: 1, minWidth: 0 } })]
     : runtimeLabel
-      ? [liveDot(ctx), text(runtimeLabel, textStyle("caption", theme.colors.textMuted), { numberOfLines: 1, style: { flex: 1, minWidth: 0 } })]
+      ? [liveDot(ctx), shimmerText(ctx, runtimeLabel)]
       : hasContent
         ? [liveDot(ctx), { type: "view", style: { flex: 1 } }]
         : [{ type: "view", style: { flex: 1, flexDirection: "row", alignItems: "center" }, children: [mascotLoader(ctx, 22, t("message.stream.starting"))] }];

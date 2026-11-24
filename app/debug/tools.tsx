@@ -84,6 +84,7 @@ export default function DebugToolsScreen() {
         <StreamingTurnProcess messages={STEPS} thinking={[]} />
         <MessageBubble message={MESSAGE} />
         <StreamCard content={[{ type: "text", text: "Still working on the rest…" }]} status="streaming" startedAt={startedAt} />
+        <StreamCard content={[{ type: "thinking", thinking: "Checking the remaining files." }]} status="streaming" startedAt={startedAt} />
       </ScrollView>
     </Screen>
   );

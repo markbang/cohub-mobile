@@ -14,6 +14,7 @@ import { MessageMeasurements, answerBlocks, createStreamBatch, liveReplyAnchor, 
 import { CHAT_FOLLOW_TAIL_ANIMATE_THRESHOLD, CHAT_FOLLOW_TAIL_MAINTAIN_THRESHOLD, CHAT_TAIL_THRESHOLD, chatFollowPinAnimated, chatListDistances, chatListViewOffset, chatMaintainScrollAtEnd, chatTailDisplaced, chatTailScrolledAway, chatTailStalled, chatTimelineSettledOffset, isChatRowVisible, nextChatTailFollowing } from "../src/data/chat-scroll.ts";
 import { StreamRevealController } from "../src/data/stream-reveal.ts";
 import { formatElapsed, formatMessageClock, formatThreadTime } from "../src/data/chat-format.ts";
+import { shimmerGlyphs, shimmerWave } from "../src/components/shimmer.ts";
 import { getComposerActionState } from "../src/data/composer-state.ts";
 import { msUntilRelativeTimeChange, relativeTime } from "../src/data/relative-time.ts";
 import { createForegroundGate } from "../src/data/foreground-handoff.ts";
@@ -2266,7 +2267,7 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
     ...chromeScope, REPLY_INSET_X: 16, REPLY_META_HEIGHT: 44, getReplyContentWidth, getReplyRowWidth, formatElapsed,
     useElapsedSeconds: (startedAt, running) => running ? startedAt ? 72 : 3 : null,
     useWindowDimensions: () => ({ width: 390 }), useTranslation: () => ({ t: replyT }), hasRenderableContent: (content) => content.length > 0,
-    BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
+    BubbleContentWidth: { Provider: "BubbleContentWidthProvider" }, MessageContent: "MessageContent", LiveDot: "LiveDot", ShimmerText: "ShimmerText", TypingIndicator: "TypingIndicator", answerBlocks, thinkingBlocks,
   });
   for (const [content, status] of [[[{ type: "text", text: "partial" }], "streaming"], [[], "pending"], [[], "failed"]]) {
     const card = StreamCard({ content, status });
@@ -2278,11 +2279,17 @@ assert.deepEqual(footerPlacements(bubbleRender({ content: [{ type: "text", text:
   assert.equal(liveClock({ startedAt: "2026-10-31T09:00:00.000Z" }), "1m 12s", "the live line counts how long the Turn has run");
   assert.equal(liveClock({}), "3s", "a Turn not yet known counts from when the reply appeared");
   assert.equal(chromeNodes(StreamCard({ content: [], status: "failed", startedAt: "2026-10-31T09:00:00.000Z" })).some((node) => node.type === "Text" && classes(node).has("tabular-nums")), false, "a finished reply stops counting");
+  assert.deepEqual(shimmerGlyphs("waiting claude…"), ["w", "a", "i", "t", "i", "n", "g", " c", "l", "a", "u", "d", "e", "…"], "a space leads the glyph after it, so no glyph ends in whitespace");
+  assert.equal(shimmerGlyphs("正在思考…").join(""), "正在思考…");
+  const shortWave = shimmerWave(9);
+  const longWave = shimmerWave(60);
+  assert.ok(shortWave.keyframes.every((frame, index, frames) => index === 0 || frame.at > frames[index - 1].at) && shortWave.keyframes.at(-1).at === 1, "the keyframes run once through a pass");
+  assert.ok(shortWave.stagger * 8 < shortWave.duration && longWave.stagger * 59 <= 1000 && longWave.stagger < shortWave.stagger, "the light crosses a short label at its pace and a long one within the sweep, leaving a rest before the next pass");
   // Only the answer is the reply; the thinking belongs to the Turn's steps, live and finished alike.
   const thought = { type: "thinking", thinking: "Weighing options" };
   const answer = { type: "text", text: "Done." };
   const thinkingOnly = chromeNodes(StreamCard({ content: [thought], status: "streaming" }));
-  assert.deepEqual([thinkingOnly.some((node) => node.type === "MessageContent"), thinkingOnly.some((node) => node.type === "Text" && node.props.children.join("") === "message.stream.thinking")], [false, true], "while only thinking streams, the status line says so instead of showing it");
+  assert.deepEqual([thinkingOnly.some((node) => node.type === "MessageContent"), thinkingOnly.some((node) => node.type === "ShimmerText" && node.props.label === "message.stream.thinking")], [false, true], "while only thinking streams, the status line says so instead of showing it");
   assert.deepEqual(chromeNodes(StreamCard({ content: [thought, answer], status: "streaming" })).find((node) => node.type === "MessageContent").props.content, [answer]);
   const MessageBubble = loadChromeComponent("../src/components/MessageContent.tsx", "MessageBubble", {
     ...chromeScope, memo: (component) => component, useMemo: (factory) => factory(), useSyncExternalStore: () => false, useTraceTouches: () => ({}),
