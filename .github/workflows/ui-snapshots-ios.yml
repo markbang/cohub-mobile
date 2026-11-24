@@ -158,7 +158,6 @@ jobs:
         with:
           name: ui-snapshots-ios-app
           path: build/ui-snapshots/Cohub-ios-simulator.zip
-          archive: false
           if-no-files-found: error
           retention-days: 1
 
