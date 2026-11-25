@@ -255,9 +255,9 @@ assert.equal(listMotion.setup, undefined, "the list opens at its top with the fu
 assert.deepEqual(listRecording, [
   '- startRecording: "motion-chats-list"',
   ...listHold(800),
-  "- swipe:", '    start: "50%, 72%"', '    end: "50%, 28%"', "    duration: 4000",
+  "- swipe:", '    start: "20%, 72%"', '    end: "20%, 28%"', "    duration: 4000",
   ...listHold(2000),
-  "- swipe:", '    start: "50%, 48%"', '    end: "50%, 54%"', "    duration: 800",
+  "- swipe:", '    start: "20%, 48%"', '    end: "20%, 54%"', "    duration: 800",
   ...listHold(2000),
 ], "the list recording is a still hold, a drag up, a hold, a small stroke down and a hold: nothing tapped, no search");
 assert.equal(listMotion.onset, 1, "the clock anchors at the drag up: the first hold is still, and the video first moves there");
@@ -268,3 +268,4 @@ assert.ok(listMotion.frames.every((frame) => frame.ms < listLengths[frame.swipe]
 assert.ok(LAST_STILL_GUARD_SECONDS > 0 && LAST_STILL_GUARD_SECONDS < 0.5, "a still after the last change is cut a little before the last stored frame");
 assert.deepEqual(expectedOutputs({ part: "motion", screens: ["motion-chats-list"] }, { themes: ["light"], motionThemes: ["light", "dark"] }).filter((file) => file.endsWith(".png")), ["motion/light/list-edge.png", "motion/light/list-halfway.png", "motion/light/list-hold.png", "motion/light/list-settled.png", "motion/dark/list-edge.png", "motion/dark/list-halfway.png", "motion/dark/list-hold.png", "motion/dark/list-settled.png"], "the list frames are list-<label>.png in each theme's folder");
 assert.equal(planShards({ ...all, targets: ["phone"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").flatMap((entry) => entry.screens).join(), "motion-chats-list", "naming the list motion plans it alone");
+assert.deepEqual(planShards({ ...all, targets: ["tablet"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").map((entry) => [entry.target, entry.screens.join()]), [["tablet", "motion-chats-list"]], "naming an interaction plans its motion on the tablet: one tablet motion job");

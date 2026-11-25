@@ -271,14 +271,15 @@ export const MOTIONS = [
     link: "cohub:///",
     fresh: true,
     framePrefix: "list",
-    // The list opens at its top with the full tab bar. The first hold makes the recording open still; the content moves
-    // up, which collapses the bar to its bubble; a hold shows the rows behind the bubble; a small stroke down brings the
-    // full bar back over the rows; a last hold shows them. Holds press the title bar's empty margin, never a row.
+    // The list opens at its top. The first hold makes the recording open still; the drag up moves the rows under the tab
+    // bar, and on a phone the bar collapses to its bubble and stays so; a hold, a small stroke down, and a last hold.
+    // Drags start at x = 20%, inside a tablet's left pane, where the full bar is drawn over the rows. Holds press the
+    // title bar's empty margin, never a row.
     steps: [
       { hold: 800, at: TITLE_BAR_HOLD_POINT },
-      { drag: { from: "50%, 72%", to: "50%, 28%", duration: 4000 } },
+      { drag: { from: "20%, 72%", to: "20%, 28%", duration: 4000 } },
       { hold: 2000, at: TITLE_BAR_HOLD_POINT },
-      { drag: { from: "50%, 48%", to: "50%, 54%", duration: 800 } },
+      { drag: { from: "20%, 48%", to: "20%, 54%", duration: 800 } },
       { hold: 2000, at: TITLE_BAR_HOLD_POINT },
     ],
     // The swipes after the recording starts, holds included: 0 the first hold, 1 drag up, 2 the hold, 3 the small stroke
@@ -395,9 +396,10 @@ export function planShards({ targets, orientations = null, screens = null, scope
     const hasDefault = cells.some((cell) => cell.textSize === "default");
     // The split flows run in the full scope only: core captures screens, and its jobs stay at five.
     if (target === "tablet" && scope === "full" && !screens && hasDefault) units.push({ target, orientations: ["portrait"], textSize: "default", part: "flow", screens: [] });
-    // Motion runs at the default text size, whether or not the selection names any screen.
-    if (target === "phone" && motion && (textSizes === null || textSizes.includes("default"))) {
-      const interactions = motionNames(screens);
+    // Motion runs at the default text size, whether or not the selection names any screen. A phone records every
+    // interaction; a tablet records only the ones its selection names, so a run without a selection plans no tablet motion.
+    if (motion && (textSizes === null || textSizes.includes("default"))) {
+      const interactions = target === "phone" || screens ? motionNames(screens) : [];
       for (const slice of splitByBudget(interactions, interactions.length * motionThemes.length * SECONDS_PER_MOTION)) units.push({ target, orientations: ["portrait"], textSize: "default", part: "motion", screens: slice });
     }
     if (perf > 0) units.push({ target, orientations: ["portrait"], textSize: "default", part: "perf", screens: [] });
@@ -498,7 +500,7 @@ function checkSelection(options) {
   if (options.perf > 0 && options.textSizes && !options.textSizes.includes("default")) throw new Error("--perf runs at the default text size; add default to --text-size.");
   if (options.part === "perf" && options.perf < 1) throw new Error("--part perf needs --perf <runs>.");
   if (options.part === "flow" && options.targets.some((target) => target !== "tablet")) throw new Error("--part flow is for --target tablet.");
-  if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
+  if (options.part === "motion" && options.targets.includes("tablet") && !options.screens) throw new Error("--part motion on a tablet needs --screens naming its interaction.");
   for (const theme of options.motionThemes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown motion theme "${theme}". Use light and/or dark.`);
   // A selection without a part names screens and interactions alike; `--part motion` names interactions only.
   const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS]), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
@@ -839,8 +841,9 @@ function buildPerfFlow({ platform, session, target }) {
 }
 
 /** Records each interaction from its settled start screen to its settled end. */
-export function buildMotionFlow({ platform, session, motions }) {
-  const lines = preamble(platform, session);
+export function buildMotionFlow({ platform, session, motions, target = "phone" }) {
+  const lines = preamble(platform, session, target === "tablet" ? "portrait" : null);
+  if (target === "tablet") checkSplit(lines, platform);
   for (const [index, motion] of motions.entries()) {
     // `fresh` relaunches first, so an overlay the previous recording left open (a New Chat sheet) is gone.
     if (motion.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
@@ -1246,7 +1249,7 @@ async function captureCell(options, session, missing) {
   // The split flows and the motion recordings run once, at the default text size.
   const doScreens = parts.includes("screens") && screens.length > 0;
   const doFlow = parts.includes("flow") && options.target === "tablet" && options.textSize === "default";
-  const doMotion = parts.includes("motion") && options.target === "phone" && options.textSize === "default" && motions.length > 0;
+  const doMotion = parts.includes("motion") && (options.target === "phone" || options.screens !== null) && options.textSize === "default" && motions.length > 0;
   const doPerf = parts.includes("perf") && options.perf > 0 && options.textSize === "default";
   if (!doScreens && !doFlow && !doMotion && !doPerf) return 0;
   const orientations = options.orientations ?? (options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"]);
@@ -1305,7 +1308,7 @@ async function captureCell(options, session, missing) {
         device.setTheme(theme);
         const name = `motion-${theme}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
+        writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions, target: options.target }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
