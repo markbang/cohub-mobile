@@ -141,6 +141,10 @@ assert.deepEqual(await runFlowWithRetries(flowsRetried.launch, quiet).then((outc
 const dead = scripted([driverDown, driverDown, driverDown]);
 const deadOutcome = await runFlowWithRetries(dead.launch, quiet);
 assert.deepEqual([deadOutcome.ok, deadOutcome.reason, dead.calls.length], [false, "driver", 3], "a driver that never starts stops after its own three tries");
+const firstStart = scripted([{ ...driverDown, output: "iOS driver not ready in time: FIRST START LINE" }, { ...driverDown, output: "iOS driver not ready in time: SECOND START LINE" }, { ...driverDown, output: "iOS driver not ready in time: LAST START LINE" }]);
+let driverLogReads = 0;
+const firstOutcome = await runFlowWithRetries(firstStart.launch, { ...quiet, driverLog: (attempt) => (driverLogReads += 1, attempt.output) });
+assert.deepEqual([firstOutcome.reason, firstOutcome.driverLog, driverLogReads], ["driver", "iOS driver not ready in time: FIRST START LINE", 1], "a driver that never starts keeps the first start's log, read once, not the last start's");
 const mixed = scripted([driverDown, flowFailed, driverDown, flowFailed, passed]);
 assert.deepEqual(await runFlowWithRetries(mixed.launch, quiet).then((outcome) => [outcome.ok, mixed.calls.length]), [true, 5], "driver starts and flow retries have their own budgets");
 const failing = scripted([flowFailed, flowFailed, flowFailed]);

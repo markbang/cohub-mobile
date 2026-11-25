@@ -821,18 +821,25 @@ function driverNeverStarted(attempt) {
 
 /**
  * Runs a flow until it passes or a budget runs out. A driver that never starts has run no step, so only its start is
- * retried, on its own budget; a flow that fails after its driver came up is retried as a whole, as before.
+ * retried, on its own budget; a flow that fails after its driver came up is retried as a whole, as before. The first
+ * failed start is read by `driverLog` as soon as it fails, before the next start overwrites Maestro's debug output,
+ * and that text is returned as `driverLog` whatever the later starts do.
  */
-export async function runFlowWithRetries(launch, { describe, driverAttempts = DRIVER_ATTEMPTS, flowAttempts = FLOW_ATTEMPTS, pauseMs = RETRY_PAUSE_MS, pause = sleep, log = (text) => process.stdout.write(text) }) {
+export async function runFlowWithRetries(launch, { describe, driverAttempts = DRIVER_ATTEMPTS, flowAttempts = FLOW_ATTEMPTS, pauseMs = RETRY_PAUSE_MS, pause = sleep, log = (text) => process.stdout.write(text), driverLog = () => "" }) {
   let drivers = 0;
   let flows = 0;
+  let firstDriverLog = null;
   for (;;) {
     const attempt = await launch();
     if (attempt.status === 0 && !attempt.timedOut) return { ok: true, attempt };
     if (driverNeverStarted(attempt)) {
       drivers += 1;
+      if (firstDriverLog === null) {
+        firstDriverLog = driverLog(attempt);
+        if (firstDriverLog) log(`Driver start 1 failed on ${describe}. Its log:\n${firstDriverLog}\n`);
+      }
       log(`Driver start ${drivers} of ${driverAttempts} failed on ${describe} after ${attempt.seconds.toFixed(0)} s; no step ran.${drivers < driverAttempts ? " Starting the driver again." : ""}\n`);
-      if (drivers === driverAttempts) return { ok: false, reason: "driver", attempt };
+      if (drivers === driverAttempts) return { ok: false, reason: "driver", attempt, driverLog: firstDriverLog };
     } else {
       flows += 1;
       log(`Maestro ${attempt.timedOut ? "timed out" : "failed"} on ${describe}.${flows < flowAttempts ? ` Retrying (attempt ${flows + 1} of ${flowAttempts}).` : ""}\n`);
@@ -866,16 +873,16 @@ async function runMaestro({ device, flowPath, out, testOutput, offline = false }
   const since = Date.now();
   let outcome;
   try {
-    outcome = await runFlowWithRetries(() => launchMaestro(args, out, device), { describe });
+    outcome = await runFlowWithRetries(() => launchMaestro(args, out, device), {
+      describe,
+      driverLog: (attempt) => driverLogExcerpt(attempt, { udid: device, debugOutput, since, secrets }),
+    });
   } finally {
     redact(debugOutput, secrets);
     redact(testOutput, secrets);
   }
   if (outcome.ok) return;
-  if (outcome.reason === "driver") {
-    const excerpt = driverLogExcerpt(outcome.attempt, { udid: device, debugOutput, since, secrets });
-    throw new Error(`Maestro's driver did not start on ${device} in ${DRIVER_ATTEMPTS} attempts (${describe}). Driver log:\n${excerpt}`);
-  }
+  if (outcome.reason === "driver") throw new Error(`Maestro's driver did not start on ${device} in ${DRIVER_ATTEMPTS} attempts (${describe}). The first start's log:\n${outcome.driverLog}`);
   throw new Error(`Maestro failed on ${describe}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
 
