@@ -6,7 +6,7 @@ import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildMotionFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
-import { clampToLastFrame, frameTimes, recordingClock } from "./ui-snapshots-frames.mjs";
+import { clampToLastFrame, frameTimes, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -226,6 +226,8 @@ assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /N
 assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
 assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
 assert.deepEqual(clampToLastFrame([{ label: "edge", videoSeconds: 3 }, { label: "settled", videoSeconds: 9 }], 5).map((frame) => frame.videoSeconds), [3, 5], "a frame past the last stored frame shows that frame: the screen is still from there on");
+assert.equal(lastTimeIn("0.000000\n4.250000\n14.161667\n"), 14.161667, "the last frame is the last time in ffprobe's output, and a trailing newline is no time");
+assert.equal(lastTimeIn("\n"), null, "output with no times has no last frame");
 
 // The recorded gestures end where they are: no wait for animations follows a drag, so the gap Maestro leaves is the hold.
 // Two drags, the second from above the composer to the top of the screen, then the back swipe; nothing else is recorded.

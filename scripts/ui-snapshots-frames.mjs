@@ -89,9 +89,15 @@ function listJson(root) {
  */
 export function lastFrameSeconds(video) {
   const result = spawnSync("ffprobe", ["-v", "error", "-select_streams", "v", "-show_entries", "frame=pts_time", "-of", "csv=p=0", video], { encoding: "utf8" });
-  const times = (result.stdout ?? "").split("\n").map((line) => Number(line.trim())).filter((time) => Number.isFinite(time));
-  if (times.length === 0) throw new Error(`ffprobe found no video frames in ${video}: ${(result.stderr || result.error?.message || "").trim()}`);
-  return times[times.length - 1];
+  const last = lastTimeIn(result.stdout ?? "");
+  if (last === null) throw new Error(`ffprobe found no video frames in ${video}: ${(result.stderr || result.error?.message || "").trim()}`);
+  return last;
+}
+
+/** The last time in ffprobe's one-time-per-line output, or null when there is none. A trailing newline is no time. */
+export function lastTimeIn(output) {
+  const times = output.split("\n").map((line) => line.trim()).filter((line) => line !== "").map(Number).filter(Number.isFinite);
+  return times.length === 0 ? null : times[times.length - 1];
 }
 
 /** A frame past the last stored frame shows that frame: the screen is still from there on. */

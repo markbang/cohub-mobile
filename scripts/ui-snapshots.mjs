@@ -271,7 +271,7 @@ export const MOTIONS = [
     link: "cohub:///",
     fresh: true,
     framePrefix: "list",
-    setup: [{ swipe: "up" }],
+    setup: [{ swipe: "up" }, { hold: 2000, at: TITLE_BAR_HOLD_POINT }],
     steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { hold: 2000, at: TITLE_BAR_HOLD_POINT }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }, { hold: 2000, at: TITLE_BAR_HOLD_POINT }],
     // The swipes after the recording starts, holds included: 0 drag down, 1 the hold after it, 2 drag up, 3 the hold after
     // that. The video first moves at drag down.
