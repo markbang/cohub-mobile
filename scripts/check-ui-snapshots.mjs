@@ -6,6 +6,7 @@ import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { frameTimes, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -72,9 +73,9 @@ assert.deepEqual(landscape.map((entry) => [entry.orientations.join("/"), entry.p
 assert.deepEqual(planShards({ ...all, targets: ["phone"], screens: ["split-space"] }), [], "a run naming only tablet screens has no phone job");
 
 const doubled = planShards({ ...all, targets: ["phone"], themes: ["light", "dark"] });
-assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs of eleven screens");
+assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs");
 assert.deepEqual(doubled.flatMap((entry) => entry.screens), SCREENS.map((screen) => screen.name), "both themes still cover each phone screen once");
-assert.ok(doubled.every((entry) => entry.screens.length === 11), "each doubled phone job holds eleven screens");
+assert.ok(doubled.every((entry) => entry.screens.length <= 12), "no doubled phone job holds more than twelve screens");
 
 const motionPlan = planShards({ ...all, targets: ["phone"], motion: true });
 const motions = motionPlan.filter((entry) => entry.part === "motion");
@@ -86,6 +87,15 @@ assert.equal(planShards({ ...all, targets: ["tablet"], perf: 2 }).filter((entry)
 const expected = (plan, options) => plan.flatMap((entry) => expectedOutputs(entry, options));
 const outputs = expected(defaults, { themes: ["light"] });
 assert.equal(new Set(outputs).size, outputs.length, "no two jobs write the same file");
+const bothThemes = planShards({ ...all, targets: ["phone"], motion: true, themes: ["light"], motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion");
+const bothOutputs = expected(bothThemes, { themes: ["light"], motionThemes: ["light", "dark"] });
+assert.ok(MOTIONS.every((motion) => ["light", "dark"].every((theme) => bothOutputs.includes(`motion/${theme}/${motion.name}.mp4`))), "each motion theme writes every video under motion/<theme>/");
+assert.ok(!bothOutputs.some((path) => /^motion\/[^/]+\.mp4$/.test(path)), "no video is written at the top of motion/");
+const stripesOnly = planShards({ ...all, targets: ["phone"], screens: ["chat-stripes", "motion-stripes"], themes: ["light", "dark"], motion: true, motionThemes: ["light", "dark"] });
+assert.deepEqual(stripesOnly.map((entry) => [entry.part, entry.screens]), [["screens", ["chat-stripes"]], ["motion", ["motion-stripes"]]], "--screens names a screen and an interaction, and each job takes its own");
+const stripesFiles = expected(stripesOnly.filter((entry) => entry.part === "motion"), { themes: ["light", "dark"], motionThemes: ["light", "dark"] });
+const stripesFrames = ["tab-edge", "tab-halfway", "tab-hold", "back-edge", "back-halfway", "back-hold"];
+assert.deepEqual([...stripesFiles].sort(), ["light", "dark"].flatMap((theme) => [`motion/${theme}/motion-stripes.json`, `motion/${theme}/motion-stripes.mp4`, ...stripesFrames.map((label) => `motion/${theme}/motion-stripes-${label}.png`)]).sort(), "the stripes recording writes its video, sidecar and six PNG frames in each theme");
 assert.ok(outputs.includes("light/catalog-type.png") && outputs.includes("tablet-portrait/light/split-empty.png") && outputs.includes("tablet-landscape/light/split-empty.png"), "the expected paths match the layout compare reads");
 assert.ok(outputs.includes("tablet-flow/"), "the split flows' directory is expected");
 const sized = expected(planShards({ ...all, targets: ["phone"], screens: ["catalog-rows"], themes: ["light", "dark"], textSizes: ["default", "accessibility-large"] }), { themes: ["light", "dark"] });
@@ -192,3 +202,17 @@ assert.equal(restoreModules?.with?.["fail-on-cache-miss"], true, "a node_modules
 const maestroRestore = captureSteps.find((step) => String(step.uses ?? "").startsWith("actions/cache/restore") && step.with?.path === "~/.maestro");
 assert.ok(maestroRestore && maestroRestore.with["fail-on-cache-miss"] !== true, "a Maestro restore miss or failure installs Maestro instead of failing the shard");
 assert.ok(captureSteps.some((step) => step.name === "Install Maestro" && step.if === "steps.maestro.outputs.cache-hit != 'true'"), "capture installs Maestro when its restore does not hit");
+
+// A frame's time in the video: the swipe it names, plus its offset, less the recording's own start on the host clock.
+const timed = (metadata, command) => ({ command, metadata });
+const commands = [
+  timed({ timestamp: 1000, duration: 100 }, { openLinkCommand: { link: "cohub://settings" } }),
+  timed({ timestamp: 2000, duration: 5 }, { startRecordingCommand: { path: "motion-stripes" } }),
+  timed({ timestamp: 2500, duration: 4000 }, { swipeCommand: { start: "50%, 70%", end: "50%, 43%", duration: 4000 } }),
+  timed({ timestamp: 9000, duration: 4000 }, { swipeCommand: { start: "50%, 85%", end: "50%, 5%", duration: 4000 } }),
+];
+const clock = recordingClock(commands, "motion-stripes");
+assert.deepEqual([clock.startedAtMs, clock.swipes.map((swipe) => swipe.startMs)], [2000, [2500, 9000]], "the recording starts at its startRecording command, and the swipes after it are counted from there");
+assert.deepEqual(frameTimes(clock, [{ label: "tab-halfway", swipe: 0, ms: 3200 }, { label: "back-hold", swipe: 1, ms: 5000 }]).map((frame) => [frame.label, frame.videoSeconds]), [["tab-halfway", 3.7], ["back-hold", 12]], "a frame sits at its swipe's start plus its offset, in seconds from the recording's start");
+assert.throws(() => recordingClock(commands.slice(0, 1), "motion-stripes"), /No startRecording/, "a recording with no start in its commands fails and says what it saw");
+assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }]), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");

@@ -1,3 +1,4 @@
+import { Image } from "react-native";
 import type { BillingCreditStatus, BillingSubscriptionHistoryList, ModelCatalogEntry, ModelStatusResponse, PaletteOverviewResponse, SpaceRecord, UserActivityResponse, UserSessionListItem } from "@neta-art/cohub";
 import { uiSnapshots } from "@/src/config";
 import type { SessionSeenState } from "@/src/data/chat-read-state";
@@ -6,7 +7,7 @@ import type { SessionView } from "@/src/data/types";
 import { FIXTURE_ACCOUNT } from "./account";
 import { FIXTURE_CREDITS, FIXTURE_SUBSCRIPTIONS, fixtureActivity } from "./activity";
 import { fixtureChats } from "./chats";
-import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, previewChatView, REAL_CHAT_ID } from "./session";
+import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, previewChatView, REAL_CHAT_ID, STRIPES_CHAT_ID, stripesChatView } from "./session";
 import { FIXTURE_SPACE_SPECS, fixtureOverview, fixtureSpaces, fixtureSpaceSessionCounts } from "./spaces";
 
 /**
@@ -51,6 +52,9 @@ function buildSeed(now: number): FixtureSeed {
   // Every row opens to a loaded Chat, so a tap on any row in a capture reads seeded history.
   const sessionViews = Object.fromEntries(sessions.map((session) => [session.id, previewChatView(spaceOf(session.spaceId), session, now)]));
   sessionViews[REAL_CHAT_ID] = fixtureChatView(spaceOf(FIXTURE_SPACE_SPECS.finance.id), now);
+  // The striped test picture, as a dev-server URL a Markdown image loads (`scripts/make-stripes-fixture.mjs`).
+  const picture = Image.resolveAssetSource(require("../../../assets/debug/stripes.png")).uri;
+  sessionViews[STRIPES_CHAT_ID] = stripesChatView(spaceOf(FIXTURE_SPACE_SPECS.product.id), now, picture);
   return {
     account: FIXTURE_ACCOUNT,
     spaces,

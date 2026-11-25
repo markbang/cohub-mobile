@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { exportFrames, frameTimes, readCommands, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
 
 /**
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
@@ -10,7 +11,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
  *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
  *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
  *           [--target phone,tablet] [--text-size default,accessibility-large] [--offline] [--part screens|flow|motion|perf]
- *           [--scope core|full]
+ *           [--scope core|full] [--motion-themes light,dark]
  *           (--target and --text-size take comma lists; every cell runs in this one process, with one Metro)
  *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
  *           (--scope core is the default: CORE's screens, at the default size and the composer's at accessibility-large.
@@ -28,8 +29,10 @@ import { basename, dirname, join, relative, resolve } from "node:path";
  *   driver --platform ios --target phone|tablet   (starts Maestro's driver once on the simulator, so the capture's first start finds it running)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
- * After the screenshots it records each of MOTIONS as a video (light theme, animations on); compare
- * pairs those too, so motion can be tuned frame by frame.
+ * After the screenshots it records each of MOTIONS as a video, in each of `--motion-themes` (light by default, animations
+ * on): `motion/<theme>/<name>.mp4`, with a `<name>.json` sidecar that holds the recording's start on the host clock. An
+ * interaction with `frames` also writes its PNGs beside the video. compare pairs the videos too, so motion can be tuned
+ * frame by frame. With `--screens`, only the named interactions record.
  *
  * `--target tablet` runs on an iPad simulator or a tablet emulator at its own density, in each of
  * `--orientations`, and writes `tablet-<orientation>/<theme>/`; the phone keeps `<theme>/`. A text size
@@ -91,6 +94,11 @@ const BROWSER_VALUE = "(System|In-app) browser";
 const LONG_DRAFT = "The draft keeps its place while the timeline scrolls, and the composer grows with it. ";
 const LONG_DRAFT_PHONE = encodeURIComponent(LONG_DRAFT.repeat(2).trim());
 const LONG_DRAFT_TABLET = encodeURIComponent(LONG_DRAFT.repeat(3).trim());
+
+// The striped Chat's title, as the Chats list and the Chat's header show it (src/data/fixtures/session.ts).
+const STRIPES_TITLE = "Stripe test pattern";
+// A Chats row's label carries its preview too, so the row is matched as a pattern.
+const STRIPES_ROW = `.*${STRIPES_TITLE}.*`;
 
 export const SCREENS = [
   { name: "catalog-type", ready: "Display.*", link: "cohub://debug/ui?section=type" },
@@ -156,6 +164,8 @@ export const SCREENS = [
   { name: "catalog-sheet", ready: "Sheet title", link: "cohub://debug/ui?section=sheet", fresh: true },
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
+  // The striped Chat (the Chats list's last row), at rest: the picture starts below the fold, so the screen shows its caption.
+  { name: "chat-stripes", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "240 × 720" }, { hold: 2500 }] },
 ];
 
 // The left pane's first and a later Chat or Space row in a split window.
@@ -224,7 +234,41 @@ export const MOTIONS = [
   { name: "motion-list", ready: "List continuity", link: "cohub://debug/ui?section=list", steps: [{ tapOn: "Archive first" }, { tapOn: "Move last up" }, { tapOn: "Restore" }] },
   // Chats keeps its offset across recordings; a drag down brings its search field back first.
   { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
+  // The striped Chat under the chrome. The picture starts below the fold: five swipes down bring the Chat to its top, where
+  // the picture sits below the older replies. Then a slow drag takes its top edge up to the composer's top edge (the bottom
+  // chrome) and holds, then a drag to the back button holds with it under the button. The back swipe ends the Chat.
+  // `frames` cut PNGs from the recording, each at `ms` after the start of the drag `swipe` (0: the first drag, 1: the second).
+  {
+    name: "motion-stripes",
+    ready: "Appearance",
+    link: "cohub://settings",
+    setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "240 × 720" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { hold: 1000 }],
+    steps: [{ hold: 2000 }, { drag: { from: "50%, 70%", to: "50%, 43%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }, { hold: 2000 }],
+    frames: [
+      { label: "tab-halfway", swipe: 0, ms: 3200 },
+      { label: "tab-edge", swipe: 0, ms: 4000 },
+      { label: "tab-hold", swipe: 0, ms: 5000 },
+      { label: "back-edge", swipe: 1, ms: 3900 },
+      { label: "back-halfway", swipe: 1, ms: 4000 },
+      { label: "back-hold", swipe: 1, ms: 5000 },
+    ],
+  },
 ];
+
+/** The interactions a selection records: every one, or with `screens`, the ones it names. */
+function motionsNamed(screens) {
+  return MOTIONS.filter((motion) => !screens || screens.includes(motion.name));
+}
+
+function motionNames(screens) {
+  return motionsNamed(screens).map((motion) => motion.name);
+}
+
+/** The files one interaction leaves in each theme: its video, its sidecar, and the PNGs its `frames` cut. */
+function motionOutputs(name, motionThemes) {
+  const frames = MOTIONS.find((motion) => motion.name === name)?.frames ?? [];
+  return motionThemes.flatMap((theme) => [`motion/${theme}/${name}.mp4`, `motion/${theme}/${name}.json`, ...frames.map((frame) => `motion/${theme}/${name}-${frame.label}.png`)]);
+}
 
 const ARTIFACTS = { phone: "ui-snapshots-ios", tablet: "ui-snapshots-ios-tablet" };
 const PARTS = ["screens", "flow", "motion", "perf"];
@@ -292,7 +336,7 @@ function cellsFor({ target, scope, screens, textSizes }) {
  * under. A default-size job holds one orientation, since its screens are many; a larger text size's screens are few, so its
  * job holds all of the target's orientations and the fixed cost is paid once.
  */
-export function planShards({ targets, orientations = null, screens = null, scope = "core", themes, textSizes = null, motion, perf }) {
+export function planShards({ targets, orientations = null, screens = null, scope = "core", themes, textSizes = null, motion, perf, motionThemes = ["light"] }) {
   const units = [];
   for (const target of ["phone", "tablet"].filter((name) => targets.includes(name))) {
     const targetOrientations = orientations ?? DEFAULT_ORIENTATIONS[target];
@@ -308,8 +352,8 @@ export function planShards({ targets, orientations = null, screens = null, scope
     // The split flows run in the full scope only: core captures screens, and its jobs stay at five.
     if (target === "tablet" && scope === "full" && !screens && hasDefault) units.push({ target, orientations: ["portrait"], textSize: "default", part: "flow", screens: [] });
     if (target === "phone" && motion && hasDefault) {
-      const interactions = MOTIONS.map((interaction) => interaction.name);
-      for (const slice of splitByBudget(interactions, interactions.length * SECONDS_PER_MOTION)) units.push({ target, orientations: ["portrait"], textSize: "default", part: "motion", screens: slice });
+      const interactions = motionNames(screens);
+      for (const slice of splitByBudget(interactions, interactions.length * motionThemes.length * SECONDS_PER_MOTION)) units.push({ target, orientations: ["portrait"], textSize: "default", part: "motion", screens: slice });
     }
     if (perf > 0) units.push({ target, orientations: ["portrait"], textSize: "default", part: "perf", screens: [] });
   }
@@ -320,7 +364,7 @@ export function planShards({ targets, orientations = null, screens = null, scope
  * The files one job leaves in the run's layout, relative to the run's root. A path ending in "/" is a directory: the
  * split flows name their screenshots in the flow file, so only their directory is known here.
  */
-export function expectedOutputs(entry, { themes }) {
+export function expectedOutputs(entry, { themes, motionThemes = ["light"] }) {
   if (entry.part === "screens") {
     const suffix = entry.textSize === "default" ? "" : `-${entry.textSize}`;
     return entry.orientations.flatMap((orientation) => {
@@ -328,14 +372,14 @@ export function expectedOutputs(entry, { themes }) {
       return themes.flatMap((theme) => entry.screens.map((name) => `${prefix}${theme}${suffix}/${name}.png`));
     });
   }
-  if (entry.part === "motion") return entry.screens.map((name) => `motion/${name}.mp4`);
+  if (entry.part === "motion") return entry.screens.flatMap((name) => motionOutputs(name, motionThemes));
   if (entry.part === "perf") return [`perf/${entry.target}-${entry.orientations[0]}.json`];
   return ["tablet-flow/"];
 }
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: null, scope: "core", offline: false, part: null, plan: null, shards: null };
+  const options = { command, themes: ["light", "dark"], motionThemes: ["light"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: null, scope: "core", offline: false, part: null, plan: null, shards: null };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -360,6 +404,7 @@ function parseArgs(argv) {
     else if (flag === "--offline") options.offline = true;
     else if (flag === "--part") options.part = value();
     else if (flag === "--scope") options.scope = value();
+    else if (flag === "--motion-themes") options.motionThemes = value().split(",").map((name) => name.trim()).filter(Boolean);
     else if (flag === "--plan") options.plan = resolve(value());
     else if (flag === "--shards") options.shards = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
@@ -409,9 +454,10 @@ function checkSelection(options) {
   if (options.part === "perf" && options.perf < 1) throw new Error("--part perf needs --perf <runs>.");
   if (options.part === "flow" && options.targets.some((target) => target !== "tablet")) throw new Error("--part flow is for --target tablet.");
   if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
-  const interactions = options.part === "motion";
-  const known = new Set((interactions ? MOTIONS : [...SCREENS, ...TABLET_SCREENS]).map((item) => item.name));
-  for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown ${interactions ? "interaction" : "screen"} "${name}". Known: ${[...known].join(", ")}.`);
+  for (const theme of options.motionThemes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown motion theme "${theme}". Use light and/or dark.`);
+  // A selection without a part names screens and interactions alike; `--part motion` names interactions only.
+  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS]), ...(options.part === undefined || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
+  for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen or interaction "${name}". Known: ${[...known].join(", ")}.`);
 }
 
 function run(command, args, options = {}) {
@@ -620,7 +666,11 @@ function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
     // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
     // `exact` matches the whole text, for a short word such as a menu item that other labels contain.
-    if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(step.exact ? step.waitFor : `.*${step.waitFor}.*`)}`, "    timeout: 20000");
+    // A hold is an optional wait for a state that never comes, so the flow pauses for the whole timeout.
+    if (step.hold) lines.push("- extendedWaitUntil:", "    visible: \"^__hold__$\"", `    timeout: ${step.hold}`, "    optional: true");
+    else if (step.drag) lines.push("- swipe:", `    start: ${yamlString(step.drag.from)}`, `    end: ${yamlString(step.drag.to)}`, `    duration: ${step.drag.duration}`);
+    else if (step.scrollTo) lines.push("- scrollUntilVisible:", "    element:", `      text: ${yamlString(`.*${step.scrollTo}.*`)}`, "    direction: DOWN", "    timeout: 60000");
+    else if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(step.exact ? step.waitFor : `.*${step.waitFor}.*`)}`, "    timeout: 20000");
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
     // A pause with nothing to wait for, as a keyboard needs after a tap before it is drawn.
@@ -1120,7 +1170,6 @@ async function capture(options) {
 /** The slices one capture runs: a `--part`, or without one every slice the target has in this run. */
 function partsFor(options, screens) {
   if (options.part) return [options.part];
-  if (options.screens && screens.length === 0) return [];
   return ["screens", ...(options.target === "tablet" && !options.screens && options.scope === "full" ? ["flow"] : []), ...(options.motion ? ["motion"] : []), ...(options.perf > 0 ? ["perf"] : [])];
 }
 
@@ -1128,12 +1177,12 @@ function partsFor(options, screens) {
 async function captureCell(options, session, missing) {
   const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
   const screens = catalog.filter((screen) => options.names.includes(screen.name));
-  const motions = options.part === "motion" && options.screens ? MOTIONS.filter((motion) => options.screens.includes(motion.name)) : MOTIONS;
+  const motions = motionsNamed(options.screens);
   const parts = partsFor(options, screens);
   // The split flows and the motion recordings run once, at the default text size.
   const doScreens = parts.includes("screens") && screens.length > 0;
   const doFlow = parts.includes("flow") && options.target === "tablet" && options.textSize === "default";
-  const doMotion = parts.includes("motion") && options.target === "phone" && options.textSize === "default";
+  const doMotion = parts.includes("motion") && options.target === "phone" && options.textSize === "default" && motions.length > 0;
   const doPerf = parts.includes("perf") && options.perf > 0 && options.textSize === "default";
   if (!doScreens && !doFlow && !doMotion && !doPerf) return 0;
   const orientations = options.orientations ?? (options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"]);
@@ -1185,26 +1234,50 @@ async function captureCell(options, session, missing) {
       const directory = join(options.out, "motion");
       rmSync(directory, { recursive: true, force: true });
       mkdirSync(directory, { recursive: true });
-      device.setTheme("light");
       device.setAnimations(true);
-      const flowPath = join(options.out, "motion.yaml");
-      writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
-      const testOutput = join(options.out, "maestro-output", "motion");
-      rmSync(testOutput, { recursive: true, force: true });
-      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
-      device.setAnimations(false);
-      for (const motion of motions) {
-        const file = `${motion.name}.mp4`;
-        const found = findFile(testOutput, file);
-        if (found) run("mv", [found, join(directory, file)]);
-        else missing.push(`motion/${file}`);
+      for (const theme of options.motionThemes) {
+        const themeDirectory = join(directory, theme);
+        mkdirSync(themeDirectory, { recursive: true });
+        device.setTheme(theme);
+        const name = `motion-${theme}`;
+        const flowPath = join(options.out, `${name}.yaml`);
+        writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
+        const testOutput = join(options.out, "maestro-output", name);
+        rmSync(testOutput, { recursive: true, force: true });
+        await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+        const debugOutput = join(options.out, "maestro-debug", name);
+        for (const motion of motions) {
+          const file = `${motion.name}.mp4`;
+          const found = findFile(testOutput, file);
+          if (!found) {
+            missing.push(`motion/${theme}/${file}`);
+            continue;
+          }
+          run("mv", [found, join(themeDirectory, file)]);
+          recordMotion({ motion, theme, video: join(themeDirectory, file), debugOutput, directory: themeDirectory, missing });
+        }
       }
+      device.setAnimations(false);
     }
     if (doPerf) await capturePerf(options, device, session);
   } finally {
     device.restore();
   }
   return 1;
+}
+
+/**
+ * Writes a recording's sidecar: the host-clock start from Maestro's command JSON, and the frames its `frames` name, cut
+ * from the mp4 at their real-time offsets. A failure is listed as missing, so the run reports it after the other captures.
+ */
+function recordMotion({ motion, theme, video, debugOutput, directory, missing }) {
+  try {
+    const clock = recordingClock(readCommands(debugOutput), `${motion.name} (${theme})`);
+    const frames = exportFrames(video, frameTimes(clock, motion.frames ?? []), directory, motion.name);
+    writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, frames });
+  } catch (error) {
+    missing.push(`motion/${theme}/${motion.name} sidecar or frames: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function listFiles(root) {
@@ -1305,28 +1378,31 @@ function firstChange(path) {
 
 /** Recordings side by side at one height and frame rate, aligned on their first change; the shorter one holds its last frame. */
 function pairMotion(options, unmatched) {
-  const iosDirectory = join(options.ios, "motion");
-  const androidDirectory = join(options.android, "motion");
-  if (!existsSync(iosDirectory) || !existsSync(androidDirectory)) return 0;
-  requireCommand("ffmpeg", ["-version"], "Install ffmpeg (apt-get install ffmpeg / brew install ffmpeg) to pair recordings.");
-  const directory = join(options.out, "motion");
-  mkdirSync(directory, { recursive: true });
   let count = 0;
-  const names = new Set([...readdirSync(iosDirectory), ...readdirSync(androidDirectory)].filter((name) => name.endsWith(".mp4")));
-  for (const name of [...names].sort()) {
-    const left = join(iosDirectory, name);
-    const right = join(androidDirectory, name);
-    if (!existsSync(left) || !existsSync(right)) {
-      unmatched.push(`motion/${name}`);
-      continue;
+  // Each theme's recordings sit in `motion/<theme>/`; a theme that only one platform captured is listed as unmatched.
+  for (const theme of ["light", "dark"]) {
+    const iosDirectory = join(options.ios, "motion", theme);
+    const androidDirectory = join(options.android, "motion", theme);
+    if (!existsSync(iosDirectory) || !existsSync(androidDirectory)) continue;
+    requireCommand("ffmpeg", ["-version"], "Install ffmpeg (apt-get install ffmpeg / brew install ffmpeg) to pair recordings.");
+    const directory = join(options.out, "motion", theme);
+    mkdirSync(directory, { recursive: true });
+    const names = new Set([...readdirSync(iosDirectory), ...readdirSync(androidDirectory)].filter((name) => name.endsWith(".mp4")));
+    for (const name of [...names].sort()) {
+      const left = join(iosDirectory, name);
+      const right = join(androidDirectory, name);
+      if (!existsSync(left) || !existsSync(right)) {
+        unmatched.push(`motion/${theme}/${name}`);
+        continue;
+      }
+      const height = 1280;
+      const lead = 0.3;
+      const trim = (path) => String(Math.max(0, firstChange(path) - lead));
+      run("ffmpeg", ["-y", "-loglevel", "error", "-ss", trim(left), "-i", left, "-ss", trim(right), "-i", right, "-filter_complex",
+        `[0:v]fps=30,scale=-2:${height},setsar=1[a];[1:v]fps=30,scale=-2:${height},setsar=1[b];[a]pad=iw+24:ih:0:0:color=0x808080[ag];[ag][b]hstack=inputs=2`,
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(directory, name)]);
+      count += 1;
     }
-    const height = 1280;
-    const lead = 0.3;
-    const trim = (path) => String(Math.max(0, firstChange(path) - lead));
-    run("ffmpeg", ["-y", "-loglevel", "error", "-ss", trim(left), "-i", left, "-ss", trim(right), "-i", right, "-filter_complex",
-      `[0:v]fps=30,scale=-2:${height},setsar=1[a];[1:v]fps=30,scale=-2:${height},setsar=1[b];[a]pad=iw+24:ih:0:0:color=0x808080[ag];[ag][b]hstack=inputs=2`,
-      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(directory, name)]);
-    count += 1;
   }
   return count;
 }

@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { inflateSync } from "node:zlib";
 import { fixtureChats } from "../src/data/fixtures/chats.ts";
 import { FIXTURE_ACCOUNT } from "../src/data/fixtures/account.ts";
 import { fixtureActivity, FIXTURE_SUBSCRIPTIONS } from "../src/data/fixtures/activity.ts";
-import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, REAL_CHAT_ID } from "../src/data/fixtures/session.ts";
+import { FIXTURE_MODEL_STATUS, FIXTURE_MODELS, fixtureChatView, REAL_CHAT_ID, STRIPES_CHAT_ID, STRIPES_TITLE, stripesChatView } from "../src/data/fixtures/session.ts";
 import { FIXTURE_SPACE_SPECS, fixtureSpaces } from "../src/data/fixtures/spaces.ts";
 import { isSessionUnread } from "../src/data/chat-read-state.ts";
 import { modelAvailabilityLevel } from "../src/model-catalog.ts";
 import { buildFlow, buildMotionFlow, buildTabletFlow, MOTIONS, SCREENS } from "./ui-snapshots.mjs";
+import { HEIGHT, pixel, WIDTH } from "./make-stripes-fixture.mjs";
 
 const DAY_MS = 86_400_000;
 const now = Date.parse("2026-11-24T04:00:00Z");
@@ -70,3 +72,39 @@ assert.doesNotMatch(offlineFlow, /Send message/, "the offline flow stops before 
 assert.match(flowFile("app/new-chat.tsx"), /testID=\{`new-chat-space-\$\{space\.id\}`\}/, "New Chat gives each Space row the testID the offline flow taps");
 assert.match(flowFile("e2e/tablet/split-send.yaml"), /Send message/, "the signed-in flow sends its message");
 
+
+const stripesSession = sessions.at(-1);
+assert.equal(stripesSession.id, STRIPES_CHAT_ID, "the striped Chat is the last row, so the rows above it do not move");
+assert.equal(stripesSession.title, STRIPES_TITLE, "the striped Chat's row carries its title");
+const pictureUri = "http://localhost:8081/assets/?unstable_path=.%2Fassets%2Fdebug%2Fstripes.png";
+const striped = stripesChatView(spaces.find((space) => space.id === stripesSession.spaceId), now, pictureUri);
+assert.equal(striped.session.id, STRIPES_CHAT_ID, "the striped view belongs to the striped row");
+const pictureReply = striped.messages.at(-1);
+assert.equal(pictureReply?.role, "assistant", "the picture is the Chat's last message, an assistant reply");
+assert.ok(pictureReply.text?.includes(`![${STRIPES_TITLE}](${pictureUri})`), "the reply carries the picture as a Markdown image on the dev server URL");
+assert.ok(pictureReply.text?.trimEnd().endsWith("240 × 720 px."), "the caption below the picture is the reply's last line");
+assert.ok(striped.messages.length >= 14, "older replies sit above the picture, so it starts below the fold");
+
+const stripesPng = readFileSync(repoFile("assets/debug/stripes.png"));
+const pngPixels = (png) => {
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  const data = [];
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString("latin1", offset + 4, offset + 8);
+    if (type === "IHDR") [width, height] = [png.readUInt32BE(offset + 8), png.readUInt32BE(offset + 12)];
+    if (type === "IDAT") data.push(png.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+  }
+  return { width, height, rows: inflateSync(Buffer.concat(data)) };
+};
+const decoded = pngPixels(stripesPng);
+assert.deepEqual([decoded.width, decoded.height], [WIDTH, HEIGHT], "the committed picture is the generator's size");
+const sample = [[0, 0], [7, 40], [120, 100], [30, 300], [200, 400], [50, 500], [100, 650], [239, 719]];
+for (const [x, y] of sample) {
+  const at = y * (1 + WIDTH * 3) + 1 + x * 3;
+  assert.deepEqual([...decoded.rows.subarray(at, at + 3)], [...pixel(x, y)], `the committed picture matches the generator at (${x}, ${y})`);
+}
+assert.ok(existsSync(repoFile("app/debug")) && existsSync(repoFile("assets/debug/stripes.png")), "the picture sits in assets/debug");

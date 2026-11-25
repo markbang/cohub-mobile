@@ -165,6 +165,61 @@ export function fixtureChatView(space: SpaceRecord, now: number): SessionView {
   return loadedView(space, session, turns);
 }
 
+/** The Chat with the striped picture: the last row, so the Chats list's top rows are unchanged. */
+export const STRIPES_CHAT_ID = "2b1e0000-0000-4000-8000-000000000023";
+export const STRIPES_TITLE = "Stripe test pattern";
+/** Hours since the picture's message: the Chats list shows it at the bottom, ten days back. */
+export const STRIPES_HOURS = 300;
+const STRIPES_FILLER: [string, string][] = [
+  ["What do the chrome checks need?", "Two things: a long list under the glass bars, and a picture taller than the screen, so it can scroll past them."],
+  ["Which screen should I use?", "The Chat screen. It has a back button at the top and the composer at the bottom, and its messages scroll under both."],
+  ["How tall should the picture be?", "Taller than the screen, so one slow swipe carries it from below the fold to under the top bar."],
+  ["Anything else to know?", "Keep the bands sharp. Fine lines show blur, thick bars show drift, and the colour bars show contrast under glass."],
+  ["Got it.", "Then the reference is ready. The picture holds under each bar for two seconds, and the list keeps its place."],
+  ["Is the run ready?", "Ready. The picture is the last message in this Chat, below the older replies."],
+];
+
+/**
+ * The striped Chat: older replies first, so the picture starts below the fold once the Chat is scrolled to its top.
+ * `pictureUri` is the bundled `assets/debug/stripes.png`, which the caller resolves to its dev-server URL.
+ */
+export function stripesChatView(space: SpaceRecord, now: number, pictureUri: string): SessionView {
+  const sessionId = STRIPES_CHAT_ID;
+  const lastMessageAt = new Date(now - STRIPES_HOURS * HOUR_MS).toISOString();
+  const pictureTurn = {
+    sequence: STRIPES_FILLER.length + 1,
+    userText: "Show the test pattern.",
+    assistantContent: [{ type: "text" as const, text: `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 240 × 720 px.` }],
+  };
+  const turns = [...STRIPES_FILLER.map(([userText, reply], index) => turnRecord(sessionId, now, {
+    sequence: index + 1,
+    sentAgoMs: (STRIPES_HOURS + (STRIPES_FILLER.length - index) * 2) * HOUR_MS,
+    durationMs: 9 * SECOND_MS,
+    userText,
+    assistantContent: [{ type: "text", text: reply }],
+    tokens: 2400,
+    toolCallCount: 0,
+  })), turnRecord(sessionId, now, { ...pictureTurn, sentAgoMs: STRIPES_HOURS * HOUR_MS, durationMs: 9 * SECOND_MS, tokens: 2400, toolCallCount: 0 })];
+  const session: SessionRecord = {
+    id: sessionId,
+    spaceId: space.id,
+    userUuid: null,
+    title: STRIPES_TITLE,
+    source: null,
+    status: null,
+    externalSessionId: null,
+    meta: null,
+    latestMessageText: pictureTurn.assistantContent[0].text,
+    lastMessageAt,
+    lastMessageId: `${sessionId}:latest`,
+    createdAt: new Date(now - (STRIPES_HOURS + 6) * HOUR_MS).toISOString(),
+    updatedAt: lastMessageAt,
+    totalMessages: turns.length * 2,
+    totalToolCalls: 0,
+  };
+  return loadedView(space, session, turns);
+}
+
 /** The view the Chat screen holds once a Chat's history has loaded and no reply is streaming. */
 function loadedView(space: SpaceRecord, session: SessionRecord, turns: SessionTurnRecord[]): SessionView {
   return {

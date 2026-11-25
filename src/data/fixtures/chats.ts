@@ -1,7 +1,7 @@
 import type { UserSessionListItem } from "@neta-art/cohub";
 import type { SessionSeenEntry, SessionSeenState } from "@/src/data/chat-read-state";
 import { FIXTURE_SPACE_SPECS, type FixtureSpaceKey } from "./spaces";
-import { REAL_CHAT_HOURS } from "./session";
+import { REAL_CHAT_HOURS, STRIPES_HOURS, STRIPES_TITLE } from "./session";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -41,6 +41,8 @@ const CHAT_SPECS: FixtureChatSpec[] = [
   { hours: 222, space: "research", title: "Literature list for the retention study", latest: "Thirty-one papers, sorted by how directly they measure week-four retention." },
   { hours: 240, space: "product", title: "Name options for the sync feature", latest: "Five names shortlisted and checked against existing trademarks in the first two classes." },
   { hours: 250, space: "finance", title: "Bank feed mapping", latest: "Mapped 18 accounts. Two new cards still need categories." },
+  // The striped Chat the motion recordings open from this row, last so the rows above it are unchanged.
+  { hours: STRIPES_HOURS, space: "product", title: STRIPES_TITLE, latest: "Striped test pattern for the chrome checks." },
 ];
 
 /** The first Chat is the real Chat, `REAL_CHAT_ID`, which the Chat screen fixture is keyed by. */
