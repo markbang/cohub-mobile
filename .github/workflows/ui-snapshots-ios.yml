@@ -250,13 +250,19 @@ jobs:
       - name: Boot simulator
         run: node scripts/ui-snapshots.mjs boot --platform ios --target "${{ matrix.target }}"
 
-      # prepare saved Maestro under this version; a miss means prepare did not, so the job fails.
+      # prepare saves Maestro under this version. Restoring it only saves time: a miss or a failed restore installs it here.
       - name: Restore Maestro
+        id: maestro
         uses: actions/cache/restore@v6
         with:
           path: ~/.maestro
           key: maestro-${{ runner.os }}-${{ env.MAESTRO_VERSION }}
-          fail-on-cache-miss: true
+
+      - name: Install Maestro
+        if: steps.maestro.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
 
       - name: Add Maestro to PATH
         run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"

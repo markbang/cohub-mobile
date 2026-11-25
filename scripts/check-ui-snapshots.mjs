@@ -189,3 +189,6 @@ assert.ok(captureSteps.some((step) => step.uses === "./.github/actions/restore-d
 const restoreAction = parse(readFileSync(new URL("../.github/actions/restore-dependencies/action.yml", import.meta.url), "utf8"), { uniqueKeys: true });
 const restoreModules = restoreAction.runs.steps.find((step) => String(step.uses).startsWith("actions/cache/restore"));
 assert.equal(restoreModules?.with?.["fail-on-cache-miss"], true, "a node_modules miss fails the capture job");
+const maestroRestore = captureSteps.find((step) => String(step.uses ?? "").startsWith("actions/cache/restore") && step.with?.path === "~/.maestro");
+assert.ok(maestroRestore && maestroRestore.with["fail-on-cache-miss"] !== true, "a Maestro restore miss or failure installs Maestro instead of failing the shard");
+assert.ok(captureSteps.some((step) => step.name === "Install Maestro" && step.if === "steps.maestro.outputs.cache-hit != 'true'"), "capture installs Maestro when its restore does not hit");
