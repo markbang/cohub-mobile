@@ -35,7 +35,7 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 - 截图任务不安装依赖。`prepare` 安装 `node_modules` 和 Maestro，并以它报告的键保存（`node_modules` 按锁文件，Maestro 按 `MAESTRO_VERSION`）。每个截图任务恢复 `node_modules`，缓存未命中则失败；它把 Maestro 当作优化来恢复，恢复未命中或失败时则安装。每个任务的 Node 22 来自运行器的工具缓存，Bun 来自 `setup-bun`。
 - 每次运行预热一次 Metro。`prepare` 启动 Metro，请求应用的第一个包（`scripts/ui-snapshots.mjs warm`），并以每次运行一个的键保存 Metro 的转换缓存；每个截图任务都恢复该保存，因此第一个包直接读取已完成的转换。每个任务的日志显示第一个包的行（`iOS Bundled <ms> … (<modules>)`）。
 - 方向：平板流程在启动应用之前转动设备（在 `launchApp` 之前执行 `setOrientation`），因此横屏任务从不依赖另一个流程留下的状态。
-- 计划：`plan` 把范围内的截图切成每个最多 9.5 分钟截图时长的任务（`SHARD_CAPTURE_SECONDS`，每屏时长取自 `scripts/ui-snapshots.mjs`）。默认字号的任务只含一个方向；大字号任务包含该目标的所有方向，因为它的屏幕很少。分屏流程和动效录制各自是一个或多个任务（`--part flow`、`--part motion`），`perf` 是一个任务。手机录制每个交互；平板只录制选择中指定的交互（`--target tablet --screens motion-chats-list`），因此不指定 `--screens` 的运行不会计划平板录制。`scope=core`、浅色主题、离线、不录动效时，计划是五个任务：手机默认字号、手机编辑器的 accessibility-large、平板竖屏、平板横屏，以及两个方向上平板编辑器的 accessibility-large。`scope=full` 的计划同样是五个任务：手机 2 个、平板竖屏 1 个、平板横屏 1 个和分屏流程 1 个。GitHub 同时运行五个 macOS 任务，第六个会排队等待。只有一个屏幕的运行是一个任务。
+- 计划：`plan` 把范围内的截图切成每个最多 9.5 分钟截图时长的任务（`SHARD_CAPTURE_SECONDS`，每屏时长取自 `scripts/ui-snapshots.mjs`）。默认字号的任务只含一个方向；大字号任务包含该目标的所有方向，因为它的屏幕很少。分屏流程和动效录制各自是一个或多个任务（`--part flow`、`--part motion`），`perf` 是一个任务。`scope=core`、浅色主题、离线、不录动效时，计划是五个任务：手机默认字号、手机编辑器的 accessibility-large、平板竖屏、平板横屏，以及两个方向上平板编辑器的 accessibility-large。`scope=full` 的计划同样是五个任务：手机 2 个、平板竖屏 1 个、平板横屏 1 个和分屏流程 1 个。GitHub 同时运行五个 macOS 任务，第六个会排队等待。只有一个屏幕的运行是一个任务。
 
 ## 范围
 
@@ -118,7 +118,7 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 
 图片为 288 × 160 px，以 360 × 200 pt 显示，因此它的顶部几行位于标题栏之下，编辑器的玻璃会把它们模糊。Chat 没有标签栏：底部覆盖层是编辑器。
 
-`motion-chats-list` 是列表的参照。它重新启动应用，在顶部打开 Chats 根页面。它先静止 0.8 秒，让录制从静止开始；然后在 x = 20% 处把列表向上拖动屏幕的 44%，并静止 2 秒。手机上，向上的移动会把标签栏收成气泡，而且气泡保持不变。平板上，分屏布局的左栏会把完整的标签栏画在行的上方，所以这个动效录制在平板上进行（`--target tablet`）。20% 这一列让拖动留在左栏内。之后向下轻拨（屏幕的 5%），再静止 2 秒。静止是在标题栏空白处的零位移滑动，所以不会按到任何一行，也不会出现菜单。录制中不点击任何东西，也从不打开搜索。
+`motion-chats-list` 是列表的参照。它重新启动应用，在顶部打开带完整标签栏的 Chats 根页面。它先静止 0.8 秒，让录制从静止开始；然后把列表向上拖动屏幕的 44%，使行从标签栏下方经过，并静止 2 秒。内容向上移动使标签栏收成气泡。接着向下轻拨（屏幕的 5%），让完整标签栏回到行的上方，再静止 2 秒。静止是在标题栏空白处的零位移滑动，所以不会按到任何一行，也不会出现菜单。录制中不点击任何东西，也从不打开搜索。滑动序号把静止计算在内：0 第一次静止，1 向上拖动，2 静止，3 向下轻拨，4 最后静止。每个主题的文件夹里是 `list-<label>.png`（edge、halfway、hold、settled）；发布时为 `list-<theme>-<label>.png`。
 
 每次录制写入 `motion/<theme>/motion-stripes.json`，其中的主机时钟起点来自 Maestro 的命令 JSON。这个时钟给出的帧时间是近似的，因为 Maestro 的滑动时间戳不是手势的第一帧。发布的帧直接从录制中截取：图片边缘到达各覆盖层边缘的时刻，以及每段静止开始的时刻。
 
