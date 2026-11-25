@@ -244,7 +244,7 @@ export const MOTIONS = [
     ready: "Appearance",
     link: "cohub://settings",
     setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 \u00d7 160" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { drag: { from: "50%, 80%", to: "50%, 34%", duration: 3000 } }, { hold: 1000 }],
-    steps: [{ hold: 3000 }, { drag: { from: "50%, 80%", to: "50%, 62%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }],
+    steps: [{ hold: 2000 }, { drag: { from: "50%, 80%", to: "50%, 62%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 2%", duration: 4000 } }, { hold: 2000 }, { back: true }],
     // The swipes after the recording starts: 0 the first hold, 1 drag A, 2 the hold under the bar, 3 drag B, 4 the hold under
     // the button, 5 the back swipe. The video first moves at drag A, so `onset` anchors the clock there.
     onset: 1,
@@ -252,8 +252,8 @@ export const MOTIONS = [
       { label: "tab-halfway", swipe: 1, ms: 2810 },
       { label: "tab-edge", swipe: 1, ms: 4000 },
       { label: "tab-hold", swipe: 2, ms: 1000 },
-      { label: "back-edge", swipe: 3, ms: 3870 },
-      { label: "back-halfway", swipe: 3, ms: 4000 },
+      { label: "back-edge", swipe: 3, ms: 3810 },
+      { label: "back-halfway", swipe: 3, ms: 3960 },
       { label: "back-hold", swipe: 4, ms: 1000 },
     ],
   },
