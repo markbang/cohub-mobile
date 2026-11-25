@@ -296,17 +296,30 @@ jobs:
     if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       # A run whose jobs all failed uploads nothing; the merge then lists every capture as missing.
+      # Each job's artifact is downloaded by its exact name into a folder of its own. A pattern is not used: with one
+      # artifact matching it unpacks flat, and the merge then reads the folder as missing. A job that did not upload
+      # has no artifact; the merge lists it.
       - name: Download captures
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          pattern: ui-snapshots-ios{,-tablet}-[0-9]*
-          path: dist/ui-snapshots/shards
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.prepare.outputs.shards }}
+        run: |
+          mkdir -p dist/ui-snapshots/shards
+          for artifact in $(printf '%s' "$PLAN" | jq -r '.[].artifact'); do
+            if gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "dist/ui-snapshots/shards/$artifact"; then
+              echo "Downloaded $artifact"
+            else
+              echo "::warning::$artifact did not upload; the merge lists its captures as missing."
+            fi
+          done
 
       - name: Merge captures
         env:
