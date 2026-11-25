@@ -224,9 +224,14 @@ assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /N
 assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
 assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
 
-// A drag or a hold ends the step it is in: a wait for animations after it would run to its full timeout on a Chat.
+// The recorded gestures end where they are: no wait for animations follows a drag, so the gap Maestro leaves is the hold.
+// Two drags, the second from above the composer to the top of the screen, then the back swipe; nothing else is recorded.
 const stripesFlow = buildMotionFlow({ platform: "ios", session: true, motions: MOTIONS.filter((motion) => motion.name === "motion-stripes") }).split("\n");
-const recorded = stripesFlow.slice(stripesFlow.indexOf("- startRecording: \"motion-stripes\""));
-const drag = recorded.indexOf("    duration: 4000");
-assert.ok(drag > 0 && recorded[drag + 1] !== "- waitForAnimationToEnd:", "the recorded drag is followed by its next step, not a wait for animations");
-assert.equal(recorded.filter((line) => line === '    start: "2%, 50%"').length, 3, "the recording holds three times, each a still press on the left margin: before the first drag, under the bar, and under the button");
+const recorded = stripesFlow.slice(stripesFlow.indexOf("- startRecording: \"motion-stripes\""), stripesFlow.indexOf("- stopRecording"));
+const firstDrag = recorded.indexOf("    duration: 4000");
+const secondDrag = recorded.indexOf("    duration: 4000", firstDrag + 1);
+assert.ok(firstDrag > 0 && secondDrag > firstDrag, "the recording has two 4 s drags");
+assert.ok(recorded[firstDrag + 1] !== "- waitForAnimationToEnd:" && recorded[secondDrag + 1] !== "- waitForAnimationToEnd:", "no wait for animations follows a drag");
+assert.equal(recorded.filter((line) => line.includes("__hold__")).length, 0, "the recording has no explicit holds: the gaps between commands are the holds");
+assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    end: "50%, 0%"'), "the second drag runs from above the composer to the top of the screen");
+assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
