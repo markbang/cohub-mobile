@@ -19,13 +19,15 @@ function commandMetadata(entry) {
 }
 
 /**
- * The recording's start and the swipes after it, in milliseconds on the host clock. Throws when the JSON carries no
- * start or no timestamp, and names what it found, so a Maestro format change is one line to read.
+ * The recording's start and the swipes after it, in milliseconds on the host clock, from the command list that starts
+ * the recording. Throws when no list starts it or a stamp is missing, and names what it found.
  */
-export function recordingClock(commands, recording) {
+export function recordingClock(commandLists, recording) {
+  const lists = commandLists.filter((commands) => commands.some((entry) => /^startrecording/i.test(commandName(entry))));
+  if (lists.length === 0) throw new Error(`No Maestro commands JSON starts a recording as ${recording}. Command names seen: ${[...new Set(commandLists.flat().map(commandName))].join(", ")}.`);
+  const commands = lists[0];
   const names = commands.map(commandName);
   const start = names.findIndex((name) => /^startrecording/i.test(name));
-  if (start < 0) throw new Error(`No startRecording in the Maestro commands for ${recording}. Commands seen: ${names.join(", ")}.`);
   const startedAtMs = commandMetadata(commands[start]).timestamp;
   if (typeof startedAtMs !== "number") throw new Error(`The startRecording command for ${recording} has no timestamp. Metadata seen: ${JSON.stringify(commandMetadata(commands[start]))}.`);
   const swipes = commands.slice(start + 1).flatMap((entry) => {
@@ -62,11 +64,14 @@ export function motionOnset(video) {
   return Number(match[1]);
 }
 
-/** Maestro's command JSON under a flow's debug output, as parsed objects. Maestro names it `commands-(<flow>).json`. */
-export function readCommands(debugOutput) {
-  const found = listJson(debugOutput).filter((path) => basename(path).startsWith("commands"));
-  if (found.length === 0) throw new Error(`No Maestro commands JSON under ${debugOutput}.`);
-  return JSON.parse(readFileSync(found[0], "utf8"));
+/**
+ * The command lists Maestro wrote under a flow's test output: one per (sub)flow, each named `commands*.json`. The
+ * recording's list is the one that starts it, so a caller reads them all.
+ */
+export function commandLists(root) {
+  const found = listJson(root).filter((path) => basename(path).startsWith("commands"));
+  if (found.length === 0) throw new Error(`No Maestro commands JSON under ${root}.`);
+  return found.map((path) => JSON.parse(readFileSync(path, "utf8")));
 }
 
 function listJson(root) {

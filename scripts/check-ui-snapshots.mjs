@@ -217,10 +217,11 @@ const commands = [
   timed({ timestamp: 2500, duration: 4000 }, { swipeCommand: { start: "50%, 70%", end: "50%, 43%", duration: 4000 } }),
   timed({ timestamp: 9000, duration: 4000 }, { swipeCommand: { start: "50%, 85%", end: "50%, 5%", duration: 4000 } }),
 ];
-const clock = recordingClock(commands, "motion-stripes");
+const clock = recordingClock([[{ command: { applyConfigurationCommand: {} }, metadata: { timestamp: 500, duration: 1 } }], commands], "motion-stripes");
 assert.deepEqual([clock.startedAtMs, clock.swipes.map((swipe) => swipe.startMs)], [2000, [2500, 9000]], "the recording starts at its startRecording command, and the swipes after it are counted from there");
 assert.deepEqual(frameTimes(clock, [{ label: "tab-halfway", swipe: 0, ms: 3200 }, { label: "back-hold", swipe: 1, ms: 5000 }], { swipe: 0, seconds: 0.5 }).map((frame) => [frame.label, frame.videoSeconds]), [["tab-halfway", 3.7], ["back-hold", 12]], "a frame sits at its swipe's start plus its offset, on the video's clock anchored at the onset swipe");
-assert.throws(() => recordingClock(commands.slice(0, 1), "motion-stripes"), /No startRecording/, "a recording with no start in its commands fails and says what it saw");
+assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /No Maestro commands JSON starts a recording/, "a recording with no start in any command list fails and says what it saw");
+assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
 assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
 
 // A drag or a hold ends the step it is in: a wait for animations after it would run to its full timeout on a Chat.

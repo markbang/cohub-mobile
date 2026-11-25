@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { exportFrames, frameTimes, motionOnset, readCommands, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
+import { commandLists, exportFrames, frameTimes, motionOnset, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
 
 /**
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
@@ -1291,7 +1291,7 @@ async function captureCell(options, session, missing) {
  */
 function recordMotion({ motion, theme, video, commands, directory, missing }) {
   try {
-    const clock = recordingClock(readCommands(commands), `${motion.name} (${theme})`);
+    const clock = recordingClock(commandLists(commands), `${motion.name} (${theme})`);
     const onset = { swipe: motion.onset ?? 0, seconds: motionOnset(video) };
     const frames = exportFrames(video, frameTimes(clock, motion.frames ?? [], onset), directory, motion.name);
     writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, onset, frames });
