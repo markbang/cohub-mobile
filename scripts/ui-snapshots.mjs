@@ -234,21 +234,22 @@ export const MOTIONS = [
   { name: "motion-list", ready: "List continuity", link: "cohub://debug/ui?section=list", steps: [{ tapOn: "Archive first" }, { tapOn: "Move last up" }, { tapOn: "Restore" }] },
   // Chats keeps its offset across recordings; a drag down brings its search field back first.
   { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
-  // The striped Chat under the chrome. The picture starts below the fold: five swipes down bring the Chat to its top, where
-  // the picture sits below the older replies. Then a slow drag takes its top edge up to the composer's top edge (the bottom
-  // chrome) and holds, then a drag to the back button holds with it under the button. The back swipe ends the Chat.
-  // `frames` cut PNGs from the recording, each at `ms` after the start of the drag `swipe` (0: the first drag, 1: the second).
+  // The striped Chat under the chrome. Measured on run 45596762445: the picture's top sits about 1340 pt down at the
+  // Chat's top, so five swipes down bring the Chat to its top, then one slow drag up leaves the picture's top just under
+  // the fold (about 938 pt). Drag A takes its top edge to the composer's top edge (the bottom chrome), where it holds.
+  // Drag B takes it to the back button, where it holds, then the back swipe ends the Chat. `frames` cut PNGs from the
+  // recording, each at `ms` after the start of the drag `swipe` (0: drag A, 1: drag B).
   {
     name: "motion-stripes",
     ready: "Appearance",
     link: "cohub://settings",
-    setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 × 160" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { hold: 1000 }],
-    steps: [{ hold: 2000 }, { drag: { from: "50%, 70%", to: "50%, 43%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }, { hold: 2000 }],
+    setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 \u00d7 160" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { drag: { from: "50%, 80%", to: "50%, 34%", duration: 3000 } }, { hold: 1000 }],
+    steps: [{ hold: 2000 }, { drag: { from: "50%, 80%", to: "50%, 62%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }, { hold: 2000 }],
     frames: [
-      { label: "tab-halfway", swipe: 0, ms: 3200 },
+      { label: "tab-halfway", swipe: 0, ms: 2810 },
       { label: "tab-edge", swipe: 0, ms: 4000 },
       { label: "tab-hold", swipe: 0, ms: 5000 },
-      { label: "back-edge", swipe: 1, ms: 3900 },
+      { label: "back-edge", swipe: 1, ms: 3870 },
       { label: "back-halfway", swipe: 1, ms: 4000 },
       { label: "back-hold", swipe: 1, ms: 5000 },
     ],
