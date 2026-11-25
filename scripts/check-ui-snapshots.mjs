@@ -127,6 +127,12 @@ assert.equal(JSON.parse(cliCore.stdout).length, 5, "plan's default scope is core
 const cliFull = JSON.parse(cli(["--target", "phone,tablet", "--themes", "light", "--no-motion", "--scope", "full"]).stdout);
 assert.equal(cliFull.length, 5, "plan --scope full is the old list: five jobs");
 assert.ok(cliFull.some((entry) => entry.part === "flow"), "plan --scope full keeps the split flows");
+const named = cli(["--target", "phone", "--themes", "light", "--screens", "chat-stripes,motion-stripes", "--motion-themes", "light,dark"]);
+assert.equal(named.status, 0, named.stderr);
+assert.deepEqual(JSON.parse(named.stdout).map((entry) => [entry.part, entry.screens]), [["screens", ["chat-stripes"]], ["motion", ["motion-stripes"]]], "plan names a screen and an interaction together, as the workflow passes them");
+const unknown = cli(["--target", "phone", "--themes", "light", "--screens", "motion-nope"]);
+assert.equal(unknown.status, 1, "an unknown name fails the plan");
+assert.match(unknown.stderr, /Unknown screen or interaction "motion-nope"/, "the refusal names the unknown screen or interaction");
 const refused = cli(["--target", "phone", "--themes", "light", "--no-motion", "--text-size", "extra-large"]);
 assert.deepEqual([refused.status, refused.stdout], [1, ""], "core refuses a text size it does not carry, and names the scope to use");
 assert.match(refused.stderr, /use --scope full for extra-large/, "the refusal says which scope takes the size");

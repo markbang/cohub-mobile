@@ -456,7 +456,7 @@ function checkSelection(options) {
   if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
   for (const theme of options.motionThemes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown motion theme "${theme}". Use light and/or dark.`);
   // A selection without a part names screens and interactions alike; `--part motion` names interactions only.
-  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS]), ...(options.part === undefined || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
+  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS]), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
   for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen or interaction "${name}". Known: ${[...known].join(", ")}.`);
 }
 
