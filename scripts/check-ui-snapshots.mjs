@@ -87,6 +87,8 @@ assert.equal(planShards({ ...all, targets: ["tablet"], perf: 2 }).filter((entry)
 const expected = (plan, options) => plan.flatMap((entry) => expectedOutputs(entry, options));
 const outputs = expected(defaults, { themes: ["light"] });
 assert.equal(new Set(outputs).size, outputs.length, "no two jobs write the same file");
+const interactionOnly = planShards({ ...all, targets: ["phone"], screens: ["motion-stripes"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] });
+assert.deepEqual(interactionOnly.map((entry) => [entry.part, entry.screens]), [["motion", ["motion-stripes"]]], "naming only an interaction plans its motion job, with no screen job");
 const bothThemes = planShards({ ...all, targets: ["phone"], motion: true, themes: ["light"], motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion");
 const bothOutputs = expected(bothThemes, { themes: ["light"], motionThemes: ["light", "dark"] });
 assert.ok(MOTIONS.every((motion) => ["light", "dark"].every((theme) => bothOutputs.includes(`motion/${theme}/${motion.name}.mp4`))), "each motion theme writes every video under motion/<theme>/");

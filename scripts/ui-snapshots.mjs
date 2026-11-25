@@ -356,7 +356,8 @@ export function planShards({ targets, orientations = null, screens = null, scope
     const hasDefault = cells.some((cell) => cell.textSize === "default");
     // The split flows run in the full scope only: core captures screens, and its jobs stay at five.
     if (target === "tablet" && scope === "full" && !screens && hasDefault) units.push({ target, orientations: ["portrait"], textSize: "default", part: "flow", screens: [] });
-    if (target === "phone" && motion && hasDefault) {
+    // Motion runs at the default text size, whether or not the selection names any screen.
+    if (target === "phone" && motion && (textSizes === null || textSizes.includes("default"))) {
       const interactions = motionNames(screens);
       for (const slice of splitByBudget(interactions, interactions.length * motionThemes.length * SECONDS_PER_MOTION)) units.push({ target, orientations: ["portrait"], textSize: "default", part: "motion", screens: slice });
     }
