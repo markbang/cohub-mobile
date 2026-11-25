@@ -20,11 +20,18 @@ assert.equal((firstBlock.match(/timeout: 60000/g) ?? []).length, 2, "the first l
 assert.ok(!ios.slice(secondLink).includes("Open in .*Cohub"), "later links do not check for the question");
 assert.ok(!flow("android", [first]).includes(`"(Open in`), "Android does not wait for the question with the screen");
 
-// A landscape flow asks for its orientation before the app launches, so it never relies on the state an earlier flow left.
+// A landscape flow answers the once-per-simulator link question on a portrait launch, then launches the app in landscape.
 const landscapeFlow = buildFlow({ platform: "ios", session: true, screens: TABLET_SCREENS.slice(0, 1), target: "tablet", orientation: "landscape" });
-assert.ok(landscapeFlow.indexOf("- setOrientation: LANDSCAPE_LEFT") > 0 && landscapeFlow.indexOf("- setOrientation: LANDSCAPE_LEFT") < landscapeFlow.indexOf("- launchApp:"), "the landscape flow turns the device before it launches the app");
+const portraitLaunch = landscapeFlow.indexOf("- setOrientation: PORTRAIT");
+const firstLaunch = landscapeFlow.indexOf("- launchApp:");
+const questionAnswer = landscapeFlow.indexOf("tapOn: \"^Open$\"");
+const landscapeLaunch = landscapeFlow.lastIndexOf("- launchApp:");
+assert.ok(portraitLaunch > 0 && portraitLaunch < firstLaunch && firstLaunch < questionAnswer, "the landscape flow launches in portrait and answers the link question there");
+assert.ok(landscapeFlow.lastIndexOf("- setOrientation: LANDSCAPE_LEFT", landscapeLaunch) > questionAnswer && landscapeLaunch > questionAnswer, "the landscape flow turns the device before its screens' launch");
+assert.equal(landscapeFlow.indexOf("- setOrientation: PORTRAIT", firstLaunch), -1, "the landscape flow stays in portrait only for the question");
 const portraitFlow = buildFlow({ platform: "ios", session: true, screens: TABLET_SCREENS.slice(0, 1), target: "tablet", orientation: "portrait" });
 assert.ok(portraitFlow.indexOf("- setOrientation: PORTRAIT") > 0 && portraitFlow.indexOf("- setOrientation: PORTRAIT") < portraitFlow.indexOf("- launchApp:"), "the portrait flow turns the device before it launches the app");
+assert.equal(portraitFlow.includes("LANDSCAPE_LEFT"), false, "the portrait flow does not ask the link question on a landscape launch");
 assert.equal(buildFlow({ platform: "ios", session: true, screens: SCREENS.slice(0, 1), target: "phone", orientation: "portrait" }).includes("setOrientation"), false, "a phone flow does not turn the device");
 const tabletFlowLandscape = buildTabletFlow({ platform: "ios", session: true, maestroOrientation: (orientation) => (orientation === "landscape" ? "LANDSCAPE_LEFT" : "PORTRAIT") });
 assert.ok(tabletFlowLandscape.indexOf("- setOrientation: PORTRAIT") < tabletFlowLandscape.indexOf("- launchApp:"), "the split-flow run turns the device before it launches the app");

@@ -455,12 +455,13 @@ const MAESTRO_ORIENTATION = { portrait: "PORTRAIT", landscape: "LANDSCAPE_LEFT" 
  * With a `session` (an offline run) the app draws its fixtures without sign-in, so the flow waits for
  * Chats alone.
  */
-function preamble(platform, session, orientation = null) {
+function preamble(platform, session, orientation = null, prelude = []) {
   const login = resolve(LOGIN_FLOWS[platform]);
   const start = session ? "Chats" : "Continue with Cohub|Chats";
   return [
     `appId: ${PACKAGE_ID}`,
     "---",
+    ...prelude,
     // Before the launch, so the app draws in the orientation the flow asks for and not in the one an earlier flow left.
     ...(platform === "ios" && orientation ? [`- setOrientation: ${MAESTRO_ORIENTATION[orientation]}`, "- waitForAnimationToEnd:", "    timeout: 5000"] : []),
     "- launchApp:",
@@ -597,6 +598,29 @@ function pushSteps(lines, platform, steps = []) {
   }
 }
 
+/**
+ * iOS asks once per simulator before the app's first custom-scheme link, and the question is drawn in the device's
+ * frame: a landscape window never accepts it (the logs show it stuck, with the device in portrait). A landscape flow
+ * therefore answers it on a portrait launch; the preamble then turns the device and launches the app for its screens.
+ */
+function answerQuestionInPortrait(platform, session) {
+  const start = session ? "Chats" : "Continue with Cohub|Chats";
+  const lines = [
+    "- setOrientation: PORTRAIT",
+    "- waitForAnimationToEnd:",
+    "    timeout: 5000",
+    "- launchApp:",
+    "    stopApp: true",
+    "    permissions:",
+    "      all: allow",
+    "- extendedWaitUntil:",
+    `    visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING}|${OPEN_IN_APP})`)}`,
+    "    timeout: 600000",
+  ];
+  openScreen(lines, platform, "cohub://debug/chat?fixture=conversation", true, "Fix the Android sheet height");
+  return lines;
+}
+
 /** The app's own word on its layout: a tablet run must draw the split panes before anything is captured. */
 function checkSplit(lines, platform) {
   openScreen(lines, platform, "cohub://debug/chat?fixture=conversation", true, "Fix the Android sheet height");
@@ -610,7 +634,8 @@ const EMPTY_OR_ERROR_TEXT = "(.*are unavailable|.*Connection unavailable|.*Still
 
 /** One Maestro run per theme: sign in if needed, then visit and capture each screen. */
 export function buildFlow({ platform, session, screens, target, orientation }) {
-  const lines = preamble(platform, session, target === "tablet" ? orientation : null);
+  const landscape = platform === "ios" && target === "tablet" && orientation === "landscape";
+  const lines = preamble(platform, session, target === "tablet" ? orientation : null, landscape ? answerQuestionInPortrait(platform, session) : []);
   if (target === "tablet") checkSplit(lines, platform);
   for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
