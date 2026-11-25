@@ -717,6 +717,7 @@ const DRIVER_LINE = /xctest|xcodebuild|xcuitest|driver|simctl|simulator|exceptio
  * there is killed after the driver's own timeout plus two minutes.
  */
 export function launchMaestro(args, cwd, device) {
+  // Maestro's own timer starts after the runner is installed and launched, so this ceiling covers those steps too.
   const watchdogMs = (Number(process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT) || 240_000) + 120_000;
   return new Promise((resolveAttempt, reject) => {
     const started = Date.now();
@@ -797,7 +798,17 @@ function driverLogExcerpt({ output }, { udid, debugOutput, since, secrets }) {
   return scrubSecrets([`device: ${device.trim()}`, ...fromOutput.slice(-25), ...fromLogs.slice(-40)].join("\n"), secrets);
 }
 
-async function runMaestro({ device, flowPath, out, testOutput, offline = false }) {
+/**
+ * The arguments of one `maestro test`. On iOS the XCTest runner is kept between sessions of one job: by default every
+ * session uninstalls and reinstalls it, which took 1.5 to 3 minutes each (run 45523363575). A session that finds the
+ * runner still listening reuses it. Android keeps Maestro's default.
+ */
+export function maestroTestArgs({ device, flowPath, debugOutput, testOutput, credentials, platform }) {
+  const keepRunner = platform === "ios" ? ["--reinstall-driver=false"] : [];
+  return ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...keepRunner, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
+}
+
+async function runMaestro({ device, flowPath, out, testOutput, offline = false, platform }) {
   const credentials = offline ? [] : ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => {
     const value = process.env[key]?.trim();
     if (!value) throw new Error(`${key} is required: every screen renders AuthScreen until a session exists (dev tenant account).`);
@@ -807,7 +818,7 @@ async function runMaestro({ device, flowPath, out, testOutput, offline = false }
   const secrets = credentials.map((pair) => pair.slice(pair.indexOf("=") + 1));
   // Kept inside the uploaded directory so a failed run carries Maestro's own screenshots and view hierarchy.
   const debugOutput = join(out, "maestro-debug", basename(flowPath, ".yaml"));
-  const args = ["test", "--device", device, "--debug-output", debugOutput, "--test-output-dir", testOutput, ...credentials.flatMap((pair) => ["-e", pair]), flowPath];
+  const args = maestroTestArgs({ device, flowPath, debugOutput, testOutput, credentials, platform });
   const describe = basename(flowPath);
   const since = Date.now();
   let outcome;
@@ -1077,7 +1088,7 @@ async function captureCell(options, session, missing) {
         writeFileSync(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
-        await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+        await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline, platform: options.platform });
         for (const screen of screens) {
           const file = `${screen.name}.png`;
           // Maestro may nest screenshots in a per-run folder under its test output directory.
@@ -1097,7 +1108,7 @@ async function captureCell(options, session, missing) {
       writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
-      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline, platform: options.platform });
       for (const file of listFiles(testOutput).filter((path) => path.endsWith(".png"))) run("mv", [file, join(directory, basename(file))]);
     }
     if (doMotion) {
@@ -1110,7 +1121,7 @@ async function captureCell(options, session, missing) {
       writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
       const testOutput = join(options.out, "maestro-output", "motion");
       rmSync(testOutput, { recursive: true, force: true });
-      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline, platform: options.platform });
       device.setAnimations(false);
       for (const motion of motions) {
         const file = `${motion.name}.mp4`;
@@ -1155,7 +1166,7 @@ async function capturePerf(options, device, session) {
       const testOutput = join(options.out, "maestro-output", `perf-${index}`);
       rmSync(testOutput, { recursive: true, force: true });
       const startedAt = new Date().toISOString();
-      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput });
+      await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline, platform: options.platform });
       runs.push({ run: index, startedAt, endedAt: new Date().toISOString() });
     }
   } finally {

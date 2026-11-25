@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseAllDocuments } from "yaml";
-import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, maestroTestArgs, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -116,6 +116,12 @@ const failingOutcome = await runFlowWithRetries(failing.launch, quiet);
 assert.deepEqual([failingOutcome.ok, failingOutcome.reason, failing.calls.length], [false, "flow", 3], "a flow that keeps failing stops after three tries");
 const hung = scripted([{ ...driverDown, output: "", driverHung: true }, passed]);
 assert.deepEqual(await runFlowWithRetries(hung.launch, quiet).then((outcome) => [outcome.ok, hung.calls.length]), [true, 2], "a start the watchdog killed is a driver start, not a flow failure");
+
+const argsFor = (platform) => maestroTestArgs({ device: "UDID", flowPath: "flow.yaml", debugOutput: "debug", testOutput: "out", credentials: ["E2E_ACCOUNT_EMAIL=a"], platform });
+assert.ok(argsFor("ios").includes("--reinstall-driver=false"), "an iOS session keeps the XCTest runner it finds listening");
+assert.equal(argsFor("android").includes("--reinstall-driver=false"), false, "Android keeps Maestro's default driver reinstall");
+assert.deepEqual(argsFor("android").slice(0, 2), ["test", "--device"], "the command still starts with the device");
+assert.ok(argsFor("ios").indexOf("E2E_ACCOUNT_EMAIL=a") > 0 && argsFor("ios").at(-1) === "flow.yaml", "credentials and the flow stay in the arguments");
 
 const fakeBin = mkdtempSync(join(tmpdir(), "fake-maestro-"));
 writeFileSync(join(fakeBin, "maestro"), `#!/bin/sh

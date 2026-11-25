@@ -45,7 +45,7 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 
 `--part screens|flow|motion|perf` runs one slice of a target's work, which is how a capture job runs. `node scripts/ui-snapshots.mjs plan ...` prints the jobs for a selection as JSON. `node scripts/ui-snapshots.mjs merge --plan plan.json --shards <dir>` combines downloaded job artifacts.
 
-The iOS driver's start is retried on its own: a start that Maestro reports as not ready (`iOS driver not ready in time`) runs again without repeating any flow step. Each attempt logs when the driver comes up or fails, and a start that fails for good quotes the driver's log lines and the device's state.
+The iOS driver starts in each Maestro session. Measured over 17 starts in runs 45515629048, 45520027332, 45523363575, 45530753187 and 45539594041 (Driver up lines and the failed-start lines): the 15 successful starts took 37 to 259 s (median 107 s, 90th percentile 173 s); the 2 failed starts took 268 s and 361 s, both before the old 240 s timeout ended them. `MAESTRO_DRIVER_STARTUP_TIMEOUT` is 480 s, 1.85 times the slowest success, and the capture's watchdog allows 120 s more, because Maestro's timer starts only after the runner is installed and launched. iOS sessions run with `--reinstall-driver=false`, so the second and later sessions of a job reuse the running runner instead of reinstalling it. A start that never comes up is retried on its own budget of three, and each attempt logs its wait and outcome; a failed start quotes the driver's log lines and the device's state.
 
 ## Tablets
 
