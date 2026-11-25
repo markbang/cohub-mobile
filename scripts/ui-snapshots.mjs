@@ -206,6 +206,10 @@ const PERF_STEPS = { phone: perfSteps(FIRST_ROW), tablet: perfSteps(LEFT_FIRST_R
  * Interactions recorded as video, the same on both platforms. `setup` runs before the recording
  * starts. `back` is the system back on Android and the edge swipe on iOS, which has no back key.
  */
+// The title bar's empty left margin, below the status bar: a still press there opens nothing. A list row would open
+// its context menu under the same press.
+const TITLE_BAR_HOLD_POINT = "2%, 8%";
+
 export const MOTIONS = [
   { name: "motion-tabs", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Chats" }, { tapOn: "Spaces" }, { tapOn: "Activity" }, { tapOn: "Me" }] },
   { name: "motion-push", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: "Appearance" }, { back: true }] },
@@ -268,7 +272,7 @@ export const MOTIONS = [
     fresh: true,
     framePrefix: "list",
     setup: [{ swipe: "up" }],
-    steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }, { hold: 2000 }],
+    steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { hold: 2000, at: TITLE_BAR_HOLD_POINT }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }, { hold: 2000, at: TITLE_BAR_HOLD_POINT }],
     // The swipes after the recording starts, holds included: 0 drag down, 1 the hold after it, 2 drag up, 3 the hold after
     // that. The video first moves at drag down.
     onset: 0,
@@ -707,7 +711,8 @@ function pushSteps(lines, platform, steps = []) {
     // An iOS hold presses still on the left margin for its full time: an optional wait for a state that never comes
     // runs for several times its timeout there, since each check of the hierarchy takes seconds on a Chat.
     if (step.hold && platform === "ios") {
-      lines.push("- swipe:", `    start: ${yamlString(HOLD_POINT)}`, `    end: ${yamlString(HOLD_POINT)}`, `    duration: ${step.hold}`);
+      const point = yamlString(step.at ?? HOLD_POINT);
+      lines.push("- swipe:", `    start: ${point}`, `    end: ${point}`, `    duration: ${step.hold}`);
       continue;
     }
     if (step.hold) {

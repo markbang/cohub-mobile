@@ -6,7 +6,7 @@ import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildMotionFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
-import { frameTimes, recordingClock } from "./ui-snapshots-frames.mjs";
+import { clampToLastFrame, frameTimes, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -225,6 +225,7 @@ assert.deepEqual(frameTimes(clock, [{ label: "tab-halfway", swipe: 0, ms: 3200 }
 assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /No Maestro commands JSON starts a recording/, "a recording with no start in any command list fails and says what it saw");
 assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
 assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
+assert.deepEqual(clampToLastFrame([{ label: "edge", videoSeconds: 3 }, { label: "settled", videoSeconds: 9 }], 5).map((frame) => frame.videoSeconds), [3, 5], "a frame past the last stored frame shows that frame: the screen is still from there on");
 
 // The recorded gestures end where they are: no wait for animations follows a drag, so the gap Maestro leaves is the hold.
 // Two drags, the second from above the composer to the top of the screen, then the back swipe; nothing else is recorded.
@@ -239,11 +240,12 @@ assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    e
 assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
 
 // The list motion: a fresh start on the Chats root, a drag down and a drag up with a 2 s hold after each, and nothing
-// tapped or searched while recording. Its frames are list-<label>.png, and each sits in the swipe it names.
+// tapped or searched while recording. Its holds press the title bar, where a press opens nothing, and its frames are
+// list-<label>.png, each in the swipe it names.
 const listMotion = MOTIONS.find((motion) => motion.name === "motion-chats-list");
 const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: [listMotion] }).split("\n");
 const listRecording = listFlow.slice(listFlow.indexOf("- startRecording: \"motion-chats-list\""), listFlow.indexOf("- stopRecording"));
-const listHold = ["- swipe:", '    start: "2%, 50%"', '    end: "2%, 50%"', "    duration: 2000"];
+const listHold = ["- swipe:", '    start: "2%, 8%"', '    end: "2%, 8%"', "    duration: 2000"];
 assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"cohub:///\""), "the list motion relaunches before it opens the Chats root");
 assert.deepEqual(listRecording, [
   '- startRecording: "motion-chats-list"',

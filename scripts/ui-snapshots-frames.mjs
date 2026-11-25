@@ -83,12 +83,28 @@ function listJson(root) {
   });
 }
 
-/** One PNG per frame, taken at its time in the video. Input seeking after `-i` decodes to the exact frame. */
+/**
+ * The time of the video's last frame. The recorder stores a frame only when the screen changes, so a still that follows
+ * the last change has no frame of its own: the container runs on past this time, showing that last frame.
+ */
+export function lastFrameSeconds(video) {
+  const result = spawnSync("ffprobe", ["-v", "error", "-select_streams", "v", "-show_entries", "frame=pts_time", "-of", "csv=p=0", video], { encoding: "utf8" });
+  const times = (result.stdout ?? "").split("\n").map((line) => Number(line.trim())).filter((time) => Number.isFinite(time));
+  if (times.length === 0) throw new Error(`ffprobe found no video frames in ${video}: ${(result.stderr || result.error?.message || "").trim()}`);
+  return times[times.length - 1];
+}
+
+/** A frame past the last stored frame shows that frame: the screen is still from there on. */
+export function clampToLastFrame(timed, lastSeconds) {
+  return timed.map((frame) => ({ ...frame, videoSeconds: Math.min(frame.videoSeconds, lastSeconds) }));
+}
+
+/** One PNG per frame, taken at its time in the video, or at the last frame when its time is past the end. */
 export function exportFrames(video, timed, directory, prefix) {
-  return timed.map((frame) => {
+  return clampToLastFrame(timed, lastFrameSeconds(video)).map((frame) => {
     const file = join(directory, `${prefix}-${frame.label}.png`);
     const result = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", video, "-ss", frame.videoSeconds.toFixed(3), "-frames:v", "1", "-y", file], { encoding: "utf8" });
-    if (result.status !== 0) throw new Error(`ffmpeg could not cut ${file} at ${frame.videoSeconds.toFixed(3)} s: ${(result.stderr || result.error?.message || "").trim()}`);
+    if (result.status !== 0 || !existsSync(file)) throw new Error(`ffmpeg could not cut ${file} at ${frame.videoSeconds.toFixed(3)} s: ${(result.stderr || result.error?.message || "no frame at that time").trim()}`);
     return { ...frame, file };
   });
 }
