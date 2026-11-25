@@ -96,7 +96,7 @@ export function lastFrameSeconds(video) {
 
 /** The last time in ffprobe's one-time-per-line output, or null when there is none. A trailing newline is no time. */
 export function lastTimeIn(output) {
-  const times = output.split("\n").map((line) => line.trim()).filter((line) => line !== "").map(Number).filter(Number.isFinite);
+  const times = output.split("\n").map((line) => line.trim().replace(/,$/, "")).filter((line) => line !== "").map(Number).filter(Number.isFinite);
   return times.length === 0 ? null : times[times.length - 1];
 }
 

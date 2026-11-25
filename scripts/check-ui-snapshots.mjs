@@ -228,6 +228,7 @@ assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], {
 assert.deepEqual(clampToLastFrame([{ label: "edge", videoSeconds: 3 }, { label: "settled", videoSeconds: 9 }], 5).map((frame) => frame.videoSeconds), [3, 5], "a frame past the last stored frame shows that frame: the screen is still from there on");
 assert.equal(lastTimeIn("0.000000\n4.250000\n14.161667\n"), 14.161667, "the last frame is the last time in ffprobe's output, and a trailing newline is no time");
 assert.equal(lastTimeIn("\n"), null, "output with no times has no last frame");
+assert.equal(lastTimeIn("0.000000\n14.161667,\n"), 14.161667, "ffprobe can end a line with a comma, which is no part of the time");
 
 // The recorded gestures end where they are: no wait for animations follows a drag, so the gap Maestro leaves is the hold.
 // Two drags, the second from above the composer to the top of the screen, then the back swipe; nothing else is recorded.
