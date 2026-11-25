@@ -79,12 +79,12 @@ assert.equal(stripesSession.title, STRIPES_TITLE, "the striped Chat's row carrie
 const pictureUri = "http://localhost:8081/assets/?unstable_path=.%2Fassets%2Fdebug%2Fstripes.png";
 const striped = stripesChatView(spaces.find((space) => space.id === stripesSession.spaceId), now, pictureUri);
 assert.equal(striped.session.id, STRIPES_CHAT_ID, "the striped view belongs to the striped row");
-const pictureReply = striped.messages.at(-1);
-assert.equal(pictureReply?.role, "assistant", "the picture is the Chat's last message, an assistant reply");
-assert.ok(pictureReply.text?.includes(`![${STRIPES_TITLE}](${pictureUri})`), "the reply carries the picture as a Markdown image on the dev server URL");
-assert.ok(pictureReply.text?.trimEnd().endsWith("288 × 160 px."), "the caption below the picture is the reply's last line");
-assert.ok(striped.messages.length >= 14, "older replies sit above the picture, so it starts below the fold");
-
+const pictureIndex = striped.messages.findIndex((message) => message.text?.includes(`![${STRIPES_TITLE}](${pictureUri})`));
+assert.ok(pictureIndex >= 0, "the picture is a Markdown image on the dev server URL in one reply");
+assert.equal(striped.messages[pictureIndex]?.role, "assistant", "the picture is an assistant reply");
+assert.ok(striped.messages[pictureIndex].text?.trimEnd().endsWith("288 × 160 px."), "the caption below the picture is the reply's last line");
+assert.ok(striped.messages.length - pictureIndex >= 9, "replies follow the picture, so the list can scroll it under the back button");
+assert.ok(pictureIndex >= 12, "older replies sit above the picture, so it starts below the fold");
 const stripesPng = readFileSync(repoFile("assets/debug/stripes.png"));
 const pngPixels = (png) => {
   let offset = 8;

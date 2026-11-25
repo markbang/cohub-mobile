@@ -96,7 +96,7 @@ The account screens are never captured from a real account. `src/data/fixtures/`
 - `spaces`, `spaces-scrolled`: four Spaces; the three without a description show their Chat counts.
 - `activity`, `activity-scrolled`: a balance, no active subscription and a 13-week heatmap.
 - `settings`, `settings-scrolled`: the profile card's name, email and avatar.
-- `chat-stripes`, `motion-stripes`: the striped Chat (`STRIPES_CHAT_ID` in `src/data/fixtures/session.ts`), the Chats list's last row, "Stripe test pattern", so the rows above it do not move. Its older replies fill the space above a picture, `assets/debug/stripes.png`, 288 × 160 px, drawn as a Markdown image at 360 × 200 pt, the Chat's image box, so it is shown uncropped. `scripts/make-stripes-fixture.mjs` writes that PNG: fine lines, thick bars, colour bars, a checkerboard, thin rules, a vertical line, and red and blue rows at its top and bottom edges. The Chat is a root screen, so the tab bar is hidden under it; its chrome is the back button and the composer.
+- `chat-stripes`, `motion-stripes`: the striped Chat (`STRIPES_CHAT_ID` in `src/data/fixtures/session.ts`), the Chats list's last row, "Stripe test pattern", so the rows above it do not move. Its older replies fill the space above a picture, `assets/debug/stripes.png`, 288 × 160 px, drawn as a Markdown image at 360 × 200 pt, the Chat's image box, so it is shown uncropped. Four replies follow it, so the list has room to scroll the picture under the back button. `scripts/make-stripes-fixture.mjs` writes that PNG: fine lines, thick bars, colour bars, a checkerboard, thin rules, a vertical line, and red and blue rows at its top and bottom edges. The Chat is a root screen, so the tab bar is hidden under it; its chrome is the back button and the composer.
 
 The seed is gated by `usesFixtures()` in `src/data/fixtures/index.ts`, which is `__DEV__ && uiSnapshots`. A release build has `__DEV__` false, so no fixture is ever read. A screen that needs data the seed does not hold gets it added to the seed, not a manual capture.
 
@@ -114,18 +114,18 @@ After the screenshots, each platform records the interactions in `MOTIONS` (`scr
 
 Each recording writes `motion/<theme>/<interaction>.json` beside its mp4. The sidecar holds the recording's start on the host clock (`startedAt`), read from Maestro's command JSON under `maestro-debug/`, and the start of each swipe. A recording with `frames` also writes one PNG per frame, `motion/<theme>/<interaction>-<label>.png`. A frame sits at a real-time offset: the start of the named swipe plus `ms`, less the recording's start. The sidecar lists each frame's time in the video. `scripts/ui-snapshots-frames.mjs` does this and cuts the frames with ffmpeg.
 
-`motion-stripes` is the chrome reference. Opened from the Chats list, it starts with the picture below the fold. Then a 2-second hold, a 4-second drag that takes the picture's top edge up to the composer's top edge (the bottom chrome), a 2-second hold, a 4-second drag that takes it under the back button, a 2-second hold, and the back swipe. Its six frames:
+`motion-stripes` is the chrome reference. Opened from the Chats list, it starts with the picture below the fold. A 3-second still, a 4-second drag that takes the picture's top edge up to the composer's top edge (the bottom chrome), a 2-second still under it, a 4-second drag that takes it under the back button, a 2-second still there, and the back swipe. A still is a press on the left margin, where nothing is under the finger, so the recording does not wait on a check of the screen. Its six frames:
 
 | Frame | Cut at | What is under the chrome |
 |---|---|---|
-| `tab-halfway` | 3.2 s into the first drag | the picture's top edge halfway up the bottom chrome |
+| `tab-halfway` | 2.8 s into the first drag | the picture's top edge halfway up the bottom chrome |
 | `tab-edge` | the end of the first drag | the picture's top edge at the bottom chrome's top edge |
-| `tab-hold` | 1 s into the hold after it | the same, held |
+| `tab-hold` | 1 s into the still after it | the same, held |
 | `back-edge` | 3.9 s into the second drag | the picture's top edge at the back button's bottom edge |
 | `back-halfway` | the end of the second drag | the picture's top edge at the back button's middle |
-| `back-hold` | 1 s into the hold after it | the same, held |
+| `back-hold` | 1 s into the still after it | the same, held |
 
-The bottom chrome is the Chat's composer, since the tab bar does not show over a Chat. The `ms` offsets follow the drags' geometry; check them against the frames after a run.
+The clock is Maestro's: each swipe's start is stamped on the host clock, and a frame sits at its swipe's start plus its offset. Maestro's `startRecording` stamp comes earlier than the video's first frame, so the sidecar's `onset` anchors the clock where the video first moves, at the first drag (`onset: 1` in `MOTIONS`). The bottom chrome is the Chat's composer, since the tab bar does not show over a Chat. The `ms` offsets follow the drags' geometry; check them against the frames after a run.
 
 ## Limits
 

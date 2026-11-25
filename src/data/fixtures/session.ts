@@ -176,30 +176,35 @@ const STRIPES_FILLER: [string, string][] = [
   ["How tall should the picture be?", "Taller than the screen, so one slow swipe carries it from below the fold to under the top bar."],
   ["Anything else to know?", "Keep the bands sharp. Fine lines show blur, thick bars show drift, and the colour bars show contrast under glass."],
   ["Got it.", "Then the reference is ready. The picture holds under each bar for two seconds, and the list keeps its place."],
-  ["Is the run ready?", "Ready. The picture is the last message in this Chat, below the older replies."],
+  ["Is the run ready?", "Ready. The picture sits above these replies, so the list has room to scroll it under the chrome."],
+];
+/** Replies after the picture: the list needs this much content under it to scroll the picture up under the back button. */
+const STRIPES_TRAILING: [string, string][] = [
+  ["Can you say more about the drag?", "It is a slow drag, four seconds, so the content follows the finger and the picture rises under the bar."],
+  ["And the holds?", "Two seconds each, with the picture still under the bar, then under the back button."],
+  ["Anything to check after the run?", "The frames: the top edge at the bar, halfway under it, the hold, then the same three under the back button."],
+  ["Thanks.", "Done. The list stays where the last reply leaves it."],
 ];
 
 /**
- * The striped Chat: older replies first, so the picture starts below the fold once the Chat is scrolled to its top.
- * `pictureUri` is the bundled `assets/debug/stripes.png`, which the caller resolves to its dev-server URL.
+ * The striped Chat: older replies first, so the picture starts below the fold once the Chat is scrolled to its top, and
+ * replies after it, so the list can scroll the picture up under the back button. `pictureUri` is the bundled
+ * `assets/debug/stripes.png`, which the caller resolves to its dev-server URL.
  */
 export function stripesChatView(space: SpaceRecord, now: number, pictureUri: string): SessionView {
   const sessionId = STRIPES_CHAT_ID;
   const lastMessageAt = new Date(now - STRIPES_HOURS * HOUR_MS).toISOString();
-  const pictureTurn = {
-    sequence: STRIPES_FILLER.length + 1,
-    userText: "Show the test pattern.",
-    assistantContent: [{ type: "text" as const, text: `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 288 × 160 px.` }],
-  };
-  const turns = [...STRIPES_FILLER.map(([userText, reply], index) => turnRecord(sessionId, now, {
+  const pictureReply = `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 288 × 160 px.`;
+  const exchanges: [string, string][] = [...STRIPES_FILLER, ["Show the test pattern.", pictureReply], ...STRIPES_TRAILING];
+  const turns = exchanges.map(([userText, reply], index) => turnRecord(sessionId, now, {
     sequence: index + 1,
-    sentAgoMs: (STRIPES_HOURS + (STRIPES_FILLER.length - index) * 2) * HOUR_MS,
+    sentAgoMs: (STRIPES_HOURS + (exchanges.length - 1 - index) * 2) * HOUR_MS,
     durationMs: 9 * SECOND_MS,
     userText,
     assistantContent: [{ type: "text", text: reply }],
     tokens: 2400,
     toolCallCount: 0,
-  })), turnRecord(sessionId, now, { ...pictureTurn, sentAgoMs: STRIPES_HOURS * HOUR_MS, durationMs: 9 * SECOND_MS, tokens: 2400, toolCallCount: 0 })];
+  }));
   const session: SessionRecord = {
     id: sessionId,
     spaceId: space.id,
@@ -209,7 +214,7 @@ export function stripesChatView(space: SpaceRecord, now: number, pictureUri: str
     status: null,
     externalSessionId: null,
     meta: null,
-    latestMessageText: pictureTurn.assistantContent[0].text,
+    latestMessageText: STRIPES_TRAILING.at(-1)?.[1] ?? "",
     lastMessageAt,
     lastMessageId: `${sessionId}:latest`,
     createdAt: new Date(now - (STRIPES_HOURS + 6) * HOUR_MS).toISOString(),

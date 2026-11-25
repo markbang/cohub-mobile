@@ -2,7 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { exportFrames, frameTimes, readCommands, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
+import { exportFrames, frameTimes, motionOnset, readCommands, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
 
 /**
  * Captures the same screens on iOS and Android and pairs them side by side, so the drawn Android
@@ -236,22 +236,25 @@ export const MOTIONS = [
   { name: "motion-search", ready: "Appearance", link: "cohub://settings", setup: [{ tapOn: "Chats" }, { swipe: "down" }], steps: [{ tapOn: "Search", optional: true }, { tapOn: "Cancel", optional: true }] },
   // The striped Chat under the chrome. Measured on run 45596762445: the picture's top sits about 1340 pt down at the
   // Chat's top, so five swipes down bring the Chat to its top, then one slow drag up leaves the picture's top just under
-  // the fold (about 938 pt). Drag A takes its top edge to the composer's top edge (the bottom chrome), where it holds.
+  // the fold (about 938 pt; run 45608184709 has it at 778 pt when drag A ends). Drag A takes its top edge to the composer's top edge (the bottom chrome), where it holds.
   // Drag B takes it to the back button, where it holds, then the back swipe ends the Chat. `frames` cut PNGs from the
-  // recording, each at `ms` after the start of the drag `swipe` (0: drag A, 1: drag B).
+  // recording, each at `ms` after the start of its swipe (see `onset` below).
   {
     name: "motion-stripes",
     ready: "Appearance",
     link: "cohub://settings",
     setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 \u00d7 160" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { drag: { from: "50%, 80%", to: "50%, 34%", duration: 3000 } }, { hold: 1000 }],
-    steps: [{ hold: 2000 }, { drag: { from: "50%, 80%", to: "50%, 62%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }, { hold: 2000 }],
+    steps: [{ hold: 3000 }, { drag: { from: "50%, 80%", to: "50%, 62%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }],
+    // The swipes after the recording starts: 0 the first hold, 1 drag A, 2 the hold under the bar, 3 drag B, 4 the hold under
+    // the button, 5 the back swipe. The video first moves at drag A, so `onset` anchors the clock there.
+    onset: 1,
     frames: [
-      { label: "tab-halfway", swipe: 0, ms: 2810 },
-      { label: "tab-edge", swipe: 0, ms: 4000 },
-      { label: "tab-hold", swipe: 0, ms: 5000 },
-      { label: "back-edge", swipe: 1, ms: 3870 },
-      { label: "back-halfway", swipe: 1, ms: 4000 },
-      { label: "back-hold", swipe: 1, ms: 5000 },
+      { label: "tab-halfway", swipe: 1, ms: 2810 },
+      { label: "tab-edge", swipe: 1, ms: 4000 },
+      { label: "tab-hold", swipe: 2, ms: 1000 },
+      { label: "back-edge", swipe: 3, ms: 3870 },
+      { label: "back-halfway", swipe: 3, ms: 4000 },
+      { label: "back-hold", swipe: 4, ms: 1000 },
     ],
   },
 ];
@@ -663,12 +666,21 @@ const TAB_LABELS = new Set(["Chats", "Spaces", "Activity", "Me"]);
 // ("Filter Chats by who started them, All"), so iOS matches the label's start.
 const SOURCE_FILTER_IOS = "Filter Chats by .*";
 
+// The left margin of a list, where a still press does nothing: no text, bubble or row reaches x = 2%.
+const HOLD_POINT = "2%, 50%";
+
 function pushSteps(lines, platform, steps = []) {
   for (const step of steps) {
     // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
     // `exact` matches the whole text, for a short word such as a menu item that other labels contain.
     // A hold is an optional wait for a state that never comes, so the flow pauses for the whole timeout.
     // Holds and drags end where they are: a wait for animations after them would run to its full five seconds on a Chat.
+    // An iOS hold presses still on the left margin for its full time: an optional wait for a state that never comes
+    // runs for several times its timeout there, since each check of the hierarchy takes seconds on a Chat.
+    if (step.hold && platform === "ios") {
+      lines.push("- swipe:", `    start: ${yamlString(HOLD_POINT)}`, `    end: ${yamlString(HOLD_POINT)}`, `    duration: ${step.hold}`);
+      continue;
+    }
     if (step.hold) {
       lines.push("- extendedWaitUntil:", "    visible: \"^__hold__$\"", `    timeout: ${step.hold}`, "    optional: true");
       continue;
@@ -1280,8 +1292,9 @@ async function captureCell(options, session, missing) {
 function recordMotion({ motion, theme, video, commands, directory, missing }) {
   try {
     const clock = recordingClock(readCommands(commands), `${motion.name} (${theme})`);
-    const frames = exportFrames(video, frameTimes(clock, motion.frames ?? []), directory, motion.name);
-    writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, frames });
+    const onset = { swipe: motion.onset ?? 0, seconds: motionOnset(video) };
+    const frames = exportFrames(video, frameTimes(clock, motion.frames ?? [], onset), directory, motion.name);
+    writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, onset, frames });
   } catch (error) {
     missing.push(`motion/${theme}/${motion.name} sidecar or frames: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -1377,12 +1390,6 @@ function compare(options) {
  * Seconds before the first change on screen. Each platform starts recording at its own moment, so
  * pairs are trimmed to start just before their first interaction and play in step.
  */
-function firstChange(path) {
-  const result = spawnSync("ffmpeg", ["-hide_banner", "-i", path, "-vf", "freezedetect=n=0.003:d=0.2", "-map", "0:v", "-f", "null", "-"], { encoding: "utf8" });
-  const match = /freeze_start: 0(?:\.0+)?\b[\s\S]*?freeze_end: ([\d.]+)/.exec(result.stderr ?? "");
-  return match ? Number(match[1]) : 0;
-}
-
 /** Recordings side by side at one height and frame rate, aligned on their first change; the shorter one holds its last frame. */
 function pairMotion(options, unmatched) {
   let count = 0;
@@ -1404,7 +1411,7 @@ function pairMotion(options, unmatched) {
       }
       const height = 1280;
       const lead = 0.3;
-      const trim = (path) => String(Math.max(0, firstChange(path) - lead));
+      const trim = (path) => String(Math.max(0, motionOnset(path) - lead));
       run("ffmpeg", ["-y", "-loglevel", "error", "-ss", trim(left), "-i", left, "-ss", trim(right), "-i", right, "-filter_complex",
         `[0:v]fps=30,scale=-2:${height},setsar=1[a];[1:v]fps=30,scale=-2:${height},setsar=1[b];[a]pad=iw+24:ih:0:0:color=0x808080[ag];[ag][b]hstack=inputs=2`,
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", join(directory, name)]);

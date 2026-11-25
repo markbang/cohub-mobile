@@ -96,7 +96,7 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 - `spaces`、`spaces-scrolled`：四个 Space；没有描述的三个显示其 Chat 数量。
 - `activity`、`activity-scrolled`：一个余额、无有效订阅，以及一个 13 周的热力图。
 - `settings`、`settings-scrolled`：个人资料卡片的名称、邮箱和头像。
-- `chat-stripes`、`motion-stripes`：条纹 Chat（`src/data/fixtures/session.ts` 中的 `STRIPES_CHAT_ID`），是 Chats 列表的最后一行，标题为 "Stripe test pattern"，因此它上面的行不会移动。它的较早回复填满图片上方的空间。图片是 `assets/debug/stripes.png`，288 × 160 px，以 Markdown 图片呈现，显示为 360 × 200 pt（Chat 的图片框），因此不被裁剪。`scripts/make-stripes-fixture.mjs` 生成这张 PNG：细线、粗条、彩条、棋盘格、细横线、一条竖线，以及顶部和底部边缘的红色与蓝色行。Chat 是根屏幕，标签栏在其下隐藏；它的覆盖层是返回按钮和编辑器。
+- `chat-stripes`、`motion-stripes`：条纹 Chat（`src/data/fixtures/session.ts` 中的 `STRIPES_CHAT_ID`），是 Chats 列表的最后一行，标题为 "Stripe test pattern"，因此它上面的行不会移动。它的较早回复填满图片上方的空间。图片是 `assets/debug/stripes.png`，288 × 160 px，以 Markdown 图片呈现，显示为 360 × 200 pt（Chat 的图片框），因此不被裁剪。图片之后还有四条回复，使列表有空间把图片滚到返回按钮之下。`scripts/make-stripes-fixture.mjs` 生成这张 PNG：细线、粗条、彩条、棋盘格、细横线、一条竖线，以及顶部和底部边缘的红色与蓝色行。Chat 是根屏幕，标签栏在其下隐藏；它的覆盖层是返回按钮和编辑器。
 
 种子由 `src/data/fixtures/index.ts` 中的 `usesFixtures()` 控制，其值为 `__DEV__ && uiSnapshots`。发布版本的 `__DEV__` 为 false，因此永远不会读取任何种子。如果某个屏幕需要种子未包含的数据，应把数据加入种子，而不是手动截取。
 
@@ -114,16 +114,18 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 
 每次录制在 mp4 旁边写入 `motion/<theme>/<interaction>.json`。附属文件包含录制在主机时钟上的开始时间（`startedAt`），取自 `maestro-debug/` 下 Maestro 的命令 JSON，以及每次滑动的开始时间。带有 `frames` 的录制还为每一帧写入一张 PNG，即 `motion/<theme>/<interaction>-<label>.png`。每一帧位于一个真实时间偏移处：所指滑动的开始时间加上 `ms`，再减去录制的开始时间。附属文件列出每一帧在视频中的时间。`scripts/ui-snapshots-frames.mjs` 完成这些工作，并用 ffmpeg 截取帧。
 
-`motion-stripes` 是底部和顶部覆盖层的参照。从 Chats 列表打开后，图片位于折线以下。随后是 2 秒停顿、一段 4 秒的拖动（把图片顶边拉到编辑器顶边，即底部覆盖层）、2 秒停顿、另一段 4 秒的拖动（把它拉到返回按钮下方）、2 秒停顿，最后是返回滑动。它的六帧如下：
+`motion-stripes` 是覆盖层的参照。从 Chats 列表打开后，图片位于折线以下。先静止 3 秒，然后一段 4 秒的拖动把图片顶边拉到编辑器顶边（底部覆盖层），再静止 2 秒，接着另一段 4 秒的拖动把它拉到返回按钮下方，再静止 2 秒，最后是返回滑动。静止是在左边缘按住不动，那里手指下没有任何内容，因此录制不会等待对屏幕的检查。它的六帧如下：
 
 | 帧 | 截取时间 | 覆盖层下的内容 |
 |---|---|---|
-| `tab-halfway` | 第一段拖动开始后 3.2 秒 | 图片顶边位于底部覆盖层的一半高度 |
+| `tab-halfway` | 第一段拖动开始后 2.8 秒 | 图片顶边位于底部覆盖层的一半高度 |
 | `tab-edge` | 第一段拖动结束时 | 图片顶边位于底部覆盖层的顶边 |
-| `tab-hold` | 其后停顿的第 1 秒 | 同上，保持不动 |
+| `tab-hold` | 其后静止的第 1 秒 | 同上，保持不动 |
 | `back-edge` | 第二段拖动开始后 3.9 秒 | 图片顶边位于返回按钮的下边缘 |
 | `back-halfway` | 第二段拖动结束时 | 图片顶边位于返回按钮的中线 |
-| `back-hold` | 其后停顿的第 1 秒 | 同上，保持不动 |
+| `back-hold` | 其后静止的第 1 秒 | 同上，保持不动 |
+
+时钟来自 Maestro：每次滑动的开始都在主机时钟上打了时间戳，一帧位于其滑动开始加上偏移处。Maestro 的 `startRecording` 时间戳早于视频的第一帧，所以附属文件的 `onset` 把时钟锚定在视频第一次变化的地方，即第一段拖动（`MOTIONS` 中的 `onset: 1`）。
 
 底部覆盖层是 Chat 的编辑器，因为标签栏不在 Chat 上方显示。`ms` 偏移依据拖动的几何关系设定；运行后请对照帧检查。
 

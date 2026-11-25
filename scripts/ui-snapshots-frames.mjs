@@ -38,16 +38,28 @@ export function recordingClock(commands, recording) {
 }
 
 /**
- * Where each frame sits in the video, in seconds: `swipe` counts the swipes after the recording started, and `ms` is
- * the offset from that swipe's start on the host clock.
+ * Where each frame sits in the video, in seconds. A frame is `ms` after the start of its swipe on the host clock. The
+ * video's zero is not the recording's start: Maestro's startRecording stamp comes earlier, by the time the recorder
+ * takes to start. So `onset` anchors the clock to the video: the swipe `onset.swipe` begins at `onset.seconds` in it,
+ * where the video first changes.
  */
-export function frameTimes(clock, frames) {
+export function frameTimes(clock, frames, onset) {
+  const anchor = clock.swipes[onset.swipe];
+  if (!anchor) throw new Error(`The onset swipe ${onset.swipe} is missing from the recording, which has ${clock.swipes.length} swipes.`);
   return frames.map((frame) => {
     const swipe = clock.swipes[frame.swipe];
     if (!swipe) throw new Error(`Frame "${frame.label}" wants swipe ${frame.swipe}, but the recording has ${clock.swipes.length}.`);
     const wallMs = swipe.startMs + frame.ms;
-    return { label: frame.label, wallMs, videoSeconds: (wallMs - clock.startedAtMs) / 1000 };
+    return { label: frame.label, wallMs, videoSeconds: onset.seconds + (wallMs - anchor.startMs) / 1000 };
   });
+}
+
+/** The video's first change, in seconds: where the recording's content first moves. */
+export function motionOnset(video) {
+  const result = spawnSync("ffmpeg", ["-hide_banner", "-i", video, "-vf", "freezedetect=n=0.003:d=0.2", "-map", "0:v", "-f", "null", "-"], { encoding: "utf8" });
+  const match = /freeze_start: 0(?:\.0+)?\b[\s\S]*?freeze_end: ([\d.]+)/.exec(result.stderr ?? "");
+  if (!match) throw new Error(`No still start found in ${video}; the recording may already be moving at its first frame.`);
+  return Number(match[1]);
 }
 
 /** Maestro's command JSON under a flow's debug output, as parsed objects. Maestro names it `commands-(<flow>).json`. */
@@ -80,13 +92,14 @@ export function exportFrames(video, timed, directory, prefix) {
  * The sidecar next to a recording: the host-clock start, and each frame with its file and time. Written as the
  * recording's `<name>.json`, so a reader can cut other frames from the same mp4 with the same clock.
  */
-export function writeSidecar(path, { name, theme, clock, frames }) {
+export function writeSidecar(path, { name, theme, clock, onset, frames }) {
   const body = {
     name,
     theme,
     video: `${name}.mp4`,
     startedAt: new Date(clock.startedAtMs).toISOString(),
     startedAtMs: clock.startedAtMs,
+    onset: { swipe: onset.swipe, videoSeconds: onset.seconds },
     swipes: clock.swipes.map((swipe) => ({ startedAt: new Date(swipe.startMs).toISOString(), startedAtMs: swipe.startMs, durationMs: swipe.durationMs })),
     frames: frames.map((frame) => ({ label: frame.label, file: basename(frame.file), videoSeconds: Number(frame.videoSeconds.toFixed(3)), wallMs: frame.wallMs })),
   };
