@@ -165,6 +165,66 @@ export function fixtureChatView(space: SpaceRecord, now: number): SessionView {
   return loadedView(space, session, turns);
 }
 
+/** The Chat with the striped picture: the last row, so the Chats list's top rows are unchanged. */
+export const STRIPES_CHAT_ID = "2b1e0000-0000-4000-8000-000000000023";
+export const STRIPES_TITLE = "Stripe test pattern";
+/** Hours since the picture's message: the Chats list shows it at the bottom, ten days back. */
+export const STRIPES_HOURS = 300;
+const STRIPES_FILLER: [string, string][] = [
+  ["What do the chrome checks need?", "Two things: a long list under the glass bars, and a picture taller than the screen, so it can scroll past them."],
+  ["Which screen should I use?", "The Chat screen. It has a back button at the top and the composer at the bottom, and its messages scroll under both."],
+  ["How tall should the picture be?", "Taller than the screen, so one slow swipe carries it from below the fold to under the top bar."],
+  ["Anything else to know?", "Keep the bands sharp. Fine lines show blur, thick bars show drift, and the colour bars show contrast under glass."],
+  ["Got it.", "Then the reference is ready. The picture holds under each bar for two seconds, and the list keeps its place."],
+  ["Is the run ready?", "Ready. The picture sits above these replies, so the list has room to scroll it under the chrome."],
+];
+/** Replies after the picture: the list needs this much content under it to scroll the picture up under the back button. */
+const STRIPES_TRAILING: [string, string][] = [
+  ["Can you say more about the drag?", "It is a slow drag, four seconds, so the content follows the finger and the picture rises under the bar."],
+  ["And the holds?", "Two seconds each, with the picture still under the bar, then under the back button."],
+  ["Anything to check after the run?", "The frames: the top edge at the bar, halfway under it, the hold, then the same three under the back button."],
+  ["Thanks.", "Done. The list stays where the last reply leaves it."],
+];
+
+/**
+ * The striped Chat: older replies first, so the picture starts below the fold once the Chat is scrolled to its top, and
+ * replies after it, so the list can scroll the picture up under the back button. `pictureUri` is the bundled
+ * `assets/debug/stripes.png`, which the caller resolves to its dev-server URL.
+ */
+export function stripesChatView(space: SpaceRecord, now: number, pictureUri: string): SessionView {
+  const sessionId = STRIPES_CHAT_ID;
+  const lastMessageAt = new Date(now - STRIPES_HOURS * HOUR_MS).toISOString();
+  const pictureReply = `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 288 × 160 px.`;
+  const exchanges: [string, string][] = [...STRIPES_FILLER, ["Show the test pattern.", pictureReply], ...STRIPES_TRAILING];
+  const turns = exchanges.map(([userText, reply], index) => turnRecord(sessionId, now, {
+    sequence: index + 1,
+    sentAgoMs: (STRIPES_HOURS + (exchanges.length - 1 - index) * 2) * HOUR_MS,
+    durationMs: 9 * SECOND_MS,
+    userText,
+    assistantContent: [{ type: "text", text: reply }],
+    tokens: 2400,
+    toolCallCount: 0,
+  }));
+  const session: SessionRecord = {
+    id: sessionId,
+    spaceId: space.id,
+    userUuid: null,
+    title: STRIPES_TITLE,
+    source: null,
+    status: null,
+    externalSessionId: null,
+    meta: null,
+    latestMessageText: STRIPES_TRAILING.at(-1)?.[1] ?? "",
+    lastMessageAt,
+    lastMessageId: `${sessionId}:latest`,
+    createdAt: new Date(now - (STRIPES_HOURS + 6) * HOUR_MS).toISOString(),
+    updatedAt: lastMessageAt,
+    totalMessages: turns.length * 2,
+    totalToolCalls: 0,
+  };
+  return loadedView(space, session, turns);
+}
+
 /** The view the Chat screen holds once a Chat's history has loaded and no reply is streaming. */
 function loadedView(space: SpaceRecord, session: SessionRecord, turns: SessionTurnRecord[]): SessionView {
   return {

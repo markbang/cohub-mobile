@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { buildFlow, buildMotionFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { clampToLastFrame, frameTimes, LAST_STILL_GUARD_SECONDS, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -72,9 +73,9 @@ assert.deepEqual(landscape.map((entry) => [entry.orientations.join("/"), entry.p
 assert.deepEqual(planShards({ ...all, targets: ["phone"], screens: ["split-space"] }), [], "a run naming only tablet screens has no phone job");
 
 const doubled = planShards({ ...all, targets: ["phone"], themes: ["light", "dark"] });
-assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs of eleven screens");
+assert.equal(doubled.length, 4, "both themes double the phone's work into four jobs");
 assert.deepEqual(doubled.flatMap((entry) => entry.screens), SCREENS.map((screen) => screen.name), "both themes still cover each phone screen once");
-assert.ok(doubled.every((entry) => entry.screens.length === 11), "each doubled phone job holds eleven screens");
+assert.ok(doubled.every((entry) => entry.screens.length <= 12), "no doubled phone job holds more than twelve screens");
 
 const motionPlan = planShards({ ...all, targets: ["phone"], motion: true });
 const motions = motionPlan.filter((entry) => entry.part === "motion");
@@ -86,6 +87,17 @@ assert.equal(planShards({ ...all, targets: ["tablet"], perf: 2 }).filter((entry)
 const expected = (plan, options) => plan.flatMap((entry) => expectedOutputs(entry, options));
 const outputs = expected(defaults, { themes: ["light"] });
 assert.equal(new Set(outputs).size, outputs.length, "no two jobs write the same file");
+const interactionOnly = planShards({ ...all, targets: ["phone"], screens: ["motion-stripes"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] });
+assert.deepEqual(interactionOnly.map((entry) => [entry.part, entry.screens]), [["motion", ["motion-stripes"]]], "naming only an interaction plans its motion job, with no screen job");
+const bothThemes = planShards({ ...all, targets: ["phone"], motion: true, themes: ["light"], motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion");
+const bothOutputs = expected(bothThemes, { themes: ["light"], motionThemes: ["light", "dark"] });
+assert.ok(MOTIONS.every((motion) => ["light", "dark"].every((theme) => bothOutputs.includes(`motion/${theme}/${motion.name}.mp4`))), "each motion theme writes every video under motion/<theme>/");
+assert.ok(!bothOutputs.some((path) => /^motion\/[^/]+\.mp4$/.test(path)), "no video is written at the top of motion/");
+const stripesOnly = planShards({ ...all, targets: ["phone"], screens: ["chat-stripes", "motion-stripes"], themes: ["light", "dark"], motion: true, motionThemes: ["light", "dark"] });
+assert.deepEqual(stripesOnly.map((entry) => [entry.part, entry.screens]), [["screens", ["chat-stripes"]], ["motion", ["motion-stripes"]]], "--screens names a screen and an interaction, and each job takes its own");
+const stripesFiles = expected(stripesOnly.filter((entry) => entry.part === "motion"), { themes: ["light", "dark"], motionThemes: ["light", "dark"] });
+const stripesFrames = ["tab-edge", "tab-halfway", "tab-hold", "back-edge", "back-halfway", "back-hold"];
+assert.deepEqual([...stripesFiles].sort(), ["light", "dark"].flatMap((theme) => [`motion/${theme}/motion-stripes.json`, `motion/${theme}/motion-stripes.mp4`, ...stripesFrames.map((label) => `motion/${theme}/motion-stripes-${label}.png`)]).sort(), "the stripes recording writes its video, sidecar and six PNG frames in each theme");
 assert.ok(outputs.includes("light/catalog-type.png") && outputs.includes("tablet-portrait/light/split-empty.png") && outputs.includes("tablet-landscape/light/split-empty.png"), "the expected paths match the layout compare reads");
 assert.ok(outputs.includes("tablet-flow/"), "the split flows' directory is expected");
 const sized = expected(planShards({ ...all, targets: ["phone"], screens: ["catalog-rows"], themes: ["light", "dark"], textSizes: ["default", "accessibility-large"] }), { themes: ["light", "dark"] });
@@ -117,6 +129,12 @@ assert.equal(JSON.parse(cliCore.stdout).length, 5, "plan's default scope is core
 const cliFull = JSON.parse(cli(["--target", "phone,tablet", "--themes", "light", "--no-motion", "--scope", "full"]).stdout);
 assert.equal(cliFull.length, 5, "plan --scope full is the old list: five jobs");
 assert.ok(cliFull.some((entry) => entry.part === "flow"), "plan --scope full keeps the split flows");
+const named = cli(["--target", "phone", "--themes", "light", "--screens", "chat-stripes,motion-stripes", "--motion-themes", "light,dark"]);
+assert.equal(named.status, 0, named.stderr);
+assert.deepEqual(JSON.parse(named.stdout).map((entry) => [entry.part, entry.screens]), [["screens", ["chat-stripes"]], ["motion", ["motion-stripes"]]], "plan names a screen and an interaction together, as the workflow passes them");
+const unknown = cli(["--target", "phone", "--themes", "light", "--screens", "motion-nope"]);
+assert.equal(unknown.status, 1, "an unknown name fails the plan");
+assert.match(unknown.stderr, /Unknown screen or interaction "motion-nope"/, "the refusal names the unknown screen or interaction");
 const refused = cli(["--target", "phone", "--themes", "light", "--no-motion", "--text-size", "extra-large"]);
 assert.deepEqual([refused.status, refused.stdout], [1, ""], "core refuses a text size it does not carry, and names the scope to use");
 assert.match(refused.stderr, /use --scope full for extra-large/, "the refusal says which scope takes the size");
@@ -192,3 +210,61 @@ assert.equal(restoreModules?.with?.["fail-on-cache-miss"], true, "a node_modules
 const maestroRestore = captureSteps.find((step) => String(step.uses ?? "").startsWith("actions/cache/restore") && step.with?.path === "~/.maestro");
 assert.ok(maestroRestore && maestroRestore.with["fail-on-cache-miss"] !== true, "a Maestro restore miss or failure installs Maestro instead of failing the shard");
 assert.ok(captureSteps.some((step) => step.name === "Install Maestro" && step.if === "steps.maestro.outputs.cache-hit != 'true'"), "capture installs Maestro when its restore does not hit");
+
+// A frame's time in the video: the swipe it names, plus its offset, less the recording's own start on the host clock.
+const timed = (metadata, command) => ({ command, metadata });
+const commands = [
+  timed({ timestamp: 1000, duration: 100 }, { openLinkCommand: { link: "cohub://settings" } }),
+  timed({ timestamp: 2000, duration: 5 }, { startRecordingCommand: { path: "motion-stripes" } }),
+  timed({ timestamp: 2500, duration: 4000 }, { swipeCommand: { start: "50%, 70%", end: "50%, 43%", duration: 4000 } }),
+  timed({ timestamp: 9000, duration: 4000 }, { swipeCommand: { start: "50%, 85%", end: "50%, 5%", duration: 4000 } }),
+];
+const clock = recordingClock([[{ command: { applyConfigurationCommand: {} }, metadata: { timestamp: 500, duration: 1 } }], commands], "motion-stripes");
+assert.deepEqual([clock.startedAtMs, clock.swipes.map((swipe) => swipe.startMs)], [2000, [2500, 9000]], "the recording starts at its startRecording command, and the swipes after it are counted from there");
+assert.deepEqual(frameTimes(clock, [{ label: "tab-halfway", swipe: 0, ms: 3200 }, { label: "back-hold", swipe: 1, ms: 5000 }], { swipe: 0, seconds: 0.5 }).map((frame) => [frame.label, frame.videoSeconds]), [["tab-halfway", 3.7], ["back-hold", 12]], "a frame sits at its swipe's start plus its offset, on the video's clock anchored at the onset swipe");
+assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /No Maestro commands JSON starts a recording/, "a recording with no start in any command list fails and says what it saw");
+assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
+assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
+assert.deepEqual(clampToLastFrame([{ label: "edge", videoSeconds: 3 }, { label: "settled", videoSeconds: 9 }], 5).map((frame) => frame.videoSeconds), [3, 5], "a frame past the last stored frame shows that frame: the screen is still from there on");
+assert.equal(lastTimeIn("0.000000\n4.250000\n14.161667\n"), 14.161667, "the last frame is the latest time in ffprobe's output, and a trailing newline is no time");
+assert.equal(lastTimeIn("0.000000\n14.161667\n13.900000\n"), 14.161667, "ffprobe lists frames in decode order, so the last line can be earlier than the latest time");
+assert.equal(lastTimeIn("\n"), null, "output with no times has no last frame");
+assert.equal(lastTimeIn("0.000000\n14.161667,\n"), 14.161667, "ffprobe can end a line with a comma, which is no part of the time");
+
+// The recorded gestures end where they are: no wait for animations follows a drag, so the gap Maestro leaves is the hold.
+// Two drags, the second from above the composer to the top of the screen, then the back swipe; nothing else is recorded.
+const stripesFlow = buildMotionFlow({ platform: "ios", session: true, motions: MOTIONS.filter((motion) => motion.name === "motion-stripes") }).split("\n");
+const recorded = stripesFlow.slice(stripesFlow.indexOf("- startRecording: \"motion-stripes\""), stripesFlow.indexOf("- stopRecording"));
+const firstDrag = recorded.indexOf("    duration: 4000");
+const secondDrag = recorded.indexOf("    duration: 4000", firstDrag + 1);
+assert.ok(firstDrag > 0 && secondDrag > firstDrag, "the recording has two 4 s drags");
+assert.ok(recorded[firstDrag + 1] !== "- waitForAnimationToEnd:" && recorded[secondDrag + 1] !== "- waitForAnimationToEnd:", "no wait for animations follows a drag");
+assert.equal(recorded.filter((line) => line.includes("__hold__")).length, 0, "the recording has no explicit holds: the gaps between commands are the holds");
+assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    end: "50%, 0%"'), "the second drag runs from above the composer to the top of the screen");
+assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
+
+// The list motion: a fresh start on the Chats root, then five steps: a still hold, a drag up, a hold, a small stroke down
+// and a last hold. Nothing is tapped or searched, every hold presses the title bar's empty margin, and frames name the
+// swipe they sit in. The clock anchors at the drag up, where the video first moves.
+const listMotion = MOTIONS.find((motion) => motion.name === "motion-chats-list");
+const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: [listMotion] }).split("\n");
+const listRecording = listFlow.slice(listFlow.indexOf("- startRecording: \"motion-chats-list\""), listFlow.indexOf("- stopRecording"));
+const listHold = (duration) => ["- swipe:", '    start: "2%, 8%"', '    end: "2%, 8%"', `    duration: ${duration}`];
+assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"cohub:///\""), "the list motion relaunches before it opens the Chats root");
+assert.equal(listMotion.setup, undefined, "the list opens at its top with the full bar: no swipe before the recording");
+assert.deepEqual(listRecording, [
+  '- startRecording: "motion-chats-list"',
+  ...listHold(2000),
+  "- swipe:", '    start: "50%, 72%"', '    end: "50%, 28%"', "    duration: 4000",
+  ...listHold(2000),
+  "- swipe:", '    start: "50%, 48%"', '    end: "50%, 54%"', "    duration: 800",
+  ...listHold(2000),
+], "the list recording is a 2 s still hold, a drag up, a hold, a small stroke down and a hold: nothing tapped, no search");
+assert.equal(listMotion.onset, 1, "the clock anchors at the drag up: the first hold is still, and the video first moves there");
+const listKinds = listMotion.steps.map((step) => (step.drag ? "drag" : "hold"));
+assert.deepEqual(listMotion.frames.map((frame) => [frame.label, listKinds[frame.swipe]]), [["edge", "drag"], ["halfway", "drag"], ["hold", "hold"], ["settled", "hold"]], "each list frame sits in the swipe its label names: edge and halfway in the drag up, hold and settled in the last hold");
+const listLengths = listMotion.steps.map((step) => step.drag?.duration ?? step.hold);
+assert.ok(listMotion.frames.every((frame) => frame.ms < listLengths[frame.swipe]), "each list frame falls inside its swipe");
+assert.ok(LAST_STILL_GUARD_SECONDS > 0 && LAST_STILL_GUARD_SECONDS < 0.5, "a still after the last change is cut a little before the last stored frame");
+assert.deepEqual(expectedOutputs({ part: "motion", screens: ["motion-chats-list"] }, { themes: ["light"], motionThemes: ["light", "dark"] }).filter((file) => file.endsWith(".png")), ["motion/light/list-edge.png", "motion/light/list-halfway.png", "motion/light/list-hold.png", "motion/light/list-settled.png", "motion/dark/list-edge.png", "motion/dark/list-halfway.png", "motion/dark/list-hold.png", "motion/dark/list-settled.png"], "the list frames are list-<label>.png in each theme's folder");
+assert.equal(planShards({ ...all, targets: ["phone"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").flatMap((entry) => entry.screens).join(), "motion-chats-list", "naming the list motion plans it alone");

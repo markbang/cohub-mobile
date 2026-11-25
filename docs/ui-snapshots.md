@@ -1,5 +1,7 @@
 # UI snapshots
 
+Chinese version: [ui-snapshots.zh-CN.md](ui-snapshots.zh-CN.md).
+
 Android draws the iOS design (see `AGENTS.md` › Native UI). iOS uses the system components, so its screenshots are the reference. The capture runs on both platforms, and `compare` places each pair side by side: iOS on the left, Android on the right.
 
 ## Run in CI
@@ -27,7 +29,8 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 - `.github/workflows/ui-snapshots-android.yml` and `.github/workflows/ui-snapshots-ios.yml` build debug binaries and cache them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
 - Snapshots run without an account on seeded fixtures by default (`offline=true`). `offline=false` signs in through the login flow (`e2e/auth/`) with the `E2E_ACCOUNT_EMAIL` and `E2E_ACCOUNT_PASSWORD` secrets (a dev-tenant account), and the tenant's CAPTCHA blocks that step.
 - The Android device E2E (`.github/workflows/e2e-android.yml`) is `disabled_manually`. It depends on the same page login, which the CAPTCHA keeps from running unattended, so do not re-enable it.
-- Artifacts: `ui-snapshots-android` and `ui-snapshots-ios`, each holding `<theme>/<screen>.png` and `motion/<interaction>.mp4`. A non-default text size writes to a suffixed directory instead of overwriting the default: `<theme>-<size>/` on the phone and `tablet-<orientation>/<theme>-<size>/` on a tablet, so `light/` is the default size and `light-accessibility-large/` the large one. A tablet run uploads `ui-snapshots-android-tablet` and `ui-snapshots-ios-tablet` instead (see [Tablets](#tablets)).
+- `motion_themes` (iOS, default `light`) sets the themes the recordings are made in, `light,dark` for both. Each video lands in `motion/<theme>/<interaction>.mp4`, with a `motion/<theme>/<interaction>.json` sidecar beside it (see [Recordings](#recordings)).
+- Artifacts: `ui-snapshots-android` and `ui-snapshots-ios`, each holding `<theme>/<screen>.png` and `motion/<theme>/<interaction>.mp4`. A non-default text size writes to a suffixed directory instead of overwriting the default: `<theme>-<size>/` on the phone and `tablet-<orientation>/<theme>-<size>/` on a tablet, so `light/` is the default size and `light-accessibility-large/` the large one. A tablet run uploads `ui-snapshots-android-tablet` and `ui-snapshots-ios-tablet` instead (see [Tablets](#tablets)).
 - iOS shards. `ui-snapshots-ios.yml` uploads each capture job as `ui-snapshots-ios-<n>` (phone) or `ui-snapshots-ios-tablet-<n>` (tablet), and the `merge` job combines them into `ui-snapshots-ios` and `ui-snapshots-ios-tablet`, with the layout above. Each job's Maestro output and flow files are under `diagnostics/<job artifact>/` in the merged artifact. If a job failed, the merged artifact still holds the others, and `MISSING.txt` lists every capture it did not get, with the screens the job owned. The run fails.
 - Capture jobs install no dependencies. `prepare` installs `node_modules` and Maestro and saves them under keys it reports (`node_modules` by lockfile, Maestro by `MAESTRO_VERSION`). Each capture job restores `node_modules` and fails on a miss; it restores Maestro as an optimisation and installs it when the restore misses or fails. Each job's Node 22 comes from the runner's tool cache, and Bun from `setup-bun`.
 - Metro is warmed once per run. `prepare` starts Metro, requests the app's first bundle (`scripts/ui-snapshots.mjs warm`) and saves Metro's transform cache under a key per run; every capture job restores that save, so its first bundle reads the transforms. Each job's log shows the first bundle line (`iOS Bundled <ms> … (<modules>)`).
@@ -93,6 +96,7 @@ The account screens are never captured from a real account. `src/data/fixtures/`
 - `spaces`, `spaces-scrolled`: four Spaces; the three without a description show their Chat counts.
 - `activity`, `activity-scrolled`: a balance, no active subscription and a 13-week heatmap.
 - `settings`, `settings-scrolled`: the profile card's name, email and avatar.
+- `chat-stripes`, `motion-stripes`: the striped Chat (`STRIPES_CHAT_ID` in `src/data/fixtures/session.ts`), the Chats list's last row, "Stripe test pattern", so the rows above it do not move. Its older replies fill the space above a picture, `assets/debug/stripes.png`, 288 × 160 px, drawn as a Markdown image at 360 × 200 pt, the Chat's image box, so it is shown uncropped. Four replies follow it, so the list has room to scroll the picture under the back button. `scripts/make-stripes-fixture.mjs` writes that PNG: fine lines, thick bars, colour bars, a checkerboard, thin rules, a vertical line, and red and blue rows at its top and bottom edges. The Chat is a root screen, so the tab bar is hidden under it; its chrome is the back button and the composer.
 
 The seed is gated by `usesFixtures()` in `src/data/fixtures/index.ts`, which is `__DEV__ && uiSnapshots`. A release build has `__DEV__` false, so no fixture is ever read. A screen that needs data the seed does not hold gets it added to the seed, not a manual capture.
 
@@ -106,7 +110,18 @@ The screen list is `SCREENS` in `scripts/ui-snapshots.mjs`, which maps each name
 
 ## Recordings
 
-After the screenshots, each platform records the interactions in `MOTIONS` (`scripts/ui-snapshots.mjs`) in the light theme: tab switches, a push and back, controls, a menu, a sheet, and a confirmation. Android turns its animation scales back on for this pass. `compare` stacks each pair into one 30 fps video with ffmpeg. To record a new interaction, add an entry to `MOTIONS`. Use `?open=0` on the catalog's `sheet` and `confirm` sections so a recording starts from the closed state.
+After the screenshots, each platform records the interactions in `MOTIONS` (`scripts/ui-snapshots.mjs`) in each of `motion_themes` (`--motion-themes`, light by default): tab switches, a push and back, controls, a menu, a sheet, a confirmation, and the striped Chat. Android turns its animation scales back on for this pass. `compare` stacks each pair into one 30 fps video with ffmpeg, per theme. To record a new interaction, add an entry to `MOTIONS`. Use `?open=0` on the catalog's `sheet` and `confirm` sections so a recording starts from the closed state.
+
+Each recording writes `motion/<theme>/<interaction>.json` beside its mp4. The sidecar holds the recording's start on the host clock (`startedAt`), read from Maestro's command JSON under `maestro-debug/`, and the start of each swipe. A recording with `frames` also writes one PNG per frame, `motion/<theme>/<interaction>-<label>.png`. A frame sits at a real-time offset: the start of the named swipe plus `ms`, less the recording's start. The sidecar lists each frame's time in the video. `scripts/ui-snapshots-frames.mjs` does this and cuts the frames with ffmpeg.
+
+`motion-stripes` is the chrome reference. Opened from the Chats list, it starts with the picture below the fold. Drag A takes the picture's top edge up to the composer's top edge (the bottom chrome). Drag B runs from above the composer to the top of the screen, so the picture's top passes under the title pill and the back button. The back swipe then ends the Chat. The holds are the gaps Maestro leaves between these commands: no step waits, so each still is what the simulator shows between two gestures.  The recording holds only the two drags and the back swipe.
+
+The picture is 288 × 160 px, shown at 360 × 200 pt, so its top rows sit under the header and the composer's glass blurs them. The Chat has no tab bar: its bottom chrome is the composer.
+
+`motion-chats-list` is the list reference. It relaunches and opens the Chats root at its top, with the full tab bar. It holds still for 2 s: that opening is the full bar over the rows. It then drags the rows up 44% of the screen so they pass under the bar, which collapses it to a bubble, and holds 2 s. A short stroke down (5% of the screen) follows, then a last 2 s hold. The stroke does not bring the full bar back on a phone. Holds are zero-distance swipes on the title bar's empty margin, so no row is pressed and no menu opens. Nothing is tapped and search is never opened. Swipe indices count the holds: 0 the opening hold, 1 drag up, 2 hold, 3 stroke down, 4 last hold. Each theme's folder holds `list-<label>.png` (edge and halfway in the drag up, hold in the opening hold, settled at the end); published, they are `list-<theme>-<label>.png`.
+
+Each recording writes `motion/<theme>/motion-stripes.json` with the host-clock start from Maestro's command JSON. The frame times from that clock are approximate, because Maestro's swipe stamps are not the gesture's first frame. The published frames are cut from the recording itself, at the times where the picture's edge reaches each chrome edge and where each still begins.
+
 
 ## Limits
 
