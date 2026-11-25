@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseAllDocuments } from "yaml";
 import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
@@ -35,6 +36,17 @@ assert.equal(portraitFlow.includes("LANDSCAPE_LEFT"), false, "the portrait flow 
 assert.equal(buildFlow({ platform: "ios", session: true, screens: SCREENS.slice(0, 1), target: "phone", orientation: "portrait" }).includes("setOrientation"), false, "a phone flow does not turn the device");
 const tabletFlowLandscape = buildTabletFlow({ platform: "ios", session: true, maestroOrientation: (orientation) => (orientation === "landscape" ? "LANDSCAPE_LEFT" : "PORTRAIT") });
 assert.ok(tabletFlowLandscape.indexOf("- setOrientation: PORTRAIT") < tabletFlowLandscape.indexOf("- launchApp:"), "the split-flow run turns the device before it launches the app");
+
+// The question's Open button: a landscape window's question is tapped by position, every other one by its text.
+const openTaps = (flowText) => ({ text: flowText.split("tapOn: \"^Open$\"").length - 1, point: flowText.split("point: \"56%, 51%\"").length - 1 });
+const landscapeQuestions = openTaps(landscapeFlow);
+assert.deepEqual(landscapeQuestions, { text: 1, point: 2 }, "the landscape flow taps the question by its text only in the portrait launch, and by position in the landscape launch and the split check");
+assert.deepEqual(openTaps(portraitFlow), { text: 2, point: 0 }, "a portrait flow taps the question by its text");
+assert.deepEqual(openTaps(buildFlow({ platform: "ios", session: true, screens: SCREENS.slice(0, 1), target: "phone", orientation: "portrait" })), { text: 2, point: 0 }, "a phone flow taps the question by its text");
+for (const flowText of [landscapeFlow, portraitFlow, buildTabletFlow({ platform: "ios", session: true, maestroOrientation: (orientation) => (orientation === "landscape" ? "LANDSCAPE_LEFT" : "PORTRAIT") })]) {
+  const documents = parseAllDocuments(flowText);
+  assert.deepEqual(documents.flatMap((document) => document.errors.map(String)), [], "a generated flow is valid YAML");
+}
 
 const all = { targets: ["phone", "tablet"], orientations: null, screens: null, themes: ["light"], textSizes: ["default"], motion: false, perf: 0 };
 const defaults = planShards(all);

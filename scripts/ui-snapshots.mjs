@@ -62,6 +62,16 @@ const WARM_TIMEOUT_MS = 30 * 60 * 1000;
 const DEV_SERVER_ERROR = "Could not connect to development server";
 const NOT_RESPONDING = ".* isn't responding";
 const OPEN_IN_APP = "Open in .*Cohub.*\\?";
+// The question's Open button where a landscape window draws it. The question is drawn in a portrait window, so its
+// Open button's accessibility frame sits at portrait coordinates, and a text tap on it misses the landscape screen
+// (run 45505096009 tapped the empty right pane). The button's centre, measured on that run's landscape screenshot,
+// is 56.2% across and 51.2% down.
+const OPEN_BUTTON_LANDSCAPE = "56%, 51%";
+
+/** The commands that answer the question: the Open button by its drawn position in landscape, by its text otherwise. */
+function answerOpenInApp(landscape) {
+  return ["    commands:", ...(landscape ? ["      - tapOn:", `          point: ${yamlString(OPEN_BUTTON_LANDSCAPE)}`] : ["      - tapOn: \"^Open$\""])];
+}
 
 // Screens that leave an overlay open come last; `fresh` relaunches first, because a UIKit sheet or
 // alert survives the route change and would cover the next screen.
@@ -475,8 +485,7 @@ function preamble(platform, session, orientation = null, prelude = []) {
     "- runFlow:",
     "    when:",
     `      visible: ${yamlString(OPEN_IN_APP)}`,
-    "    commands:",
-    "      - tapOn: \"^Open$\"",
+    ...answerOpenInApp(platform === "ios" && orientation === "landscape"),
     "      - extendedWaitUntil:",
     `          visible: ${yamlString(`(${start}|${DEV_SERVER_ERROR}.*|${NOT_RESPONDING})`)}`,
     "          timeout: 300000",
@@ -532,7 +541,7 @@ function preamble(platform, session, orientation = null, prelude = []) {
  * A deep link navigates after `openLink` returns, so an animation wait can return before the screen
  * changes. A screen names text that shows it is ready; without one it gets a short settle.
  */
-function openScreen(lines, platform, link, first, ready) {
+function openScreen(lines, platform, link, first, ready, landscape = false) {
   lines.push(`- openLink: ${yamlString(link)}`);
   // Matched inside the element's text: iOS and Android often merge a card or row into one element.
   const screen = ready ? `.*${ready}.*` : "^__settle__$";
@@ -543,7 +552,7 @@ function openScreen(lines, platform, link, first, ready) {
   // optional lookup, so only a flow's first link checks.
   if (platform === "ios" && first && ready) {
     lines.push("- extendedWaitUntil:", `    visible: ${yamlString(`(${OPEN_IN_APP}|${screen})`)}`, "    timeout: 60000");
-    lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, "    commands:", "      - tapOn: \"^Open$\"");
+    lines.push("- runFlow:", "    when:", `      visible: ${yamlString(OPEN_IN_APP)}`, ...answerOpenInApp(landscape));
     lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 60000");
   } else if (ready) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(screen)}`, "    timeout: 20000");
   else lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 1500", "    optional: true");
@@ -622,8 +631,8 @@ function answerQuestionInPortrait(platform, session) {
 }
 
 /** The app's own word on its layout: a tablet run must draw the split panes before anything is captured. */
-function checkSplit(lines, platform) {
-  openScreen(lines, platform, "cohub://debug/chat?fixture=conversation", true, "Fix the Android sheet height");
+function checkSplit(lines, platform, landscape = false) {
+  openScreen(lines, platform, "cohub://debug/chat?fixture=conversation", true, "Fix the Android sheet height", landscape);
   lines.push("- assertVisible:", "    id: \"split-right-pane\"");
 }
 
@@ -636,10 +645,10 @@ const EMPTY_OR_ERROR_TEXT = "(.*are unavailable|.*Connection unavailable|.*Still
 export function buildFlow({ platform, session, screens, target, orientation }) {
   const landscape = platform === "ios" && target === "tablet" && orientation === "landscape";
   const lines = preamble(platform, session, target === "tablet" ? orientation : null, landscape ? answerQuestionInPortrait(platform, session) : []);
-  if (target === "tablet") checkSplit(lines, platform);
+  if (target === "tablet") checkSplit(lines, platform, landscape);
   for (const [index, screen] of screens.entries()) {
     if (screen.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
-    openScreen(lines, platform, screen.link, index === 0 && target !== "tablet", screen.ready);
+    openScreen(lines, platform, screen.link, index === 0 && target !== "tablet", screen.ready, landscape);
     pushSteps(lines, platform, screen.steps);
     if (ACCOUNT_SCREENS.has(screen.name)) lines.push("- assertNotVisible:", `    text: ${yamlString(EMPTY_OR_ERROR_TEXT)}`);
     // Maestro only writes screenshots inside its test output directory, so the path stays relative.
