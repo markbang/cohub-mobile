@@ -83,6 +83,9 @@ function listJson(root) {
   });
 }
 
+/** How far before the last stored frame a cut for a still after the last change is taken. */
+export const LAST_STILL_GUARD_SECONDS = 0.1;
+
 /**
  * The time of the video's last frame. The recorder stores a frame only when the screen changes, so a still that follows
  * the last change has no frame of its own: the container runs on past this time, showing that last frame.
@@ -94,20 +97,26 @@ export function lastFrameSeconds(video) {
   return last;
 }
 
-/** The last time in ffprobe's one-time-per-line output, or null when there is none. A trailing newline is no time. */
+/**
+ * The latest time in ffprobe's output, or null when there is none. ffprobe lists frames in decode order, and with B-frames
+ * the last line is not the latest time, so the largest is taken. A trailing comma or newline is no part of a time.
+ */
 export function lastTimeIn(output) {
   const times = output.split("\n").map((line) => line.trim().replace(/,$/, "")).filter((line) => line !== "").map(Number).filter(Number.isFinite);
-  return times.length === 0 ? null : times[times.length - 1];
+  return times.length === 0 ? null : Math.max(...times);
 }
 
-/** A frame past the last stored frame shows that frame: the screen is still from there on. */
+/**
+ * A frame past the last stored frame shows that frame: the screen is still from there on. The cut is taken a little before
+ * the last stored frame, since a cut at exactly that time can find no frame to take.
+ */
 export function clampToLastFrame(timed, lastSeconds) {
   return timed.map((frame) => ({ ...frame, videoSeconds: Math.min(frame.videoSeconds, lastSeconds) }));
 }
 
 /** One PNG per frame, taken at its time in the video, or at the last frame when its time is past the end. */
 export function exportFrames(video, timed, directory, prefix) {
-  return clampToLastFrame(timed, lastFrameSeconds(video)).map((frame) => {
+  return clampToLastFrame(timed, lastFrameSeconds(video) - LAST_STILL_GUARD_SECONDS).map((frame) => {
     const file = join(directory, `${prefix}-${frame.label}.png`);
     const result = spawnSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", video, "-ss", frame.videoSeconds.toFixed(3), "-frames:v", "1", "-y", file], { encoding: "utf8" });
     if (result.status !== 0 || !existsSync(file)) throw new Error(`ffmpeg could not cut ${file} at ${frame.videoSeconds.toFixed(3)} s: ${(result.stderr || result.error?.message || "no frame at that time").trim()}`);

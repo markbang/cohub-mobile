@@ -6,7 +6,7 @@ import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildMotionFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
-import { clampToLastFrame, frameTimes, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
+import { clampToLastFrame, frameTimes, LAST_STILL_GUARD_SECONDS, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
 // link returns. The first link waits for the question or the screen, answers the question, then waits for the screen.
@@ -226,7 +226,8 @@ assert.throws(() => recordingClock([commands.slice(0, 1)], "motion-stripes"), /N
 assert.equal(recordingClock([commands.slice(0, 1), commands], "motion-stripes").startedAtMs, 2000, "the list that starts the recording is the one read, whichever file it is in");
 assert.throws(() => frameTimes(clock, [{ label: "missing", swipe: 2, ms: 0 }], { swipe: 0, seconds: 0 }), /wants swipe 2/, "a frame naming a swipe the recording lacks fails clearly");
 assert.deepEqual(clampToLastFrame([{ label: "edge", videoSeconds: 3 }, { label: "settled", videoSeconds: 9 }], 5).map((frame) => frame.videoSeconds), [3, 5], "a frame past the last stored frame shows that frame: the screen is still from there on");
-assert.equal(lastTimeIn("0.000000\n4.250000\n14.161667\n"), 14.161667, "the last frame is the last time in ffprobe's output, and a trailing newline is no time");
+assert.equal(lastTimeIn("0.000000\n4.250000\n14.161667\n"), 14.161667, "the last frame is the latest time in ffprobe's output, and a trailing newline is no time");
+assert.equal(lastTimeIn("0.000000\n14.161667\n13.900000\n"), 14.161667, "ffprobe lists frames in decode order, so the last line can be earlier than the latest time");
 assert.equal(lastTimeIn("\n"), null, "output with no times has no last frame");
 assert.equal(lastTimeIn("0.000000\n14.161667,\n"), 14.161667, "ffprobe can end a line with a comma, which is no part of the time");
 
@@ -242,24 +243,28 @@ assert.equal(recorded.filter((line) => line.includes("__hold__")).length, 0, "th
 assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    end: "50%, 0%"'), "the second drag runs from above the composer to the top of the screen");
 assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
 
-// The list motion: a fresh start on the Chats root, a drag down and a drag up with a 2 s hold after each, and nothing
-// tapped or searched while recording. Its holds press the title bar, where a press opens nothing, and its frames are
-// list-<label>.png, each in the swipe it names.
+// The list motion: a fresh start on the Chats root, then five steps: a still hold, a drag up, a hold, a small stroke down
+// and a last hold. Nothing is tapped or searched, every hold presses the title bar's empty margin, and frames name the
+// swipe they sit in. The clock anchors at the drag up, where the video first moves.
 const listMotion = MOTIONS.find((motion) => motion.name === "motion-chats-list");
 const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: [listMotion] }).split("\n");
 const listRecording = listFlow.slice(listFlow.indexOf("- startRecording: \"motion-chats-list\""), listFlow.indexOf("- stopRecording"));
-const listHold = ["- swipe:", '    start: "2%, 8%"', '    end: "2%, 8%"', "    duration: 2000"];
+const listHold = (duration) => ["- swipe:", '    start: "2%, 8%"', '    end: "2%, 8%"', `    duration: ${duration}`];
 assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"cohub:///\""), "the list motion relaunches before it opens the Chats root");
+assert.equal(listMotion.setup, undefined, "the list opens at its top with the full bar: no swipe before the recording");
 assert.deepEqual(listRecording, [
   '- startRecording: "motion-chats-list"',
-  "- swipe:", '    start: "50%, 30%"', '    end: "50%, 72%"', "    duration: 4000",
-  ...listHold,
-  "- swipe:", '    start: "50%, 75%"', '    end: "50%, 35%"', "    duration: 4000",
-  ...listHold,
-], "the list recording is a drag down, a 2 s hold, a drag up and a 2 s hold: nothing tapped, no search");
-const listKinds = listMotion.steps.filter((step) => step.drag || step.hold).map((step) => (step.drag ? "drag" : "hold"));
-const listLengths = listMotion.steps.filter((step) => step.drag || step.hold).map((step) => step.drag?.duration ?? step.hold);
-assert.deepEqual(listMotion.frames.map((frame) => [frame.label, listKinds[frame.swipe]]), [["edge", "drag"], ["halfway", "drag"], ["hold", "hold"], ["settled", "hold"]], "each list frame sits in the swipe its label names: edge and halfway in the drag down, hold and settled in the holds");
+  ...listHold(800),
+  "- swipe:", '    start: "50%, 72%"', '    end: "50%, 28%"', "    duration: 4000",
+  ...listHold(2000),
+  "- swipe:", '    start: "50%, 48%"', '    end: "50%, 54%"', "    duration: 800",
+  ...listHold(2000),
+], "the list recording is a still hold, a drag up, a hold, a small stroke down and a hold: nothing tapped, no search");
+assert.equal(listMotion.onset, 1, "the clock anchors at the drag up: the first hold is still, and the video first moves there");
+const listKinds = listMotion.steps.map((step) => (step.drag ? "drag" : "hold"));
+assert.deepEqual(listMotion.frames.map((frame) => [frame.label, listKinds[frame.swipe]]), [["edge", "drag"], ["halfway", "drag"], ["hold", "hold"], ["settled", "hold"]], "each list frame sits in the swipe its label names: edge and halfway in the drag up, hold and settled in the last hold");
+const listLengths = listMotion.steps.map((step) => step.drag?.duration ?? step.hold);
 assert.ok(listMotion.frames.every((frame) => frame.ms < listLengths[frame.swipe]), "each list frame falls inside its swipe");
+assert.ok(LAST_STILL_GUARD_SECONDS > 0 && LAST_STILL_GUARD_SECONDS < 0.5, "a still after the last change is cut a little before the last stored frame");
 assert.deepEqual(expectedOutputs({ part: "motion", screens: ["motion-chats-list"] }, { themes: ["light"], motionThemes: ["light", "dark"] }).filter((file) => file.endsWith(".png")), ["motion/light/list-edge.png", "motion/light/list-halfway.png", "motion/light/list-hold.png", "motion/light/list-settled.png", "motion/dark/list-edge.png", "motion/dark/list-halfway.png", "motion/dark/list-hold.png", "motion/dark/list-settled.png"], "the list frames are list-<label>.png in each theme's folder");
 assert.equal(planShards({ ...all, targets: ["phone"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").flatMap((entry) => entry.screens).join(), "motion-chats-list", "naming the list motion plans it alone");
