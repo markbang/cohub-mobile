@@ -8,8 +8,10 @@ Each platform has its own workflow, so you can retry one without waiting for the
 
 ```bash
 gh workflow run ui-snapshots-android.yml --ref <branch> [-f screens=catalog-rows,settings] [-f themes=light] [-f motion=false] [-f target=tablet] [-f orientations=landscape] [-f perf=3]
-gh workflow run ui-snapshots-ios.yml --ref <branch> [same inputs]
+gh workflow run ui-snapshots-ios.yml --ref <branch> [-f scope=core|full] [same inputs]
 ```
+
+The iOS run defaults to `scope=core` (see [Scopes](#scopes)). The Android run has no scope input and always captures the full list.
 
 Once both runs succeed, download them and pair them locally. `compare` needs ImageMagick and ffmpeg:
 
@@ -19,7 +21,7 @@ gh run download <ios-run-id> -n ui-snapshots-ios -D dist/ui-snapshots/ios
 node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist/ui-snapshots/android
 ```
 
-- `target` and `text_size` take comma lists (`target=phone,tablet`, `text_size=default,accessibility-large`). The iOS workflow has three stages. `prepare` builds or restores the simulator app and runs `scripts/ui-snapshots.mjs plan`, which cuts the work into capture jobs. Those jobs run in parallel, each on its own simulator, and the `merge` job combines them. `text_size` (iOS only) sets the simulator's Dynamic Type category for its cell: `default`, `extra-large` or `accessibility-large`. The capture logs the category it applied and returns the simulator to `large` (its default) afterwards. Android has no such input.
+- `target` and `text_size` take comma lists (`target=phone,tablet`, `text_size=default,accessibility-large`). The iOS workflow has three stages. `prepare` builds or restores the simulator app and runs `scripts/ui-snapshots.mjs plan`, which cuts the work into capture jobs. Those jobs run in parallel, each on its own simulator, and the `merge` job combines them. `text_size` (iOS only) sets the simulator's Dynamic Type category for its cell: `default`, `extra-large` or `accessibility-large`. Blank (the default) takes the scope's own sizes. The capture logs the category it applied and returns the simulator to `large` (its default) afterwards. Android has no such input.
 - `offline` (iOS, default `true`) skips sign-in and the Logto request, so the run needs no account. Offline covers every screen and both tablet orientations, with the split flow's layout checks and its new-Chat draft; only the send is dropped. A signed-in run (`offline=false`) renders the same screens from the account's own data and adds the send in `e2e/tablet/split-send.yaml`. The app stays in debug bundles only (`src/auth/e2e-session.ts`).
 - The iOS reference runs on iOS 27, on GitHub's `xcode-27` image (a preview). Pass `-f ios=26` to `ui-snapshots-ios.yml` to capture on the default image's iOS 26 instead; the drawn Android UI follows iOS 27.
 - `.github/workflows/ui-snapshots-android.yml` and `.github/workflows/ui-snapshots-ios.yml` build debug binaries and cache them by native fingerprint. The branch's JS is served from Metro, so a JS-only change reuses the cached binaries. A native change rebuilds them, which takes roughly 30 minutes on Android and 60 on iOS.
@@ -29,7 +31,29 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 - iOS shards. `ui-snapshots-ios.yml` uploads each capture job as `ui-snapshots-ios-<n>` (phone) or `ui-snapshots-ios-tablet-<n>` (tablet), and the `merge` job combines them into `ui-snapshots-ios` and `ui-snapshots-ios-tablet`, with the layout above. Each job's Maestro output and flow files are under `diagnostics/<job artifact>/` in the merged artifact. If a job failed, the merged artifact still holds the others, and `MISSING.txt` lists every capture it did not get, with the screens the job owned. The run fails.
 - Metro is warmed once per run. `prepare` starts Metro, requests the app's first bundle (`scripts/ui-snapshots.mjs warm`) and saves Metro's transform cache under a key per run; every capture job restores that save, so its first bundle reads the transforms. Each job's log shows the first bundle line (`iOS Bundled <ms> … (<modules>)`).
 - Orientation: a tablet flow turns the device before it launches the app (`setOrientation` ahead of `launchApp`), so a landscape job never relies on the state another flow left.
-- Plan: `plan` cuts each target and orientation into jobs of at most 9.5 minutes of captures (`SHARD_CAPTURE_SECONDS`, from the per-screen times in `scripts/ui-snapshots.mjs`). The split flows and the motion recordings are one or more jobs of their own (`--part flow`, `--part motion`), and `perf` is one job. With the default screens, light theme, offline and no motion, the plan is five jobs: phone 2, tablet portrait 1, tablet landscape 1 and split flows 1. GitHub runs five macOS jobs at once, so a sixth would queue behind them. A run with a single screen is one job.
+- Plan: `plan` cuts the scope's screens into jobs of at most 9.5 minutes of captures (`SHARD_CAPTURE_SECONDS`, from the per-screen times in `scripts/ui-snapshots.mjs`). A default-size job holds one orientation; a large-size job holds all of a target's orientations, since its screens are few. The split flows and the motion recordings are one or more jobs of their own (`--part flow`, `--part motion`), and `perf` is one job. With `scope=core`, light theme, offline and no motion, the plan is five jobs: phone default, phone composer at accessibility-large, tablet portrait, tablet landscape, and tablet composer at accessibility-large in both orientations. With `scope=full` the plan is five jobs too: phone 2, tablet portrait 1, tablet landscape 1 and split flows 1. GitHub runs five macOS jobs at once, so a sixth would queue behind them. A run with a single screen is one job.
+
+## Scopes
+
+`scope` picks the screens. `core` (the default, `--scope core` locally) is the budget: a run with `themes=light`, offline and no motion finishes in about 15 minutes from dispatch to the merged artifact. `full` (`scope=full`) is every screen in `SCREENS` and `TABLET_SCREENS`, at the sizes asked for, plus the tablet split flows. Run it on demand; it takes longer than the budget.
+
+Core is the states that have regressed, listed in `CORE` in `scripts/ui-snapshots.mjs`:
+
+| State | Phone | Tablet |
+|---|---|---|
+| Composer: empty, one-line draft, long draft | `chat-draft-empty`, `chat-draft`, `chat-draft-long` | `split-chat-draft-empty`, `split-chat-draft`, `split-chat-draft-long` |
+| Composer at `accessibility-large` | the three above, at the large size | `split-chat-draft-long` at the large size |
+| Unread divider, and the divider gone once read | `chat-unread`, `chat-unread-end` | |
+| Delivered line | `chat-delivered` | |
+| Send failure and retry | `chat-states` | |
+| Reply arriving while the timeline is scrolled | `chat-arrival` | |
+| Chats long list | `chats`, `chats-scrolled` | |
+| A real Chat (markdown table and code block on the phone) | `chat-conversation`, `chat-real` | `split-chat-real` |
+| Tablet split pane: Chat panel, Space, settings page, empty right pane | | `split-chat-panel`, `split-space`, `split-settings-page`, `split-empty` |
+
+Core captures each of these in every requested theme, offline, and in both tablet orientations. The large-size jobs carry only the composer screens, so the default run adds two small jobs for them rather than doubling the list. The split flows (`e2e/tablet/split-layout.yaml` and its variants) are not in core; `scope=full` runs them.
+
+To run the full list on iOS: `gh workflow run ui-snapshots-ios.yml --ref <branch> -f scope=full`. To run it at both sizes, add `-f text_size=default,accessibility-large`. `--screens` still overrides the scope's screens: it names them at each requested size.
 
 ## Run locally
 
@@ -43,7 +67,7 @@ node scripts/ui-snapshots.mjs compare --ios dist/ui-snapshots/ios --android dist
 
 `--target phone,tablet` and `--text-size default,accessibility-large` take comma lists; every cell runs in the one process. `--offline` renders the debug fixtures without an account, as the workflow's `offline` input does. Use `--no-metro` when Metro is already running on port 8081. Android phone capture sets the emulator's density so that both platforms lay out at 402 pt wide. It resets the density when it finishes.
 
-`--part screens|flow|motion|perf` runs one slice of a target's work, which is how a capture job runs. `node scripts/ui-snapshots.mjs plan ...` prints the jobs for a selection as JSON. `node scripts/ui-snapshots.mjs merge --plan plan.json --shards <dir>` combines downloaded job artifacts.
+`--scope core|full` picks the screens as in CI (core by default). `--part screens|flow|motion|perf` runs one slice of a target's work, which is how a capture job runs. `node scripts/ui-snapshots.mjs plan ...` prints the jobs for a selection as JSON. `node scripts/ui-snapshots.mjs merge --plan plan.json --shards <dir>` combines downloaded job artifacts.
 
 The iOS driver's start is retried on its own: a start that Maestro reports as not ready (`iOS driver not ready in time`) runs again without repeating any flow step. Each attempt logs when the driver comes up or fails, and a start that fails for good quotes the driver's log lines and the device's state.
 
