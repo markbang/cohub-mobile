@@ -66,8 +66,9 @@ env:
   E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   OFFLINE_ARG: ${{ inputs.offline && '--offline' || '' }}
-  # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
-  MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
+  # Successful driver starts took 37 to 259 s, median 107 s, over 15 starts (docs/ui-snapshots.md). 480 s is 1.85 times
+  # the slowest; the capture's own watchdog allows 120 s more for the install and launch that Maestro's timer does not cover.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: "480000"
 
 jobs:
   prepare:
