@@ -9,8 +9,16 @@ name: UI Snapshots (iOS)
 on:
   workflow_dispatch:
     inputs:
+      scope:
+        description: core (the default) captures the core set that fits the 15-minute budget (CORE in scripts/ui-snapshots.mjs). full captures every screen, and the split flows on the tablet.
+        required: false
+        default: core
+        type: choice
+        options:
+          - core
+          - full
       screens:
-        description: Screens to capture, comma-separated (see SCREENS in scripts/ui-snapshots.mjs). Defaults to all.
+        description: Screens to capture, comma-separated (see SCREENS in scripts/ui-snapshots.mjs). Overrides the scope's screens, at each text size requested.
         required: false
         type: string
       themes:
@@ -33,9 +41,8 @@ on:
         required: false
         type: string
       text_size:
-        description: Dynamic Type content sizes, comma-separated (default, extra-large, accessibility-large). Each size is restored to default after its cell; a non-default size writes to a suffixed theme directory.
+        description: Dynamic Type content sizes, comma-separated (default, extra-large, accessibility-large). Blank takes the scope's own sizes (core has the default size and the composer screens at accessibility-large; full the default size). Each size is restored to default after its cell; a non-default size writes to a suffixed theme directory.
         required: false
-        default: default
         type: string
       offline:
         description: Render the debug fixtures without an account (no sign-in). On by default because the tenant's CAPTCHA blocks the login flow; set false to sign in.
@@ -130,6 +137,7 @@ jobs:
         id: plan
         env:
           TARGET: ${{ inputs.target }}
+          SCOPE: ${{ inputs.scope }}
           SCREENS: ${{ inputs.screens }}
           ORIENTATIONS: ${{ inputs.orientations }}
           THEMES: ${{ inputs.themes }}
@@ -137,13 +145,14 @@ jobs:
           MOTION: ${{ inputs.motion }}
           PERF: ${{ inputs.perf }}
         run: |
-          args=(--target "$TARGET" --themes "$THEMES" --text-size "$TEXT_SIZE" --perf "$PERF")
+          args=(--target "$TARGET" --scope "$SCOPE" --themes "$THEMES" --perf "$PERF")
+          if [ -n "$TEXT_SIZE" ]; then args+=(--text-size "$TEXT_SIZE"); fi
           if [ -n "$SCREENS" ]; then args+=(--screens "$SCREENS"); fi
           if [ -n "$ORIENTATIONS" ]; then args+=(--orientations "$ORIENTATIONS"); fi
           if [ "$MOTION" != "true" ]; then args+=(--no-motion); fi
           shards=$(node scripts/ui-snapshots.mjs plan "${args[@]}")
           echo "shards=$shards" >> "$GITHUB_OUTPUT"
-          echo "$shards" | jq -r '.[] | "\(.artifact): \(.target) \(.orientation) \(.part), \(.screens | length) screens"'
+          echo "$shards" | jq -r '.[] | "\(.artifact): \(.target) \(.orientations | join(",")) \(.textSize) \(.part), \(.screens | length) screens"'
 
       - name: Native fingerprint
         id: fingerprint
@@ -202,7 +211,7 @@ jobs:
           retention-days: 1
 
   capture:
-    name: iOS ${{ matrix.target }} ${{ matrix.orientation }} ${{ matrix.part }} (${{ matrix.shard }})
+    name: iOS ${{ matrix.target }} ${{ join(matrix.orientations, ',') }} ${{ matrix.textSize }} ${{ matrix.part }} (${{ matrix.shard }})
     needs: prepare
     strategy:
       fail-fast: false
@@ -266,7 +275,7 @@ jobs:
       - name: Capture
         env:
           SCREENS_ARG: ${{ join(matrix.screens, ',') && format('--screens {0}', join(matrix.screens, ',')) || '' }}
-        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ matrix.target }}" --orientations "${{ matrix.orientation }}" --part "${{ matrix.part }}" --text-size "${{ inputs.text_size }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $OFFLINE_ARG
+        run: node scripts/ui-snapshots.mjs capture --platform ios --app build/ui-snapshots/Cohub-ios-simulator.zip --out dist/ui-snapshots/ios --target "${{ matrix.target }}" --orientations "${{ join(matrix.orientations, ',') }}" --part "${{ matrix.part }}" --text-size "${{ matrix.textSize }}" --perf "${{ inputs.perf }}" --themes "${{ inputs.themes }}" $SCREENS_ARG $OFFLINE_ARG
 
       # A cancelled capture never reaches the script's own redaction, and Maestro and the simulator
       # log typed text; this repository is public.
@@ -325,11 +334,10 @@ jobs:
         env:
           PLAN: ${{ needs.prepare.outputs.shards }}
           THEMES: ${{ inputs.themes }}
-          TEXT_SIZE: ${{ inputs.text_size }}
         run: |
           set -euo pipefail
           printf '%s' "$PLAN" > plan.json
-          node scripts/ui-snapshots.mjs merge --plan plan.json --shards dist/ui-snapshots/shards --out dist/ui-snapshots/merged --themes "$THEMES" --text-size "$TEXT_SIZE"
+          node scripts/ui-snapshots.mjs merge --plan plan.json --shards dist/ui-snapshots/shards --out dist/ui-snapshots/merged --themes "$THEMES"
 
       - name: Upload screenshots
         if: always()

@@ -10,13 +10,16 @@ import { basename, dirname, join, relative, resolve } from "node:path";
  *   capture --platform android|ios --app <apk|.app|.zip> [--target phone|tablet] [--orientations portrait,landscape]
  *           [--out dir] [--screens a,b] [--themes light,dark] [--no-metro] [--no-motion] [--perf runs]
  *           [--target phone,tablet] [--text-size default,accessibility-large] [--offline] [--part screens|flow|motion|perf]
+ *           [--scope core|full]
  *           (--target and --text-size take comma lists; every cell runs in this one process, with one Metro)
  *           (--text-size is iOS only and restored to default after each cell; --offline needs no account)
+ *           (--scope core is the default: CORE's screens, at the default size and the composer's at accessibility-large.
+ *            full is every screen at the requested sizes, and the split flows. --screens names the screens at each size.)
  *           (--part runs one slice of the target's work: its screens, the split flows, the motion recordings
  *            (--screens then names the interactions) or the perf runs. Without --part every slice runs.)
  *   warm --platform ios [--offline]   (starts Metro, requests the iOS bundle once, stops Metro; prepare saves the cache)
- *   plan --target phone,tablet [--orientations ...] [--screens ...] [--themes ...] [--text-size ...] [--no-motion] [--perf runs]
- *           prints the capture jobs as JSON, each one a --part slice that fits one job's budget
+ *   plan --target phone,tablet [--scope core|full] [--orientations ...] [--screens ...] [--themes ...] [--text-size ...] [--no-motion] [--perf runs]
+ *           prints the capture jobs as JSON, each one a --part slice that fits one job's budget, with its text size
  *   merge --plan <plan.json> --shards <dir> [--out dir] [--themes ...] [--text-size ...]
  *           combines the jobs' directories into one per artifact; names what a missing job did not capture
  *   compare --ios <dir> --android <dir> [--out dir]
@@ -224,15 +227,32 @@ export const MOTIONS = [
 
 const ARTIFACTS = { phone: "ui-snapshots-ios", tablet: "ui-snapshots-ios-tablet" };
 const PARTS = ["screens", "flow", "motion", "perf"];
+const SCOPES = ["core", "full"];
 const DEFAULT_ORIENTATIONS = { phone: ["portrait"], tablet: ["portrait", "landscape"] };
 // Seconds of Maestro time per screen, measured on run 45497720090 (warm Metro, offline, light): 25 s on a phone,
 // 26 s on a tablet. A job holds at most SHARD_CAPTURE_SECONDS of it. Every job also pays a fixed cost before its
 // first screen (about 12 minutes measured on that run: dependencies, the driver, the first bundle), and GitHub runs
-// five macOS jobs at once, so the default list is five jobs: phone 2, tablet portrait 1, tablet landscape 1, split flows 1.
+// five macOS jobs at once, so the full list is five jobs: phone 2, tablet portrait 1, tablet landscape 1, split flows 1.
 const SHARD_CAPTURE_SECONDS = 570;
 const SECONDS_PER_SCREEN = { "phone-portrait": 25, "tablet-portrait": 26, "tablet-landscape": 26 };
 // An estimate: no run has timed the motion recordings yet.
 const SECONDS_PER_MOTION = 25;
+
+/**
+ * The core set, the default scope: the states that have regressed, per target. `default` is captured at the default
+ * text size; `accessibility-large` holds the composer's screens, the only ones captured at the large size.
+ */
+export const CORE = {
+  phone: {
+    default: ["chats", "chats-scrolled", "chat-conversation", "chat-real", "chat-draft-empty", "chat-draft", "chat-draft-long", "chat-unread", "chat-unread-end", "chat-delivered", "chat-states", "chat-arrival"],
+    "accessibility-large": ["chat-draft-empty", "chat-draft", "chat-draft-long"],
+  },
+  tablet: {
+    default: ["split-chat-real", "split-chat-draft-empty", "split-chat-draft", "split-chat-draft-long", "split-chat-panel", "split-space", "split-settings-page", "split-empty"],
+    "accessibility-large": ["split-chat-draft-long"],
+  },
+};
+const CORE_TEXT_SIZES = ["default", "accessibility-large"];
 
 function list(value) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -252,26 +272,45 @@ function splitByBudget(items, seconds) {
 }
 
 /**
- * The capture jobs for one run, in matrix order. Each is one `--part` slice: its target, orientation, the part, and the
- * names that part captures (screens, or motion interactions). `artifact` is the name its directory uploads under.
+ * The screens each text size captures for one target, as `{ textSize, names }` in catalog order. `screens` (--screens)
+ * names them at every requested size. Otherwise core takes its CORE table and full takes the whole catalog at each size.
  */
-export function planShards({ targets, orientations = null, screens = null, themes, textSizes, motion, perf }) {
+function cellsFor({ target, scope, screens, textSizes }) {
+  const catalog = (target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name);
+  const inCatalog = (names) => catalog.filter((name) => names.includes(name));
+  if (screens) return (textSizes ?? ["default"]).map((textSize) => ({ textSize, names: inCatalog(screens) }));
+  if (scope === "core") {
+    return Object.entries(CORE[target]).filter(([textSize]) => !textSizes || textSizes.includes(textSize)).map(([textSize, names]) => ({ textSize, names: inCatalog(names) }));
+  }
+  return (textSizes ?? ["default"]).map((textSize) => ({ textSize, names: catalog }));
+}
+
+/**
+ * The capture jobs for one run, in matrix order. Each is one `--part` slice: its target, its orientations, its text size,
+ * the part, and the names that part captures (screens, or motion interactions). `artifact` is the name its directory uploads
+ * under. A default-size job holds one orientation, since its screens are many; a larger text size's screens are few, so its
+ * job holds all of the target's orientations and the fixed cost is paid once.
+ */
+export function planShards({ targets, orientations = null, screens = null, scope = "core", themes, textSizes = null, motion, perf }) {
   const units = [];
   for (const target of ["phone", "tablet"].filter((name) => targets.includes(name))) {
-    const catalog = target === "tablet" ? TABLET_SCREENS : SCREENS;
-    const names = (screens ? catalog.filter((screen) => screens.includes(screen.name)) : catalog).map((screen) => screen.name);
-    // A run that names only another target's screens has nothing for this one.
-    if (names.length === 0) continue;
-    for (const orientation of orientations ?? DEFAULT_ORIENTATIONS[target]) {
-      const seconds = SECONDS_PER_SCREEN[`${target}-${orientation}`] * themes.length * textSizes.length;
-      for (const slice of splitByBudget(names, names.length * seconds)) units.push({ target, orientation, part: "screens", screens: slice });
+    const targetOrientations = orientations ?? DEFAULT_ORIENTATIONS[target];
+    const cells = cellsFor({ target, scope, screens, textSizes }).filter((cell) => cell.names.length > 0);
+    for (const { textSize, names } of cells) {
+      const groups = textSize === "default" ? targetOrientations.map((orientation) => [orientation]) : [targetOrientations];
+      for (const group of groups) {
+        const seconds = themes.length * names.length * group.reduce((sum, orientation) => sum + SECONDS_PER_SCREEN[`${target}-${orientation}`], 0);
+        for (const slice of splitByBudget(names, seconds)) units.push({ target, orientations: group, textSize, part: "screens", screens: slice });
+      }
     }
-    if (target === "tablet" && !screens && textSizes.includes("default")) units.push({ target, orientation: "portrait", part: "flow", screens: [] });
-    if (target === "phone" && motion && textSizes.includes("default")) {
+    const hasDefault = cells.some((cell) => cell.textSize === "default");
+    // The split flows run in the full scope only: core captures screens, and its jobs stay at five.
+    if (target === "tablet" && scope === "full" && !screens && hasDefault) units.push({ target, orientations: ["portrait"], textSize: "default", part: "flow", screens: [] });
+    if (target === "phone" && motion && hasDefault) {
       const interactions = MOTIONS.map((interaction) => interaction.name);
-      for (const slice of splitByBudget(interactions, interactions.length * SECONDS_PER_MOTION)) units.push({ target, orientation: "portrait", part: "motion", screens: slice });
+      for (const slice of splitByBudget(interactions, interactions.length * SECONDS_PER_MOTION)) units.push({ target, orientations: ["portrait"], textSize: "default", part: "motion", screens: slice });
     }
-    if (perf > 0) units.push({ target, orientation: "portrait", part: "perf", screens: [] });
+    if (perf > 0) units.push({ target, orientations: ["portrait"], textSize: "default", part: "perf", screens: [] });
   }
   return units.map((unit, shard) => ({ shard, artifact: `${ARTIFACTS[unit.target]}-${shard}`, ...unit }));
 }
@@ -280,19 +319,22 @@ export function planShards({ targets, orientations = null, screens = null, theme
  * The files one job leaves in the run's layout, relative to the run's root. A path ending in "/" is a directory: the
  * split flows name their screenshots in the flow file, so only their directory is known here.
  */
-export function expectedOutputs(entry, { themes, textSizes }) {
+export function expectedOutputs(entry, { themes }) {
   if (entry.part === "screens") {
-    const prefix = entry.target === "phone" ? "" : `${entry.target}-${entry.orientation}/`;
-    return textSizes.flatMap((size) => themes.flatMap((theme) => entry.screens.map((name) => `${prefix}${theme}${size === "default" ? "" : `-${size}`}/${name}.png`)));
+    const suffix = entry.textSize === "default" ? "" : `-${entry.textSize}`;
+    return entry.orientations.flatMap((orientation) => {
+      const prefix = entry.target === "phone" ? "" : `${entry.target}-${orientation}/`;
+      return themes.flatMap((theme) => entry.screens.map((name) => `${prefix}${theme}${suffix}/${name}.png`));
+    });
   }
   if (entry.part === "motion") return entry.screens.map((name) => `motion/${name}.mp4`);
-  if (entry.part === "perf") return [`perf/${entry.target}-${entry.orientation}.json`];
+  if (entry.part === "perf") return [`perf/${entry.target}-${entry.orientations[0]}.json`];
   return ["tablet-flow/"];
 }
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: ["default"], offline: false, part: null, plan: null, shards: null };
+  const options = { command, themes: ["light", "dark"], screens: null, metro: true, motion: true, targets: ["phone"], orientations: null, perf: 0, textSizes: null, scope: "core", offline: false, part: null, plan: null, shards: null };
   for (let index = 0; index < rest.length; index += 1) {
     const flag = rest[index];
     const value = () => {
@@ -316,15 +358,19 @@ function parseArgs(argv) {
     else if (flag === "--text-size") options.textSizes = list(value());
     else if (flag === "--offline") options.offline = true;
     else if (flag === "--part") options.part = value();
+    else if (flag === "--scope") options.scope = value();
     else if (flag === "--plan") options.plan = resolve(value());
     else if (flag === "--shards") options.shards = resolve(value());
     else throw new Error(`Unknown argument "${flag}".`);
   }
   if (options.part !== null && !PARTS.includes(options.part)) throw new Error(`--part must be one of ${PARTS.join(", ")}.`);
+  if (!SCOPES.includes(options.scope)) throw new Error(`--scope must be ${SCOPES.join(" or ")}.`);
   if (command === "capture" || command === "plan") checkSelection(options);
   if (command === "capture") {
     if (options.platform !== "android" && options.platform !== "ios") throw new Error("--platform must be android or ios.");
     if (!options.app || !existsSync(options.app)) throw new Error("--app must point to a built debug APK (Android) or simulator .app/.zip (iOS).");
+    // Android has no Dynamic Type: its default size is the only one, and the core set's composer sizes drop out.
+    if (options.platform === "android") options.textSizes ??= ["default"];
     if (options.platform === "android" && options.textSizes.some((size) => size !== "default")) throw new Error("--text-size is set on iOS only; Android captures at its default font scale.");
     if (options.perf > 0 && !options.metro) throw new Error("--perf starts its own Metro with the frame probe forced on; drop --no-metro.");
     if (options.offline && options.platform === "android") throw new Error("--offline is iOS only for now: the Android flows still sign in.");
@@ -355,8 +401,10 @@ function checkSelection(options) {
   for (const target of options.targets) for (const orientation of options.orientations ?? []) if (!SIZE_BANDS[`${target}-${orientation}`]) throw new Error(`The ${target} target has no ${orientation} orientation. Known: ${Object.keys(SIZE_BANDS).join(", ")}.`);
   for (const theme of options.themes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown theme "${theme}". Use light and/or dark.`);
   if (!Number.isInteger(options.perf) || options.perf < 0) throw new Error("--perf must be a whole number of runs.");
-  if (options.textSizes.length === 0 || options.textSizes.some((size) => !(size in TEXT_SIZES))) throw new Error(`Unknown --text-size. Use a comma list of ${Object.keys(TEXT_SIZES).join(", ")}.`);
-  if (options.perf > 0 && (options.targets.length > 1 || options.textSizes.length > 1)) throw new Error("--perf runs one target at one text size.");
+  if (options.textSizes?.length === 0 || options.textSizes?.some((size) => !(size in TEXT_SIZES))) throw new Error(`Unknown --text-size. Use a comma list of ${Object.keys(TEXT_SIZES).join(", ")}.`);
+  if (options.scope === "core" && !options.screens && options.textSizes?.some((size) => !CORE_TEXT_SIZES.includes(size))) throw new Error(`The core scope captures ${CORE_TEXT_SIZES.join(" and ")} only; use --scope full for ${options.textSizes.join(", ")}.`);
+  if (options.perf > 0 && options.targets.length > 1) throw new Error("--perf runs one target at a time.");
+  if (options.perf > 0 && options.textSizes && !options.textSizes.includes("default")) throw new Error("--perf runs at the default text size; add default to --text-size.");
   if (options.part === "perf" && options.perf < 1) throw new Error("--part perf needs --perf <runs>.");
   if (options.part === "flow" && options.targets.some((target) => target !== "tablet")) throw new Error("--part flow is for --target tablet.");
   if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
@@ -1023,37 +1071,39 @@ async function capture(options) {
   if (metro && options.platform === "ios") warmIosBundle();
   const missing = [];
   let cells = 0;
+  const described = [];
   try {
     for (const target of options.targets) {
-      for (const textSize of options.textSizes) {
-        cells += await captureCell({ ...options, target, textSize }, session, missing);
+      for (const cell of cellsFor({ target, scope: options.scope, screens: options.screens, textSizes: options.textSizes })) {
+        described.push(`${target} ${cell.textSize} (${cell.names.length})`);
+        cells += await captureCell({ ...options, target, textSize: cell.textSize, names: cell.names }, session, missing);
       }
     }
   } finally {
     stopMetro(metro);
   }
   if (missing.length) throw new Error(`Maestro finished but these captures are missing: ${missing.join(", ")}.`);
-  process.stdout.write(`Captured ${cells} cells (${options.targets.join(", ")} × ${options.textSizes.join(", ")}) in ${options.out}\n`);
+  process.stdout.write(`Captured ${cells} cells (${described.join(", ")}) in ${options.out}\n`);
 }
 
 /** The slices one capture runs: a `--part`, or without one every slice the target has in this run. */
 function partsFor(options, screens) {
   if (options.part) return [options.part];
   if (options.screens && screens.length === 0) return [];
-  return ["screens", ...(options.target === "tablet" && !options.screens ? ["flow"] : []), ...(options.motion ? ["motion"] : []), ...(options.perf > 0 ? ["perf"] : [])];
+  return ["screens", ...(options.target === "tablet" && !options.screens && options.scope === "full" ? ["flow"] : []), ...(options.motion ? ["motion"] : []), ...(options.perf > 0 ? ["perf"] : [])];
 }
 
-/** One device at one text size: the screens in each orientation and theme, then the slices the target has beyond them. */
+/** One device at one text size: the screens it names in each orientation and theme, then the slices the target has beyond them. */
 async function captureCell(options, session, missing) {
   const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
-  const screens = options.screens ? catalog.filter((screen) => options.screens.includes(screen.name)) : catalog;
+  const screens = catalog.filter((screen) => options.names.includes(screen.name));
   const motions = options.part === "motion" && options.screens ? MOTIONS.filter((motion) => options.screens.includes(motion.name)) : MOTIONS;
   const parts = partsFor(options, screens);
   // The split flows and the motion recordings run once, at the default text size.
   const doScreens = parts.includes("screens") && screens.length > 0;
   const doFlow = parts.includes("flow") && options.target === "tablet" && options.textSize === "default";
   const doMotion = parts.includes("motion") && options.target === "phone" && options.textSize === "default";
-  const doPerf = parts.includes("perf") && options.perf > 0;
+  const doPerf = parts.includes("perf") && options.perf > 0 && options.textSize === "default";
   if (!doScreens && !doFlow && !doMotion && !doPerf) return 0;
   const orientations = options.orientations ?? (options.target === "tablet" ? ["portrait", "landscape"] : ["portrait"]);
   // Text sizes other than the default get their own theme directories, so every cell of a run survives.
@@ -1251,10 +1301,10 @@ function pairMotion(options, unmatched) {
 }
 
 function describeEntry(entry) {
-  const where = entry.target === "tablet" ? `tablet ${entry.orientation}` : "phone";
+  const where = entry.target === "tablet" ? `tablet ${entry.orientations.join("/")}` : "phone";
   if (entry.part === "flow") return `${where} split flows`;
   if (entry.part === "perf") return `${where} perf runs`;
-  return `${where} ${entry.part}: ${entry.screens.join(", ")}`;
+  return `${where} ${entry.textSize} ${entry.part}: ${entry.screens.join(", ")}`;
 }
 
 /** Diagnostics stay out of the layout that compare reads: Maestro's output, its debug logs and the flow files. */
