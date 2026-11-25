@@ -1,0 +1,43 @@
+name: Restore dependencies
+description: Restore the node_modules that prepare saved, without installing or saving. A miss fails the job.
+
+inputs:
+  cache-key:
+    description: The key prepare saved, from install-dependencies' cache-key output. Capture jobs never install or save.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Capture starts Expo's CLI through bunx and runs Node scripts. The image has no Bun, and setup-node resolves
+    # its version from a remote manifest on every job, which took minutes on the capture runners. Node 22 comes from
+    # the runner's tool cache, the same 22.x that prepare's setup-node resolved, so the cache key holds.
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version-file: package.json
+
+    - name: Use Node 22 from the tool cache
+      shell: bash
+      run: |
+        set -euo pipefail
+        arch=$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
+        node_dir=$(ls -d "$RUNNER_TOOL_CACHE"/node/22.*/"$arch" 2>/dev/null | sort -V | tail -n 1 || true)
+        if [ -z "$node_dir" ] || [ ! -x "$node_dir/bin/node" ]; then
+          echo "::error::No Node 22 for $arch in $RUNNER_TOOL_CACHE/node. The runner image changed: add actions/setup-node to restore-dependencies."
+          exit 1
+        fi
+        echo "$node_dir/bin" >> "$GITHUB_PATH"
+        echo "Node $(basename "$(dirname "$node_dir")") from $node_dir"
+
+    # The same paths as install-dependencies, which saved them.
+    - name: Restore node_modules
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          node_modules
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/grammars
+          modules/react-native-enriched-markdown/cpp/highlight/vendor/tree-sitter
+          modules/react-native-enriched-markdown/ios/vendor
+        key: ${{ inputs.cache-key }}
+        fail-on-cache-miss: true

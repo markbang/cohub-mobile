@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAllDocuments } from "yaml";
+import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
@@ -141,6 +141,10 @@ assert.deepEqual(await runFlowWithRetries(flowsRetried.launch, quiet).then((outc
 const dead = scripted([driverDown, driverDown, driverDown]);
 const deadOutcome = await runFlowWithRetries(dead.launch, quiet);
 assert.deepEqual([deadOutcome.ok, deadOutcome.reason, dead.calls.length], [false, "driver", 3], "a driver that never starts stops after its own three tries");
+const firstStart = scripted([{ ...driverDown, output: "iOS driver not ready in time: FIRST START LINE" }, { ...driverDown, output: "iOS driver not ready in time: SECOND START LINE" }, { ...driverDown, output: "iOS driver not ready in time: LAST START LINE" }]);
+let driverLogReads = 0;
+const firstOutcome = await runFlowWithRetries(firstStart.launch, { ...quiet, driverLog: (attempt) => (driverLogReads += 1, attempt.output) });
+assert.deepEqual([firstOutcome.reason, firstOutcome.driverLog, driverLogReads], ["driver", "iOS driver not ready in time: FIRST START LINE", 1], "a driver that never starts keeps the first start's log, read once, not the last start's");
 const mixed = scripted([driverDown, flowFailed, driverDown, flowFailed, passed]);
 assert.deepEqual(await runFlowWithRetries(mixed.launch, quiet).then((outcome) => [outcome.ok, mixed.calls.length]), [true, 5], "driver starts and flow retries have their own budgets");
 const failing = scripted([flowFailed, flowFailed, flowFailed]);
@@ -173,3 +177,18 @@ assert.deepEqual([outcome.ok, outcome.attempt.started, outcome.attempt.status], 
 assert.equal(quietLog.length, 2, "each failed driver start is logged");
 assert.ok(quietLog.every((line) => line.startsWith("Driver start ") && line.includes("no step ran")), "the log names each failed start and that no step ran");
 rmSync(fakeBin, { recursive: true, force: true });
+
+// Capture jobs restore what prepare saved and install nothing: a miss fails the job, and no capture job saves a cache.
+const iosWorkflow = parse(readFileSync(new URL("../.github/workflows/ui-snapshots-ios.yml", import.meta.url), "utf8"), { uniqueKeys: true });
+const captureSteps = iosWorkflow.jobs.capture.steps;
+const usesOf = (steps) => steps.map((step) => String(step.uses ?? ""));
+assert.equal(usesOf(captureSteps).some((uses) => uses.includes("install-dependencies")), false, "capture jobs run no install step");
+assert.equal(usesOf(captureSteps).some((uses) => uses.startsWith("actions/cache/save") || uses.startsWith("actions/cache@")), false, "capture jobs save no cache");
+assert.ok(iosWorkflow.jobs.prepare.outputs["modules-key"], "prepare reports the node_modules key it saved");
+assert.ok(captureSteps.some((step) => step.uses === "./.github/actions/restore-dependencies" && step.with?.["cache-key"] === "${{ needs.prepare.outputs.modules-key }}"), "capture restores the modules under prepare's key");
+const restoreAction = parse(readFileSync(new URL("../.github/actions/restore-dependencies/action.yml", import.meta.url), "utf8"), { uniqueKeys: true });
+const restoreModules = restoreAction.runs.steps.find((step) => String(step.uses).startsWith("actions/cache/restore"));
+assert.equal(restoreModules?.with?.["fail-on-cache-miss"], true, "a node_modules miss fails the capture job");
+const maestroRestore = captureSteps.find((step) => String(step.uses ?? "").startsWith("actions/cache/restore") && step.with?.path === "~/.maestro");
+assert.ok(maestroRestore && maestroRestore.with["fail-on-cache-miss"] !== true, "a Maestro restore miss or failure installs Maestro instead of failing the shard");
+assert.ok(captureSteps.some((step) => step.name === "Install Maestro" && step.if === "steps.maestro.outputs.cache-hit != 'true'"), "capture installs Maestro when its restore does not hit");

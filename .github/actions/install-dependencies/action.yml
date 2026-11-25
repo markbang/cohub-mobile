@@ -6,6 +6,11 @@ inputs:
     description: Whether a fresh install may save the node_modules cache. Pass false for runs that may select unreviewed code.
     default: "true"
 
+outputs:
+  cache-key:
+    description: The node_modules cache key. A job that restores these modules with restore-dependencies names it.
+    value: ${{ steps.node-modules.outputs.cache-primary-key }}
+
 runs:
   using: composite
   steps:

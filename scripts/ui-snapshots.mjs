@@ -25,6 +25,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
  *   compare --ios <dir> --android <dir> [--out dir]
  *   redact --dir <dir>   (replaces E2E_ACCOUNT_* values in text files before an upload)
  *   boot --platform ios --target phone|tablet   (starts the simulator's boot and returns; capture waits for it)
+ *   driver --platform ios --target phone|tablet   (starts Maestro's driver once on the simulator, so the capture's first start finds it running)
  *
  * Capture runs a debug binary against a local Metro, so a JS-only change needs no native rebuild.
  * After the screenshots it records each of MOTIONS as a video (light theme, animations on); compare
@@ -386,11 +387,11 @@ function parseArgs(argv) {
     options.out ??= resolve("dist/ui-snapshots/pairs");
   } else if (command === "redact") {
     if (!options.dir) throw new Error("redact needs --dir <dir>.");
-  } else if (command === "boot") {
-    if (options.platform !== "ios") throw new Error("boot is for --platform ios.");
-    if (options.targets.length !== 1) throw new Error("boot takes one --target: phone or tablet.");
+  } else if (command === "boot" || command === "driver") {
+    if (options.platform !== "ios") throw new Error(`${command} is for --platform ios.`);
+    if (options.targets.length !== 1) throw new Error(`${command} takes one --target: phone or tablet.`);
   } else {
-    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|plan|warm|merge|compare|redact|boot [options]. See the header of this file.");
+    throw new Error("Usage: node scripts/ui-snapshots.mjs capture|plan|warm|merge|compare|redact|boot|driver [options]. See the header of this file.");
   }
   return options;
 }
@@ -762,10 +763,10 @@ const DRIVER_LINE = /xctest|xcodebuild|xcuitest|driver|simctl|simulator|exceptio
 /**
  * Runs one `maestro test` and reports how it went. Its output is copied to this process as it arrives. `started` is
  * true once Maestro names the device it runs on, which it does only after the driver answers; a start that never gets
- * there is killed after the driver's own timeout plus two minutes.
+ * there is killed a minute after the driver's own timeout.
  */
 export function launchMaestro(args, cwd, device) {
-  const watchdogMs = (Number(process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT) || 240_000) + 120_000;
+  const watchdogMs = driverWatchdogMs();
   return new Promise((resolveAttempt, reject) => {
     const started = Date.now();
     let output = "";
@@ -808,6 +809,11 @@ export function launchMaestro(args, cwd, device) {
   });
 }
 
+/** Maestro's own startup ceiling plus a minute: a start that is still silent then is killed as hung. */
+function driverWatchdogMs() {
+  return (Number(process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT) || 300_000) + 60_000;
+}
+
 /** A start that never reached the device: Maestro's startup timeout, or the watchdog. No step of the flow has run. */
 function driverNeverStarted(attempt) {
   return !attempt.started && (attempt.driverHung || attempt.output.includes(DRIVER_NOT_READY));
@@ -815,18 +821,25 @@ function driverNeverStarted(attempt) {
 
 /**
  * Runs a flow until it passes or a budget runs out. A driver that never starts has run no step, so only its start is
- * retried, on its own budget; a flow that fails after its driver came up is retried as a whole, as before.
+ * retried, on its own budget; a flow that fails after its driver came up is retried as a whole, as before. The first
+ * failed start is read by `driverLog` as soon as it fails, before the next start overwrites Maestro's debug output,
+ * and that text is returned as `driverLog` whatever the later starts do.
  */
-export async function runFlowWithRetries(launch, { describe, driverAttempts = DRIVER_ATTEMPTS, flowAttempts = FLOW_ATTEMPTS, pauseMs = RETRY_PAUSE_MS, pause = sleep, log = (text) => process.stdout.write(text) }) {
+export async function runFlowWithRetries(launch, { describe, driverAttempts = DRIVER_ATTEMPTS, flowAttempts = FLOW_ATTEMPTS, pauseMs = RETRY_PAUSE_MS, pause = sleep, log = (text) => process.stdout.write(text), driverLog = () => "" }) {
   let drivers = 0;
   let flows = 0;
+  let firstDriverLog = null;
   for (;;) {
     const attempt = await launch();
     if (attempt.status === 0 && !attempt.timedOut) return { ok: true, attempt };
     if (driverNeverStarted(attempt)) {
       drivers += 1;
+      if (firstDriverLog === null) {
+        firstDriverLog = driverLog(attempt);
+        if (firstDriverLog) log(`Driver start 1 failed on ${describe}. Its log:\n${firstDriverLog}\n`);
+      }
       log(`Driver start ${drivers} of ${driverAttempts} failed on ${describe} after ${attempt.seconds.toFixed(0)} s; no step ran.${drivers < driverAttempts ? " Starting the driver again." : ""}\n`);
-      if (drivers === driverAttempts) return { ok: false, reason: "driver", attempt };
+      if (drivers === driverAttempts) return { ok: false, reason: "driver", attempt, driverLog: firstDriverLog };
     } else {
       flows += 1;
       log(`Maestro ${attempt.timedOut ? "timed out" : "failed"} on ${describe}.${flows < flowAttempts ? ` Retrying (attempt ${flows + 1} of ${flowAttempts}).` : ""}\n`);
@@ -860,16 +873,16 @@ async function runMaestro({ device, flowPath, out, testOutput, offline = false }
   const since = Date.now();
   let outcome;
   try {
-    outcome = await runFlowWithRetries(() => launchMaestro(args, out, device), { describe });
+    outcome = await runFlowWithRetries(() => launchMaestro(args, out, device), {
+      describe,
+      driverLog: (attempt) => driverLogExcerpt(attempt, { udid: device, debugOutput, since, secrets }),
+    });
   } finally {
     redact(debugOutput, secrets);
     redact(testOutput, secrets);
   }
   if (outcome.ok) return;
-  if (outcome.reason === "driver") {
-    const excerpt = driverLogExcerpt(outcome.attempt, { udid: device, debugOutput, since, secrets });
-    throw new Error(`Maestro's driver did not start on ${device} in ${DRIVER_ATTEMPTS} attempts (${describe}). Driver log:\n${excerpt}`);
-  }
+  if (outcome.reason === "driver") throw new Error(`Maestro's driver did not start on ${device} in ${DRIVER_ATTEMPTS} attempts (${describe}). The first start's log:\n${outcome.driverLog}`);
   throw new Error(`Maestro failed on ${describe}. Its screenshots and view hierarchy are in ${debugOutput}.`);
 }
 
@@ -1012,6 +1025,24 @@ function bootSimulator(target) {
   const device = iosDevice(target);
   if (device.state === "Shutdown") timed("boot", () => run("xcrun", ["simctl", "boot", device.udid]));
   process.stdout.write(`${device.name} (${device.state}) ${device.udid}\n`);
+}
+
+/**
+ * Starts Maestro's driver on the target's simulator once: `hierarchy` opens a session and closes it. A start that fails
+ * is reported and not fatal, since the capture starts the driver itself and retries it.
+ */
+function warmDriver(target) {
+  const device = iosDevice(target);
+  timed("bootstatus", () => run("xcrun", ["simctl", "bootstatus", device.udid, "-b"]));
+  const started = Date.now();
+  const result = spawnSync("maestro", ["--device", device.udid, "hierarchy"], { encoding: "utf8", timeout: driverWatchdogMs(), stdio: ["ignore", "ignore", "pipe"] });
+  const seconds = ((Date.now() - started) / 1000).toFixed(0);
+  if (result.status === 0) {
+    process.stdout.write(`Driver warm on ${device.udid} after ${seconds} s.\n`);
+    return;
+  }
+  const reason = result.error?.message ?? (result.signal ? `killed by ${result.signal}` : `exit ${result.status}`);
+  process.stdout.write(`Driver warm-up failed on ${device.udid} after ${seconds} s (${reason}); the capture starts the driver itself.\n${String(result.stderr ?? "").slice(-4000)}\n`);
 }
 
 const ios = {
@@ -1372,6 +1403,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     else if (options.command === "warm") await warm(options);
     else if (options.command === "merge") merge(options);
     else if (options.command === "boot") bootSimulator(options.targets[0]);
+    else if (options.command === "driver") warmDriver(options.targets[0]);
     else if (options.command === "redact") redact(options.dir, ["E2E_ACCOUNT_EMAIL", "E2E_ACCOUNT_PASSWORD"].map((key) => process.env[key]?.trim()).filter(Boolean));
     else compare(options);
   } catch (error) {
