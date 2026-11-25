@@ -165,7 +165,7 @@ export const SCREENS = [
   { name: "catalog-page", ready: "New Space", link: "cohub://debug/ui?section=page", fresh: true },
   { name: "catalog-confirm", ready: "Delete this chat\\?", link: "cohub://debug/ui?section=confirm", fresh: true },
   // The striped Chat (the Chats list's last row), at rest: the picture starts below the fold, so the screen shows its caption.
-  { name: "chat-stripes", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "240 × 720" }, { hold: 2500 }] },
+  { name: "chat-stripes", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 × 160" }, { hold: 2500 }] },
 ];
 
 // The left pane's first and a later Chat or Space row in a split window.
@@ -242,7 +242,7 @@ export const MOTIONS = [
     name: "motion-stripes",
     ready: "Appearance",
     link: "cohub://settings",
-    setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "240 × 720" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { hold: 1000 }],
+    setup: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 × 160" }, { hold: 2500 }, ...Array.from({ length: 5 }, () => ({ swipe: "down" })), { hold: 1000 }],
     steps: [{ hold: 2000 }, { drag: { from: "50%, 70%", to: "50%, 43%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 85%", to: "50%, 5%", duration: 4000 } }, { hold: 2000 }, { back: true }, { hold: 2000 }],
     frames: [
       { label: "tab-halfway", swipe: 0, ms: 3200 },
@@ -667,9 +667,16 @@ function pushSteps(lines, platform, steps = []) {
     // What a tap opens can take a moment to draw; `waitFor` holds the capture until it has.
     // `exact` matches the whole text, for a short word such as a menu item that other labels contain.
     // A hold is an optional wait for a state that never comes, so the flow pauses for the whole timeout.
-    if (step.hold) lines.push("- extendedWaitUntil:", "    visible: \"^__hold__$\"", `    timeout: ${step.hold}`, "    optional: true");
-    else if (step.drag) lines.push("- swipe:", `    start: ${yamlString(step.drag.from)}`, `    end: ${yamlString(step.drag.to)}`, `    duration: ${step.drag.duration}`);
-    else if (step.scrollTo) lines.push("- scrollUntilVisible:", "    element:", `      text: ${yamlString(`.*${step.scrollTo}.*`)}`, "    direction: DOWN", "    timeout: 60000");
+    // Holds and drags end where they are: a wait for animations after them would run to its full five seconds on a Chat.
+    if (step.hold) {
+      lines.push("- extendedWaitUntil:", "    visible: \"^__hold__$\"", `    timeout: ${step.hold}`, "    optional: true");
+      continue;
+    }
+    if (step.drag) {
+      lines.push("- swipe:", `    start: ${yamlString(step.drag.from)}`, `    end: ${yamlString(step.drag.to)}`, `    duration: ${step.drag.duration}`);
+      continue;
+    }
+    if (step.scrollTo) lines.push("- scrollUntilVisible:", "    element:", `      text: ${yamlString(`.*${step.scrollTo}.*`)}`, "    direction: DOWN", "    timeout: 60000");
     else if (step.waitFor) lines.push("- extendedWaitUntil:", `    visible: ${yamlString(step.exact ? step.waitFor : `.*${step.waitFor}.*`)}`, "    timeout: 20000");
     // For a loading state: the screen counts as ready once it has gone.
     else if (step.waitGone) lines.push("- extendedWaitUntil:", `    notVisible: ${yamlString(`.*${step.waitGone}.*`)}`, "    timeout: 60000");
@@ -1245,7 +1252,6 @@ async function captureCell(options, session, missing) {
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
-        const debugOutput = join(options.out, "maestro-debug", name);
         for (const motion of motions) {
           const file = `${motion.name}.mp4`;
           const found = findFile(testOutput, file);
@@ -1254,7 +1260,7 @@ async function captureCell(options, session, missing) {
             continue;
           }
           run("mv", [found, join(themeDirectory, file)]);
-          recordMotion({ motion, theme, video: join(themeDirectory, file), debugOutput, directory: themeDirectory, missing });
+          recordMotion({ motion, theme, video: join(themeDirectory, file), commands: testOutput, directory: themeDirectory, missing });
         }
       }
       device.setAnimations(false);
@@ -1267,12 +1273,12 @@ async function captureCell(options, session, missing) {
 }
 
 /**
- * Writes a recording's sidecar: the host-clock start from Maestro's command JSON, and the frames its `frames` name, cut
- * from the mp4 at their real-time offsets. A failure is listed as missing, so the run reports it after the other captures.
+ * Writes a recording's sidecar: the host-clock start from Maestro's command JSON (in the flow's test output, which the
+ * upload leaves out), and the frames its `frames` name, cut from the mp4 at their real-time offsets. A failure is listed as missing, so the run reports it after the other captures.
  */
-function recordMotion({ motion, theme, video, debugOutput, directory, missing }) {
+function recordMotion({ motion, theme, video, commands, directory, missing }) {
   try {
-    const clock = recordingClock(readCommands(debugOutput), `${motion.name} (${theme})`);
+    const clock = recordingClock(readCommands(commands), `${motion.name} (${theme})`);
     const frames = exportFrames(video, frameTimes(clock, motion.frames ?? []), directory, motion.name);
     writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, frames });
   } catch (error) {

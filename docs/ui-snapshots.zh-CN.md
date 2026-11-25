@@ -96,7 +96,7 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 - `spaces`、`spaces-scrolled`：四个 Space；没有描述的三个显示其 Chat 数量。
 - `activity`、`activity-scrolled`：一个余额、无有效订阅，以及一个 13 周的热力图。
 - `settings`、`settings-scrolled`：个人资料卡片的名称、邮箱和头像。
-- `chat-stripes`、`motion-stripes`：条纹 Chat（`src/data/fixtures/session.ts` 中的 `STRIPES_CHAT_ID`），是 Chats 列表的最后一行，标题为 "Stripe test pattern"，因此它上面的行不会移动。它的较早回复填满图片上方的空间。图片是 `assets/debug/stripes.png`，240 × 720 px，以 Markdown 图片呈现，宽度与气泡相同。`scripts/make-stripes-fixture.mjs` 生成这张 PNG：细线、粗条、彩条、棋盘格、细横线、一条竖线，以及顶部和底部边缘的红色与蓝色行。Chat 是根屏幕，标签栏在其下隐藏；它的覆盖层是返回按钮和编辑器。
+- `chat-stripes`、`motion-stripes`：条纹 Chat（`src/data/fixtures/session.ts` 中的 `STRIPES_CHAT_ID`），是 Chats 列表的最后一行，标题为 "Stripe test pattern"，因此它上面的行不会移动。它的较早回复填满图片上方的空间。图片是 `assets/debug/stripes.png`，288 × 160 px，以 Markdown 图片呈现，显示为 360 × 200 pt（Chat 的图片框），因此不被裁剪。`scripts/make-stripes-fixture.mjs` 生成这张 PNG：细线、粗条、彩条、棋盘格、细横线、一条竖线，以及顶部和底部边缘的红色与蓝色行。Chat 是根屏幕，标签栏在其下隐藏；它的覆盖层是返回按钮和编辑器。
 
 种子由 `src/data/fixtures/index.ts` 中的 `usesFixtures()` 控制，其值为 `__DEV__ && uiSnapshots`。发布版本的 `__DEV__` 为 false，因此永远不会读取任何种子。如果某个屏幕需要种子未包含的数据，应把数据加入种子，而不是手动截取。
 

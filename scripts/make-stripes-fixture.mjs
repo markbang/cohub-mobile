@@ -4,13 +4,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Writes the striped test picture the debug Chat shows (`assets/debug/stripes.png`). Its bands run top to bottom,
- * so scrolling the Chat moves each one past the chrome in turn: fine lines, thick bars, colour bars, a checkerboard,
- * thin rules, and a vertical line. Red and blue rows mark its top and bottom edges. Run again after changing a band;
+ * Writes the striped test picture the debug Chat shows (`assets/debug/stripes.png`). The Chat draws a Markdown image
+ * 360 × 200 pt, a 1.8:1 box, so the picture has that ratio and is not cropped. Its bands run top to bottom: fine lines,
+ * thick bars, colour bars, a checkerboard, vertical bars, thin rules, a red and blue checkerboard, and a border. Red
+ * and blue rows mark its top and bottom edges, and a vertical line runs down its middle. Run again after changing a band;
  * the output is deterministic.
  */
-export const WIDTH = 240;
-export const HEIGHT = 720;
+export const WIDTH = 288;
+export const HEIGHT = 160;
 
 const BAND = HEIGHT / 8;
 const BLACK = [0, 0, 0];
@@ -21,19 +22,19 @@ const COLOURS = [WHITE, [230, 30, 30], [30, 180, 60], [30, 60, 230], [240, 210, 
 
 /** The colour of the pixel at (x, y): one band per eighth of the height, with edge rows and a vertical line over all of them. */
 export function pixel(x, y) {
-  if (y < 6 || y >= HEIGHT - 6) return y < 6 ? RED : BLUE;
+  if (y < 4 || y >= HEIGHT - 4) return y < 4 ? RED : BLUE;
   if (Math.abs(x - WIDTH / 2) < 2) return BLACK;
   const band = Math.floor(y / BAND);
   const row = y - band * BAND;
   switch (band) {
     case 0: return Math.floor(row / 2) % 2 === 0 ? BLACK : WHITE;
-    case 1: return Math.floor(row / 15) % 2 === 0 ? BLACK : WHITE;
+    case 1: return Math.floor(row / 5) % 2 === 0 ? BLACK : WHITE;
     case 2: return COLOURS[Math.floor(x / (WIDTH / COLOURS.length))];
-    case 3: return (Math.floor(x / 15) + Math.floor(row / 15)) % 2 === 0 ? BLACK : WHITE;
-    case 4: return Math.floor(x / 20) % 2 === 0 ? BLACK : WHITE;
-    case 5: return row % 8 === 0 ? BLACK : WHITE;
-    case 6: return (Math.floor(x / 15) + Math.floor(row / 15)) % 2 === 0 ? RED : BLUE;
-    default: return row < 10 || row >= BAND - 10 ? BLACK : WHITE;
+    case 3: return (Math.floor(x / 10) + Math.floor(row / 10)) % 2 === 0 ? BLACK : WHITE;
+    case 4: return Math.floor(x / 12) % 2 === 0 ? BLACK : WHITE;
+    case 5: return row % 4 === 0 ? BLACK : WHITE;
+    case 6: return (Math.floor(x / 10) + Math.floor(row / 10)) % 2 === 0 ? RED : BLUE;
+    default: return row < 3 || row >= BAND - 3 ? BLACK : WHITE;
   }
 }
 

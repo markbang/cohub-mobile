@@ -82,7 +82,7 @@ assert.equal(striped.session.id, STRIPES_CHAT_ID, "the striped view belongs to t
 const pictureReply = striped.messages.at(-1);
 assert.equal(pictureReply?.role, "assistant", "the picture is the Chat's last message, an assistant reply");
 assert.ok(pictureReply.text?.includes(`![${STRIPES_TITLE}](${pictureUri})`), "the reply carries the picture as a Markdown image on the dev server URL");
-assert.ok(pictureReply.text?.trimEnd().endsWith("240 × 720 px."), "the caption below the picture is the reply's last line");
+assert.ok(pictureReply.text?.trimEnd().endsWith("288 × 160 px."), "the caption below the picture is the reply's last line");
 assert.ok(striped.messages.length >= 14, "older replies sit above the picture, so it starts below the fold");
 
 const stripesPng = readFileSync(repoFile("assets/debug/stripes.png"));
@@ -102,7 +102,7 @@ const pngPixels = (png) => {
 };
 const decoded = pngPixels(stripesPng);
 assert.deepEqual([decoded.width, decoded.height], [WIDTH, HEIGHT], "the committed picture is the generator's size");
-const sample = [[0, 0], [7, 40], [120, 100], [30, 300], [200, 400], [50, 500], [100, 650], [239, 719]];
+const sample = [[0, 0], [7, 25], [120, 45], [30, 70], [200, 90], [50, 110], [100, 130], [287, 159]];
 for (const [x, y] of sample) {
   const at = y * (1 + WIDTH * 3) + 1 + x * 3;
   assert.deepEqual([...decoded.rows.subarray(at, at + 3)], [...pixel(x, y)], `the committed picture matches the generator at (${x}, ${y})`);

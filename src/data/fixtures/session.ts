@@ -189,7 +189,7 @@ export function stripesChatView(space: SpaceRecord, now: number, pictureUri: str
   const pictureTurn = {
     sequence: STRIPES_FILLER.length + 1,
     userText: "Show the test pattern.",
-    assistantContent: [{ type: "text" as const, text: `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 240 × 720 px.` }],
+    assistantContent: [{ type: "text" as const, text: `Here is the test pattern.\n\n![${STRIPES_TITLE}](${pictureUri})\n\nOne picture, 288 × 160 px.` }],
   };
   const turns = [...STRIPES_FILLER.map(([userText, reply], index) => turnRecord(sessionId, now, {
     sequence: index + 1,
