@@ -238,11 +238,23 @@ assert.equal(recorded.filter((line) => line.includes("__hold__")).length, 0, "th
 assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    end: "50%, 0%"'), "the second drag runs from above the composer to the top of the screen");
 assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
 
-// The list motion: a fresh start on the Chats root, two slow drags, and nothing tapped or searched while recording.
-const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: MOTIONS.filter((motion) => motion.name === "motion-chats-list") }).split("\n");
+// The list motion: a fresh start on the Chats root, a drag down and a drag up with a 2 s hold after each, and nothing
+// tapped or searched while recording. Its frames are list-<label>.png, and each sits in the swipe it names.
+const listMotion = MOTIONS.find((motion) => motion.name === "motion-chats-list");
+const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: [listMotion] }).split("\n");
 const listRecording = listFlow.slice(listFlow.indexOf("- startRecording: \"motion-chats-list\""), listFlow.indexOf("- stopRecording"));
+const listHold = ["- swipe:", '    start: "2%, 50%"', '    end: "2%, 50%"', "    duration: 2000"];
 assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"cohub:///\""), "the list motion relaunches before it opens the Chats root");
-assert.equal(listRecording.filter((line) => line.startsWith("- swipe:")).length, 2, "the list recording is two drags, one down and one up");
-assert.equal(listRecording.filter((line) => line.startsWith("- tapOn") || line.includes("tapOn") || line.includes("Search")).length, 0, "the list recording taps nothing and opens no search");
-assert.equal(listRecording.filter((line) => line.includes("__hold__")).length, 0, "the list recording's stops are the gaps between commands");
+assert.deepEqual(listRecording, [
+  '- startRecording: "motion-chats-list"',
+  "- swipe:", '    start: "50%, 30%"', '    end: "50%, 72%"', "    duration: 4000",
+  ...listHold,
+  "- swipe:", '    start: "50%, 75%"', '    end: "50%, 35%"', "    duration: 4000",
+  ...listHold,
+], "the list recording is a drag down, a 2 s hold, a drag up and a 2 s hold: nothing tapped, no search");
+const listKinds = listMotion.steps.filter((step) => step.drag || step.hold).map((step) => (step.drag ? "drag" : "hold"));
+const listLengths = listMotion.steps.filter((step) => step.drag || step.hold).map((step) => step.drag?.duration ?? step.hold);
+assert.deepEqual(listMotion.frames.map((frame) => [frame.label, listKinds[frame.swipe]]), [["edge", "drag"], ["halfway", "drag"], ["hold", "hold"], ["settled", "hold"]], "each list frame sits in the swipe its label names: edge and halfway in the drag down, hold and settled in the holds");
+assert.ok(listMotion.frames.every((frame) => frame.ms < listLengths[frame.swipe]), "each list frame falls inside its swipe");
+assert.deepEqual(expectedOutputs({ part: "motion", screens: ["motion-chats-list"] }, { themes: ["light"], motionThemes: ["light", "dark"] }).filter((file) => file.endsWith(".png")), ["motion/light/list-edge.png", "motion/light/list-halfway.png", "motion/light/list-hold.png", "motion/light/list-settled.png", "motion/dark/list-edge.png", "motion/dark/list-halfway.png", "motion/dark/list-hold.png", "motion/dark/list-settled.png"], "the list frames are list-<label>.png in each theme's folder");
 assert.equal(planShards({ ...all, targets: ["phone"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").flatMap((entry) => entry.screens).join(), "motion-chats-list", "naming the list motion plans it alone");

@@ -266,10 +266,18 @@ export const MOTIONS = [
     ready: "Reconcile Q3 vendor invoices",
     link: "cohub:///",
     fresh: true,
+    framePrefix: "list",
     setup: [{ swipe: "up" }],
-    steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }],
+    steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { hold: 2000 }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }, { hold: 2000 }],
+    // The swipes after the recording starts, holds included: 0 drag down, 1 the hold after it, 2 drag up, 3 the hold after
+    // that. The video first moves at drag down.
     onset: 0,
-    frames: [],
+    frames: [
+      { label: "edge", swipe: 0, ms: 3500 },
+      { label: "halfway", swipe: 0, ms: 2000 },
+      { label: "hold", swipe: 1, ms: 1000 },
+      { label: "settled", swipe: 3, ms: 1000 },
+    ],
   },
 ];
 
@@ -282,10 +290,16 @@ function motionNames(screens) {
   return motionsNamed(screens).map((motion) => motion.name);
 }
 
+/** A motion's frame files start with its `framePrefix`, which defaults to its name: `<prefix>-<label>.png`. */
+function framePrefix(motion) {
+  return motion.framePrefix ?? motion.name;
+}
+
 /** The files one interaction leaves in each theme: its video, its sidecar, and the PNGs its `frames` cut. */
 function motionOutputs(name, motionThemes) {
-  const frames = MOTIONS.find((motion) => motion.name === name)?.frames ?? [];
-  return motionThemes.flatMap((theme) => [`motion/${theme}/${name}.mp4`, `motion/${theme}/${name}.json`, ...frames.map((frame) => `motion/${theme}/${name}-${frame.label}.png`)]);
+  const motion = MOTIONS.find((entry) => entry.name === name);
+  const frames = motion?.frames ?? [];
+  return motionThemes.flatMap((theme) => [`motion/${theme}/${name}.mp4`, `motion/${theme}/${name}.json`, ...frames.map((frame) => `motion/${theme}/${framePrefix(motion)}-${frame.label}.png`)]);
 }
 
 const ARTIFACTS = { phone: "ui-snapshots-ios", tablet: "ui-snapshots-ios-tablet" };
@@ -1310,7 +1324,7 @@ function recordMotion({ motion, theme, video, commands, directory, missing }) {
   try {
     const clock = recordingClock(commandLists(commands), `${motion.name} (${theme})`);
     const onset = { swipe: motion.onset ?? 0, seconds: motionOnset(video) };
-    const frames = exportFrames(video, frameTimes(clock, motion.frames ?? [], onset), directory, motion.name);
+    const frames = exportFrames(video, frameTimes(clock, motion.frames ?? [], onset), directory, framePrefix(motion));
     writeSidecar(join(directory, `${motion.name}.json`), { name: motion.name, theme, clock, onset, frames });
   } catch (error) {
     missing.push(`motion/${theme}/${motion.name} sidecar or frames: ${error instanceof Error ? error.message : String(error)}`);
