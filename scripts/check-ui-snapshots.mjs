@@ -254,12 +254,12 @@ assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"coh
 assert.equal(listMotion.setup, undefined, "the list opens at its top with the full bar: no swipe before the recording");
 assert.deepEqual(listRecording, [
   '- startRecording: "motion-chats-list"',
-  ...listHold(800),
+  ...listHold(2000),
   "- swipe:", '    start: "50%, 72%"', '    end: "50%, 28%"', "    duration: 4000",
   ...listHold(2000),
   "- swipe:", '    start: "50%, 48%"', '    end: "50%, 54%"', "    duration: 800",
   ...listHold(2000),
-], "the list recording is a still hold, a drag up, a hold, a small stroke down and a hold: nothing tapped, no search");
+], "the list recording is a 2 s still hold, a drag up, a hold, a small stroke down and a hold: nothing tapped, no search");
 assert.equal(listMotion.onset, 1, "the clock anchors at the drag up: the first hold is still, and the video first moves there");
 const listKinds = listMotion.steps.map((step) => (step.drag ? "drag" : "hold"));
 assert.deepEqual(listMotion.frames.map((frame) => [frame.label, listKinds[frame.swipe]]), [["edge", "drag"], ["halfway", "drag"], ["hold", "hold"], ["settled", "hold"]], "each list frame sits in the swipe its label names: edge and halfway in the drag up, hold and settled in the last hold");

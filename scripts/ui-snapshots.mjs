@@ -271,23 +271,23 @@ export const MOTIONS = [
     link: "cohub:///",
     fresh: true,
     framePrefix: "list",
-    // The list opens at its top with the full tab bar. The first hold makes the recording open still; the content moves
-    // up, which collapses the bar to its bubble; a hold shows the rows behind the bubble; a small stroke down brings the
-    // full bar back over the rows; a last hold shows them. Holds press the title bar's empty margin, never a row.
+    // The list opens at its top with the full tab bar over the rows: the first hold is that still state. The drag up
+    // moves the rows under the bar, which collapses it to a bubble; a hold, a small stroke down, and a last hold follow.
+    // Holds press the title bar's empty margin, never a row.
     steps: [
-      { hold: 800, at: TITLE_BAR_HOLD_POINT },
+      { hold: 2000, at: TITLE_BAR_HOLD_POINT },
       { drag: { from: "50%, 72%", to: "50%, 28%", duration: 4000 } },
       { hold: 2000, at: TITLE_BAR_HOLD_POINT },
       { drag: { from: "50%, 48%", to: "50%, 54%", duration: 800 } },
       { hold: 2000, at: TITLE_BAR_HOLD_POINT },
     ],
-    // The swipes after the recording starts, holds included: 0 the first hold, 1 drag up, 2 the hold, 3 the small stroke
-    // down, 4 the last hold. The video first moves at drag up, so the clock anchors there.
+    // The swipes after the recording starts, holds included: 0 the opening hold, 1 drag up, 2 the hold, 3 the small stroke
+    // down, 4 the last hold. The clock anchors at the drag up, the first gesture.
     onset: 1,
     frames: [
       { label: "edge", swipe: 1, ms: 3300 },
       { label: "halfway", swipe: 1, ms: 2000 },
-      { label: "hold", swipe: 4, ms: 1000 },
+      { label: "hold", swipe: 0, ms: 1200 },
       { label: "settled", swipe: 4, ms: 1900 },
     ],
   },
