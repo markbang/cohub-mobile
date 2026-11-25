@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAllDocuments } from "yaml";
+import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { buildFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
@@ -173,3 +173,15 @@ assert.deepEqual([outcome.ok, outcome.attempt.started, outcome.attempt.status], 
 assert.equal(quietLog.length, 2, "each failed driver start is logged");
 assert.ok(quietLog.every((line) => line.startsWith("Driver start ") && line.includes("no step ran")), "the log names each failed start and that no step ran");
 rmSync(fakeBin, { recursive: true, force: true });
+
+// Capture jobs restore what prepare saved and install nothing: a miss fails the job, and no capture job saves a cache.
+const iosWorkflow = parse(readFileSync(new URL("../.github/workflows/ui-snapshots-ios.yml", import.meta.url), "utf8"), { uniqueKeys: true });
+const captureSteps = iosWorkflow.jobs.capture.steps;
+const usesOf = (steps) => steps.map((step) => String(step.uses ?? ""));
+assert.equal(usesOf(captureSteps).some((uses) => uses.includes("install-dependencies")), false, "capture jobs run no install step");
+assert.equal(usesOf(captureSteps).some((uses) => uses.startsWith("actions/cache/save") || uses.startsWith("actions/cache@")), false, "capture jobs save no cache");
+assert.ok(iosWorkflow.jobs.prepare.outputs["modules-key"], "prepare reports the node_modules key it saved");
+assert.ok(captureSteps.some((step) => step.uses === "./.github/actions/restore-dependencies" && step.with?.["cache-key"] === "${{ needs.prepare.outputs.modules-key }}"), "capture restores the modules under prepare's key");
+const restoreAction = parse(readFileSync(new URL("../.github/actions/restore-dependencies/action.yml", import.meta.url), "utf8"), { uniqueKeys: true });
+const restoreModules = restoreAction.runs.steps.find((step) => String(step.uses).startsWith("actions/cache/restore"));
+assert.equal(restoreModules?.with?.["fail-on-cache-miss"], true, "a node_modules miss fails the capture job");

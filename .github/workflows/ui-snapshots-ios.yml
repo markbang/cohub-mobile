@@ -73,8 +73,10 @@ env:
   E2E_ACCOUNT_EMAIL: ${{ secrets.E2E_ACCOUNT_EMAIL }}
   E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
   OFFLINE_ARG: ${{ inputs.offline && '--offline' || '' }}
-  # Hosted macOS runners can take minutes to start Maestro's XCTest driver.
-  MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000"
+  # Pinned so the Maestro install prepare caches is reproducible; capture jobs restore it by this version.
+  MAESTRO_VERSION: "2.12.1"
+  # Driver starts that came up took 35 s to 285 s in the last 15 runs; the watchdog adds a minute.
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
 
 jobs:
   prepare:
@@ -90,6 +92,7 @@ jobs:
       shards: ${{ steps.plan.outputs.shards }}
       key: ${{ steps.app.outputs.cache-primary-key }}
       built: ${{ steps.app.outputs.cache-hit != 'true' }}
+      modules-key: ${{ steps.deps.outputs.cache-key }}
     steps:
       # Fails the run before any build when the target input is not phone, tablet, or both.
       - name: Targets
@@ -107,7 +110,22 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install dependencies
+        id: deps
         uses: ./.github/actions/install-dependencies
+
+      # Capture jobs restore this install rather than downloading it. The version is in the key, so a bump re-caches it.
+      - name: Restore Maestro
+        id: maestro
+        uses: actions/cache@v6
+        with:
+          path: ~/.maestro
+          key: maestro-${{ runner.os }}-${{ env.MAESTRO_VERSION }}
+
+      - name: Install Maestro
+        if: steps.maestro.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -Ls "https://get.maestro.mobile.dev" | bash
 
       # Metro's transform cache is shared through this run: prepare warms it with the app's first bundle and saves
       # it, and every capture job restores that save. The key is per run, so a new run starts from the newest save
@@ -228,15 +246,33 @@ jobs:
         uses: actions/checkout@v7
 
       # The simulator boots for minutes, and `simctl boot` returns once the boot is requested: it runs under the
-      # dependency install, Maestro's install and Metro's start. The capture step waits for it (bootstatus).
+      # restores and Metro's start. The driver warm-up and the capture step wait for it (bootstatus).
       - name: Boot simulator
         run: node scripts/ui-snapshots.mjs boot --platform ios --target "${{ matrix.target }}"
 
-      # prepare has saved node_modules by now; a capture that misses it installs without saving.
-      - name: Install dependencies
-        uses: ./.github/actions/install-dependencies
+      # prepare saved Maestro under this version; a miss means prepare did not, so the job fails.
+      - name: Restore Maestro
+        uses: actions/cache/restore@v6
         with:
-          save-cache: "false"
+          path: ~/.maestro
+          key: maestro-${{ runner.os }}-${{ env.MAESTRO_VERSION }}
+          fail-on-cache-miss: true
+
+      - name: Add Maestro to PATH
+        run: echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # Maestro's driver takes minutes to start on a fresh simulator. This starts it once in the background, while the
+      # dependencies, the app and Metro restore; the capture step waits for it, then starts its own driver.
+      - name: Warm the driver
+        run: |
+          ( node scripts/ui-snapshots.mjs driver --platform ios --target "${{ matrix.target }}" ) > "$RUNNER_TEMP/driver-warm.log" 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/driver-warm.pid"
+
+      # prepare saved node_modules under the key it reported; a miss fails the job rather than installing.
+      - name: Restore dependencies
+        uses: ./.github/actions/restore-dependencies
+        with:
+          cache-key: ${{ needs.prepare.outputs.modules-key }}
 
       - name: Download simulator app
         if: needs.prepare.outputs.built == 'true'
@@ -253,12 +289,6 @@ jobs:
           key: ${{ needs.prepare.outputs.key }}
           fail-on-cache-miss: true
 
-      - name: Install Maestro
-        run: |
-          set -euo pipefail
-          curl -Ls "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-
       # Metro's transform cache, saved by prepare in this run: the app's first bundle starts from transforms already done.
       - name: Locate Metro cache
         id: metro
@@ -271,6 +301,12 @@ jobs:
           key: metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ github.run_id }}
           restore-keys: |
             metro-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+
+      - name: Wait for the driver warm-up
+        run: |
+          pid=$(cat "$RUNNER_TEMP/driver-warm.pid")
+          while kill -0 "$pid" 2>/dev/null; do sleep 2; done
+          cat "$RUNNER_TEMP/driver-warm.log"
 
       - name: Capture
         env:
