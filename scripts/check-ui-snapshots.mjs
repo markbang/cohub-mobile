@@ -237,3 +237,12 @@ assert.ok(recorded[firstDrag + 1] !== "- waitForAnimationToEnd:" && recorded[sec
 assert.equal(recorded.filter((line) => line.includes("__hold__")).length, 0, "the recording has no explicit holds: the gaps between commands are the holds");
 assert.ok(recorded.includes('    start: "50%, 91%"') && recorded.includes('    end: "50%, 0%"'), "the second drag runs from above the composer to the top of the screen");
 assert.equal(recorded.filter((line) => line.startsWith("- swipe:")).length, 3, "two drags and the back swipe, and nothing else");
+
+// The list motion: a fresh start on the Chats root, two slow drags, and nothing tapped or searched while recording.
+const listFlow = buildMotionFlow({ platform: "ios", session: true, motions: MOTIONS.filter((motion) => motion.name === "motion-chats-list") }).split("\n");
+const listRecording = listFlow.slice(listFlow.indexOf("- startRecording: \"motion-chats-list\""), listFlow.indexOf("- stopRecording"));
+assert.ok(listFlow.indexOf("- launchApp:") < listFlow.indexOf("- openLink: \"cohub:///\""), "the list motion relaunches before it opens the Chats root");
+assert.equal(listRecording.filter((line) => line.startsWith("- swipe:")).length, 2, "the list recording is two drags, one down and one up");
+assert.equal(listRecording.filter((line) => line.startsWith("- tapOn") || line.includes("tapOn") || line.includes("Search")).length, 0, "the list recording taps nothing and opens no search");
+assert.equal(listRecording.filter((line) => line.includes("__hold__")).length, 0, "the list recording's stops are the gaps between commands");
+assert.equal(planShards({ ...all, targets: ["phone"], screens: ["motion-chats-list"], themes: ["light"], motion: true, motionThemes: ["light", "dark"] }).filter((entry) => entry.part === "motion").flatMap((entry) => entry.screens).join(), "motion-chats-list", "naming the list motion plans it alone");

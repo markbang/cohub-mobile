@@ -258,6 +258,19 @@ export const MOTIONS = [
       { label: "back-hold", swipe: 1, ms: 4500 },
     ],
   },
+  // The Chats list with its seeded rows (src/data/fixtures/chats.ts). Setup scrolls the rows up, so rows sit above the
+  // tab bar. Recorded: a slow drag down brings the rows above it under the bar, a stop, a slow drag up, a stop. Nothing is
+  // tapped and search is never opened. The Chats list is a root screen, so `fresh` starts it from the top.
+  {
+    name: "motion-chats-list",
+    ready: "Reconcile Q3 vendor invoices",
+    link: "cohub:///",
+    fresh: true,
+    setup: [{ swipe: "up" }],
+    steps: [{ drag: { from: "50%, 30%", to: "50%, 72%", duration: 4000 } }, { drag: { from: "50%, 75%", to: "50%, 35%", duration: 4000 } }],
+    onset: 0,
+    frames: [],
+  },
 ];
 
 /** The interactions a selection records: every one, or with `screens`, the ones it names. */
@@ -802,6 +815,8 @@ function buildPerfFlow({ platform, session, target }) {
 export function buildMotionFlow({ platform, session, motions }) {
   const lines = preamble(platform, session);
   for (const [index, motion] of motions.entries()) {
+    // `fresh` relaunches first, so an overlay the previous recording left open (a New Chat sheet) is gone.
+    if (motion.fresh) lines.push("- launchApp:", "    stopApp: true", "- extendedWaitUntil:", "    visible: \"Chats\"", "    timeout: 120000");
     openScreen(lines, platform, motion.link, index === 0, motion.ready);
     pushSteps(lines, platform, motion.setup);
     lines.push(`- startRecording: ${yamlString(motion.name)}`);

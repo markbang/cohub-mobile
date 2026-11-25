@@ -118,6 +118,8 @@ Each recording writes `motion/<theme>/<interaction>.json` beside its mp4. The si
 
 The picture is 288 × 160 px, shown at 360 × 200 pt, so its top rows sit under the header and the composer's glass blurs them. The Chat has no tab bar: its bottom chrome is the composer.
 
+`motion-chats-list` is the list reference. It relaunches, opens the Chats root with its seeded rows, and drags the rows down slowly so their text passes under the floating tab bar. It stops, drags back up slowly and stops again. Nothing is tapped and search is never opened. Its frames are `list-<theme>-<label>.png`: the first row text at the bar's top edge, half covered, held, and settled.
+
 Each recording writes `motion/<theme>/motion-stripes.json` with the host-clock start from Maestro's command JSON. The frame times from that clock are approximate, because Maestro's swipe stamps are not the gesture's first frame. The published frames are cut from the recording itself, at the times where the picture's edge reaches each chrome edge and where each still begins.
 
 
