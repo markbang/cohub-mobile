@@ -90,14 +90,10 @@ export function estimateComposerContentHeight(text: string, lineHeight: number, 
   return lines * lineHeight + textPadding;
 }
 
-/**
- * The text's heights for the layout. Typed text uses the native content size. Any other value uses the height its
- * text layout reported at the rows it is drawn in: iOS reports a content size only when the input's frame changes,
- * and Android's watcher reads a stale layout, so a JS-set value never reaches the native measurement. The estimate
- * stands in only until that first report.
- */
-export function composerTextMeasure(input: { typed: boolean; nativeHeight: number; layoutHeight: number | null; estimate: ComposerMeasure }): ComposerMeasure {
-  if (input.typed) return { inline: input.nativeHeight, wide: input.nativeHeight };
+/** iOS reports content size on frame changes, not on edits inside a fixed frame. Use the text layout there
+ * and for JS-set drafts; Android typing has its own content-size watcher. */
+export function composerTextMeasure(input: { typed: boolean; ios: boolean; nativeHeight: number; layoutHeight: number | null; estimate: ComposerMeasure }): ComposerMeasure {
+  if (input.typed && !input.ios && input.nativeHeight > 0) return { inline: input.nativeHeight, wide: input.nativeHeight };
   if (input.layoutHeight !== null) return { inline: input.layoutHeight, wide: input.layoutHeight };
   return input.estimate;
 }
