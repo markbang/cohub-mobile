@@ -14,9 +14,10 @@ export const TAB_BAR_RIM = { top: 82.67, bottom: 21.33 };
 export const TAB_BAR_BAND_INSETS = { top: 9, bottom: 20 };
 export const TAB_BAR_LINE_HEIGHT = 20;
 export const TAB_BAR_ROW_HEIGHT = TAB_BAR_LINE_HEIGHT * 2;
-/** Half a row: the second still moves the lines half a row, so the two samples share no alignment. */
-export const TAB_BAR_SHIFT = TAB_BAR_ROW_HEIGHT / 2;
-const ROWS = 40;
+/** A quarter of a row: a half would move the lines exactly one line and land on the same grid. */
+export const TAB_BAR_SHIFT = TAB_BAR_ROW_HEIGHT / 4;
+/** Enough rows to cover the lower part of the window and the band, leaving the top clear of text. */
+const ROWS = 16;
 
 const pad = (index: number) => String(index + 1).padStart(2, "0");
 
@@ -26,18 +27,21 @@ export function TabBarFixtureList({ shift }: { shift: TabBarFixtureShift }) {
   const { height } = useWindowDimensions();
   const theme = useAppTheme();
   const bandTop = height - TAB_BAR_RIM.top + TAB_BAR_BAND_INSETS.top;
-  // A row starts where the band does (its top is `bandTop` modulo a row); `b` then lifts the rows half a row.
-  const offset = (bandTop % TAB_BAR_ROW_HEIGHT) - (shift === "b" ? TAB_BAR_SHIFT : 0);
+  const top = height - ROWS * TAB_BAR_ROW_HEIGHT;
+  // A row starts where the band does (its top is `bandTop` modulo a row, from the rows' own top); `b` lifts them.
+  const offset = ((bandTop - top) % TAB_BAR_ROW_HEIGHT) - (shift === "b" ? TAB_BAR_SHIFT : 0);
   const line = { fontSize: 17, lineHeight: TAB_BAR_LINE_HEIGHT, fontWeight: "600" as const };
   return (
-    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height, overflow: "hidden", backgroundColor: theme.colors.background }}>
-      <View style={{ position: "absolute", left: 0, right: 0, top: 0, transform: [{ translateY: offset }] }}>
-        {Array.from({ length: ROWS }, (_, index) => (
-          <View key={index} style={{ height: TAB_BAR_ROW_HEIGHT, paddingHorizontal: 16, justifyContent: "center" }}>
-            <Text numberOfLines={1} style={{ ...line, color: theme.colors.text }}>{`Row ${pad(index)} · invoice draft`}</Text>
-            <Text numberOfLines={1} style={{ ...line, color: theme.colors.textSecondary }}>{`Row ${pad(index)} · marked as paid`}</Text>
-          </View>
-        ))}
+    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: theme.colors.background }}>
+      <View style={{ position: "absolute", left: 0, right: 0, top, height: ROWS * TAB_BAR_ROW_HEIGHT, overflow: "hidden" }}>
+        <View style={{ position: "absolute", left: 0, right: 0, top: 0, transform: [{ translateY: offset }] }}>
+          {Array.from({ length: ROWS }, (_, index) => (
+            <View key={index} style={{ height: TAB_BAR_ROW_HEIGHT, paddingHorizontal: 16, justifyContent: "center" }}>
+              <Text numberOfLines={1} style={{ ...line, color: theme.colors.text }}>{`Row ${pad(index)} · invoice draft`}</Text>
+              <Text numberOfLines={1} style={{ ...line, color: theme.colors.textSecondary }}>{`Row ${pad(index)} · marked as paid`}</Text>
+            </View>
+          ))}
+        </View>
       </View>
       <Text style={{ position: "absolute", right: 16, top: 8, fontSize: 11, fontWeight: "500", color: theme.colors.textFaint }}>{`tab bar fixture · ${shift}`}</Text>
     </View>
