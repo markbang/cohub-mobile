@@ -1,5 +1,4 @@
 import { Text, useWindowDimensions, View } from "react-native";
-import { useAppTheme } from "@/src/theme";
 
 /**
  * A fixed list of dense, high-contrast lines for fitting the tab bar's glass: one row is two 17 pt lines of
@@ -25,25 +24,24 @@ export type TabBarFixtureShift = "a" | "b";
 
 export function TabBarFixtureList({ shift }: { shift: TabBarFixtureShift }) {
   const { height } = useWindowDimensions();
-  const theme = useAppTheme();
   const bandTop = height - TAB_BAR_RIM.top + TAB_BAR_BAND_INSETS.top;
   const top = height - ROWS * TAB_BAR_ROW_HEIGHT;
   // A row starts where the band does (its top is `bandTop` modulo a row, from the rows' own top); `b` lifts them.
   const offset = ((bandTop - top) % TAB_BAR_ROW_HEIGHT) - (shift === "b" ? TAB_BAR_SHIFT : 0);
   const line = { fontSize: 17, lineHeight: TAB_BAR_LINE_HEIGHT, fontWeight: "600" as const };
   return (
-    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: theme.colors.background }}>
+    <View className="absolute inset-0 bg-background">
       <View style={{ position: "absolute", left: 0, right: 0, top, height: ROWS * TAB_BAR_ROW_HEIGHT, overflow: "hidden" }}>
         <View style={{ position: "absolute", left: 0, right: 0, top: 0, transform: [{ translateY: offset }] }}>
           {Array.from({ length: ROWS }, (_, index) => (
             <View key={index} style={{ height: TAB_BAR_ROW_HEIGHT, paddingHorizontal: 16, justifyContent: "center" }}>
-              <Text numberOfLines={1} style={{ ...line, color: theme.colors.text }}>{`Row ${pad(index)} · invoice draft`}</Text>
-              <Text numberOfLines={1} style={{ ...line, color: theme.colors.textSecondary }}>{`Row ${pad(index)} · marked as paid`}</Text>
+              <Text numberOfLines={1} className="text-fg" style={line}>{`Row ${pad(index)} · invoice draft`}</Text>
+              <Text numberOfLines={1} className="text-fg-secondary" style={line}>{`Row ${pad(index)} · marked as paid`}</Text>
             </View>
           ))}
         </View>
       </View>
-      <Text style={{ position: "absolute", right: 16, top: 8, fontSize: 11, fontWeight: "500", color: theme.colors.textFaint }}>{`tab bar fixture · ${shift}`}</Text>
+      <Text className="text-fg-faint" style={{ position: "absolute", right: 16, top: 8, fontSize: 11, fontWeight: "500" }}>{`tab bar fixture · ${shift}`}</Text>
     </View>
   );
 }
