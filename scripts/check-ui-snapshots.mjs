@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildFlow, buildMotionFlow, buildTabletFlow, EVIDENCE_SCREENS, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, screenCatalog, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { assertFlowParses, buildFlow, buildMotionFlow, buildTabletFlow, EVIDENCE_SCREENS, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, screenCatalog, TABLET_SCREENS } from "./ui-snapshots.mjs";
 import { clampToLastFrame, frameTimes, LAST_STILL_GUARD_SECONDS, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
@@ -50,6 +50,27 @@ for (const flowText of [landscapeFlow, portraitFlow, buildTabletFlow({ platform:
   const documents = parseAllDocuments(flowText);
   assert.deepEqual(documents.flatMap((document) => document.errors.map(String)), [], "a generated flow is valid YAML");
 }
+
+// A typed message is one scalar command, then a settle. Indenting keys under the scalar is the shape that broke Maestro's parse.
+const typed = screenCatalog("phone").find((screen) => screen.name === "chat-keyboard-typed");
+const typedText = typed.steps.find((step) => step.type !== undefined).type;
+const typedFlow = buildFlow({ platform: "ios", session: true, screens: [typed], target: "phone", orientation: "portrait" });
+const typedBody = typedFlow.slice(typedFlow.indexOf("\n---\n") + "\n---\n".length);
+const typedCommands = parse(typedBody);
+const typeAt = typedCommands.findIndex((command) => command.inputText !== undefined);
+assert.equal(typedCommands.filter((command) => command.inputText !== undefined).length, 1, "the typed message is one inputText command");
+assert.equal(typedCommands[typeAt].inputText, typedText, "the typed command carries the message exactly");
+assert.ok(typedCommands.findIndex((command) => command.tapOn?.id === "chat-composer-input") < typeAt, "the composer is tapped before the message is typed");
+assert.deepEqual(typedCommands[typeAt + 1], { waitForAnimationToEnd: { timeout: 1000 } }, "the typed message is followed by its own settle");
+await assertFlowParses("chat-keyboard-typed.yaml", typedFlow);
+
+// The first broken line is named by file and position, in one line.
+const brokenFlow = ["appId: x", "---", "- inputText: \"a: b\"", "    waitToSettleTimeoutMs: 1000"].join("\n");
+await assert.rejects(assertFlowParses("dist/ui-snapshots/ios/light.yaml", brokenFlow), (error) => {
+  assert.ok(error instanceof Error && !error.message.includes("\n"), "the parse error is one line");
+  assert.ok(error.message.startsWith("The generated flow does not parse: dist/ui-snapshots/ios/light.yaml:4:"), error.message);
+  return true;
+}, "a broken flow throws at its line");
 
 const all = { targets: ["phone", "tablet"], orientations: null, screens: null, scope: "full", themes: ["light"], textSizes: ["default"], motion: false, perf: 0 };
 const defaults = planShards(all);
