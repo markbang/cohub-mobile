@@ -62,11 +62,11 @@ assert.equal(typedCommands.filter((command) => command.inputText !== undefined).
 assert.equal(typedCommands[typeAt].inputText, typedText, "the typed command carries the message exactly");
 assert.ok(typedCommands.findIndex((command) => command.tapOn?.id === "chat-composer-input") < typeAt, "the composer is tapped before the message is typed");
 assert.deepEqual(typedCommands[typeAt + 1], { waitForAnimationToEnd: { timeout: 1000 } }, "the typed message is followed by its own settle");
-assert.doesNotThrow(() => assertFlowParses("chat-keyboard-typed.yaml", typedFlow), "a flow with a typed message parses");
+await assertFlowParses("chat-keyboard-typed.yaml", typedFlow);
 
 // The first broken line is named by file and position, in one line.
 const brokenFlow = ["appId: x", "---", "- inputText: \"a: b\"", "    waitToSettleTimeoutMs: 1000"].join("\n");
-assert.throws(() => assertFlowParses("dist/ui-snapshots/ios/light.yaml", brokenFlow), (error) => {
+await assert.rejects(assertFlowParses("dist/ui-snapshots/ios/light.yaml", brokenFlow), (error) => {
   assert.ok(error instanceof Error && !error.message.includes("\n"), "the parse error is one line");
   assert.ok(error.message.startsWith("The generated flow does not parse: dist/ui-snapshots/ios/light.yaml:4:"), error.message);
   return true;

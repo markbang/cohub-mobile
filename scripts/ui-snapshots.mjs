@@ -2,7 +2,6 @@ import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { parseAllDocuments } from "yaml";
 import { commandLists, exportFrames, frameTimes, motionOnset, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
 
 /**
@@ -626,15 +625,17 @@ function yamlString(value) {
 }
 
 /** Throws one line naming the file and position of the first YAML error, so a bad flow stops the run before Maestro reads it. */
-export function assertFlowParses(flowPath, text) {
+export async function assertFlowParses(flowPath, text) {
+  // Loaded on first use: boot, redact and merge run before or without node_modules, and only capture writes flows.
+  const { parseAllDocuments } = await import("yaml");
   const error = parseAllDocuments(text).flatMap((document) => document.errors)[0];
   if (!error) return;
   const position = error.linePos?.[0] ? `:${error.linePos[0].line}:${error.linePos[0].col}` : "";
   throw new Error(`The generated flow does not parse: ${flowPath}${position} ${error.message.split("\n")[0]}`);
 }
 
-function writeFlow(flowPath, text) {
-  assertFlowParses(flowPath, text);
+async function writeFlow(flowPath, text) {
+  await assertFlowParses(flowPath, text);
   writeFileSync(flowPath, text);
 }
 
@@ -1319,7 +1320,7 @@ async function captureCell(options, session, missing) {
         device.setTheme(theme);
         const name = `${options.target === "phone" ? theme : `${group}-${theme}`}${suffix}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFlow(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
+        await writeFlow(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1339,7 +1340,7 @@ async function captureCell(options, session, missing) {
       device.setTheme("light");
       device.setOrientation("portrait");
       const flowPath = join(options.out, "tablet-flow.yaml");
-      writeFlow(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
+      await writeFlow(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
       await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1356,7 +1357,7 @@ async function captureCell(options, session, missing) {
         device.setTheme(theme);
         const name = `motion-${theme}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFlow(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
+        await writeFlow(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1417,7 +1418,7 @@ async function capturePerf(options, device, session) {
   device.setOrientation("portrait");
   device.setAnimations(true);
   const flowPath = join(options.out, "perf.yaml");
-  writeFlow(flowPath, buildPerfFlow({ platform: options.platform, session, target: options.target }));
+  await writeFlow(flowPath, buildPerfFlow({ platform: options.platform, session, target: options.target }));
   const runs = [];
   try {
     for (let index = 1; index <= options.perf; index += 1) {
