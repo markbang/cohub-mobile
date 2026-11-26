@@ -104,6 +104,8 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 
 屏幕列表是 `scripts/ui-snapshots.mjs` 中的 `SCREENS`，它把每个名称映射到一个深层链接和可选的点击。要截取新屏幕，在那里添加一个条目。
 
+`EVIDENCE_SCREENS` 收录只在点名时才截的屏幕，核心集和全量集都不包含它们，因此任务数仍在 GitHub 五个并发 macOS 任务的上限内。`tab-bar-a` 和 `tab-bar-b` 在 Chats 标签页里绘制 `src/components/TabBarFixtureList.tsx`（`app/(tabs)/(chats)/tab-bar.tsx`，`?shift=a|b`）：固定 40 行，每行两条 17 pt 半粗文字，行高等于拟合可用的那一条带，不画滚动视图，所以标签栏保持展开。行从窗口底边定位：栏的内外边缘是在 iOS 27 手机 3× 下量得的（2622 px 窗口中上沿 2374 px、下沿 2558 px），可用带从上沿下 9 pt 到下沿上 20 pt，再往下会被透镜镜像。`a` 让一行正好从带的顶部开始，`b` 再上移半行，两张来自两次独立的冷启动。`tab-bar-ref-a` 和 `tab-bar-ref-b` 在 `app/debug/tab-bar.tsx` 上以同样的偏移画同样的行，那条路由没有标签栏，作为清晰参照。
+
 `app/debug/ui.tsx` 是 UI 目录，展示每个共享原语。`?section=` 将其限制为一个部分，使每一部分都能放进一张截图。添加或改造共享组件时，把它加入目录。
 
 `app/debug/chat.tsx` 在固定的会话上渲染 Chat 屏幕的标题、原生时间线和编辑器（`?fixture=conversation|tools|long|states|media|stream|bot`，其中 `bot` 是 Bot 的页面），因此无需账号数据即可比较 Chat 布局。`&native=0` 绘制不支持原生时间线的二进制所使用的 JS 列表；只有该列表会显示 `stream` 种子中正在进行的回复。`&draft=<text>` 设置编辑器，与 Chat 保存的草稿相同（`chat-draft` 屏幕）。`chat-draft-long` 设置一个在 402 pt 下约四行换行的草稿，`split-chat-draft-long` 则是 820 pt 下约六行的草稿，用于检验编辑器的两行布局。`&arrive=<n>` 在屏幕打开两秒后追加 n 条回复，模拟用户向上阅读时新回复到达；`chat-arrival` 屏幕会等它们出现（一个可访问的 `arrivals <n>` 标签）后再滚动。`chat-scrolled`、`chat-arrival`、`chat-keyboard` 和 `chat-keyboard-drag` 屏幕覆盖跳到最新和键盘。`app/debug/bot-list.tsx` 渲染 Bots 视图中固定 Bot 的行。

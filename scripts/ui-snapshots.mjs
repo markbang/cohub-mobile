@@ -377,12 +377,17 @@ function splitByBudget(items, seconds) {
  * The screens each text size captures for one target, as `{ textSize, names }` in catalog order. `screens` (--screens)
  * names them at every requested size. Otherwise core takes its CORE table and full takes the whole catalog at each size.
  */
+/** The screens one target can capture: its catalog, and the evidence screens a run names. */
+export function screenCatalog(target) {
+  return target === "tablet" ? TABLET_SCREENS : [...SCREENS, ...EVIDENCE_SCREENS];
+}
+
 function cellsFor({ target, scope, screens, textSizes }) {
   const catalog = (target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name);
   const inCatalog = (names) => catalog.filter((name) => names.includes(name));
   // A selection may name an evidence screen, which the core and full sets leave out.
   if (screens) {
-    const named = [...catalog, ...EVIDENCE_SCREENS.map((screen) => screen.name)].filter((name) => screens.includes(name));
+    const named = screenCatalog(target).map((screen) => screen.name).filter((name) => screens.includes(name));
     return (textSizes ?? ["default"]).map((textSize) => ({ textSize, names: named }));
   }
   if (scope === "core") {
@@ -518,7 +523,7 @@ function checkSelection(options) {
   if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
   for (const theme of options.motionThemes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown motion theme "${theme}". Use light and/or dark.`);
   // A selection without a part names screens and interactions alike; `--part motion` names interactions only.
-  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS, ...EVIDENCE_SCREENS]), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
+  const known = new Set([...(options.part === "motion" ? [] : screenCatalog("phone").concat(screenCatalog("tablet"))), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
   for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen or interaction "${name}". Known: ${[...known].join(", ")}.`);
 }
 
@@ -1256,8 +1261,13 @@ function partsFor(options, screens) {
 
 /** One device at one text size: the screens it names in each orientation and theme, then the slices the target has beyond them. */
 async function captureCell(options, session, missing) {
-  const catalog = options.target === "tablet" ? TABLET_SCREENS : SCREENS;
-  const screens = catalog.filter((screen) => options.names.includes(screen.name));
+  const screens = screenCatalog(options.target).filter((screen) => options.names.includes(screen.name));
+  // A planned name the catalog cannot resolve captures nothing, and the run would report a green capture of zero
+  // screens: fail on it instead.
+  if (screens.length !== options.names.length) {
+    const unknown = options.names.filter((name) => !screens.some((screen) => screen.name === name));
+    throw new Error(`The ${options.target} plan names screens its catalog does not hold: ${unknown.join(", ")}.`);
+  }
   const motions = motionsNamed(options.screens);
   const parts = partsFor(options, screens);
   // The split flows and the motion recordings run once, at the default text size.
