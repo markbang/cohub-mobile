@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { parseAllDocuments } from "yaml";
 import { commandLists, exportFrames, frameTimes, motionOnset, recordingClock, writeSidecar } from "./ui-snapshots-frames.mjs";
 
 /**
@@ -95,6 +96,9 @@ const LONG_DRAFT = "The draft keeps its place while the timeline scrolls, and th
 const LONG_DRAFT_PHONE = encodeURIComponent(LONG_DRAFT.repeat(2).trim());
 const LONG_DRAFT_TABLET = encodeURIComponent(LONG_DRAFT.repeat(3).trim());
 
+// Typed into the composer by a `type` step, so it wraps over several lines as it grows. The colon checks the quoting.
+const TYPED_DRAFT = "Typing a longer message on purpose, to see the composer wrap it over several lines: each new word should land on the line below once the current one is full, and the send button should stay where it is.";
+
 // The striped Chat's title, as the Chats list and the Chat's header show it (src/data/fixtures/session.ts).
 const STRIPES_TITLE = "Stripe test pattern";
 // A Chats row's label carries its preview too, so the row is matched as a pattern.
@@ -179,6 +183,8 @@ export const EVIDENCE_SCREENS = [
   { name: "tab-bar-b", ready: "tab bar fixture · b", link: "cohub://tab-bar?shift=b", fresh: true },
   { name: "tab-bar-ref-a", ready: "tab bar fixture · a", link: "cohub://debug/tab-bar?shift=a", fresh: true },
   { name: "tab-bar-ref-b", ready: "tab bar fixture · b", link: "cohub://debug/tab-bar?shift=b", fresh: true },
+  // Types a long message into the composer, rather than seeding it as a draft, so the wrap is shot as the text grows.
+  { name: "chat-keyboard-typed", ready: "Fix the Android sheet height", link: "cohub://debug/chat?fixture=conversation", steps: [{ tapOnId: "chat-composer-input" }, { type: TYPED_DRAFT }, { settle: true }] },
 ];
 
 // The left pane's first and a later Chat or Space row in a split window.
@@ -619,6 +625,19 @@ function yamlString(value) {
   return JSON.stringify(value);
 }
 
+/** Throws one line naming the file and position of the first YAML error, so a bad flow stops the run before Maestro reads it. */
+export function assertFlowParses(flowPath, text) {
+  const error = parseAllDocuments(text).flatMap((document) => document.errors)[0];
+  if (!error) return;
+  const position = error.linePos?.[0] ? `:${error.linePos[0].line}:${error.linePos[0].col}` : "";
+  throw new Error(`The generated flow does not parse: ${flowPath}${position} ${error.message.split("\n")[0]}`);
+}
+
+function writeFlow(flowPath, text) {
+  assertFlowParses(flowPath, text);
+  writeFileSync(flowPath, text);
+}
+
 const MAESTRO_ORIENTATION = { portrait: "PORTRAIT", landscape: "LANDSCAPE_LEFT" };
 
 /**
@@ -760,6 +779,11 @@ function pushSteps(lines, platform, steps = []) {
     // A pause with nothing to wait for, as a keyboard needs after a tap before it is drawn.
     else if (step.settle) lines.push("- extendedWaitUntil:", "    visible: \"^__settle__$\"", "    timeout: 2500", "    optional: true");
     else if (step.tapOnId) lines.push("- tapOn:", `    id: ${yamlString(step.tapOnId)}`, SETTLE);
+    // Typed text is a scalar command, so its settle is a separate command: keys indented under a scalar do not parse.
+    else if (step.type !== undefined) {
+      lines.push(`- inputText: ${yamlString(step.type)}`, "- waitForAnimationToEnd:", "    timeout: 1000");
+      continue;
+    }
     // The root link selects Chats on iPad, where a minimized system tab bar can hide the label.
     else if (step.chatsTab && platform === "ios") lines.push("- openLink: \"cohub:///\"", "- extendedWaitUntil:", "    visible: \".*Chats.*\"", "    timeout: 20000");
     else if (step.chatsTab) lines.push("- tapOn:", "    text: \"Chats\"", SETTLE);
@@ -1295,7 +1319,7 @@ async function captureCell(options, session, missing) {
         device.setTheme(theme);
         const name = `${options.target === "phone" ? theme : `${group}-${theme}`}${suffix}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFileSync(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
+        writeFlow(flowPath, buildFlow({ platform: options.platform, session, screens, target: options.target, orientation }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1315,7 +1339,7 @@ async function captureCell(options, session, missing) {
       device.setTheme("light");
       device.setOrientation("portrait");
       const flowPath = join(options.out, "tablet-flow.yaml");
-      writeFileSync(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
+      writeFlow(flowPath, buildTabletFlow({ platform: options.platform, session, maestroOrientation: device.maestroOrientation }));
       const testOutput = join(options.out, "maestro-output", "tablet-flow");
       rmSync(testOutput, { recursive: true, force: true });
       await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1332,7 +1356,7 @@ async function captureCell(options, session, missing) {
         device.setTheme(theme);
         const name = `motion-${theme}`;
         const flowPath = join(options.out, `${name}.yaml`);
-        writeFileSync(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
+        writeFlow(flowPath, buildMotionFlow({ platform: options.platform, session, motions }));
         const testOutput = join(options.out, "maestro-output", name);
         rmSync(testOutput, { recursive: true, force: true });
         await runMaestro({ device: device.device, flowPath, out: options.out, testOutput, offline: options.offline });
@@ -1393,7 +1417,7 @@ async function capturePerf(options, device, session) {
   device.setOrientation("portrait");
   device.setAnimations(true);
   const flowPath = join(options.out, "perf.yaml");
-  writeFileSync(flowPath, buildPerfFlow({ platform: options.platform, session, target: options.target }));
+  writeFlow(flowPath, buildPerfFlow({ platform: options.platform, session, target: options.target }));
   const runs = [];
   try {
     for (let index = 1; index <= options.perf; index += 1) {
