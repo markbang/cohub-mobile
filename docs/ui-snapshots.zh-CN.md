@@ -104,7 +104,7 @@ iOS 驱动的启动会单独重试：Maestro 报告未就绪（`iOS driver not r
 
 屏幕列表是 `scripts/ui-snapshots.mjs` 中的 `SCREENS`，它把每个名称映射到一个深层链接和可选的点击。要截取新屏幕，在那里添加一个条目。
 
-`EVIDENCE_SCREENS` 收录只在点名时才截的屏幕，核心集和全量集都不包含它们，因此任务数仍在 GitHub 五个并发 macOS 任务的上限内。`tab-bar-a` 和 `tab-bar-b` 在 Chats 标签页里绘制 `src/components/TabBarFixtureList.tsx`（`app/(tabs)/(chats)/tab-bar.tsx`，`?shift=a|b`）：固定 40 行，每行两条 17 pt 半粗文字，行高等于拟合可用的那一条带，不画滚动视图，所以标签栏保持展开。行从窗口底边定位：栏的内外边缘是在 iOS 27 手机 3× 下量得的（2622 px 窗口中上沿 2374 px、下沿 2558 px），可用带从上沿下 9 pt 到下沿上 20 pt，再往下会被透镜镜像。`a` 让一行正好从带的顶部开始，`b` 再上移四分之一行（半行会正好落在同一条行网格上），两张来自两次独立的冷启动。`tab-bar-ref-a` 和 `tab-bar-ref-b` 在 `app/debug/tab-bar.tsx` 上以同样的偏移画同样的行，那条路由没有标签栏，作为清晰参照。
+`EVIDENCE_SCREENS` 收录只在点名时才截的屏幕，核心集和全量集都不包含它们，因此任务数仍在 GitHub 五个并发 macOS 任务的上限内。`tab-bar-a` 和 `tab-bar-b` 在 Chats 标签页里绘制 `src/components/TabBarFixtureList.tsx`（`app/(tabs)/(chats)/tab-bar.tsx`，`?shift=a|b`）：固定 16 行，每行两条 17 pt 半粗文字，行高等于拟合可用的那一条带，不画滚动视图，所以标签栏保持展开。行从窗口底边定位：栏的内外边缘是在 iOS 27 手机 3× 下量得的（2622 px 窗口中上沿 2374 px、下沿 2558 px），可用带从上沿下 9 pt 到下沿上 20 pt，再往下会被透镜镜像。`a` 让一行正好从带的顶部开始，`b` 再上移四分之一行（半行会正好落在同一条行网格上），两张来自两次独立的冷启动。`tab-bar-ref-a` 和 `tab-bar-ref-b` 在 `app/debug/tab-bar.tsx` 上以同样的偏移画同样的行，那条路由没有标签栏，作为清晰参照。
 
 `app/debug/ui.tsx` 是 UI 目录，展示每个共享原语。`?section=` 将其限制为一个部分，使每一部分都能放进一张截图。添加或改造共享组件时，把它加入目录。
 
