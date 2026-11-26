@@ -610,10 +610,12 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
   const estimate = (text: string, fullRow: boolean) => estimateComposerContentHeight(text, lineHeight, textPadding, composerColumnsPerLine(fontScale, fullRow));
   // The native measurement includes the field's vertical padding when the field was drawn in one row; in two rows the padding sits outside the input.
   const nativeHeight = contentHeight > 0 ? contentHeight + (wrapped ? textPadding : 0) : 0;
-  const typed = userEdited && value === lastUserText && nativeHeight > 0;
-  // The layout's height holds only for the text and the rows it was laid out in.
-  const laidOutHeight = laidOutText && laidOutText.text === value && laidOutText.twoRows === wrapped && laidOutText.lineHeight === lineHeight ? laidOutText.height : null;
-  const textMeasure = composerTextMeasure({ typed, nativeHeight, layoutHeight: laidOutHeight, estimate: { inline: estimate(value, false), wide: estimate(value, true) } });
+  const typed = userEdited && value === lastUserText;
+  const ios = Platform.OS === "ios";
+  // Text.onLayout only fires when its frame changes. Keep its height between iOS keystrokes
+  // on the same line; a soft wrap or deletion changes the frame and reports the new height.
+  const laidOutHeight = laidOutText && ((ios && typed) || laidOutText.text === value) && laidOutText.twoRows === wrapped && laidOutText.lineHeight === lineHeight ? laidOutText.height : null;
+  const textMeasure = composerTextMeasure({ typed, ios, nativeHeight, layoutHeight: laidOutHeight, estimate: { inline: estimate(value, false), wide: estimate(value, true) } });
   const placeholderMeasure = { inline: estimate(placeholderText, false), wide: estimate(placeholderText, true) };
   const layout = getComposerLayout({
     text: value,
@@ -668,8 +670,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
                 two-row padding and clip would then re-create the tree around the focused field, dropping the keyboard. */}
             <View collapsable={false} style={layout.twoRows ? { paddingVertical: textPadding / 2 } : undefined}>
               <View collapsable={false} style={textClip}>
-                {/* Hidden, at the input's width and font: it reports the height a value set from JS reaches, which the input does not report.
-                    Always mounted, so the input's sibling index does not change when the first character arrives. */}
+                {/* Hidden at the field's width and font; always mounted to keep the focused input's sibling index stable. */}
                 <Text
                   pointerEvents="none"
                   accessibilityElementsHidden

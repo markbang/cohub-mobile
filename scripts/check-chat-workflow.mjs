@@ -4109,11 +4109,16 @@ assert.equal(getComposerLayout({ ...composerLayoutInput, text: longDraft, measur
 const jsDraft = "word ".repeat(20).trim();
 const jsDraftEstimate = fitMeasure(jsDraft, 1);
 assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: jsDraftEstimate }).height, 64, "the estimate counts two wide lines for the JS-set draft");
-const jsDraftLaidOut = composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: 3 * 22 + 20, estimate: jsDraftEstimate });
+const jsDraftLaidOut = composerTextMeasure({ typed: false, ios: true, nativeHeight: 0, layoutHeight: 3 * 22 + 20, estimate: jsDraftEstimate });
 assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: jsDraftLaidOut }).height, 86, "a JS-set draft shows the three lines its text layout measured, not the two the estimate counts");
-assert.deepEqual(composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: null, estimate: jsDraftEstimate }), jsDraftEstimate, "before its first layout report a JS-set draft is the estimate");
-assert.deepEqual(composerTextMeasure({ typed: true, nativeHeight: 40, layoutHeight: 86, estimate: jsDraftEstimate }), { inline: 40, wide: 40 }, "typed text keeps its native measurement");
-assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: composerTextMeasure({ typed: false, nativeHeight: 0, layoutHeight: 5 * 22 + 20, estimate: jsDraftEstimate }) }).scrollEnabled, true, "a laid-out draft one line past the collapsed cap scrolls to its end");
+assert.deepEqual(composerTextMeasure({ typed: false, ios: true, nativeHeight: 0, layoutHeight: null, estimate: jsDraftEstimate }), jsDraftEstimate, "before its first layout report a JS-set draft is the estimate");
+assert.deepEqual(composerTextMeasure({ typed: true, ios: false, nativeHeight: 40, layoutHeight: 86, estimate: jsDraftEstimate }), { inline: 40, wide: 40 }, "Android typing keeps its native measurement");
+for (const lines of [2, 3, 4, 5]) {
+  const measure = composerTextMeasure({ typed: true, ios: true, nativeHeight: 42, layoutHeight: lines * 22 + 20, estimate: jsDraftEstimate });
+  const layout = getComposerLayout({ ...composerLayoutInput, text: "字".repeat(30), wrapped: lines > 2, measure });
+  assert.deepEqual([layout.twoRows, layout.height, layout.scrollEnabled], [true, Math.min(lines, 4) * 22 + 20, lines > 4], `iOS typing at ${lines} soft-wrapped lines with a stale one-line input frame`);
+}
+assert.equal(getComposerLayout({ ...composerLayoutInput, text: jsDraft, measure: composerTextMeasure({ typed: false, ios: true, nativeHeight: 0, layoutHeight: 5 * 22 + 20, estimate: jsDraftEstimate }) }).scrollEnabled, true, "a laid-out draft one line past the collapsed cap scrolls to its end");
 const largeMetrics = { lineHeight: 44, textPadding: 40 };
 const largeDraft = (text) => ({ ...composerLayoutInput, ...largeMetrics, text, measure: fitMeasure(text, 2) });
 assert.deepEqual(getComposerLayout(largeDraft("Looks good, send it")), {
