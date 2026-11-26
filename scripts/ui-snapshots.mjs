@@ -168,6 +168,19 @@ export const SCREENS = [
   { name: "chat-stripes", ready: "Appearance", link: "cohub://settings", fresh: true, steps: [{ tapOn: "Chats" }, { scrollTo: STRIPES_TITLE }, { tapOn: STRIPES_ROW }, { waitFor: "288 × 160" }, { hold: 2500 }] },
 ];
 
+/**
+ * Screens outside the core and full sets: evidence a run asks for by name (`--screens`). They capture a fixture
+ * the app already ships, not a screen a run should visit by default, so the plan stays inside GitHub's five-job
+ * cap. The tab bar's glass is fitted from a dense fixed list, shot from two cold launches at two content shifts,
+ * then with no bar over it: `/debug/tab-bar` draws the same rows in the same places.
+ */
+export const EVIDENCE_SCREENS = [
+  { name: "tab-bar-a", ready: "tab bar fixture · a", link: "cohub://tab-bar?shift=a", fresh: true },
+  { name: "tab-bar-b", ready: "tab bar fixture · b", link: "cohub://tab-bar?shift=b", fresh: true },
+  { name: "tab-bar-ref-a", ready: "tab bar fixture · a", link: "cohub://debug/tab-bar?shift=a", fresh: true },
+  { name: "tab-bar-ref-b", ready: "tab bar fixture · b", link: "cohub://debug/tab-bar?shift=b", fresh: true },
+];
+
 // The left pane's first and a later Chat or Space row in a split window.
 const LEFT_FIRST_ROW = { ios: "12%, 35%", android: "12%, 35%" };
 const LEFT_SECOND_ROW = { ios: "12%, 44%", android: "12%, 44%" };
@@ -367,7 +380,11 @@ function splitByBudget(items, seconds) {
 function cellsFor({ target, scope, screens, textSizes }) {
   const catalog = (target === "tablet" ? TABLET_SCREENS : SCREENS).map((screen) => screen.name);
   const inCatalog = (names) => catalog.filter((name) => names.includes(name));
-  if (screens) return (textSizes ?? ["default"]).map((textSize) => ({ textSize, names: inCatalog(screens) }));
+  // A selection may name an evidence screen, which the core and full sets leave out.
+  if (screens) {
+    const named = [...catalog, ...EVIDENCE_SCREENS.map((screen) => screen.name)].filter((name) => screens.includes(name));
+    return (textSizes ?? ["default"]).map((textSize) => ({ textSize, names: named }));
+  }
   if (scope === "core") {
     return Object.entries(CORE[target]).filter(([textSize]) => !textSizes || textSizes.includes(textSize)).map(([textSize, names]) => ({ textSize, names: inCatalog(names) }));
   }
@@ -501,7 +518,7 @@ function checkSelection(options) {
   if (options.part === "motion" && options.targets.some((target) => target !== "phone")) throw new Error("--part motion is for --target phone.");
   for (const theme of options.motionThemes) if (theme !== "light" && theme !== "dark") throw new Error(`Unknown motion theme "${theme}". Use light and/or dark.`);
   // A selection without a part names screens and interactions alike; `--part motion` names interactions only.
-  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS]), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
+  const known = new Set([...(options.part === "motion" ? [] : [...SCREENS, ...TABLET_SCREENS, ...EVIDENCE_SCREENS]), ...(!options.part || options.part === "motion" ? MOTIONS : [])].map((item) => item.name));
   for (const name of options.screens ?? []) if (!known.has(name)) throw new Error(`Unknown screen or interaction "${name}". Known: ${[...known].join(", ")}.`);
 }
 

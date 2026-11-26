@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { parse, parseAllDocuments } from "yaml";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { buildFlow, buildMotionFlow, buildTabletFlow, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
+import { buildFlow, buildMotionFlow, buildTabletFlow, EVIDENCE_SCREENS, expectedOutputs, launchMaestro, MOTIONS, planShards, runFlowWithRetries, SCREENS, TABLET_SCREENS } from "./ui-snapshots.mjs";
 import { clampToLastFrame, frameTimes, LAST_STILL_GUARD_SECONDS, lastTimeIn, recordingClock } from "./ui-snapshots-frames.mjs";
 
 // iOS asks "Open in Cohub?" once per simulator, on the flow's first link, and the question can arrive after the
@@ -68,6 +68,9 @@ assert.ok(!defaults.some((entry) => entry.part === "motion" || entry.part === "p
 
 const single = planShards({ ...all, targets: ["phone"], screens: ["catalog-rows"] });
 assert.deepEqual(single.map((entry) => [entry.artifact, entry.part, entry.screens]), [["ui-snapshots-ios-0", "screens", ["catalog-rows"]]], "one screen on one target is one job");
+const evidence = planShards({ ...all, targets: ["phone"], screens: EVIDENCE_SCREENS.map((screen) => screen.name), themes: ["light", "dark"] });
+assert.deepEqual(evidence.flatMap((entry) => entry.screens), EVIDENCE_SCREENS.map((screen) => screen.name), "naming an evidence screen plans it, once each");
+assert.ok(!defaults.some((entry) => entry.screens?.some((name) => EVIDENCE_SCREENS.some((screen) => screen.name === name))), "the full scope leaves the evidence screens out, so the plan stays at five jobs");
 const landscape = planShards({ ...all, targets: ["tablet"], orientations: ["landscape"], screens: ["split-space"] });
 assert.deepEqual(landscape.map((entry) => [entry.orientations.join("/"), entry.part, entry.screens]), [["landscape", "screens", ["split-space"]]], "a tablet orientation with one screen has no flow job");
 assert.deepEqual(planShards({ ...all, targets: ["phone"], screens: ["split-space"] }), [], "a run naming only tablet screens has no phone job");
