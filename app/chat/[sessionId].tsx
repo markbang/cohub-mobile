@@ -77,7 +77,7 @@ import { chatThreadPlaceholder, failedSendDraft, failedSendMessage, isFailedSend
 import { useAppTheme, typography } from "@/src/theme";
 import { BOT_CONTEXT_WINDOW, config } from "@/src/config";
 import { useTranslation } from "@/src/i18n";
-import { formatThinkingLevel, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
+import { firstCatalogModel, formatThinkingLevel, getDefaultThinkingLevel, getSupportedThinkingLevels, modelAvailabilityLevel, requestedThinkingLevel } from "@/src/model-catalog";
 import { useNativeVoiceInput, voiceInputAvailable } from "@/src/platform/native-voice-input";
 import { GlassBackdrop, GlassBackground } from "@/src/ui/Glass";
 import { AppIcon, AttachmentChip, ComposerInput, ConnectionBanner, DataError, FIELD_INPUT_CLASS, TopBar, IconButton, ListEdgeLoader, Loader, LoadingState, PrimaryButton, Screen, type ComposerInputMeasurement, type IconName, Mascot } from "@/src/ui";
@@ -435,7 +435,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const [pendingFollowupAction, setPendingFollowupAction] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ title: string; message: string } | null>(null);
   const [selectedHarness, setSelectedHarness] = useState<RuntimeHarness | null>(null);
-  const [localModelsByHarness, setLocalModelsByHarness] = useState<Partial<Record<LocalHarness, ChatModelSelection | null>>>({});
+  const [localModelsByHarness, setLocalModelsByHarness] = useState<Partial<Record<LocalHarness, ChatModelSelection>>>({});
   const [selectedModel, setSelectedModel] = useState<ChatModelSelection | null>(null);
   const [modelOverride, setModelOverride] = useState(false);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(null);
@@ -798,11 +798,13 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
     const name = base ? models.find((item) => item.provider === base.provider && item.id === base.id)?.model?.name : null;
     return base ? { ...base, ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}) } : null;
   }, [botLastTurn, botModel, models]);
+  // No chosen or recorded model: Cohub runs the catalog's first visible model, a local Harness its own default, as on web.
+  const defaultModel = useMemo(() => composerHarness === "cohub" ? firstCatalogModel(models) : defaultRuntimeModel(runtime.status, composerHarness), [composerHarness, models, runtime.status]);
   const activeModel = composerHarness === "cohub"
-    ? (bot ? effectiveBotModel ?? recordedModel : modelOverride ? selectedModel : recordedModel)
-    : (Object.hasOwn(localModelsByHarness, composerHarness) ? localModelsByHarness[composerHarness] ?? null : recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null);
+    ? (bot ? effectiveBotModel ?? recordedModel : modelOverride ? selectedModel : recordedModel) ?? defaultModel
+    : (localModelsByHarness[composerHarness] ?? (recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null) ?? defaultModel);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
-  const modelLabel = activeModel?.name || activeModel?.id || (composerHarness === "cohub" ? t("chat.model.automatic") : t("model.runtimeAutomatic"));
+  const modelLabel = activeModel?.name || activeModel?.id;
   const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
   // Unsent choices per Harness; once sent, the Turn's own record shows what ran.
   const [approvalChoices, setApprovalChoices] = useState<Partial<Record<RuntimeHarness, ApprovalMode>>>({});
@@ -1941,7 +1943,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
         <GlassBackdrop target={screenBlurTarget}><MenuPresence open={attachmentMenuOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => closeOverlay("attachments")} onCamera={() => void takePhoto()} onPhotos={() => void pickPhotos()} onFile={() => void pickAttachments()} /></MenuPresence></GlassBackdrop>
         <TurnNavigatorSheet visible={turnNavigatorOpen} turns={view.turnIndex} currentSequence={currentTurnSequence} loading={view.turnIndexLoading} loadingSequence={loadingSequence} onClose={() => closeOverlay("turns")} onJump={(sequence) => handleTurnJump(sequence)} onRetry={() => void loadTurnIndex(sessionId, { force: true }).catch(() => undefined)} />
         <GlassBackdrop target={screenBlurTarget}>{!bot && runtime.status?.kind === "local" ? <HarnessPicker anchorRef={composerMenuSourceRef} value={composerHarness} status={runtime.status} execution={executionMenu} open={harnessMenuOpen} onClose={() => closeOverlay("harness")} onRefresh={() => void runtime.refresh()} onSelect={(harness) => { setSelectedHarness(harness); closeOverlay("harness"); }} /> : null}
-        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={bot ? effectiveBotModel : modelOverride ? selectedModel : recordedModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { closeOverlay("model"); if (bot) { void setBotModel(model).catch((error: unknown) => showToast({ title: t("bots.settings.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" })); return; } setSelectedModel(model); setModelOverride(true); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} automaticLabel={t("model.runtimeAutomatic")} automaticDetail={t("model.runtimeAutomaticDetail")} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
+        <MenuPresence open={modelSelectorOpen}>{composerHarness === "cohub" ? <ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { closeOverlay("model"); if (bot) { void setBotModel(model).catch((error: unknown) => showToast({ title: t("bots.settings.saveFailed"), message: error instanceof Error ? error.message : undefined, tone: "danger" })); return; } setSelectedModel(model); setModelOverride(true); }} /> : <ModelSelectorMenu anchorRef={composerMenuSourceRef} title={t("model.runtimeTitle", { harness: harnessLabel(composerHarness) })} models={runtimeCatalogModels(runtime.status, composerHarness)} loading={runtime.loading} error={runtime.error} currentModel={activeModel} onClose={() => closeOverlay("model")} onRetry={() => void runtime.refresh()} onSelect={(model) => { setLocalModelsByHarness((current) => ({ ...current, [composerHarness]: model })); closeOverlay("model"); }} />}</MenuPresence></GlassBackdrop>
         <NoticeSheet notice={notice} fallbackTitle={t("common.notice")} onClose={() => setNotice(null)} testID="chat-notice-sheet" />
         <Modal visible={renameOpen} transparent animationType="fade" onRequestClose={() => closeOverlay("rename")}>
           {/* A Modal is its own window, so the core avoider (keyboard events) rather than the app-level one. */}
@@ -2040,6 +2042,14 @@ function recordedChatModel(turnsNewestFirst: readonly SessionTurnRecord[], messa
 
 function runtimeCatalogModels(status: SpaceRuntimeStatus | null, harness: RuntimeHarness): ModelCatalogEntry[] {
   return localModelsForHarness(status, harness).map(({ provider, id, ...model }) => ({ provider, id, model } as ModelCatalogEntry));
+}
+
+/** The Harness's default model at its default level: what web runs when a request names none. */
+function defaultRuntimeModel(status: SpaceRuntimeStatus | null, harness: RuntimeHarness): ChatModelSelection | null {
+  const model = runtimeModelFor(status, harness, null);
+  const entry = model ? runtimeCatalogModels(status, harness).find((item) => item.provider === model.provider && item.id === model.id) : null;
+  if (!model || !entry) return null;
+  return { provider: model.provider, id: model.id, ...(model.name ? { name: model.name } : {}), ...(getSupportedThinkingLevels(entry).length > 1 ? { thinkingLevel: getDefaultThinkingLevel(entry) } : {}) };
 }
 
 function recordedRuntimeModel(turn: { provider?: string | null; model?: string | null; meta?: unknown }, harness: RuntimeHarness): ChatModelSelection {

@@ -635,7 +635,7 @@ export function ComposerInput({ value, onChangeText, onSend, onStop, onAttach, o
     setAutoExpandedFor(value);
     setExpanded(true);
   }
-  const resolvedModelLabel = modelLabel ?? t("ui.composer.modelAutomatic");
+  const resolvedModelLabel = modelLabel ?? t("model.title");
   const modelStatusLabel = modelStatus === "available" ? t("ui.modelStatus.available") : modelStatus === "degraded" ? t("ui.modelStatus.degraded") : modelStatus === "outage" ? t("ui.modelStatus.outage") : t("ui.modelStatus.unknown");
   // One line sits centred in the capsule; a line that wraps takes the layout's growing height.
   const singleLine = !layout.twoRows;

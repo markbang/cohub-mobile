@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry, ModelStatusEntry } from "@neta-art/cohub";
+import type { ChatModelSelection } from "@/src/data/types";
 import { translate } from "@/src/i18n/core";
 
 export type ModelThinkingLevel =
@@ -34,6 +35,12 @@ export type ModelAvailabilityLevel =
 export function modelDisplayName(entry: ModelCatalogEntry) {
 	const value = entry.model?.name;
 	return typeof value === "string" && value.trim() ? value.trim() : entry.id;
+}
+
+/** What a Cohub Chat runs with before a model is chosen: the first visible model of the catalog, as on web. */
+export function firstCatalogModel(models: readonly ModelCatalogEntry[]): ChatModelSelection | null {
+	const entry = models.find((item) => item.model?.hidden !== true);
+	return entry ? { provider: entry.provider, id: entry.id, name: modelDisplayName(entry) } : null;
 }
 
 export function modelContextLabel(entry: ModelCatalogEntry) {

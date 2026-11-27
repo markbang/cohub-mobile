@@ -31,11 +31,9 @@ export type ModelSelectorMenuProps = {
   modelStatusLoading?: boolean;
   currentModel: ChatModelSelection | null;
   title?: string;
-  automaticLabel?: string;
-  automaticDetail?: string;
   onClose: () => void;
   onRetry: () => void;
-  onSelect: (model: ChatModelSelection | null) => void;
+  onSelect: (model: ChatModelSelection) => void;
 };
 
 function statusColor(level: ModelAvailabilityLevel, theme: ReturnType<typeof useAppTheme>) {
@@ -76,7 +74,7 @@ function makeSelection(entry: ModelCatalogEntry, level?: ChatModelSelection["thi
   return { provider: entry.provider, id: entry.id, name: modelDisplayName(entry), ...(level ? { thinkingLevel: level } : {}) };
 }
 
-export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStatus = null, modelStatusLoading = false, currentModel, title, automaticLabel, automaticDetail, onClose, onRetry, onSelect }: ModelSelectorMenuProps) {
+export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStatus = null, modelStatusLoading = false, currentModel, title, onClose, onRetry, onSelect }: ModelSelectorMenuProps) {
   const theme = useAppTheme();
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
@@ -86,7 +84,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
     const exact = query.trim();
     const needle = exact.toLowerCase();
     // Hidden models stay resolvable by an exact id (mirrors the web picker), and the
-    // current selection stays visible so reopening the picker can keep or clear it.
+    // current selection stays visible so reopening the picker still lists it.
     const revealedHidden = models.filter(
       (entry) =>
         entry.model?.hidden === true &&
@@ -175,14 +173,7 @@ export function ModelSelectorMenu({ anchorRef, models, loading, error, modelStat
       contentContainerStyle={{ padding: 6 }}
       nestedScrollEnabled
       keyboardShouldPersistTaps="always"
-            ListHeaderComponent={<>
-        <Pressable testID="model-option-automatic" accessibilityRole="radio" accessibilityLabel={automaticLabel ?? t("model.automaticA11y")} accessibilityState={{ checked: currentModel === null }} onPress={() => { onSelect(null); setOptionsOpenFor(null); }} className={`mb-0.5 min-h-14 flex-row items-center gap-3 rounded-sm px-3 py-2 ${currentModel === null ? "bg-surface-raised" : "active:opacity-70"}`}>
-          <View className="w-7 h-7 items-center justify-center"><AppIcon name="sparkles" size={22} tone="secondary" /></View>
-          <View className="flex-1 min-w-0"><Text className="text-body font-semibold text-fg">{automaticLabel ?? t("model.automatic")}</Text><Text numberOfLines={1} className="text-caption text-fg-muted">{automaticDetail ?? t("model.automaticDetail")}</Text></View>
-          <View className="w-5 h-5 items-center justify-center">{currentModel === null ? <AppIcon name="check" size={18} tone="fg" /> : null}</View>
-        </Pressable>
-        {error ? <View className="flex-row items-center gap-2 p-2"><Text className="text-caption text-danger flex-1">{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
-      </>}
+      ListHeaderComponent={error ? <View className="flex-row items-center gap-2 p-2"><Text className="text-caption text-danger flex-1">{error}</Text><IconButton name="refresh" label={t("model.retry")} onPress={onRetry} disabled={loading || modelStatusLoading} /></View> : null}
       ListEmptyComponent={error && !loading ? null : <View className="min-h-25 items-center justify-center p-4">
         {loading ? <Loader color={theme.colors.textMuted} /> : <AppIcon name="search" size={22} tone="muted" />}
         <Text className="text-caption text-fg-muted text-center mt-2">{t(loading ? "model.loading" : "model.noMatch")}</Text>

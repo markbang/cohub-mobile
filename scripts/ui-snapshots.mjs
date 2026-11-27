@@ -237,7 +237,7 @@ export const MOTIONS = [
   // Opens the Web browsing picker and closes it from outside, so the account's setting is left alone.
   { name: "motion-select", ready: "Appearance", link: "cohub://settings", steps: [{ tapOn: BROWSER_VALUE }, { waitFor: "In-app browser" }, { tapPoint: OUTSIDE }, { waitGone: "In-app browser" }] },
   { name: "motion-attach", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-attach" }, { waitFor: "Take a photo" }, { tapPoint: OUTSIDE }] },
-  { name: "motion-model", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }, { tapOnId: "model-option-automatic" }] },
+  { name: "motion-model", ready: "blocked=", link: "cohub://debug/composer", steps: [{ tapOnId: "chat-composer-model" }, { waitFor: "Search models" }, { tapPoint: OUTSIDE }] },
   // A glass button held and let go: it swells under the finger and bounces past rest.
   { name: "motion-press", ready: "Buttons", link: "cohub://debug/ui?section=controls", steps: [{ longPressOn: "Copy" }] },
   { name: "motion-sheet", ready: "Open sheet", link: "cohub://debug/ui?section=sheet&open=0", steps: [{ tapOn: "Open sheet" }, { tapOn: "Close.*" }] },

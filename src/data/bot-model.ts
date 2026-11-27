@@ -45,11 +45,10 @@ function useBotFile(client: CohubClient | null, spaceId: string, enabled: boolea
 }
 
 /** `undefined` is no choice: the page shows the model the Bot's working Chat last ran with. */
-export function useBotModel(client: CohubClient | null, spaceId: string, enabled = true): [ChatModelSelection | undefined, (model: ChatModelSelection | null) => Promise<void>] {
+export function useBotModel(client: CohubClient | null, spaceId: string, enabled = true): [ChatModelSelection | undefined, (model: ChatModelSelection) => Promise<void>] {
   const [file, save] = useBotFile(client, spaceId, enabled);
-  const choose = useCallback((next: ChatModelSelection | null) => save((raw) => {
-    if (next) raw.model = { provider: next.provider, id: next.id, ...(next.thinkingLevel ? { thinkingLevel: next.thinkingLevel } : {}) };
-    else delete raw.model;
+  const choose = useCallback((next: ChatModelSelection) => save((raw) => {
+    raw.model = { provider: next.provider, id: next.id, ...(next.thinkingLevel ? { thinkingLevel: next.thinkingLevel } : {}) };
   }), [save]);
   return [file?.model ?? undefined, choose];
 }

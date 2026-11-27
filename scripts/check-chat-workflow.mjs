@@ -34,6 +34,7 @@ import { isUsableKeyboardFrame, keyboardOverlap } from "../src/ui/keyboard-frame
 import { getAnchoredMenuLayout } from "../src/ui/anchored-menu-layout.ts";
 import { createNewChatDraft } from "../src/data/new-chat-draft.ts";
 import { BOT_BUBBLE_INSET, BOT_TIME_GAP_MS, BOT_TURN_GAP, botContextWindow, botContextWindowFrom, botDirectory, botEntries, botExchange, botExchangeText, botMessageSpace, botModelFrom, botNoteSpace, botPlacements, botVoice, isBotSpace, latestBotNote, pinnedBotEntries, PRIMARY_BOT_SLUG, relayContent, turnModelSelection } from "../src/data/bot-mode.ts";
+import { firstCatalogModel } from "../src/model-catalog.ts";
 import { createSendFlight, interpolateSendBubbleRect, isSendBubbleMessage, measureSendBubbleSource } from "../src/ui/send-bubble-motion.ts";
 import { motion } from "../src/motion.ts";
 import { getResourcePinState, invalidateResourcePinReads, isResourcePinned, setResourcePin } from "../src/data/resource-pins.ts";
@@ -6364,6 +6365,10 @@ assert.deepEqual(chatLinkNavigation("/chat/s1/files", { sessionId: "s1", turn: n
   assert.deepEqual(reads, [["bot-mod", "reminder.txt"]], "the reminder is read from the bot mod once per launch");
   assert.deepEqual(botModelFrom({ model: { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" } }), { provider: "cohub", id: "claude-opus-5-5", thinkingLevel: "high" }, "a Bot's saved model is read from its bot.json");
 assert.equal(botModelFrom({ model: { provider: "cohub" } }), null, "a model without an id is no choice");
+  const firstModelEntry = (id, hidden = false) => ({ provider: "cohub", id, model: { name: `Name ${id}`, ...(hidden ? { hidden: true } : {}) } });
+  assert.deepEqual(firstCatalogModel([firstModelEntry("a", true), firstModelEntry("b"), firstModelEntry("c")]), { provider: "cohub", id: "b", name: "Name b" }, "a Chat with no chosen model runs the first visible model of the catalog");
+  assert.equal(firstCatalogModel([]), null, "an unloaded catalog names no default model");
+  assert.equal(firstCatalogModel([firstModelEntry("a", true)]), null, "hidden models are never the default");
 assert.deepEqual([botContextWindowFrom({ contextWindow: 100_000 }), botContextWindowFrom({ contextWindow: "100000" }), botContextWindowFrom({})], [100_000, null, null], "a Bot's window is read from its bot.json; anything else is no choice");
   const catalog = [{ id: "half", model: { contextWindow: 500_000, contextWindowLimit: 500_000 } }, { id: "lowered", model: { contextWindow: 200_000, contextWindowLimit: 1_000_000 } }, { id: "odd", model: { contextWindow: 272_000 } }, { id: "undeclared", model: { contextWindow: 128_000, contextWindowSource: "default" } }].map((item) => ({ provider: "cohub", ...item }));
   const windowOn = (saved, id, models = catalog) => botContextWindow(saved, id ? { provider: "cohub", id } : null, models);

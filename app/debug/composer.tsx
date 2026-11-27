@@ -9,7 +9,7 @@ import { ModelSelectorMenu } from "@/src/components/ModelSelectorMenu";
 import { MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { useAppActions, useModelCatalog } from "@/src/data/context";
 import type { ChatModelSelection } from "@/src/data/types";
-import { formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
+import { firstCatalogModel, formatThinkingLevel, modelAvailabilityLevel } from "@/src/model-catalog";
 import { useAppTheme } from "@/src/theme";
 import { useTranslation } from "@/src/i18n";
 import { ComposerInput, Screen, SectionHeader } from "@/src/ui";
@@ -52,8 +52,9 @@ export default function DebugComposerScreen() {
   const [sending, setSending] = useState(false);
   const [running, setRunning] = useState(false);
   const [hasStop, setHasStop] = useState(true);
-  const modelLabel = selectedModel?.name ?? selectedModel?.id;
-  const modelTriggerDetail = selectedModel?.thinkingLevel ? formatThinkingLevel(selectedModel.thinkingLevel) : undefined;
+  const activeModel = selectedModel ?? firstCatalogModel(models);
+  const modelLabel = activeModel?.name ?? activeModel?.id;
+  const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
   const { blurTarget, attachBlurTarget } = useBlurTarget();
   const live = getComposerActionState({ text, hasAttachment: attach, disabled, sending, running, hasStopHandler: hasStop });
 
@@ -131,7 +132,7 @@ export default function DebugComposerScreen() {
         onModelPress={() => { setModelOpen(true); void Promise.all([loadModels(), loadModelStatus()]).catch(() => undefined); }}
         modelLabel={modelLabel}
         modelDetail={modelTriggerDetail}
-        modelStatus={selectedModel ? modelAvailabilityLevel(modelStatus?.models[selectedModel.id]) : "unknown"}
+        modelStatus={activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown"}
         sending={sending}
         running={running}
         disabled={disabled}
@@ -139,7 +140,7 @@ export default function DebugComposerScreen() {
       />
       </GlassBackdrop>
       <MenuPresence open={attachmentOpen}><AttachmentMenu anchorRef={composerMenuSourceRef} onClose={() => setAttachmentOpen(false)} onCamera={() => { setAttach(true); setAttachmentOpen(false); }} onPhotos={() => { setAttach(true); setAttachmentOpen(false); }} onFile={() => { setAttach(true); setAttachmentOpen(false); }} /></MenuPresence>
-      <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={selectedModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
+      <MenuPresence open={modelOpen}><ModelSelectorMenu anchorRef={composerMenuSourceRef} models={models} loading={modelsLoading} error={modelsError || modelStatusError} modelStatus={modelStatus?.models ?? null} modelStatusLoading={modelStatusLoading} currentModel={activeModel} onClose={() => setModelOpen(false)} onRetry={() => void Promise.all([loadModels({ force: true }), loadModelStatus({ force: true })]).catch(() => undefined)} onSelect={(model) => { setSelectedModel(model); setModelOpen(false); }} /></MenuPresence>
     </Screen>
   );
 }

@@ -13,7 +13,7 @@ import { botFileQuery } from "@/src/data/use-bots";
 import { useSpaceDirectory } from "@/src/data/use-space-directory";
 import { useToast } from "@/src/components/Toast";
 import { useTranslation } from "@/src/i18n";
-import { formatThinkingLevel } from "@/src/model-catalog";
+import { firstCatalogModel, formatThinkingLevel } from "@/src/model-catalog";
 import { Avatar, Screen, SettingsGroup, TopBar } from "@/src/ui";
 import { MenuAnchor, MenuPresence } from "@/src/ui/MorphMenuSurface";
 import { displaySpaceName } from "@/src/utils";
@@ -50,7 +50,7 @@ export default function BotProfileScreen() {
     if (workChat && model === undefined && !botLastTurn?.model) void refreshSessionStatuses([workChat], { silent: true });
   }, [botLastTurn?.model, model, refreshSessionStatuses, workChat]);
   const effectiveModel = useMemo(() => {
-    const base = model ?? turnModelSelection(botLastTurn);
+    const base = model ?? turnModelSelection(botLastTurn) ?? firstCatalogModel(models);
     const name = base ? models.find((item) => item.provider === base.provider && item.id === base.id)?.model?.name : null;
     return base ? { ...base, ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}) } : null;
   }, [botLastTurn, model, models]);
