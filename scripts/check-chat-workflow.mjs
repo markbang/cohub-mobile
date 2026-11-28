@@ -89,7 +89,7 @@ import { channelHealthState, createSettingsChannel, createWeChatLoginPoller, isC
 import { activityContributorName, activityRange, localDateKey, tokenDays } from "../src/data/activity.ts";
 import { installSpaceMod } from "../src/data/space-mods.ts";
 import { detectSlashCommandTrigger, insertSlashCommand, selectSlashCommandItems, slashCommandLabel, slashCommandText } from "../src/data/slash-commands.ts";
-import { approvalModeFromTurns, canUseRuntimeHarness, fastServiceTier, harnessOptions, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
+import { approvalModeFromTurns, canUseRuntimeHarness, fastServiceTier, harnessOptions, requestedRuntimeModel, runtimeHarnessFromTurn } from "../src/data/runtime.ts";
 import { RELEASE_GRACE_MS, ToastClock, pushToast, toastDuration } from "../src/data/toast-queue.ts";
 
 const flushSync = async () => { for (let tick = 0; tick < 20; tick++) await Promise.resolve(); };
@@ -231,6 +231,10 @@ assert.equal(running.text, 'ui.status.running session.activity.elapsedHours {"ho
 assert.equal(sessionActivity({ activeTurn: null }, { status: "failed", latestTurn: { id: "turn", sequence: 2, status: "failed", updatedAt: "2026-01-01T00:00:00Z", errorMessage: "model overloaded" }, live: null, t }).text, "ui.status.failed · model overloaded", "the fetched Turn explains a failed row");
 assert.equal(sessionActivity({ activeTurn: null, lastTurnIssue: { turnId: "turn", sequence: 2, status: "interrupted", reason: "billing", errorMessage: null } }, { status: "stopped", latestTurn: null, live: null, t }).text, "session.activity.billingStopped", "a run stopped for an empty balance says why");
 assert.equal(approvalModeFromTurns([{ executionKind: "agent", meta: { harness: "codex", approvalMode: "read_only" } }, { executionKind: "note", meta: { harness: "codex", approvalMode: "auto" } }], "codex"), "read_only", "notes never set the approval mode");
+const settledLocalTurn = { executionKind: "agent", provider: "anthropic", model: "claude-opus-4-8-20261101", meta: { harness: "claude", provider: "claude", model: "opus", requestedThinkingLevel: "high" } };
+assert.deepEqual(requestedRuntimeModel([settledLocalTurn], "claude"), { provider: "claude", id: "opus", thinkingLevel: "high" }, "a settled local Turn restores the model it asked for, not the id the Harness reported");
+assert.equal(requestedRuntimeModel([settledLocalTurn, { executionKind: "agent", provider: "anthropic", model: "claude-sonnet-5", meta: { harness: "claude" } }], "claude"), null, "a request that named no model leaves the Harness default");
+assert.deepEqual(requestedRuntimeModel([settledLocalTurn, { executionKind: "note", meta: { harness: "claude" } }, { executionKind: "agent", meta: { harness: "codex", provider: "openai", model: "gpt-5" } }], "claude"), { provider: "claude", id: "opus", thinkingLevel: "high" }, "notes and other Harnesses do not change a Harness's model");
 assert.deepEqual([fastServiceTier({ defaultServiceTier: "priority" }, false), fastServiceTier(null, false), fastServiceTier(null, true)], ["default", undefined, "priority"], "turning Fast off only says so where it is the default");
 assert.deepEqual(spaceRealtimeChange({ type: "space.session.approvals.changed", spaceId: "space", sessionId: "chat", payload: { sessionId: "chat" } }).exact, ["session:chat:approvals"]);
 assert.equal(sessionActivity({ activeTurn: null, lastTurnIssue: null }, { status: "idle", latestTurn: { id: "turn", sequence: 2, status: "completed", updatedAt: "2026-01-01T00:00:00Z", assistantText: "done" }, live: null, t }), null, "finished rows fall back to the preview");

@@ -66,7 +66,7 @@ import { stopTurnSpeech, toggleTurnSpeech } from "@/src/platform/turn-speech";
 import { formatUsd } from "@/src/data/space-wallet";
 import type { UploadTarget } from "@/src/data/attachment-uploads";
 import { useAttachmentUploadState } from "@/src/data/use-attachment-upload";
-import { approvalModeFromTurns, approvalModesFor, canUseRuntimeHarness, fastServiceTier, FAST_SERVICE_TIER, localModelsForHarness, runtimeHarnessFromTurn, runtimeModelFor, supportsFast, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
+import { approvalModeFromTurns, approvalModesFor, canUseRuntimeHarness, fastServiceTier, FAST_SERVICE_TIER, localModelsForHarness, requestedRuntimeModel, runtimeHarnessFromTurn, runtimeModelFor, supportsFast, type RuntimeHarness, type SpaceRuntimeStatus } from "@/src/data/runtime";
 import type { LocalExecution } from "@/src/data/context";
 import type { LocalExecutionMenu } from "@/src/components/ExecutionHarnessMenu";
 import { SessionApprovals } from "@/src/components/SessionApprovals";
@@ -790,7 +790,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const recordedModel = useMemo(() => recordedChatModel(turnsNewestFirst, messages, models), [messages, models, turnsNewestFirst]);
   const lastAgentTurn = useMemo(() => turnsNewestFirst.find(isAgentTurn), [turnsNewestFirst]);
   const composerHarness: RuntimeHarness = bot ? "cohub" : selectedHarness ?? runtimeHarnessFromTurn(lastAgentTurn);
-  const recordedLocalModel = composerHarness === "cohub" ? null : turnsNewestFirst.find((turn) => runtimeHarnessFromTurn(turn) === composerHarness && turn.model);
+  const recordedLocalModel = useMemo(() => composerHarness === "cohub" ? null : requestedRuntimeModel(view.turns, composerHarness), [composerHarness, view.turns]);
   // A Bot's model is saved in its `bot.json`; its page and the bot mod read the same value.
   const [botModel, setBotModel] = useBotModel(client, spaceId, botSpace);
   const effectiveBotModel = useMemo(() => {
@@ -802,7 +802,7 @@ function ChatContent({ sessionId: routeSessionId, draft = null, onCreated, initi
   const defaultModel = useMemo(() => composerHarness === "cohub" ? firstCatalogModel(models) : defaultRuntimeModel(runtime.status, composerHarness), [composerHarness, models, runtime.status]);
   const activeModel = composerHarness === "cohub"
     ? (bot ? effectiveBotModel ?? recordedModel : modelOverride ? selectedModel : recordedModel) ?? defaultModel
-    : (localModelsByHarness[composerHarness] ?? (recordedLocalModel ? recordedRuntimeModel(recordedLocalModel, composerHarness) : null) ?? defaultModel);
+    : (localModelsByHarness[composerHarness] ?? recordedLocalModel ?? defaultModel);
   const activeStatus = composerHarness === "cohub" && activeModel ? modelAvailabilityLevel(modelStatus?.models[activeModel.id]) : "unknown";
   const modelLabel = activeModel?.name || activeModel?.id;
   const modelTriggerDetail = activeModel?.thinkingLevel ? formatThinkingLevel(activeModel.thinkingLevel) : undefined;
@@ -2050,11 +2050,6 @@ function defaultRuntimeModel(status: SpaceRuntimeStatus | null, harness: Runtime
   const entry = model ? runtimeCatalogModels(status, harness).find((item) => item.provider === model.provider && item.id === model.id) : null;
   if (!model || !entry) return null;
   return { provider: model.provider, id: model.id, ...(model.name ? { name: model.name } : {}), ...(getSupportedThinkingLevels(entry).length > 1 ? { thinkingLevel: getDefaultThinkingLevel(entry) } : {}) };
-}
-
-function recordedRuntimeModel(turn: { provider?: string | null; model?: string | null; meta?: unknown }, harness: RuntimeHarness): ChatModelSelection {
-  const thinkingLevel = requestedThinkingLevel(turn.meta);
-  return { provider: turn.provider ?? harness, id: turn.model!, ...(thinkingLevel ? { thinkingLevel } : {}) };
 }
 
 function MissingChat() {

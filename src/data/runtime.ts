@@ -1,4 +1,5 @@
-import { isAgentTurn, isApprovalMode, isLocalHarness, LOCAL_HARNESSES, STANDARD_SERVICE_TIER, type ApprovalMode, type HarnessKind, type RuntimeCapabilities, type RuntimeStatus, type SessionTurnRecord } from "@neta-art/cohub";
+import { isAgentTurn, isApprovalMode, isLocalHarness, isModelThinkingLevel, LOCAL_HARNESSES, STANDARD_SERVICE_TIER, type ApprovalMode, type HarnessKind, type RuntimeCapabilities, type RuntimeStatus, type SessionTurnRecord } from "@neta-art/cohub";
+import type { ChatModelSelection } from "./types";
 
 export type RuntimeHarness = HarnessKind;
 export type LocalRuntimeModel = Omit<RuntimeCapabilities["models"][number], "harness" | "isDefault">;
@@ -47,6 +48,18 @@ export function approvalModesFor(status: SpaceRuntimeStatus | null, harness: Run
 export function approvalModeFromTurns(turns: readonly { executionKind?: SessionTurnRecord["executionKind"]; meta?: Record<string, unknown> | null; harness?: string | null }[], harness: RuntimeHarness): ApprovalMode | null {
   const mode = turns.findLast((turn) => isAgentTurn(turn) && runtimeHarnessFromTurn(turn) === harness && isApprovalMode(turn.meta?.approvalMode))?.meta?.approvalMode;
   return isApprovalMode(mode) ? mode : null;
+}
+
+/**
+ * The model the last Turn of this Harness asked for, as on web. Once a local Turn settles, `turn.model` is the
+ * id the Harness reports for the model that answered, which need not be a Runtime catalog id; the request in
+ * `meta` is. A request without a model left the choice to the Harness default.
+ */
+export function requestedRuntimeModel(turns: readonly { executionKind?: SessionTurnRecord["executionKind"]; meta?: Record<string, unknown> | null; harness?: string | null }[], harness: RuntimeHarness): ChatModelSelection | null {
+  const meta = turns.findLast((turn) => isAgentTurn(turn) && runtimeHarnessFromTurn(turn) === harness)?.meta;
+  if (typeof meta?.model !== "string" || typeof meta.provider !== "string") return null;
+  const level = meta.requestedThinkingLevel;
+  return { provider: meta.provider, id: meta.model, ...(typeof level === "string" && isModelThinkingLevel(level) ? { thinkingLevel: level } : {}) };
 }
 
 /** The tier the Fast switch selects (Codex `priority`); models without it show no switch. */
