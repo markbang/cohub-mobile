@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.3.19](https://github.com/markbang/cohub-mobile/compare/v2.3.18...v2.3.19) (2026-11-28)
+
+
+### Features
+
+* **ui-snapshots:** record the striped Chat under the glass chrome ([#301](https://github.com/markbang/cohub-mobile/issues/301)) ([021ebb3](https://github.com/markbang/cohub-mobile/commit/021ebb37edce9cb2204027645a3b62c89c9e8879))
+* **ui-snapshots:** shoot a dense fixture under the tab bar's glass ([#302](https://github.com/markbang/cohub-mobile/issues/302)) ([640b705](https://github.com/markbang/cohub-mobile/commit/640b705bcd7a958815786134ea38c21d64de5f1a))
+* **ui-snapshots:** validate generated flows and add a typed composer screen ([#304](https://github.com/markbang/cohub-mobile/issues/304)) ([35aab4e](https://github.com/markbang/cohub-mobile/commit/35aab4e26ff9ec93e08ed75d334825528e2d5699))
+
+
+### Fixes
+
+* **chat:** default to the first catalog model and drop the automatic option ([7832ea2](https://github.com/markbang/cohub-mobile/commit/7832ea2e43cb1cdf311d6bdd093997627c26cd35))
+* **chat:** restore a settled local Turn's requested model in the composer ([93d8b23](https://github.com/markbang/cohub-mobile/commit/93d8b238643fbf49833e70d53aee5056f7de3b54))
+* **composer:** grow with soft-wrapped typing on iOS ([#303](https://github.com/markbang/cohub-mobile/issues/303)) ([6ac1f4f](https://github.com/markbang/cohub-mobile/commit/6ac1f4f460ec40a049b7ffa151905285451452d6))
+* **composer:** keep the keyboard while it wraps and animate the expansion ([254e4c2](https://github.com/markbang/cohub-mobile/commit/254e4c27deb2520714ec3265bf8c8bd0e3d70fff))
+* **composer:** measure JS-set drafts with their text layout ([#292](https://github.com/markbang/cohub-mobile/issues/292)) ([03ddc7f](https://github.com/markbang/cohub-mobile/commit/03ddc7fdf090d0c48d3ca73a2497787c82fc62f8))
+* **ui-snapshots:** make the offline default capture green ([#295](https://github.com/markbang/cohub-mobile/issues/295)) ([aff81ef](https://github.com/markbang/cohub-mobile/commit/aff81efa8b2d39320c3647659bbc3f1a01f10009))
+
+
+### CI
+
+* **ui-snapshots:** capture a core set by default and the full list on demand ([#297](https://github.com/markbang/cohub-mobile/issues/297)) ([bccfd34](https://github.com/markbang/cohub-mobile/commit/bccfd34349eadc3e08b5f1df77286c64f1f5a7b5))
+* **ui-snapshots:** capture the iOS phone and tablet targets in parallel ([#291](https://github.com/markbang/cohub-mobile/issues/291)) ([5c535b8](https://github.com/markbang/cohub-mobile/commit/5c535b849991dbde4cb2512b12d72d386245031d))
+* **ui-snapshots:** restore dependencies in capture jobs, warm the driver ([#300](https://github.com/markbang/cohub-mobile/issues/300)) ([242c422](https://github.com/markbang/cohub-mobile/commit/242c422ab4ef4b356ec4258333e3c77f02f04d5a))
+* **ui-snapshots:** shard the iOS capture into five jobs and retry only the driver start ([#296](https://github.com/markbang/cohub-mobile/issues/296)) ([eb7b858](https://github.com/markbang/cohub-mobile/commit/eb7b8585536e75f5393b31f659160d65dfc3a85c))
+* **ui-snapshots:** wait for the iOS open-link question and warm Metro during boot ([#294](https://github.com/markbang/cohub-mobile/issues/294)) ([b1fb606](https://github.com/markbang/cohub-mobile/commit/b1fb60643db9df577fc2193dabd2b043eab17543))
+
 ## [2.3.18](https://github.com/markbang/cohub-mobile/compare/v2.3.17...v2.3.18) (2026-11-24)
 
 
